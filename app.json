@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "backgroundColor": "#050507",
-      "bundleIdentifier": "app.warmmeupp",
+      "bundleIdentifier": "app.warmmeup",
       "infoPlist": {
         "NSCameraUsageDescription": "Warm Me Up uses the camera for Vault photos and videos.",
         "NSPhotoLibraryUsageDescription": "Warm Me Up accesses photos for the Vault.",
