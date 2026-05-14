@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "Warm Me Up",
+    "slug": "warmup",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#050507"
+    },
+    "scheme": "warmup",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "backgroundColor": "#050507",
+      "bundleIdentifier": "app.warmmeupp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Warm Me Up uses the camera for Vault photos and videos.",
+        "NSPhotoLibraryUsageDescription": "Warm Me Up accesses photos for the Vault.",
+        "NSPhotoLibraryAddUsageDescription": "Warm Me Up saves photos to your library from the Vault.",
+        "NSFaceIDUsageDescription": "Warm Me Up uses Face ID to protect your private content.",
+        "NSLocationWhenInUseUsageDescription": "Warm Me Up uses your location only to show local weather on the privacy lock screen."
+      }
+    },
+    "android": {
+      "backgroundColor": "#050507",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-web-browser",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Warm Me Up uses Face ID to protect your private content."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "cfde070c-187f-4d7e-b643-a20446ff95ab"
+      }
+    }
+  }
+}

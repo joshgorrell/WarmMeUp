@@ -1,0 +1,196 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TextInput, ActivityIndicator, TouchableOpacity,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { Check, Save } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
+import { invalidatePointConfigCache } from '@/lib/points';
+import { useTheme } from '@/context/ThemeContext';
+import { FontSize, Spacing, Radius } from '@/constants/theme';
+import AppShell from '@/components/AppShell';
+import ScreenHeader from '@/components/ScreenHeader';
+import { PointConfig } from '@/lib/types';
+
+const SECTIONS = [
+  {
+    title: 'DARE',
+    keys: ['dare_accept', 'dare_complete'],
+  },
+  {
+    title: 'DICE',
+    keys: ['dice_accept', 'dice_complete'],
+  },
+  {
+    title: 'ASK',
+    keys: ['ask_sent', 'ask_replied'],
+  },
+  {
+    title: 'CHAT',
+    keys: ['chat_message', 'chat_media'],
+  },
+  {
+    title: 'VAULT',
+    keys: ['vault_upload'],
+  },
+];
+
+export default function PointsConfigAdmin() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const [configs, setConfigs] = useState<PointConfig[]>([]);
+  const [edited, setEdited] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from('point_config').select('*').order('event_key');
+    if (data) setConfigs(data);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, []);
+
+  const getValue = (key: string): number => {
+    if (edited[key] !== undefined) return edited[key];
+    return configs.find(c => c.event_key === key)?.points ?? 0;
+  };
+
+  const handleChange = (key: string, raw: string) => {
+    const n = parseInt(raw, 10);
+    if (!isNaN(n) && n >= 0) {
+      setEdited(prev => ({ ...prev, [key]: n }));
+    } else if (raw === '') {
+      setEdited(prev => ({ ...prev, [key]: 0 }));
+    }
+  };
+
+  const handleSave = async (key: string) => {
+    const pts = edited[key] ?? configs.find(c => c.event_key === key)?.points;
+    if (pts === undefined) return;
+    setSaving(key);
+    await supabase.from('point_config').update({ points: pts, updated_at: new Date().toISOString() }).eq('event_key', key);
+    invalidatePointConfigCache();
+    setConfigs(prev => prev.map(c => c.event_key === key ? { ...c, points: pts } : c));
+    setEdited(prev => { const n = { ...prev }; delete n[key]; return n; });
+    setSaving(null);
+    setSaved(key);
+    setTimeout(() => setSaved(null), 1800);
+  };
+
+  const isDirty = (key: string) => edited[key] !== undefined;
+
+  return (
+    <AppShell>
+      <ScreenHeader title="Points Config" onBack={() => router.back()} />
+      {loading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color="#FFB347" />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          <View style={[styles.noticeBanner, { backgroundColor: 'rgba(255,179,71,0.08)', borderColor: 'rgba(255,179,71,0.25)' }]}>
+            <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
+              Changes apply to all new point events immediately. Existing earned points are not affected.
+            </Text>
+          </View>
+
+          {SECTIONS.map(section => (
+            <View key={section.title} style={styles.section}>
+              <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{section.title}</Text>
+              <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+                {section.keys.map((key, idx) => {
+                  const cfg = configs.find(c => c.event_key === key);
+                  if (!cfg) return null;
+                  const dirty = isDirty(key);
+                  const isSaving = saving === key;
+                  const isSaved = saved === key;
+                  return (
+                    <View
+                      key={key}
+                      style={[
+                        styles.configRow,
+                        idx < section.keys.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+                      ]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.configLabel, { color: colors.text }]}>{cfg.label}</Text>
+                        <Text style={[styles.configKey, { color: colors.textMuted }]}>{key}</Text>
+                      </View>
+                      <View style={styles.inputWrap}>
+                        <TextInput
+                          style={[
+                            styles.ptsInput,
+                            {
+                              color: colors.text,
+                              backgroundColor: dirty ? 'rgba(255,179,71,0.08)' : colors.bg2 ?? 'rgba(255,255,255,0.06)',
+                              borderColor: dirty ? 'rgba(255,179,71,0.45)' : colors.borderSubtle,
+                            },
+                          ]}
+                          value={String(getValue(key))}
+                          onChangeText={v => handleChange(key, v)}
+                          keyboardType="number-pad"
+                          maxLength={4}
+                          selectTextOnFocus
+                        />
+                        <Text style={[styles.ptsLabel, { color: colors.textMuted }]}>pts</Text>
+                      </View>
+                      {dirty && (
+                        <TouchableOpacity
+                          style={[styles.saveBtn, { backgroundColor: 'rgba(255,179,71,0.15)', borderColor: 'rgba(255,179,71,0.45)' }]}
+                          onPress={() => handleSave(key)}
+                          disabled={isSaving}
+                          activeOpacity={0.8}
+                        >
+                          {isSaving
+                            ? <ActivityIndicator color="#FFB347" size="small" />
+                            : <Save color="#FFB347" size={16} strokeWidth={2} />
+                          }
+                        </TouchableOpacity>
+                      )}
+                      {isSaved && !dirty && (
+                        <View style={[styles.savedIndicator, { backgroundColor: 'rgba(51,209,122,0.15)', borderColor: 'rgba(51,209,122,0.40)' }]}>
+                          <Check color="#33D17A" size={16} strokeWidth={2.5} />
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+    </AppShell>
+  );
+}
+
+const styles = StyleSheet.create({
+  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 60 },
+  noticeBanner: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.lg, marginTop: Spacing.sm },
+  noticeText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20, textAlign: 'center' },
+  section: { marginBottom: Spacing.lg },
+  sectionLabel: { fontSize: 11, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2, marginBottom: Spacing.sm },
+  sectionCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
+  configRow: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, gap: Spacing.sm },
+  configLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  configKey: { fontSize: 11, fontFamily: 'Inter-Regular', marginTop: 2 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ptsInput: {
+    width: 64, height: 40, borderRadius: Radius.md, borderWidth: 1,
+    textAlign: 'center', fontSize: FontSize.body, fontFamily: 'Inter-Bold',
+    paddingHorizontal: 8,
+  },
+  ptsLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', width: 24 },
+  saveBtn: {
+    width: 36, height: 36, borderRadius: Radius.md, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  savedIndicator: {
+    width: 36, height: 36, borderRadius: Radius.md, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
+});
