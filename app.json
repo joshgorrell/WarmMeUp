@@ -12,7 +12,7 @@
     },
     "scheme": "warmup",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
       "backgroundColor": "#050507",
