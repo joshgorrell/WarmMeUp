@@ -18,13 +18,14 @@ let configCachePromise: Promise<Record<string, number>> | null = null;
 export async function getPointConfig(): Promise<Record<string, number>> {
   if (configCache) return configCache;
   if (configCachePromise) return configCachePromise;
-  configCachePromise = (async () => {
+  configCachePromise = (async (): Promise<Record<string, number>> => {
     const { data } = await supabase.from('point_config').select('event_key, points');
-    configCache = data && data.length > 0
+    const result: Record<string, number> = data && data.length > 0
       ? Object.fromEntries(data.map(r => [r.event_key, r.points]))
       : { ...DEFAULTS };
+    configCache = result;
     configCachePromise = null;
-    return configCache;
+    return result;
   })();
   return configCachePromise;
 }

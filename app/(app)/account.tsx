@@ -737,7 +737,7 @@ export default function AccountScreen() {
         } catch {}
       }
       setDeleteDone(true);
-      setTimeout(() => { setDeleteStep(null); setClearHistoryOpen(false); setDeleteDone(false); loadStats(); }, 1800);
+      setTimeout(() => { setDeleteStep(null); setDeleteDone(false); loadStats(); }, 1800);
     } finally { setDeleting(false); }
   };
 

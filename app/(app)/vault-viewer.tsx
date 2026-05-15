@@ -80,17 +80,20 @@ export default function VaultViewerScreen() {
 
   useEffect(() => {
     if (!isVideo) return;
+    let mounted = true;
     (async () => {
       try {
         const { Video, ResizeMode } = await import('expo-av');
+        if (!mounted) return;
         setVideoComponent(() => (props: any) => (
           <Video {...props} resizeMode={ResizeMode.CONTAIN} />
         ));
         setAvLoaded(true);
       } catch {
-        setVideoError(true);
+        if (mounted) setVideoError(true);
       }
     })();
+    return () => { mounted = false; };
   }, [isVideo]);
 
   // Screenshot detection via AppState inactive flash
