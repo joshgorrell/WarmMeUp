@@ -12,7 +12,7 @@
     },
     "scheme": "warmup",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": false,
       "backgroundColor": "#050507",
@@ -46,6 +46,14 @@
       "expo-web-browser",
       "expo-secure-store",
       "expo-av",
+      "expo-location",
+      [
+        "expo-notifications",
+        {
+          "iosDisplayInForeground": true,
+          "mode": "production"
+        }
+      ],
       [
         "expo-local-authentication",
         {
