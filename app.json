@@ -12,7 +12,7 @@
     },
     "scheme": "warmup",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": false,
       "backgroundColor": "#050507",
@@ -70,12 +70,7 @@
         }
       ],
       "expo-camera",
-      [
-        "expo-build-properties",
-        {
-          "buildReactNativeFromSource": true
-        }
-      ]
+      "expo-build-properties"
     ],
     "experiments": {
       "typedRoutes": true
