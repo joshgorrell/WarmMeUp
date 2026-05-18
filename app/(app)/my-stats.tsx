@@ -84,6 +84,7 @@ export default function MyStatsScreen() {
   const [currentMonthPoints, setCurrentMonthPoints] = useState<{ me: number; partner: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [allTime, setAllTime] = useState(false);
+  const [streak, setStreak] = useState(0);
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
 
   const buildStatsFromEvents = useCallback((events: { reason: string; points: number }[], uid: string): MonthlyScore => {
@@ -112,6 +113,26 @@ export default function MyStatsScreen() {
     }
     return s;
   }, [couple?.id, year, month]);
+
+  const loadStreak = useCallback(async () => {
+    if (!couple?.id) return;
+    const { data } = await supabase
+      .from('interactions')
+      .select('created_at')
+      .eq('couple_id', couple.id)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (!data || data.length === 0) { setStreak(0); return; }
+    const activeDays = new Set(data.map((r: { created_at: string }) => new Date(r.created_at).toDateString()));
+    let days = 0;
+    const cursor = new Date();
+    cursor.setHours(0, 0, 0, 0);
+    while (activeDays.has(cursor.toDateString())) {
+      days++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    setStreak(days);
+  }, [couple?.id]);
 
   const loadAllTime = useCallback(async () => {
     if (!couple?.id || !user) return;
@@ -145,8 +166,9 @@ export default function MyStatsScreen() {
       partner: ((partnerScoreRes as any).data?.points ?? 0) + (sumMonthlyScores(partnerArchived)?.points ?? 0),
     });
 
+    await loadStreak();
     setLoading(false);
-  }, [couple?.id, user, buildStatsFromEvents]);
+  }, [couple?.id, user, buildStatsFromEvents, loadStreak]);
 
   const load = useCallback(async () => {
     if (!couple?.id || !user) return;
@@ -181,8 +203,9 @@ export default function MyStatsScreen() {
       setCurrentMonthPoints(null);
     }
 
+    await loadStreak();
     setLoading(false);
-  }, [couple?.id, user, year, month, isCurrentMonth, buildStatsFromEvents]);
+  }, [couple?.id, user, year, month, isCurrentMonth, buildStatsFromEvents, loadStreak]);
 
   useEffect(() => {
     if (allTime) {
@@ -341,6 +364,13 @@ export default function MyStatsScreen() {
                 <View style={[styles.progressFill, { width: `${Math.round((myPts / totalPts) * 100)}%` as any, backgroundColor: '#FF5A3D' }]} />
               </View>
             )}
+            {(couple?.streaks_enabled ?? true) && (
+              <View style={styles.streakRow}>
+                <Flame color="#FF5A5F" size={13} strokeWidth={2} />
+                <Text style={[styles.streakValue, { color: colors.text }]}>{streak}</Text>
+                <Text style={[styles.streakLabel, { color: colors.textMuted }]}>day streak</Text>
+              </View>
+            )}
           </LinearGradient>
 
           {/* Brave Meter */}
@@ -435,6 +465,9 @@ const styles = StyleSheet.create({
   vsVS: { fontSize: 11, fontFamily: 'Inter-Bold', letterSpacing: 1 },
   progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
+  streakRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingTop: 2 },
+  streakValue: { fontSize: 13, fontFamily: 'Inter-Bold' },
+  streakLabel: { fontSize: 12, fontFamily: 'Inter-Regular' },
   braveSection: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.card, gap: Spacing.md, marginBottom: Spacing.lg },
   braveSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   braveSectionTitle: { fontSize: FontSize.body, fontFamily: 'Inter-Bold' },
