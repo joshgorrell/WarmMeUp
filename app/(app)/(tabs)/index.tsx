@@ -15,6 +15,25 @@ import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
 import Avatar from '@/components/Avatar';
 
+const GREETING_SUBS = [
+  "What kind of fun are we starting?",
+  "What's the mood tonight?",
+  "Ready to stir up some trouble?",
+  "Let's make tonight interesting.",
+  "What are we getting into today?",
+  "Time to warm things up?",
+  "Let the flirting begin.",
+  "Your private playground awaits.",
+  "What's the vibe between you two today?",
+  "Feeling playful?",
+  "What's today's temptation?",
+  "Something fun is about to happen.",
+];
+
+function getSessionSub() {
+  return GREETING_SUBS[Math.floor(Math.random() * GREETING_SUBS.length)];
+}
+
 function getGreeting() {
   const h = new Date().getHours();
   if (h < 12) return 'Good Morning';
@@ -50,6 +69,7 @@ export default function HomeScreen() {
   const [activeInteraction, setActiveInteraction] = useState<Interaction | null>(null);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [greetingSub] = useState(getSessionSub);
 
   useEffect(() => {
     if (!couple?.id || !user) return;
@@ -194,7 +214,7 @@ export default function HomeScreen() {
               {getGreeting()}{profile?.display_name ? `, ${profile.display_name.split(' ')[0]}` : ''}
             </Text>
             <Text style={[styles.greetingSub, { color: colors.textSecondary }]}>
-              What kind of fun are we starting?
+              {greetingSub}
             </Text>
           </View>
 
