@@ -44,7 +44,7 @@ export default function VaultScreen() {
 
   const vaultFaceIdRequired = (settings?.vault_face_id_required ?? false) && Platform.OS !== 'web';
 
-  const blurEnabled = settings?.blur_on_background ?? true;
+  const blurEnabled = settings?.blur_media ?? true;
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   // Unlock the vault via biometrics

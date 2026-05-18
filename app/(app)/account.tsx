@@ -1142,7 +1142,7 @@ export default function AccountScreen() {
 
       <Section title="VAULT PREFERENCES">
         <SettingsRow label="Face ID to open Vault" sub="Extra protection for Vault content" toggle value={s?.vault_face_id_required ?? true} onChange={v => update({ vault_face_id_required: v })} />
-        <SettingsRow label="Blur images and video until tapped" sub="Tap once to reveal; re-blurs when you leave the app" toggle value={s?.blur_on_background ?? true} onChange={v => update({ blur_on_background: v })} last />
+        <SettingsRow label="Blur images and video until tapped" sub="Tap once to reveal in Chat and Vault; re-blurs when you leave the app" toggle value={s?.blur_media ?? true} onChange={v => update({ blur_media: v })} last />
       </Section>
 
       <Section title="NOTIFICATIONS">

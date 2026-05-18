@@ -28,6 +28,7 @@ export interface UserSettings {
   vault_face_id_required: boolean;
   login_method: 'password' | 'pin' | 'biometric';
   blur_on_background: boolean;
+  blur_media: boolean;
   discreet_notifications: boolean;
   notification_copy: string;
   vault_allow_screenshot_default: boolean;

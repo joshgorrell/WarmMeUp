@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
-  TouchableOpacity, Image, ActivityIndicator, TextInput, Alert,
+  TouchableOpacity, Image, ActivityIndicator, TextInput, Alert, AppState, AppStateStatus,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Image as ImageIcon, Camera, X, Lock, Send, Vault, Pencil, Trash2 } from 'lucide-react-native';
+import { Image as ImageIcon, Camera, X, Lock, Send, Vault, Pencil, Trash2, EyeOff } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -98,11 +98,17 @@ function BubbleMenu({
 
 function MediaBubble({
   msg,
+  blurEnabled,
+  revealed,
+  onReveal,
   getSignedUrl,
   onOpen,
   onSaveToVault,
 }: {
   msg: ChatMessage;
+  blurEnabled: boolean;
+  revealed: boolean;
+  onReveal: (id: string) => void;
   getSignedUrl: (m: ChatMessage) => Promise<string | null>;
   onOpen: (m: ChatMessage) => void;
   onSaveToVault: (m: ChatMessage) => void;
@@ -117,15 +123,30 @@ function MediaBubble({
     });
   }, [msg.id]);
 
+  const isBlurred = blurEnabled && !revealed;
+
+  const handlePress = () => {
+    if (isBlurred) {
+      onReveal(msg.id);
+    } else {
+      onOpen(msg);
+    }
+  };
+
   return (
-    <TouchableOpacity activeOpacity={0.85} onPress={() => onOpen(msg)} style={styles.mediaTap}>
+    <TouchableOpacity activeOpacity={0.85} onPress={handlePress} style={styles.mediaTap}>
       <View style={styles.mediaWrap}>
         {!loaded ? (
           <View style={styles.mediaPlaceholder}>
             <ActivityIndicator color="#FF5A3D" size="small" />
           </View>
         ) : url ? (
-          <Image source={{ uri: url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <Image
+            source={{ uri: url }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            blurRadius={isBlurred ? 20 : 0}
+          />
         ) : (
           <View style={styles.mediaPlaceholder}>
             <Lock color="rgba(255,255,255,0.5)" size={20} />
@@ -138,10 +159,17 @@ function MediaBubble({
             </View>
           </View>
         )}
-        <TouchableOpacity style={styles.vaultBtn} onPress={() => onSaveToVault(msg)} activeOpacity={0.8}>
-          <Vault color="#FFB347" size={13} strokeWidth={2} />
-          <Text style={styles.vaultBtnText}>Save to Vault</Text>
-        </TouchableOpacity>
+        {isBlurred && loaded && url && (
+          <View style={styles.mediaBlurOverlay}>
+            <EyeOff color="rgba(255,255,255,0.7)" size={20} strokeWidth={2} />
+          </View>
+        )}
+        {!isBlurred && (
+          <TouchableOpacity style={styles.vaultBtn} onPress={() => onSaveToVault(msg)} activeOpacity={0.8}>
+            <Vault color="#FFB347" size={13} strokeWidth={2} />
+            <Text style={styles.vaultBtnText}>Save to Vault</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -160,9 +188,26 @@ export default function ChatTab() {
   const [editingState, setEditingState] = useState<EditingState | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
+  const [revealedMedia, setRevealedMedia] = useState<Set<string>>(new Set());
   const listRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const bubbleRefs = useRef<Record<string, View | null>>({});
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  const blurEnabled = settings?.blur_media ?? true;
+
+  // Re-blur chat media when returning from background
+  useEffect(() => {
+    if (!blurEnabled) return;
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      const prev = appStateRef.current;
+      appStateRef.current = next;
+      if ((prev === 'background' || prev === 'inactive') && next === 'active') {
+        setRevealedMedia(new Set());
+      }
+    });
+    return () => sub.remove();
+  }, [blurEnabled]);
 
   useEffect(() => {
     if (!couple?.id) return;
@@ -435,6 +480,9 @@ export default function ChatTab() {
               {hasMedia && (
                 <MediaBubble
                   msg={item}
+                  blurEnabled={blurEnabled}
+                  revealed={revealedMedia.has(item.id)}
+                  onReveal={id => setRevealedMedia(prev => new Set([...prev, id]))}
                   getSignedUrl={getSignedUrl}
                   onOpen={handleOpenMedia}
                   onSaveToVault={handleSaveToVault}
@@ -623,6 +671,7 @@ const styles = StyleSheet.create({
   mediaWrap: { width: 200, height: 160, borderRadius: Radius.md, overflow: 'hidden', backgroundColor: '#1A1A2E' },
   mediaPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' },
+  mediaBlurOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)' },
   playCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' },
   playTriangle: { color: '#fff', fontSize: 14, marginLeft: 3 },
   vaultBtn: { position: 'absolute', bottom: 6, right: 6, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(255,179,71,0.35)' },
