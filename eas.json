@@ -9,6 +9,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "ios": {
         "autoIncrement": true,
         "simulator": false
@@ -16,6 +17,7 @@
     },
     "production": {
       "distribution": "store",
+      "channel": "production",
       "node": "20.18.0",
       "image": "macos-sequoia-15.6-xcode-16.4",
       "env": {
