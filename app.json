@@ -13,9 +13,7 @@
     "scheme": "warmup",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/cfde070c-187f-4d7e-b643-a20446ff95ab"
     },
