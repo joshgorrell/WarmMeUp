@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   right: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: Spacing.sm,
   },
   tempBtn: {
     paddingHorizontal: 6,
