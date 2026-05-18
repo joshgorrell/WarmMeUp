@@ -69,7 +69,13 @@
           "microphonePermission": "Warm Me Up uses the microphone to record video with audio in the Vault."
         }
       ],
-      "expo-camera"
+      "expo-camera",
+      [
+        "expo-build-properties",
+        {
+          "buildReactNativeFromSource": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
