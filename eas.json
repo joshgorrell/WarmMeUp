@@ -17,6 +17,7 @@
     "production": {
       "distribution": "store",
       "node": "20.18.0",
+      "image": "macos-sequoia-15.6-xcode-16.4",
       "env": {
         "NODE_ENV": "production"
       },
@@ -24,8 +25,7 @@
         "disabled": true
       },
       "ios": {
-        "autoIncrement": true,
-        "image": "macos-sequoia-15.6-xcode-26.0"
+        "autoIncrement": true
       }
     }
   },
