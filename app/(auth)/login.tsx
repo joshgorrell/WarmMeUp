@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, useWindowDimensions,
+  KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -12,15 +12,15 @@ import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 
+const V_SM = 16;
+const V_MD = 24;
+const INPUT_PAD = 14;
+
 export default function LoginScreen() {
   const router = useRouter();
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const logoSize = Math.min(Math.round(width * 0.18), 72);
   const sloganWidth = Math.min(Math.round(width * 0.52), 210);
-
-  const vSm = Math.round(height * 0.02);
-  const vMd = Math.round(height * 0.03);
-  const inputPad = Math.max(Math.round(height * 0.014), 10);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -82,21 +82,27 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
     >
-      <View style={styles.inner}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
         {/* Brand */}
-        <View style={[styles.brandBlock, { marginBottom: vMd }]}>
+        <View style={[styles.brandBlock, { marginBottom: V_MD }]}>
           <WarmupBrand logoSize={logoSize} sloganWidth={sloganWidth} showTagline />
         </View>
 
         {/* Sign-in panel */}
-        <View style={[styles.panel, { padding: vMd, gap: vSm }]}>
+        <View style={[styles.panel, { padding: V_MD, gap: V_SM }]}>
           {/* Email field */}
           <View style={styles.field}>
             <Text style={styles.label}>Email</Text>
             <TextInput
-              style={[styles.input, { paddingVertical: inputPad }]}
+              style={[styles.input, { paddingVertical: INPUT_PAD }]}
               value={email}
               onChangeText={setEmail}
               placeholder="your@email.com"
@@ -116,7 +122,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
             <TextInput
-              style={[styles.input, { paddingVertical: inputPad }]}
+              style={[styles.input, { paddingVertical: INPUT_PAD }]}
               value={password}
               onChangeText={setPassword}
               placeholder="Your password"
@@ -145,7 +151,7 @@ export default function LoginScreen() {
               <View style={styles.socialRow}>
                 {showApple && (
                   <TouchableOpacity
-                    style={[styles.socialBtn, styles.appleBtn, { paddingVertical: inputPad + 2 }]}
+                    style={[styles.socialBtn, styles.appleBtn, { paddingVertical: INPUT_PAD + 2 }]}
                     onPress={() => handleOAuth('apple')}
                     activeOpacity={0.88}
                     disabled={oauthLoading !== null || loading}
@@ -159,7 +165,7 @@ export default function LoginScreen() {
 
                 {showGoogle && (
                   <TouchableOpacity
-                    style={[styles.socialBtn, styles.googleBtn, { paddingVertical: inputPad + 2 }]}
+                    style={[styles.socialBtn, styles.googleBtn, { paddingVertical: INPUT_PAD + 2 }]}
                     onPress={() => handleOAuth('google')}
                     activeOpacity={0.88}
                     disabled={oauthLoading !== null || loading}
@@ -177,7 +183,7 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <TouchableOpacity
-          style={[styles.footerLink, { marginTop: vSm }]}
+          style={[styles.footerLink, { marginTop: V_SM }]}
           onPress={() => router.replace('/(auth)/register')}
           activeOpacity={0.7}
         >
@@ -186,7 +192,7 @@ export default function LoginScreen() {
             <Text style={styles.footerAccent}>Create one</Text>
           </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -196,11 +202,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#080608',
   },
-  inner: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.xxl,
   },
   brandBlock: {
     alignItems: 'center',
