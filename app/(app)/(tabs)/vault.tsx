@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, CircleQuestionMark, Lock, Clock, Users, Smartphone, ScanFace, FingerprintPattern as Fingerprint, FileSliders as Sliders } from 'lucide-react-native';
+import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -40,7 +40,6 @@ export default function VaultScreen() {
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [vaultAuthError, setVaultAuthError] = useState('');
   const [unlocking, setUnlocking] = useState(false);
-  const [showSecurityInfo, setShowSecurityInfo] = useState(false);
 
   const vaultFaceIdRequired = (settings?.vault_face_id_required ?? false) && Platform.OS !== 'web';
 
@@ -269,19 +268,6 @@ export default function VaultScreen() {
 
   const unviewed = items.filter(i => i.uploaded_by_user_id !== user?.id && !i.viewed_by_partner).length;
 
-  const headerRight = (
-    <View style={styles.headerBtns}>
-      <TouchableOpacity style={styles.secInfoBtn} onPress={() => setShowSecurityInfo(true)} activeOpacity={0.75}>
-        <CircleQuestionMark color="rgba(255,255,255,0.55)" size={20} strokeWidth={1.8} />
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.addBtnWrap} onPress={() => setShowAdd(true)} activeOpacity={0.85}>
-        <LinearGradient colors={['#FF5A3D', '#FF2E8A']} style={styles.addGrad}>
-          <Plus color="#fff" size={20} strokeWidth={2.5} />
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
-  );
-
   // Vault biometric gate overlay
   if (vaultFaceIdRequired && !vaultUnlocked) {
     return (
@@ -305,10 +291,7 @@ export default function VaultScreen() {
 
   return (
     <AppShell scrollable={false}>
-      <TabHeader
-        title={unviewed > 0 ? `Vault  ·  ${unviewed} new` : 'Vault'}
-        rightSlot={headerRight}
-      />
+      <TabHeader title={unviewed > 0 ? `Vault  ·  ${unviewed} new` : 'Vault'} />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -384,75 +367,18 @@ export default function VaultScreen() {
         </View>
       )}
 
-      {/* Security Info Sheet */}
-      <BottomSheet
-        visible={showSecurityInfo}
-        onClose={() => setShowSecurityInfo(false)}
-        title="Your Vault is Private"
-        subtitle="Here is how your photos and videos are kept safe."
-        scrollable
+      {/* Floating add button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowAdd(true)}
+        activeOpacity={0.88}
+        accessibilityRole="button"
+        accessibilityLabel="Add to Vault"
       >
-        <View style={styles.secInfoContent}>
-          {[
-            {
-              icon: <Lock color="#FF2E8A" size={20} strokeWidth={1.8} />,
-              bg: 'rgba(255,46,138,0.10)',
-              title: 'Private Storage',
-              desc: 'Your media lives in a locked, private vault. There is no public link anyone can guess or stumble upon — files are completely hidden from the internet.',
-            },
-            {
-              icon: <Clock color="#FF8A3D" size={20} strokeWidth={1.8} />,
-              bg: 'rgba(255,138,61,0.10)',
-              title: 'Links Expire in 1 Hour',
-              desc: 'Every time a photo or video loads, the app generates a temporary access link. That link stops working after one hour — so even if intercepted, it quickly becomes useless.',
-            },
-            {
-              icon: <Users color="#69A7FF" size={20} strokeWidth={1.8} />,
-              bg: 'rgba(105,167,255,0.10)',
-              title: 'Just the Two of You',
-              desc: 'Server-level security rules ensure only you and your partner can ever access your vault. These rules live on our servers, not just the app, so they cannot be bypassed.',
-            },
-            {
-              icon: <Smartphone color="#33D17A" size={20} strokeWidth={1.8} />,
-              bg: 'rgba(51,209,122,0.10)',
-              title: 'Never Saved to Your Device',
-              desc: 'Photos and videos taken inside the app go straight to the vault. They are never written to your camera roll or stored anywhere on your phone.',
-            },
-            {
-              icon: <ScanFace color="#FFB347" size={20} strokeWidth={1.8} />,
-              bg: 'rgba(255,179,71,0.10)',
-              title: 'Face ID & PIN Lock',
-              desc: 'You can require biometric verification (Face ID or fingerprint) before the vault even opens. Turn this on in your Account settings for an extra layer of protection.',
-            },
-            {
-              icon: <Shield color="#FF5A3D" size={20} strokeWidth={1.8} />,
-              bg: 'rgba(255,90,61,0.10)',
-              title: 'Screenshot Detection',
-              desc: 'When screenshots are turned off for an item, the app detects if your partner takes one and sends you a notification immediately.',
-            },
-            {
-              icon: <Sliders color="rgba(255,255,255,0.65)" size={20} strokeWidth={1.8} />,
-              bg: 'rgba(255,255,255,0.06)',
-              title: 'Your Rules, Your Control',
-              desc: 'You decide whether each upload can be screenshotted, saved, or shared. Defaults are set in your Profile and apply to every new item you add.',
-            },
-          ].map(({ icon, bg, title, desc }) => (
-            <View key={title} style={[styles.secInfoRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-              <View style={[styles.secInfoIcon, { backgroundColor: bg }]}>{icon}</View>
-              <View style={styles.secInfoText}>
-                <Text style={[styles.secInfoTitle, { color: colors.text }]}>{title}</Text>
-                <Text style={[styles.secInfoDesc, { color: colors.textSecondary }]}>{desc}</Text>
-              </View>
-            </View>
-          ))}
-          <View style={[styles.secInfoFooter, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: 'rgba(255,46,138,0.18)' }]}>
-            <Shield color="#FF2E8A" size={14} strokeWidth={2} />
-            <Text style={[styles.secInfoFooterText, { color: colors.textSecondary }]}>
-              Your moments are safe. We built this app to protect your privacy at every step.
-            </Text>
-          </View>
-        </View>
-      </BottomSheet>
+        <LinearGradient colors={['#FF5A3D', '#FF2E8A']} style={styles.fabGrad}>
+          <Plus color="#fff" size={24} strokeWidth={2.5} />
+        </LinearGradient>
+      </TouchableOpacity>
 
       {/* Add Sheet */}
       <BottomSheet
@@ -522,8 +448,19 @@ const styles = StyleSheet.create({
   emptyIconWrap: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: FontSize.xl, fontFamily: 'Inter-Bold' },
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', maxWidth: 260, lineHeight: 22 },
-  addBtnWrap: { borderRadius: 20, overflow: 'hidden' },
-  addGrad: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: Spacing.screen,
+    borderRadius: 28,
+    overflow: 'hidden',
+    shadowColor: '#FF2E8A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  fabGrad: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
   sheetContent: { paddingBottom: Spacing.md },
   pickerRow: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg },
   pickerBtn: {
@@ -563,17 +500,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xxl,
   },
   vaultGateBtnText: { color: '#fff', fontSize: FontSize.body, fontFamily: 'Inter-SemiBold' },
-  headerBtns: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  secInfoBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  secInfoContent: { paddingBottom: Spacing.lg, gap: Spacing.sm },
-  secInfoRow: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md,
-    borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md,
-  },
-  secInfoIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  secInfoText: { flex: 1, gap: 4 },
-  secInfoTitle: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', lineHeight: 18 },
-  secInfoDesc: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 19 },
-  secInfoFooter: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginTop: Spacing.xs },
-  secInfoFooterText: { flex: 1, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18, fontStyle: 'italic' },
 });

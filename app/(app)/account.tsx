@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, Mail, KeyRound, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX } from 'lucide-react-native';
+import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, Mail, KeyRound, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
 import { secureKey } from '@/lib/secureKey';
 import { useAuth } from '@/context/AuthContext';
@@ -31,11 +31,18 @@ type PinStep = 'current' | 'new' | 'confirm' | 'recover-password';
 type AccountTab = 'profile' | 'settings';
 
 // ─── Section wrapper ──────────────────────────────────────────────
-function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+function Section({ title, note, onInfo, children }: { title: string; note?: string; onInfo?: () => void; children: React.ReactNode }) {
   const { colors } = useTheme();
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
+      <View style={styles.sectionTitleRow}>
+        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
+        {onInfo && (
+          <TouchableOpacity onPress={onInfo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+            <CircleQuestionMark color="rgba(255,46,138,0.7)" size={14} strokeWidth={2} />
+          </TouchableOpacity>
+        )}
+      </View>
       <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
         {note && (
           <View style={[styles.ownerNote, { borderBottomColor: colors.borderSubtle }]}>
@@ -356,6 +363,7 @@ export default function AccountScreen() {
   const [resetDone, setResetDone] = useState(false);
 
   const [showDiscreetInfo, setShowDiscreetInfo] = useState(false);
+  const [showVaultSecurityInfo, setShowVaultSecurityInfo] = useState(false);
 
   // Delete Account modal
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
@@ -1133,7 +1141,7 @@ export default function AccountScreen() {
         />
       </Section>
 
-      <Section title="MY VAULT UPLOADS" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately.">
+      <Section title="MY VAULT UPLOADS" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately." onInfo={() => setShowVaultSecurityInfo(true)}>
         <SettingsRow label="Allow Screenshots of My Uploads" sub="Your partner can screenshot items you've added to the Vault" toggle value={s?.vault_allow_screenshot_default ?? false} onChange={v => update({ vault_allow_screenshot_default: v })} />
         <SettingsRow label="Allow Saving My Uploads" sub="Your partner can save your uploads to their phone" toggle value={s?.vault_allow_save_default ?? false} onChange={v => update({ vault_allow_save_default: v })} />
         <SettingsRow label="Allow Sharing My Uploads Outside App" sub="Your partner can share your content externally" toggle value={s?.vault_allow_share_default ?? false} onChange={v => update({ vault_allow_share_default: v })} />
@@ -1490,6 +1498,75 @@ export default function AccountScreen() {
       </Modal>
 
       <BottomSheet
+        visible={showVaultSecurityInfo}
+        onClose={() => setShowVaultSecurityInfo(false)}
+        title="Your Vault is Private"
+        subtitle="Here is how your photos and videos are kept safe."
+        scrollable
+      >
+        <View style={styles.secInfoContent}>
+          {[
+            {
+              icon: <Lock color="#FF2E8A" size={20} strokeWidth={1.8} />,
+              bg: 'rgba(255,46,138,0.10)',
+              title: 'Private Storage',
+              desc: 'Your media lives in a locked, private vault. There is no public link anyone can guess or stumble upon — files are completely hidden from the internet.',
+            },
+            {
+              icon: <Clock color="#FF8A3D" size={20} strokeWidth={1.8} />,
+              bg: 'rgba(255,138,61,0.10)',
+              title: 'Links Expire in 1 Hour',
+              desc: 'Every time a photo or video loads, the app generates a temporary access link. That link stops working after one hour — so even if intercepted, it quickly becomes useless.',
+            },
+            {
+              icon: <Users color="#69A7FF" size={20} strokeWidth={1.8} />,
+              bg: 'rgba(105,167,255,0.10)',
+              title: 'Just the Two of You',
+              desc: 'Server-level security rules ensure only you and your partner can ever access your vault. These rules live on our servers, not just the app, so they cannot be bypassed.',
+            },
+            {
+              icon: <Smartphone color="#33D17A" size={20} strokeWidth={1.8} />,
+              bg: 'rgba(51,209,122,0.10)',
+              title: 'Never Saved to Your Device',
+              desc: 'Photos and videos taken inside the app go straight to the vault. They are never written to your camera roll or stored anywhere on your phone.',
+            },
+            {
+              icon: <ScanFace color="#FFB347" size={20} strokeWidth={1.8} />,
+              bg: 'rgba(255,179,71,0.10)',
+              title: 'Face ID & PIN Lock',
+              desc: 'You can require biometric verification (Face ID or fingerprint) before the vault even opens. Turn this on in your Account settings for an extra layer of protection.',
+            },
+            {
+              icon: <Shield color="#FF5A3D" size={20} strokeWidth={1.8} />,
+              bg: 'rgba(255,90,61,0.10)',
+              title: 'Screenshot Detection',
+              desc: 'When screenshots are turned off for an item, the app detects if your partner takes one and sends you a notification immediately.',
+            },
+            {
+              icon: <Sliders color="rgba(255,255,255,0.65)" size={20} strokeWidth={1.8} />,
+              bg: 'rgba(255,255,255,0.06)',
+              title: 'Your Rules, Your Control',
+              desc: 'You decide whether each upload can be screenshotted, saved, or shared. Defaults are set in your Profile and apply to every new item you add.',
+            },
+          ].map(({ icon, bg, title, desc }) => (
+            <View key={title} style={[styles.secInfoRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+              <View style={[styles.secInfoIcon, { backgroundColor: bg }]}>{icon}</View>
+              <View style={styles.secInfoText}>
+                <Text style={[styles.secInfoTitle, { color: colors.text }]}>{title}</Text>
+                <Text style={[styles.secInfoDesc, { color: colors.textSecondary }]}>{desc}</Text>
+              </View>
+            </View>
+          ))}
+          <View style={[styles.secInfoFooter, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: 'rgba(255,46,138,0.18)' }]}>
+            <Shield color="#FF2E8A" size={14} strokeWidth={2} />
+            <Text style={[styles.secInfoFooterText, { color: colors.textSecondary }]}>
+              Your moments are safe. We built this app to protect your privacy at every step.
+            </Text>
+          </View>
+        </View>
+      </BottomSheet>
+
+      <BottomSheet
         visible={showDiscreetInfo}
         onClose={() => setShowDiscreetInfo(false)}
         title="Discreet Notifications"
@@ -1680,7 +1757,8 @@ const styles = StyleSheet.create({
   menuIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   menuText: { flex: 1, fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
   section: { marginBottom: Spacing.lg },
-  sectionTitle: { fontSize: 11, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2, marginBottom: Spacing.sm, paddingHorizontal: 4 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.sm, paddingHorizontal: 4 },
+  sectionTitle: { fontSize: 11, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2 },
   sectionCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
   ownerNote: { paddingHorizontal: Spacing.md, paddingVertical: 10, borderBottomWidth: 1 },
   ownerNoteText: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular', lineHeight: 17, fontStyle: 'italic' },
@@ -1692,6 +1770,17 @@ const styles = StyleSheet.create({
   rowLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   rowLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
   rowSub: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular', lineHeight: 16 },
+  secInfoContent: { paddingBottom: Spacing.lg, gap: Spacing.sm },
+  secInfoRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md,
+    borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md,
+  },
+  secInfoIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  secInfoText: { flex: 1, gap: 4 },
+  secInfoTitle: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', lineHeight: 18 },
+  secInfoDesc: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 19 },
+  secInfoFooter: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginTop: Spacing.xs },
+  secInfoFooterText: { flex: 1, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18, fontStyle: 'italic' },
   previewWrap: { paddingHorizontal: 4, paddingBottom: 8 },
   notifCard: { borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 14 },
   notifAppRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
