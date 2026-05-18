@@ -4,10 +4,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Cloud, Wind, EyeOff, MapPin, MoveHorizontal as MoreHorizontal, Bell } from 'lucide-react-native';
+import { Cloud, Wind, EyeOff, MapPin, MoveHorizontal as MoreHorizontal } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/AuthContext';
-import { useActivityBadge } from '@/hooks/useActivityBadge';
 import { supabase } from '@/lib/supabase';
 import { Spacing, FontSize, Radius } from '@/constants/theme';
 import StealthBypassSheet from '@/components/StealthBypassSheet';
@@ -62,7 +61,6 @@ export default function WeatherScreen() {
   const forecastDayWidth = width >= 600 ? 110 : 90;
   const [showStealthSheet, setShowStealthSheet] = useState(false);
   const [weather, setWeather] = useState<WeatherData>(FALLBACK);
-  const badgeCount = useActivityBadge();
 
   useEffect(() => {
     let cancelled = false;
@@ -152,8 +150,6 @@ export default function WeatherScreen() {
     router.push('/transition');
   };
 
-  const badgeLabel = badgeCount > 9 ? '9+' : String(badgeCount);
-
   return (
     <View style={styles.container}>
       {/* Deep blue sky gradient */}
@@ -178,22 +174,6 @@ export default function WeatherScreen() {
         </View>
 
         <View style={styles.topRight}>
-          {/* Notification bell with badge — only shown when there are pending notifications */}
-          {badgeCount > 0 && (
-            <TouchableOpacity
-              style={styles.bellBtn}
-              onPress={handleCoastIsClear}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={`${badgeCount} new activity`}
-            >
-              <Bell color="rgba(255,255,255,0.7)" size={20} />
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{badgeLabel}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
           <TouchableOpacity style={styles.dotsBtn} activeOpacity={0.6}>
             <MoreHorizontal color="rgba(255,255,255,0.5)" size={20} />
           </TouchableOpacity>
@@ -316,22 +296,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold', letterSpacing: 0.3,
   },
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  bellBtn: { padding: 6, position: 'relative' },
-  badge: {
-    position: 'absolute',
-    top: 1,
-    right: 1,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#FF3B30',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-    borderWidth: 1.5,
-    borderColor: '#07111f',
-  },
-  badgeText: { color: '#fff', fontSize: 9, fontFamily: 'Inter-Bold', lineHeight: 12 },
   dotsBtn: { padding: 4 },
   scroll: { paddingHorizontal: Spacing.md, paddingBottom: 20 },
   topSection: { alignItems: 'center', marginBottom: Spacing.xl, paddingTop: Spacing.lg },
