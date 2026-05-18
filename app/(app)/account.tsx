@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Alert, Platform, TextInput,
   ActivityIndicator, Modal, Image, Linking,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, Mail, KeyRound, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
@@ -564,8 +565,50 @@ export default function AccountScreen() {
     finally { setUploadingAvatar(false); }
   }, [user, refreshProfile]);
 
-  const handlePickAvatar = useCallback(() => {
-    if (!user || Platform.OS !== 'web' || uploadingAvatar) return;
+  const uploadAvatarUri = useCallback(async (uri: string) => {
+    if (!user) return;
+    setUploadingAvatar(true);
+    setAvatarError(null);
+    try {
+      const ext = uri.split('.').pop()?.split('?')[0]?.toLowerCase() ?? 'jpg';
+      const path = `${user.id}/avatar-${Date.now()}.${ext}`;
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      const { error: uploadError } = await supabase.storage
+        .from('avatars').upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
+      if (uploadError) { setAvatarError(uploadError.message ?? 'Upload failed.'); return; }
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+      const { data: updated, error: updateError } = await supabase
+        .from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id)
+        .select('id, avatar_url').maybeSingle();
+      if (updateError) { setAvatarError(updateError.message ?? 'Could not link photo to profile.'); return; }
+      if (!updated) { setAvatarError('Update was blocked. Please sign in again.'); return; }
+      await refreshProfile();
+    } catch (err: any) { setAvatarError(err?.message ?? 'Upload failed.'); }
+    finally { setUploadingAvatar(false); }
+  }, [user, refreshProfile]);
+
+  const handlePickAvatar = useCallback(async () => {
+    if (!user || uploadingAvatar) return;
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        setAvatarError('Photo library permission is required to upload a photo.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets[0]?.uri) {
+        void uploadAvatarUri(result.assets[0].uri);
+      }
+      return;
+    }
+    // Web: file input
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/jpeg,image/png,image/webp,image/gif';
@@ -577,7 +620,7 @@ export default function AccountScreen() {
     }, { once: true });
     document.body.appendChild(input);
     input.click();
-  }, [user, uploadingAvatar, uploadAvatarFile]);
+  }, [user, uploadingAvatar, uploadAvatarFile, uploadAvatarUri]);
 
   // ── Change Password ──────────────────────────────────────────────
   const openChangePw = () => {

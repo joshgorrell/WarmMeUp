@@ -80,13 +80,13 @@ function BubbleMenu({
       <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onDismiss} activeOpacity={1} />
       <View style={[
         styles.menuCard,
-        { backgroundColor: colors.card, borderColor: colors.borderSubtle, left, top },
+        { backgroundColor: '#1c1c28', borderColor: 'rgba(255,255,255,0.12)', left, top },
       ]}>
         <TouchableOpacity style={styles.menuItem} onPress={onEdit} activeOpacity={0.75}>
           <Pencil color="#FF8A3D" size={14} strokeWidth={2} />
           <Text style={[styles.menuText, { color: colors.text }]}>Edit</Text>
         </TouchableOpacity>
-        <View style={[styles.menuDivider, { backgroundColor: colors.borderSubtle }]} />
+        <View style={[styles.menuDivider, { backgroundColor: 'rgba(255,255,255,0.10)' }]} />
         <TouchableOpacity style={styles.menuItem} onPress={onDelete} activeOpacity={0.75}>
           <Trash2 color="#FF4444" size={14} strokeWidth={2} />
           <Text style={[styles.menuText, { color: '#FF4444' }]}>Delete</Text>

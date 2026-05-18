@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import WarmupLogo from './WarmupLogo';
 import WarmupWordmark from './WarmupWordmark';
 import Avatar from './Avatar';
+import { useWeather } from '@/hooks/useWeather';
 import { Spacing } from '@/constants/theme';
 
 interface BrandHeaderProps {
@@ -18,6 +20,9 @@ export default function BrandHeader({
   avatarUri,
   onAvatarPress,
 }: BrandHeaderProps) {
+  const router = useRouter();
+  const temp = useWeather();
+
   return (
     <View style={styles.container}>
       {/* Left: logo + wordmark */}
@@ -26,18 +31,21 @@ export default function BrandHeader({
         <WarmupWordmark size={13} style={styles.wordmark} />
       </View>
 
-      {/* Right: avatar or custom slot */}
-      {(avatarName || rightSlot) && (
-        <View style={styles.right}>
-          {rightSlot ?? (
-            avatarName && onAvatarPress ? (
-              <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.85}>
-                <Avatar name={avatarName} uri={avatarUri} size="sm" bgColor="rgba(255,46,138,0.20)" />
-              </TouchableOpacity>
-            ) : null
-          )}
-        </View>
-      )}
+      {/* Right: temp + avatar or custom slot */}
+      <View style={styles.right}>
+        {temp ? (
+          <TouchableOpacity onPress={() => router.push('/weather')} activeOpacity={0.7} style={styles.tempBtn}>
+            <Text style={styles.tempText}>{temp}</Text>
+          </TouchableOpacity>
+        ) : null}
+        {rightSlot ?? (
+          avatarName && onAvatarPress ? (
+            <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.85}>
+              <Avatar name={avatarName} uri={avatarUri} size="sm" bgColor="rgba(255,46,138,0.20)" />
+            </TouchableOpacity>
+          ) : null
+        )}
+      </View>
     </View>
   );
 }
@@ -59,5 +67,19 @@ const styles = StyleSheet.create({
   wordmark: {
     marginTop: 1,
   },
-  right: {},
+  right: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  tempBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  tempText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 0.2,
+  },
 });

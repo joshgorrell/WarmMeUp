@@ -101,7 +101,20 @@ export default function VaultScreen() {
   const load = async () => {
     if (!couple?.id) return;
     const { data } = await supabase.from('vault_items').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false });
-    if (data) setItems(data);
+    if (data) {
+      setItems(data);
+      // Pre-fetch signed URLs for all items so thumbnails render immediately
+      data.forEach(item => {
+        const bucket = item.storage_bucket ?? 'vault';
+        const path = item.storage_path ?? item.file_path;
+        if (!path) return;
+        supabase.storage.from(bucket).createSignedUrl(path, 60 * 60).then(({ data: urlData }) => {
+          if (urlData?.signedUrl) {
+            setSignedUrls(prev => ({ ...prev, [item.id]: urlData.signedUrl }));
+          }
+        });
+      });
+    }
   };
 
   const resolveSignedUrl = async (item: VaultItem): Promise<string | null> => {
@@ -143,6 +156,30 @@ export default function VaultScreen() {
       });
     }
   };
+
+  const handleDeleteItem = (item: VaultItem) => {
+    Alert.alert(
+      'Delete from Vault',
+      'This will permanently remove this item for both you and your partner.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setItems(prev => prev.filter(i => i.id !== item.id));
+            setSignedUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+            setRevealed(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+            const bucket = item.storage_bucket ?? 'vault';
+            const path = item.storage_path ?? item.file_path;
+            if (path) await supabase.storage.from(bucket).remove([path]);
+            await supabase.from('vault_items').delete().eq('id', item.id);
+          },
+        },
+      ]
+    );
+  };
+
 
   const uploadToVault = async (localUri: string, mediaType: 'photo' | 'video', mimeType: string) => {
     if (!couple?.id || !user) return;
@@ -305,6 +342,8 @@ export default function VaultScreen() {
                   key={item.id}
                   style={[styles.gridItem, { width: ITEM_SIZE, height: ITEM_SIZE }]}
                   onPress={() => handleReveal(item)}
+                  onLongPress={() => handleDeleteItem(item)}
+                  delayLongPress={500}
                   activeOpacity={0.85}
                 >
                   {signedUrls[item.id] ? (
