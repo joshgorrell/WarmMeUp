@@ -5,12 +5,12 @@ import { Zap, Lock, Trophy, MessageCircle, Dice6 } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { Interaction, CashInEvent } from '@/lib/types';
+import { Interaction, CashInEvent, ChatMessage } from '@/lib/types';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
 
-type FilterTab = 'all' | 'dare' | 'tell_me' | 'dice' | 'cash';
+type FilterTab = 'all' | 'dare' | 'tell_me' | 'dice' | 'cash' | 'chat';
 
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -18,6 +18,7 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'tell_me', label: 'Tell Me' },
   { key: 'dice', label: 'Dice' },
   { key: 'cash', label: 'Cash In' },
+  { key: 'chat', label: 'Chat' },
 ];
 
 type ActivityItem = {
@@ -59,15 +60,17 @@ export default function ActivityScreen() {
     const ch = supabase.channel(`activity_screen_${couple.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, load)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cash_in_events', filter: `couple_id=eq.${couple.id}` }, load)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, load)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id]);
 
   const load = async () => {
     if (!couple?.id || !user) return;
-    const [{ data: interactions }, { data: cashIns }] = await Promise.all([
+    const [{ data: interactions }, { data: cashIns }, { data: chats }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(30),
       supabase.from('cash_in_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('chat_messages').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(30),
     ]);
 
     const mapped: ActivityItem[] = [];
@@ -122,7 +125,8 @@ export default function ActivityScreen() {
         icon,
         color,
         points: i.points_awarded > 0 ? i.points_awarded : undefined,
-      });
+        _rawTime: i.created_at,
+      } as ActivityItem & { _rawTime: string });
     });
 
     (cashIns ?? []).forEach((ev: CashInEvent) => {
@@ -135,7 +139,34 @@ export default function ActivityScreen() {
         time: timeAgo(ev.created_at),
         icon: <Trophy color="#FFB347" size={18} strokeWidth={2} />,
         color: '#FFB347',
-      });
+        _rawTime: ev.created_at,
+      } as ActivityItem & { _rawTime: string });
+    });
+
+    (chats ?? []).forEach((msg: ChatMessage) => {
+      const isMine = msg.sender_id === user.id;
+      const isMedia = !!msg.media_storage_path;
+      mapped.push({
+        id: msg.id,
+        _type: 'chat',
+        label: isMine ? 'You sent a message' : `${partnerName} sent you a message`,
+        sub: isMedia
+          ? (msg.media_type === 'video' ? 'Shared a video' : 'Shared a photo')
+          : msg.content_text
+            ? `"${msg.content_text.slice(0, 60)}${msg.content_text.length > 60 ? '…' : ''}"`
+            : '',
+        time: timeAgo(msg.created_at),
+        icon: <MessageCircle color="#4FC3F7" size={18} strokeWidth={2} />,
+        color: '#4FC3F7',
+        _rawTime: msg.created_at,
+      } as ActivityItem & { _rawTime: string });
+    });
+
+    // Sort all items newest first
+    mapped.sort((a, b) => {
+      const ta = (a as any)._rawTime as string;
+      const tb = (b as any)._rawTime as string;
+      return tb.localeCompare(ta);
     });
 
     setAllItems(mapped);
