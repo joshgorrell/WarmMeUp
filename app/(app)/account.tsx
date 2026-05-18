@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UserSettings } from '@/lib/types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
+import { useSubscription } from '@/hooks/useSubscription';
 import CommunityGuidelinesModal from '@/components/CommunityGuidelinesModal';
 import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
@@ -308,6 +309,7 @@ export default function AccountScreen() {
   const { profile, partnerProfile, couple, signOut, isAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple } = useAuth();
   const { colors } = useTheme();
   const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
+  const { plan, status: subStatus, isOnTrial, renewalDate, loading: subLoading, restorePurchases, openManageSubscription } = useSubscription();
 
   const [activeTab, setActiveTab] = useState<AccountTab>('profile');
 
@@ -1211,6 +1213,41 @@ export default function AccountScreen() {
           label="Community Guidelines"
           sub="How we keep this space safe and respectful"
           onPress={() => setShowCommunityGuidelines(true)}
+          last
+        />
+      </Section>
+
+      <Section title="SUBSCRIPTION">
+        <SettingsRow
+          label="Current Plan"
+          sub={subLoading ? '—' : plan}
+        />
+        <SettingsRow
+          label="Status"
+          sub={subLoading ? '—' : subStatus}
+        />
+        {isOnTrial && (
+          <SettingsRow
+            label="Free Trial"
+            sub="7-day trial in progress"
+          />
+        )}
+        {renewalDate && (
+          <SettingsRow
+            label="Renews"
+            sub={renewalDate}
+          />
+        )}
+        <SettingsRow
+          label="Manage Subscription"
+          sub="View or cancel in the App Store"
+          onPress={openManageSubscription}
+          accent
+        />
+        <SettingsRow
+          label="Restore Purchases"
+          sub="Recover a previous subscription"
+          onPress={restorePurchases}
           last
         />
       </Section>
