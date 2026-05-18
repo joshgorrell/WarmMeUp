@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
 import { hasPinStored } from '@/lib/secureKey';
 
 export default function IndexScreen() {
@@ -17,21 +16,16 @@ export default function IndexScreen() {
       return;
     }
 
+    // Wait for settings to be populated before routing.
+    // AuthContext loads them in the same async batch as the session, so they
+    // arrive within a render or two. Routing before they're ready causes
+    // unlock.tsx to see null settings and default to PIN even when the user
+    // has biometric configured.
+    if (!settings) return;
+
     const goNext = async () => {
       const userId = session.user?.id;
-
-      // If settings haven't loaded yet, fetch login_method directly from DB
-      // so we don't fall through to the 'pin' default and mis-route the user.
-      let loginMethod = settings?.login_method;
-      if (!loginMethod && userId) {
-        const { data } = await supabase
-          .from('user_settings')
-          .select('login_method')
-          .eq('user_id', userId)
-          .maybeSingle();
-        loginMethod = data?.login_method ?? 'pin';
-      }
-      loginMethod = loginMethod ?? 'pin';
+      const loginMethod = settings.login_method ?? 'pin';
 
       const needsGate = loginMethod !== 'password';
 

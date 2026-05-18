@@ -27,14 +27,20 @@ export default function UnlockScreen() {
   const insets = useSafeAreaInsets();
 
   const loginMethod = settings?.login_method ?? 'pin';
-  const [mode, setMode] = useState<'biometric' | 'pin'>(loginMethod === 'biometric' ? 'biometric' : 'pin');
+
+  // Mode is initialised once — when settings first become non-null.
+  // Using null as "not yet decided" lets us defer until we have real data.
+  const [mode, setMode] = useState<'biometric' | 'pin' | null>(null);
+  const modeInitialised = useRef(false);
 
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [attempts, setAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [countdown, setCountdown] = useState(0);
-  const [biometricPrompted, setBiometricPrompted] = useState(false);
+  // Tracks whether the OS biometric prompt has been triggered this session.
+  // Never reset after settings arrive — only a deliberate user action resets it.
+  const biometricPrompted = useRef(false);
   const [pinMissing, setPinMissing] = useState(false);
 
   const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -87,6 +93,7 @@ export default function UnlockScreen() {
       setMode('pin');
       return;
     }
+    biometricPrompted.current = true;
     const result = await authenticate(`Unlock Warm Me Up`);
     if (result.success) {
       proceed();
@@ -95,19 +102,23 @@ export default function UnlockScreen() {
     }
   }, [bioAvailable, authenticate, proceed]);
 
+  // Set the initial mode exactly once — the first time settings is non-null.
+  // After that we never override mode from settings changes so a late-arriving
+  // context update can't reset the prompt flag and re-fire Face ID.
   useEffect(() => {
-    if (settings?.login_method === 'biometric') {
-      setMode('biometric');
-      setBiometricPrompted(false);
-    }
-  }, [settings?.login_method]);
+    if (modeInitialised.current || !settings) return;
+    modeInitialised.current = true;
+    const initial = settings.login_method === 'biometric' ? 'biometric' : 'pin';
+    setMode(initial);
+  }, [settings]);
 
+  // Trigger biometric once when mode is first set to 'biometric'.
   useEffect(() => {
-    if (mode === 'biometric' && !biometricPrompted) {
-      setBiometricPrompted(true);
-      tryBiometric();
-    }
-  }, [mode, biometricPrompted, tryBiometric]);
+    if (mode !== 'biometric') return;
+    if (biometricPrompted.current) return;
+    biometricPrompted.current = true;
+    tryBiometric();
+  }, [mode, tryBiometric]);
 
   const checkPin = useCallback(async (entered: string) => {
     // Resolve userId from context first; fall back to live session if context
@@ -202,7 +213,7 @@ export default function UnlockScreen() {
               <Text style={styles.setupPinBtnText}>Sign In with Password</Text>
             </TouchableOpacity>
           </View>
-        ) : mode === 'biometric' && bioAvailable ? (
+        ) : mode === null ? null /* settings not loaded yet — show nothing */ : mode === 'biometric' && bioAvailable ? (
           <View style={[styles.bioWrap, { gap: vSm }]}>
             <TouchableOpacity style={styles.bioButton} onPress={tryBiometric} activeOpacity={0.75}>
               <BiometricIcon color="#FF2E8A" size={52} strokeWidth={1.5} />
