@@ -33,11 +33,9 @@ export default function BrandHeader({
 
       {/* Right: temp + avatar or custom slot */}
       <View style={styles.right}>
-        {temp ? (
-          <TouchableOpacity onPress={() => router.push('/weather')} activeOpacity={0.7} style={styles.tempBtn}>
-            <Text style={styles.tempText}>{temp}</Text>
-          </TouchableOpacity>
-        ) : null}
+        <TouchableOpacity onPress={() => router.push('/weather')} activeOpacity={0.7} style={styles.tempBtn} disabled={!temp}>
+          <Text style={styles.tempText}>{temp}</Text>
+        </TouchableOpacity>
         {rightSlot ?? (
           avatarName && onAvatarPress ? (
             <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.85}>

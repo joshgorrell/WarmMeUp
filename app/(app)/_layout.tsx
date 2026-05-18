@@ -23,6 +23,7 @@ export default function AppLayout() {
       <Stack.Screen name="tellme" />
       <Stack.Screen name="vault-viewer" />
       <Stack.Screen name="customize-prompts" />
+      <Stack.Screen name="weather" />
     </Stack>
   );
 }
