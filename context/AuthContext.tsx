@@ -34,6 +34,12 @@ interface AuthContextType {
   refreshSettings: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * Shared ref that any biometric prompt must set to true while in-flight and
+   * false when done. BackgroundLockManager checks this before navigating to /unlock
+   * so it never interrupts an already-open Face ID / Touch ID prompt.
+   */
+  isAuthenticatingRef: React.MutableRefObject<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -54,6 +60,7 @@ const AuthContext = createContext<AuthContextType>({
   refreshSettings: async () => {},
   refreshProfile: async () => {},
   signOut: async () => {},
+  isAuthenticatingRef: { current: false },
 });
 
 function unlockedAtKey(userId: string) {
@@ -109,6 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const unlockedAtRef = useRef<number | null>(null);
   // Prevents double-loading when getSession() and onAuthStateChange both fire on mount.
   const loadedUserIdRef = useRef<string | null>(null);
+  // Global flag: true while any biometric prompt is open. Prevents BackgroundLockManager
+  // from navigating to /unlock and interrupting an already-open Face ID prompt.
+  const isAuthenticatingRef = useRef(false);
 
   useEffect(() => {
     // onAuthStateChange is the single source of truth for session state.
@@ -285,7 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, refreshSettings, refreshProfile, signOut }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef }}
     >
       {children}
     </AuthContext.Provider>

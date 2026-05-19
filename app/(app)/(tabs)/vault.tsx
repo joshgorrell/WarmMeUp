@@ -23,7 +23,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 
 export default function VaultScreen() {
   const router = useRouter();
-  const { user, couple, settings } = useAuth();
+  const { user, couple, settings, isAuthenticatingRef } = useAuth();
   const { colors } = useTheme();
   const { width, cols } = useLayout();
   const { available: bioAvailable, authenticate: bioAuthenticate } = useBiometricAuth();
@@ -39,7 +39,9 @@ export default function VaultScreen() {
   // Vault biometric gate
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [vaultAuthError, setVaultAuthError] = useState('');
-  const [unlocking, setUnlocking] = useState(false);
+  // Use a ref instead of state so changes don't cause useCallback/useEffect identity churn,
+  // which was causing the AppState listener to re-register mid-auth and fire stale closures.
+  const unlockingRef = useRef(false);
 
   const vaultFaceIdRequired = (settings?.vault_face_id_required ?? false) && Platform.OS !== 'web';
 
@@ -49,21 +51,26 @@ export default function VaultScreen() {
 
   // Unlock the vault via biometrics
   const unlockVault = useCallback(async () => {
-    if (unlocking) return;
+    if (unlockingRef.current) return;
     setVaultAuthError('');
     if (bioAvailable) {
-      setUnlocking(true);
-      const result = await bioAuthenticate('Unlock Vault');
-      setUnlocking(false);
-      if (result.success) {
-        setVaultUnlocked(true);
-      } else {
-        setVaultAuthError('Authentication failed. Try again.');
+      unlockingRef.current = true;
+      isAuthenticatingRef.current = true;
+      try {
+        const result = await bioAuthenticate('Unlock Vault');
+        if (result.success) {
+          setVaultUnlocked(true);
+        } else {
+          setVaultAuthError('Authentication failed. Try again.');
+        }
+      } finally {
+        unlockingRef.current = false;
+        isAuthenticatingRef.current = false;
       }
     } else {
       setVaultUnlocked(true);
     }
-  }, [bioAvailable, bioAuthenticate, unlocking]);
+  }, [bioAvailable, bioAuthenticate, isAuthenticatingRef]);
 
   // On mount, check if vault requires biometric gate
   useEffect(() => {
@@ -289,8 +296,8 @@ export default function VaultScreen() {
           <Text style={styles.vaultGateTitle}>Vault is Locked</Text>
           <Text style={styles.vaultGateSub}>Biometric verification required to view Vault content.</Text>
           {vaultAuthError ? <Text style={styles.vaultGateError}>{vaultAuthError}</Text> : null}
-          <TouchableOpacity style={[styles.vaultGateBtn, unlocking && { opacity: 0.6 }]} onPress={unlockVault} activeOpacity={0.8} disabled={unlocking}>
-            {unlocking
+          <TouchableOpacity style={[styles.vaultGateBtn, unlockingRef.current && { opacity: 0.6 }]} onPress={unlockVault} activeOpacity={0.8} disabled={unlockingRef.current}>
+            {unlockingRef.current
               ? <ActivityIndicator color="#fff" size="small" />
               : <Text style={styles.vaultGateBtnText}>Unlock Vault</Text>
             }

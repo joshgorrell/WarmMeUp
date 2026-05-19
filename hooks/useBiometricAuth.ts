@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 type AuthResult = { success: boolean; error?: string };
@@ -12,6 +12,7 @@ interface BiometricAuth {
 export function useBiometricAuth(): BiometricAuth {
   const [available, setAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('Face ID');
+  const inProgressRef = useRef(false);
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -48,6 +49,11 @@ export function useBiometricAuth(): BiometricAuth {
     if (Platform.OS === 'web' || !available) {
       return { success: false, error: 'Biometrics not available on this device.' };
     }
+    // Prevent concurrent prompts from the same hook instance
+    if (inProgressRef.current) {
+      return { success: false, error: 'Authentication already in progress.' };
+    }
+    inProgressRef.current = true;
     try {
       const LA = await import('expo-local-authentication');
       const result = await LA.authenticateAsync({
@@ -60,6 +66,8 @@ export function useBiometricAuth(): BiometricAuth {
       return { success: false, error: result.error ?? 'Authentication cancelled.' };
     } catch (e: any) {
       return { success: false, error: e.message ?? 'Authentication failed.' };
+    } finally {
+      inProgressRef.current = false;
     }
   }, [available]);
 

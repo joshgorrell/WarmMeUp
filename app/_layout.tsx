@@ -144,7 +144,7 @@ function NotificationHandler() {
 }
 
 function BackgroundLockManager() {
-  const { session, settings, lockIfNeeded } = useAuth();
+  const { session, settings, lockIfNeeded, isAuthenticatingRef } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -164,13 +164,17 @@ function BackgroundLockManager() {
         const method = settings?.login_method ?? 'pin';
         if (!session || method === 'password') return;
 
+        // Don't interrupt an already-open biometric prompt. The vault or unlock
+        // screen will handle the lock state themselves once the prompt resolves.
+        if (isAuthenticatingRef.current) return;
+
         // Use lockIfNeeded() — it measures elapsed time from the last unlock
         // timestamp (persisted in SecureStore), so "5 min" means 5 minutes from
         // last unlock regardless of how many background trips occurred.
         const didLock = lockIfNeeded();
         if (didLock) {
           const currentRoute = segments[segments.length - 1];
-          if (currentRoute !== 'unlock') {
+          if (currentRoute !== 'unlock' && currentRoute !== 'transition') {
             router.replace('/unlock');
           }
         }
@@ -178,7 +182,7 @@ function BackgroundLockManager() {
     });
 
     return () => sub.remove();
-  }, [session, settings?.login_method, lockIfNeeded]);
+  }, [session, settings?.login_method, lockIfNeeded, isAuthenticatingRef]);
 
   return null;
 }
