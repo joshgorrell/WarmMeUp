@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, useWindowDimensions, Platform, ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
@@ -14,6 +14,26 @@ import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { supabase } from '@/lib/supabase';
 import { secureKey } from '@/lib/secureKey';
 
+async function completePendingJoin(userId: string, code: string): Promise<void> {
+  const { data: targetCouple } = await supabase
+    .from('couples')
+    .select('*')
+    .eq('invite_code', code)
+    .maybeSingle();
+
+  if (!targetCouple || targetCouple.user_b_id) return;
+
+  await supabase.from('couples').delete().eq('user_a_id', userId).eq('active', false);
+  await supabase
+    .from('couples')
+    .update({ user_b_id: userId, active: true })
+    .eq('id', targetCouple.id);
+  await supabase.from('scores').upsert([
+    { couple_id: targetCouple.id, user_id: targetCouple.user_a_id, points: 0 },
+    { couple_id: targetCouple.id, user_id: userId, points: 0 },
+  ]);
+}
+
 const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 
 type Step = 'create' | 'confirm' | 'method';
@@ -22,6 +42,7 @@ type LoginMethod = 'pin' | 'biometric' | 'password';
 export default function SetupPinScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { pendingCode } = useLocalSearchParams<{ pendingCode?: string }>();
   const { available: bioAvailable, biometricLabel } = useBiometricAuth();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -83,6 +104,9 @@ export default function SetupPinScreen() {
         .from('user_settings')
         .update({ login_method: method, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
+      if (pendingCode) {
+        await completePendingJoin(user.id, pendingCode);
+      }
     } catch {
       // Non-fatal
     } finally {

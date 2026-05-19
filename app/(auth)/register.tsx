@@ -14,7 +14,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Lock, Eye, EyeOff, Mail, Check, Calendar } from 'lucide-react-native';
+import { ChevronLeft, Lock, Eye, EyeOff, Mail, Check, Calendar, User } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { signInWithProvider, isOAuthSupported } from '@/lib/oauth';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -40,26 +40,6 @@ function parseDateInput(value: string): Date | null {
   return d;
 }
 
-async function completePendingJoin(userId: string, code: string): Promise<void> {
-  const { data: targetCouple } = await supabase
-    .from('couples')
-    .select('*')
-    .eq('invite_code', code)
-    .maybeSingle();
-
-  if (!targetCouple || targetCouple.user_b_id) return;
-
-  await supabase.from('couples').delete().eq('user_a_id', userId).eq('active', false);
-  await supabase
-    .from('couples')
-    .update({ user_b_id: userId, active: true })
-    .eq('id', targetCouple.id);
-  await supabase.from('scores').upsert([
-    { couple_id: targetCouple.id, user_id: targetCouple.user_a_id, points: 0 },
-    { couple_id: targetCouple.id, user_id: userId, points: 0 },
-  ]);
-}
-
 export default function RegisterScreen() {
   const router = useRouter();
   const { pendingCode } = useLocalSearchParams<{ pendingCode?: string }>();
@@ -73,6 +53,7 @@ export default function RegisterScreen() {
   const inputPad = Math.max(Math.round(height * 0.014), 10);
   const headingSize = Math.min(Math.round(width * 0.076), 30);
 
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -122,6 +103,10 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
+    if (!displayName.trim()) {
+      setError('Please enter your name.');
+      return;
+    }
     if (!validateAge()) return;
     if (!tosAccepted) { requireTos(); return; }
     if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
@@ -142,15 +127,15 @@ export default function RegisterScreen() {
       const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
       if (signUpError) throw signUpError;
       if (data.user) {
-        // DB trigger auto-creates profile + user_settings; we just stamp tos_accepted_at
         await supabase
           .from('profiles')
-          .update({ tos_accepted_at: tosAcceptedAt })
+          .update({ display_name: displayName.trim(), tos_accepted_at: tosAcceptedAt })
           .eq('id', data.user.id);
         if (pendingCode) {
-          await completePendingJoin(data.user.id, pendingCode);
+          router.replace({ pathname: '/(auth)/setup-pin', params: { pendingCode } });
+        } else {
+          router.replace('/(auth)/setup-pin');
         }
-        router.replace('/(auth)/setup-pin');
       }
     } catch (e: any) {
       setError(e.message || 'Something went wrong.');
@@ -160,6 +145,10 @@ export default function RegisterScreen() {
   };
 
   const handleOAuth = async (provider: 'apple' | 'google') => {
+    if (!displayName.trim()) {
+      setError('Please enter your name before continuing.');
+      return;
+    }
     if (!validateAge()) return;
     if (!tosAccepted) { requireTos(); return; }
     setError('');
@@ -171,17 +160,11 @@ export default function RegisterScreen() {
 
       const userId = session.user?.id;
       if (userId) {
-        // DB trigger auto-creates profile + user_settings.
-        // Stamp tos_accepted_at and determine routing.
         await supabase
           .from('profiles')
-          .update({ tos_accepted_at: tosAcceptedAt })
+          .update({ display_name: displayName.trim(), tos_accepted_at: tosAcceptedAt })
           .eq('id', userId)
           .is('tos_accepted_at', null);
-
-        if (pendingCode) {
-          await completePendingJoin(userId, pendingCode);
-        }
 
         const { data: existing } = await supabase
           .from('profiles')
@@ -189,7 +172,11 @@ export default function RegisterScreen() {
           .eq('id', userId)
           .maybeSingle();
         if (!existing) {
-          router.replace('/(auth)/setup-pin');
+          if (pendingCode) {
+            router.replace({ pathname: '/(auth)/setup-pin', params: { pendingCode } });
+          } else {
+            router.replace('/(auth)/setup-pin');
+          }
         } else {
           router.replace('/transition');
         }
@@ -289,6 +276,20 @@ export default function RegisterScreen() {
 
         {/* Form fields */}
         <View style={[styles.form, { gap: vXs }]}>
+          <View style={styles.inputWrap}>
+            <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+            <TextInput
+              style={[styles.input, { paddingVertical: inputPad }]}
+              value={displayName}
+              onChangeText={setDisplayName}
+              placeholder="Your name"
+              placeholderTextColor="rgba(255,255,255,0.24)"
+              autoCapitalize="words"
+              autoComplete="name"
+              maxLength={40}
+            />
+          </View>
+
           <View style={styles.inputWrap}>
             <Mail color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
             <TextInput
