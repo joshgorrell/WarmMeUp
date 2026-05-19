@@ -1358,6 +1358,9 @@ export default function AccountScreen() {
                 </View>
                 <Text style={[styles.dataModalTitle, { color: colors.text }]}>Points Reset</Text>
                 <Text style={[styles.dataModalBody, { color: colors.textSecondary }]}>Both scores are back to zero. Ready for a fresh start!</Text>
+                <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => { setResetPointsOpen(false); setResetDone(false); }} activeOpacity={0.7}>
+                  <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
@@ -1453,6 +1456,9 @@ export default function AccountScreen() {
                 <Text style={[styles.dataModalBody, { color: colors.textSecondary }]}>
                   Your history has been deleted. Your settings and connection are intact — ready for a fresh start.
                 </Text>
+                <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => { setDeleteStep(null); setDeleteDone(false); }} activeOpacity={0.7}>
+                  <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</Text>
+                </TouchableOpacity>
               </>
             )}
 
@@ -1474,6 +1480,9 @@ export default function AccountScreen() {
                 <Text style={[styles.pinModalSub, { color: colors.textSecondary }]}>
                   Your new PIN is saved securely on this device.
                 </Text>
+                <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: Spacing.sm, alignSelf: 'stretch' }]} onPress={closePinModal} activeOpacity={0.7}>
+                  <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</Text>
+                </TouchableOpacity>
               </>
             ) : pinStep === 'recover-password' ? (
               <>
@@ -1847,7 +1856,7 @@ const styles = StyleSheet.create({
   inlineSubmitText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   inlineSuccess: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
   inlineSuccessText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', flex: 1 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center', padding: Spacing.xl },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', alignItems: 'center', justifyContent: 'center', padding: Spacing.xl },
   pinModalCard: {
     borderRadius: Radius.xl, padding: Spacing.xl, alignItems: 'center', width: '100%', maxWidth: 360,
     gap: Spacing.sm, borderWidth: 1, borderColor: 'rgba(255,46,138,0.18)',

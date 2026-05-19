@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
   roleBadge: { borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
   roleText: { fontSize: 10, fontFamily: 'Inter-Bold' },
   dateText: { fontSize: 11, fontFamily: 'Inter-Regular' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'flex-end' },
   modalSheet: {
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,

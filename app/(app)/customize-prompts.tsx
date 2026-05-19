@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
   emptyHint: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20 },
   errorBanner: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.md },
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.82)',
     justifyContent: 'flex-end',
   },
   modalCard: {

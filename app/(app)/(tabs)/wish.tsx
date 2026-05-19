@@ -999,7 +999,7 @@ const styles = StyleSheet.create({
   formDraftText: { color: 'rgba(255,255,255,0.45)', fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
 
   // Fulfill sheet
-  sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
+  sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'flex-end' },
   sheetContainer: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: Spacing.screen, paddingBottom: 8 },
   sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginTop: 12, marginBottom: 16 },
   sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },

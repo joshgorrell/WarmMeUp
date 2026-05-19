@@ -412,12 +412,12 @@ export default function PairScreen() {
       </ScrollView>
 
       {/* Invite modal */}
-      <Modal visible={activeModal === 'invite'} transparent animationType="slide">
+      <Modal visible={activeModal === 'invite'} transparent animationType="slide" onRequestClose={() => setActiveModal(null)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 16) + 36, minHeight: minSheetHeight }]}>
             <LinearGradient colors={['#18101C', '#100810']} style={StyleSheet.absoluteFill} />
             <TouchableOpacity style={styles.modalClose} onPress={() => setActiveModal(null)}>
-              <X color="rgba(255,255,255,0.45)" size={20} />
+              <X color="rgba(255,255,255,0.80)" size={20} />
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Your invite code</Text>
             <Text style={styles.modalSub}>Share this with your partner to connect.</Text>
@@ -444,7 +444,7 @@ export default function PairScreen() {
       </Modal>
 
       {/* Join modal */}
-      <Modal visible={activeModal === 'join'} transparent animationType="slide">
+      <Modal visible={activeModal === 'join'} transparent animationType="slide" onRequestClose={() => { setActiveModal(null); setError(''); setJoinCode(''); }}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -456,7 +456,7 @@ export default function PairScreen() {
                 style={styles.modalClose}
                 onPress={() => { setActiveModal(null); setError(''); setJoinCode(''); }}
               >
-                <X color="rgba(255,255,255,0.45)" size={20} />
+                <X color="rgba(255,255,255,0.80)" size={20} />
               </TouchableOpacity>
               <Text style={styles.modalTitle}>Enter partner's code</Text>
               <Text style={styles.modalSub}>Ask your partner for their 6-character invite code.</Text>
@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.70)',
+    backgroundColor: 'rgba(0,0,0,0.82)',
   },
   modalSheet: {
     borderTopLeftRadius: Radius.xl,

@@ -36,17 +36,15 @@ export default function BottomSheet({
     >
       <View style={styles.handle} />
 
-      {(title || subtitle) && (
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            {title && <Text style={[styles.title, { color: colors.text }]}>{title}</Text>}
-            {subtitle && <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text>}
-          </View>
-          <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: colors.borderSubtle }]}>
-            <X color={colors.textSecondary} size={18} />
-          </TouchableOpacity>
+      <View style={styles.header}>
+        <View style={styles.headerText}>
+          {title && <Text style={[styles.title, { color: colors.text }]}>{title}</Text>}
+          {subtitle && <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text>}
         </View>
-      )}
+        <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: colors.borderSubtle }]}>
+          <X color={colors.textSecondary} size={18} />
+        </TouchableOpacity>
+      </View>
 
       {scrollable ? (
         <ScrollView
@@ -78,7 +76,7 @@ export default function BottomSheet({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.82)',
     justifyContent: 'flex-end',
   },
   sheet: {
@@ -106,7 +104,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
     gap: Spacing.md,
   },
   headerText: { flex: 1, gap: 4 },
