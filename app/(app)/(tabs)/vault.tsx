@@ -333,7 +333,7 @@ export default function VaultScreen() {
                     <Image
                       source={{ uri: signedUrls[item.id] }}
                       style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
-                      blurRadius={blurEnabled && !isRevealed ? 20 : 0}
+                      blurRadius={blurEnabled && !isRevealed ? 6 : 0}
                     />
                   ) : (
                     <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.04)' }]} />

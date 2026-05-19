@@ -145,7 +145,7 @@ function MediaBubble({
             source={{ uri: url }}
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
-            blurRadius={isBlurred ? 20 : 0}
+            blurRadius={isBlurred ? 6 : 0}
           />
         ) : (
           <View style={styles.mediaPlaceholder}>
