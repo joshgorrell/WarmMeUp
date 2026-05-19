@@ -967,7 +967,7 @@ const styles = StyleSheet.create({
   grantedDate: { fontSize: 11, fontFamily: 'Inter-Regular' },
 
   // FAB
-  fab: { position: 'absolute', right: Spacing.xl, width: 52, height: 52, borderRadius: 26, overflow: 'hidden', elevation: 8, shadowColor: '#E8637A', shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  fab: { position: 'absolute', right: Spacing.xl, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', elevation: 8, shadowColor: '#E8637A', shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
   fabGrad: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   // Form (WishForm modal)

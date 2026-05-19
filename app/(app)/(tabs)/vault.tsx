@@ -12,13 +12,14 @@ import { supabase } from '@/lib/supabase';
 import { VaultItem } from '@/lib/types';
 import { awardPoints } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLayout } from '@/hooks/useLayout';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import SecondaryButton from '@/components/SecondaryButton';
 import BottomSheet from '@/components/BottomSheet';
 import TabHeader from '@/components/TabHeader';
 import AppShell from '@/components/AppShell';
-import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { FontSize, Spacing, Radius, NavHeight } from '@/constants/theme';
 
 
 export default function VaultScreen() {
@@ -26,6 +27,7 @@ export default function VaultScreen() {
   const { user, couple, settings, isAuthenticatingRef } = useAuth();
   const { colors } = useTheme();
   const { width, cols } = useLayout();
+  const insets = useSafeAreaInsets();
   const { available: bioAvailable, authenticate: bioAuthenticate } = useBiometricAuth();
   const NUM_COLS = cols(3, 4);
   const ITEM_SIZE = (width - Spacing.screen * 2 - Spacing.sm * (NUM_COLS - 1)) / NUM_COLS;
@@ -387,7 +389,7 @@ export default function VaultScreen() {
 
       {/* Floating add button */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: insets.bottom + NavHeight + Spacing.md }]}
         onPress={() => setShowAdd(true)}
         activeOpacity={0.88}
         accessibilityRole="button"
@@ -468,8 +470,9 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', maxWidth: 260, lineHeight: 22 },
   fab: {
     position: 'absolute',
-    bottom: 24,
-    right: Spacing.screen,
+    right: Spacing.xl,
+    width: 56,
+    height: 56,
     borderRadius: 28,
     overflow: 'hidden',
     shadowColor: '#FF2E8A',
@@ -478,7 +481,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
-  fabGrad: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  fabGrad: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   sheetContent: { paddingBottom: Spacing.md },
   pickerRow: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg },
   pickerBtn: {
