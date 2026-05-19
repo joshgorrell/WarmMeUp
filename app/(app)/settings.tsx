@@ -93,13 +93,14 @@ function Section({ title, note, children }: { title: string; note?: string; chil
 }
 
 function SettingsLoginMethodRow({
-  current, bioAvailable, biometricLabel, colors, onSelect,
+  current, bioAvailable, biometricLabel, colors, onSelect, neverLock,
 }: {
   current: 'password' | 'pin' | 'biometric';
   bioAvailable: boolean;
   biometricLabel: string;
   colors: any;
   onSelect: (method: 'password' | 'pin' | 'biometric') => void;
+  neverLock?: boolean;
 }) {
   const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
   const methods: { key: 'biometric' | 'pin' | 'password'; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
@@ -109,19 +110,22 @@ function SettingsLoginMethodRow({
   ];
 
   return (
-    <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
+    <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }, neverLock && { opacity: 0.38 }]}>
       <Text style={[slm.label, { color: colors.text }]}>Unlock Method</Text>
-      <Text style={[slm.sub, { color: colors.textMuted }]}>How you open Warm Me Up each time</Text>
+      <Text style={[slm.sub, { color: colors.textMuted }]}>
+        {neverLock ? 'Disabled — app locking is turned off' : 'How you open Warm Me Up each time'}
+      </Text>
       <View style={slm.row}>
         {methods.map((m) => {
           const sel = current === m.key;
+          const isDisabled = m.disabled || neverLock;
           return (
             <TouchableOpacity
               key={m.key}
-              style={[slm.chip, sel && slm.chipSelected, m.disabled && slm.chipDisabled, { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle }]}
-              onPress={() => !m.disabled && onSelect(m.key)}
-              activeOpacity={m.disabled ? 1 : 0.72}
-              disabled={m.disabled}
+              style={[slm.chip, sel && slm.chipSelected, isDisabled && slm.chipDisabled, { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle }]}
+              onPress={() => !isDisabled && onSelect(m.key)}
+              activeOpacity={isDisabled ? 1 : 0.72}
+              disabled={isDisabled}
             >
               {m.icon}
               <Text style={[slm.chipLabel, { color: m.disabled ? colors.textDisabled : sel ? '#fff' : colors.textSecondary }]}>{m.label}</Text>
@@ -161,6 +165,7 @@ const LOCK_TIMEOUT_OPTIONS: { label: string; value: number | null }[] = [
   { label: '5 min', value: 300 },
   { label: '15 min', value: 900 },
   { label: '1 hour', value: 3600 },
+  { label: 'Never', value: -1 },
 ];
 
 const EXPIRY_OPTIONS: { label: string; value: number }[] = [
@@ -330,6 +335,7 @@ export default function SettingsScreen() {
             bioAvailable={bioAvailable}
             biometricLabel={biometricLabel}
             colors={colors}
+            neverLock={(s?.lock_after_seconds ?? null) === -1}
             onSelect={async (method) => {
               if (method === 'biometric') {
                 const result = await bioAuthenticate('Confirm biometrics to enable this method');

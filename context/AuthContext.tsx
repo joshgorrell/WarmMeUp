@@ -271,6 +271,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    */
   const lockIfNeeded = useCallback((): boolean => {
     const lockAfter = settings?.lock_after_seconds ?? null;
+    // -1 means "never lock"
+    if (lockAfter === -1) return false;
     // null means "always lock"
     if (lockAfter === null) {
       setAppLocked(true);
