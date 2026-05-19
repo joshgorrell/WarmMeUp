@@ -389,7 +389,7 @@ export default function VaultScreen() {
 
       {/* Floating add button */}
       <TouchableOpacity
-        style={[styles.fab, { bottom: insets.bottom + NavHeight + Spacing.md }]}
+        style={[styles.fab, { bottom: insets.bottom + Spacing.lg }]}
         onPress={() => setShowAdd(true)}
         activeOpacity={0.88}
         accessibilityRole="button"

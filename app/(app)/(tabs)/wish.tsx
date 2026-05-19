@@ -881,7 +881,7 @@ export default function WishTab() {
       {/* FAB */}
       {activeTab !== 'granted' && (
         <TouchableOpacity
-          style={[styles.fab, { bottom: insets.bottom + 88 + Spacing.md }]}
+          style={[styles.fab, { bottom: insets.bottom + Spacing.lg }]}
           onPress={() => { setEditingWish(null); setShowForm(true); }}
           activeOpacity={0.85}
         >
