@@ -40,7 +40,7 @@ const CATEGORIES: { label: WishCategory; emoji: string }[] = [
 
 const REACTIONS = ['❤️', '🔥', '✨', '💫', '😍'];
 
-type TabKey = 'mine' | 'shared' | 'granted';
+type TabKey = 'mine' | 'shared' | 'theirs' | 'granted';
 
 interface WishWithReactions extends Wish {
   reactions: WishReaction[];
@@ -698,8 +698,9 @@ export default function WishTab() {
   const tabIndicator = useRef(new Animated.Value(0)).current;
 
   const TAB_DEFS: { key: TabKey; label: string }[] = [
-    { key: 'shared', label: 'Our Wishes' },
-    { key: 'mine',   label: 'Mine' },
+    { key: 'shared',  label: 'Ours' },
+    { key: 'mine',    label: 'Mine' },
+    { key: 'theirs',  label: 'Theirs' },
     { key: 'granted', label: 'Granted ❤️' },
   ];
 
@@ -788,10 +789,12 @@ export default function WishTab() {
 
   // Filter lists
   const myWishes = wishes.filter(w => w.created_by_user_id === user?.id && w.status !== 'fulfilled');
+  const theirWishes = wishes.filter(w => w.created_by_user_id !== user?.id && w.status !== 'fulfilled');
   const sharedWishes = wishes.filter(w => w.status === 'shared');
   const grantedWishes = wishes.filter(w => w.status === 'fulfilled');
 
   const displayedWishes = activeTab === 'mine' ? myWishes
+    : activeTab === 'theirs' ? theirWishes
     : activeTab === 'shared' ? sharedWishes
     : grantedWishes;
 
@@ -848,6 +851,7 @@ export default function WishTab() {
               <Text style={[styles.emptyTitle, { color: colors.text }]}>
                 {activeTab === 'granted' ? 'No granted wishes yet' :
                   activeTab === 'mine' ? 'Start dreaming' :
+                  activeTab === 'theirs' ? 'No wishes from your partner yet' :
                   'Your shared wishes will appear here'}
               </Text>
               <Text style={[styles.emptySub, { color: colors.textMuted }]}>
@@ -855,6 +859,8 @@ export default function WishTab() {
                   ? 'When a wish comes true, it lives here forever ❤️'
                   : activeTab === 'mine'
                   ? 'Tap + to add your first wish'
+                  : activeTab === 'theirs'
+                  ? "Their wishes will appear here once shared"
                   : 'Share something you desire and invite your partner into your dreams'}
               </Text>
             </View>
@@ -881,7 +887,7 @@ export default function WishTab() {
       )}
 
       {/* FAB */}
-      {activeTab !== 'granted' && (
+      {activeTab !== 'granted' && activeTab !== 'theirs' && (
         <TouchableOpacity
           style={[styles.fab, { bottom: insets.bottom + Spacing.lg }]}
           onPress={() => { setEditingWish(null); setShowForm(true); }}
