@@ -123,7 +123,7 @@ export default function WeatherScreen() {
     if (loginMethod === 'password') {
       // Password method has no lock gate — stamp unlock and go straight in.
       unlockApp();
-      router.push('/transition');
+      router.replace('/transition');
       return;
     }
 
@@ -131,11 +131,11 @@ export default function WeatherScreen() {
     const mustLock = lockIfNeeded();
     if (mustLock) {
       // Lock timer has expired (or never set) — require PIN/biometric.
-      router.push(loginMethod === 'pin' || loginMethod === 'biometric' ? '/unlock' : '/(auth)/setup-pin');
+      router.replace(loginMethod === 'pin' || loginMethod === 'biometric' ? '/unlock' : '/(auth)/setup-pin');
     } else {
       // Still within grace period — stamp a fresh unlock time and go in.
       unlockApp();
-      router.push('/transition');
+      router.replace('/transition');
     }
   };
 
@@ -147,7 +147,7 @@ export default function WeatherScreen() {
       .from('user_settings')
       .upsert({ user_id: user.id, stealth_bypass_until: until, updated_at: new Date().toISOString() });
     await refreshSettings();
-    router.push('/transition');
+    router.replace('/transition');
   };
 
   return (
