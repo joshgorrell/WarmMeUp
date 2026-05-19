@@ -42,6 +42,7 @@ export interface UserSettings {
   challenge_expiry_hours: number;
   celebration_seen: boolean;
   chat_auto_save_to_vault: boolean;
+  onboarding_seen: boolean;
   updated_at: string;
 }
 

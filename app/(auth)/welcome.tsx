@@ -79,6 +79,14 @@ export default function WelcomeScreen() {
               <Text style={styles.linkAccent}>Sign In</Text>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/onboarding-preview')}
+            activeOpacity={0.7}
+            style={styles.previewLink}
+          >
+            <Text style={styles.previewLinkText}>See how it works →</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -161,5 +169,15 @@ const styles = StyleSheet.create({
     color: '#FF7A45',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-SemiBold',
+  },
+  previewLink: {
+    marginTop: 4,
+    paddingVertical: 4,
+  },
+  previewLinkText: {
+    color: 'rgba(255,255,255,0.28)',
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    letterSpacing: 0.2,
   },
 });
