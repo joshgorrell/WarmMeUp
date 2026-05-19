@@ -19,7 +19,7 @@ async function completePendingJoin(userId: string, code: string): Promise<string
   const { data: targetCouple } = await supabase
     .from('couples')
     .select('*')
-    .eq('invite_code', code)
+    .eq('invite_code', code.toUpperCase().trim())
     .maybeSingle();
 
   if (!targetCouple || targetCouple.user_b_id) return null;
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
   },
-  dots: { flexDirection: 'row', gap: Spacing.md },
+  dots: { flexDirection: 'row', gap: Spacing.md, justifyContent: 'center' },
   dot: { width: 14, height: 14, borderRadius: 7 },
   error: { color: '#FF5A5F', fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
   pad: { flexDirection: 'row', flexWrap: 'wrap' },

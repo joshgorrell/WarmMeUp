@@ -293,6 +293,7 @@ const styles = StyleSheet.create({
   dots: {
     flexDirection: 'row',
     gap: Spacing.md,
+    justifyContent: 'center',
   },
   dot: { width: 14, height: 14, borderRadius: 7 },
   error: {
