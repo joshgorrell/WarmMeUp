@@ -446,6 +446,13 @@ export default function SettingsScreen() {
             value={s?.notify_me_on_own_screenshots ?? false}
             onChange={v => update({ notify_me_on_own_screenshots: v })}
           />
+          <SettingsRow
+            label="Auto-Save Chat Media to Vault"
+            sub="Any photo or video you send in Chat is automatically added to your Vault. Deleting from either place removes it from both."
+            toggle
+            value={s?.chat_auto_save_to_vault ?? true}
+            onChange={v => update({ chat_auto_save_to_vault: v })}
+          />
         </Section>
 
         <Section

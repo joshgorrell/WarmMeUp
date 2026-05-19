@@ -41,6 +41,7 @@ export interface UserSettings {
   push_notifications_enabled: boolean;
   challenge_expiry_hours: number;
   celebration_seen: boolean;
+  chat_auto_save_to_vault: boolean;
   updated_at: string;
 }
 
@@ -87,6 +88,7 @@ export interface ChatMessage {
   allow_screenshot: boolean;
   allow_save: boolean;
   allow_share: boolean;
+  vault_item_id: string | null;
   created_at: string;
   edited_at: string | null;
 }
@@ -105,6 +107,7 @@ export interface VaultItem {
   allow_share: boolean;
   screenshot_detected: boolean;
   viewed_by_partner: boolean;
+  chat_message_id: string | null;
   created_at: string;
   expires_at: string | null;
 }

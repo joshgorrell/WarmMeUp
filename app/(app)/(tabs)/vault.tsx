@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert,
+  Image, RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { VaultItem } from '@/lib/types';
 import { awardPoints } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
+import { uploadMediaFile, PICKER_OPTIONS } from '@/lib/uploadMedia';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLayout } from '@/hooks/useLayout';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
@@ -36,6 +37,8 @@ export default function VaultScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const spinAnim = useRef(new Animated.Value(0)).current;
   // Cache of item.id -> short-lived signed URL (1 hour)
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   // Vault biometric gate
@@ -167,9 +170,12 @@ export default function VaultScreen() {
   };
 
   const handleDeleteItem = (item: VaultItem) => {
+    const msg = item.chat_message_id
+      ? '\n\nThis item was sent from Chat — it will also be deleted from your Chat history.'
+      : '';
     Alert.alert(
       'Delete from Vault',
-      'This will permanently remove this item for both you and your partner.',
+      `This will permanently remove this item for both you and your partner.${msg}`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -182,6 +188,19 @@ export default function VaultScreen() {
             const bucket = item.storage_bucket ?? 'vault';
             const path = item.storage_path ?? item.file_path;
             if (path) await supabase.storage.from(bucket).remove([path]);
+            // Delete linked chat message + its storage file
+            if (item.chat_message_id) {
+              const { data: chatMsg } = await supabase
+                .from('chat_messages')
+                .select('media_storage_path, media_storage_bucket')
+                .eq('id', item.chat_message_id)
+                .maybeSingle();
+              if (chatMsg?.media_storage_path) {
+                const chatBucket = chatMsg.media_storage_bucket ?? 'chat_media';
+                await supabase.storage.from(chatBucket).remove([chatMsg.media_storage_path]);
+              }
+              await supabase.from('chat_messages').delete().eq('id', item.chat_message_id);
+            }
             await supabase.from('vault_items').delete().eq('id', item.id);
           },
         },
@@ -190,38 +209,46 @@ export default function VaultScreen() {
   };
 
 
+  // Spin animation for the progress overlay
+  const startSpin = () => {
+    spinAnim.setValue(0);
+    Animated.loop(
+      Animated.timing(spinAnim, { toValue: 1, duration: 900, useNativeDriver: true })
+    ).start();
+  };
+  const stopSpin = () => spinAnim.stopAnimation();
+
   const uploadToVault = async (localUri: string, mediaType: 'photo' | 'video', mimeType: string) => {
     if (!couple?.id || !user) return;
     setUploading(true);
+    setUploadPct(0);
     setShowAdd(false);
+    startSpin();
     try {
-      const response = await fetch(localUri);
-      const blob = await response.blob();
       const ext = mediaType === 'video' ? 'mp4' : 'jpg';
       const storagePath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage
-        .from('vault')
-        .upload(storagePath, blob, { contentType: mimeType, upsert: false });
-      if (error) throw error;
+      await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct));
 
       await supabase.from('vault_items').insert({
         couple_id: couple.id,
         uploaded_by_user_id: user.id,
         media_type: mediaType,
-        file_path: storagePath,       // store path only, not a signed URL
+        file_path: storagePath,
         storage_path: storagePath,
         storage_bucket: 'vault',
         blurred_thumbnail_path: null,
         allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
         allow_save: settings?.vault_allow_save_default ?? false,
         allow_share: settings?.vault_allow_share_default ?? false,
+        chat_message_id: null,
       });
-      // Fire-and-forget: don't hold DB connections open during the grid reload
       awardPoints(couple.id, user.id, 5, 'Vault media added');
       notifyPartner({ event_type: 'new_vault_item', couple_id: couple.id, target_route: '/(app)/(tabs)/vault' });
       await load();
     } finally {
+      stopSpin();
       setUploading(false);
+      setUploadPct(0);
     }
   };
 
@@ -234,12 +261,7 @@ export default function VaultScreen() {
         Alert.alert('Permission Required', 'Please allow access to your photo library in Settings.');
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images', 'videos'] as any,
-        quality: 0.85,
-        videoMaxDuration: 60,
-        allowsEditing: false,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
@@ -252,7 +274,6 @@ export default function VaultScreen() {
 
   const handleTakePhoto = async () => {
     setShowAdd(false);
-    // Wait for the bottom sheet slide-out animation to finish before presenting camera
     await new Promise(r => setTimeout(r, 350));
     try {
       const ImagePicker = await import('expo-image-picker');
@@ -261,16 +282,10 @@ export default function VaultScreen() {
         Alert.alert('Permission Required', 'Please allow camera access in Settings.');
         return;
       }
-      // Prevent the AppState listener from re-locking vault while camera is open
       cameraActiveRef.current = true;
       let result;
       try {
-        result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images', 'videos'] as any,
-          quality: 0.85,
-          videoMaxDuration: 60,
-          allowsEditing: false,
-        });
+        result = await ImagePicker.launchCameraAsync(PICKER_OPTIONS);
       } finally {
         cameraActiveRef.current = false;
       }
@@ -380,7 +395,18 @@ export default function VaultScreen() {
       {uploading && (
         <View style={styles.uploadOverlay}>
           <View style={[styles.uploadCard, { backgroundColor: colors.card }]}>
-            <ActivityIndicator color="#FF2E8A" size="large" />
+            <View style={styles.spinnerWrap}>
+              <Animated.View style={{
+                transform: [{
+                  rotate: spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }),
+                }],
+              }}>
+                <ActivityIndicator color="#FF2E8A" size="large" />
+              </Animated.View>
+              {uploadPct > 0 && (
+                <Text style={styles.uploadPct}>{uploadPct}%</Text>
+              )}
+            </View>
             <Text style={[styles.uploadText, { color: colors.text }]}>Uploading to Vault…</Text>
             <Text style={[styles.uploadSub, { color: colors.textMuted }]}>This will not be saved to your device.</Text>
           </View>
@@ -502,6 +528,8 @@ const styles = StyleSheet.create({
   },
   uploadText: { fontSize: FontSize.md, fontFamily: 'Inter-SemiBold', textAlign: 'center' },
   uploadSub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20 },
+  spinnerWrap: { position: 'relative', alignItems: 'center', justifyContent: 'center', width: 56, height: 56 },
+  uploadPct: { position: 'absolute', fontSize: 11, fontFamily: 'Inter-Bold', color: '#FF2E8A' },
   defaultsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md },
   defaultsText: { flex: 1, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18 },
   manageLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Spacing.md },

@@ -10,6 +10,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { awardPoints, getPointValue, incrementMonthlyCounter } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
+import { uploadMediaFile, PICKER_OPTIONS } from '@/lib/uploadMedia';
 import { ChatMessage } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
@@ -170,9 +171,15 @@ function MediaBubble({
           </View>
         )}
         {!isBlurred && (
-          <TouchableOpacity style={styles.vaultBtn} onPress={() => onSaveToVault(msg)} activeOpacity={0.8}>
-            <Vault color="#FFB347" size={13} strokeWidth={2} />
-            <Text style={styles.vaultBtnText}>Save to Vault</Text>
+          <TouchableOpacity
+            style={[styles.vaultBtn, msg.vault_item_id ? styles.vaultBtnSaved : null]}
+            onPress={() => onSaveToVault(msg)}
+            activeOpacity={0.8}
+          >
+            <Vault color={msg.vault_item_id ? '#4CAF50' : '#FFB347'} size={13} strokeWidth={2} />
+            <Text style={[styles.vaultBtnText, msg.vault_item_id ? styles.vaultBtnTextSaved : null]}>
+              {msg.vault_item_id ? 'In Vault' : 'Save to Vault'}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -189,6 +196,7 @@ export default function ChatTab() {
   const [sending, setSending] = useState(false);
   const [attachedMedia, setAttachedMedia] = useState<AttachedMedia | null>(null);
   const [uploadProgress, setUploadProgress] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [editingState, setEditingState] = useState<EditingState | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -251,12 +259,18 @@ export default function ChatTab() {
       let result;
       if (source === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) return;
-        result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'] as any, quality: 0.85, videoMaxDuration: 60, allowsEditing: false });
+        if (!perm.granted) {
+          Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync(PICKER_OPTIONS);
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) return;
-        result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'] as any, quality: 0.85, videoMaxDuration: 60, allowsEditing: false });
+        if (!perm.granted) {
+          Alert.alert('Permission Required', 'Please allow access to your photo library in Settings.');
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
       }
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
@@ -267,22 +281,28 @@ export default function ChatTab() {
         mimeType: isVideo ? 'video/mp4' : 'image/jpeg',
         fileName: `chat_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`,
       });
-    } catch {}
+    } catch (e: any) {
+      Alert.alert('Media Error', e?.message ?? 'Could not open media picker.');
+    }
   };
 
-  const uploadMedia = async (media: AttachedMedia, coupleId: string, userId: string): Promise<string | null> => {
+  const uploadChatMedia = async (
+    media: AttachedMedia,
+    coupleId: string,
+    userId: string,
+  ): Promise<string | null> => {
     try {
       setUploadProgress(true);
-      const response = await fetch(media.uri);
-      const blob = await response.blob();
+      setUploadPct(0);
       const path = `${coupleId}/${userId}/${media.fileName}`;
-      const { error } = await supabase.storage.from('chat_media').upload(path, blob, { contentType: media.mimeType, upsert: false });
-      if (error) return null;
+      await uploadMediaFile(media.uri, 'chat_media', path, media.mimeType, (pct) => setUploadPct(pct));
       return path;
-    } catch {
+    } catch (e: any) {
+      Alert.alert('Upload Failed', e?.message ?? 'Could not upload media. Please try again.');
       return null;
     } finally {
       setUploadProgress(false);
+      setUploadPct(0);
     }
   };
 
@@ -296,21 +316,61 @@ export default function ChatTab() {
     if (!hasText && !hasMedia) return;
     if (!couple?.id || !user) return;
     setSending(true);
-    let storagePath: string | null = null;
+
+    let chatStoragePath: string | null = null;
+    let vaultItemId: string | null = null;
+
     if (hasMedia && attachedMedia) {
-      storagePath = await uploadMedia(attachedMedia, couple.id, user.id);
+      chatStoragePath = await uploadChatMedia(attachedMedia, couple.id, user.id);
+      if (!chatStoragePath) {
+        // Upload failed — error already shown
+        setSending(false);
+        return;
+      }
+
+      // Auto-save to vault if enabled
+      if (settings?.chat_auto_save_to_vault ?? true) {
+        try {
+          const vaultPath = `${couple.id}/${user.id}/vault_${Date.now()}.${attachedMedia.type === 'video' ? 'mp4' : 'jpg'}`;
+          await uploadMediaFile(attachedMedia.uri, 'vault', vaultPath, attachedMedia.mimeType);
+          const { data: vaultData } = await supabase.from('vault_items').insert({
+            couple_id: couple.id,
+            uploaded_by_user_id: user.id,
+            media_type: attachedMedia.type,
+            file_path: vaultPath,
+            storage_path: vaultPath,
+            storage_bucket: 'vault',
+            blurred_thumbnail_path: null,
+            allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
+            allow_save: settings?.vault_allow_save_default ?? false,
+            allow_share: settings?.vault_allow_share_default ?? false,
+            chat_message_id: null, // will be back-filled after chat_messages insert
+          }).select('id').single();
+          if (vaultData?.id) vaultItemId = vaultData.id;
+        } catch {
+          // Non-fatal: vault save fails silently — chat message still sends
+        }
+      }
     }
+
     const { data } = await supabase.from('chat_messages').insert({
       couple_id: couple.id,
       sender_id: user.id,
       content_text: hasText ? text.trim() : null,
-      media_storage_path: storagePath,
+      media_storage_path: chatStoragePath,
       media_storage_bucket: hasMedia ? 'chat_media' : null,
       media_type: attachedMedia?.type ?? null,
       allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
+      vault_item_id: vaultItemId,
     }).select().single();
+
+    // Back-fill the chat_message_id on the vault item so deletions can cascade
+    if (data?.id && vaultItemId) {
+      await supabase.from('vault_items').update({ chat_message_id: data.id }).eq('id', vaultItemId);
+    }
+
     if (data) {
       const eventKey = hasMedia ? 'chat_media' : 'chat_message';
       const pts = await getPointValue(eventKey);
@@ -375,9 +435,23 @@ export default function ChatTab() {
     handleDismissMenu();
     const doDelete = async () => {
       setMessages(prev => prev.filter(m => m.id !== msg.id));
+      // Delete chat storage file
       if (msg.media_storage_path) {
         const bucket = msg.media_storage_bucket ?? 'chat_media';
         await supabase.storage.from(bucket).remove([msg.media_storage_path]);
+      }
+      // Delete linked vault item and its storage file
+      if (msg.vault_item_id) {
+        const { data: vItem } = await supabase
+          .from('vault_items')
+          .select('storage_path, storage_bucket')
+          .eq('id', msg.vault_item_id)
+          .maybeSingle();
+        if (vItem?.storage_path) {
+          const vBucket = vItem.storage_bucket ?? 'vault';
+          await supabase.storage.from(vBucket).remove([vItem.storage_path]);
+        }
+        await supabase.from('vault_items').delete().eq('id', msg.vault_item_id);
       }
       await supabase.from('chat_messages').delete().eq('id', msg.id).eq('sender_id', user!.id);
     };
@@ -428,15 +502,22 @@ export default function ChatTab() {
 
   const handleSaveToVault = async (msg: ChatMessage) => {
     if (!msg.media_storage_path || !couple?.id || !user) return;
+    // If already linked to a vault item, nothing to do
+    if (msg.vault_item_id) {
+      Alert.alert('Already in Vault', 'This media is already saved to your Vault.');
+      return;
+    }
     const srcBucket = msg.media_storage_bucket ?? 'chat_media';
-    const destPath = `${couple.id}/${user.id}/vault_${Date.now()}.${msg.media_type === 'video' ? 'mp4' : 'jpg'}`;
-    const { data: srcData } = await supabase.storage.from(srcBucket).createSignedUrl(msg.media_storage_path, 60);
-    if (!srcData?.signedUrl) return;
+    const mimeType = msg.media_type === 'video' ? 'video/mp4' : 'image/jpeg';
+    const ext = msg.media_type === 'video' ? 'mp4' : 'jpg';
+    const destPath = `${couple.id}/${user.id}/vault_${Date.now()}.${ext}`;
     try {
-      const resp = await fetch(srcData.signedUrl);
-      const blob = await resp.blob();
-      await supabase.storage.from('vault').upload(destPath, blob, { upsert: false });
-      await supabase.from('vault_items').insert({
+      // Get a short-lived signed URL for the source file
+      const { data: srcData } = await supabase.storage.from(srcBucket).createSignedUrl(msg.media_storage_path, 120);
+      if (!srcData?.signedUrl) throw new Error('Could not access source media.');
+      // Re-upload to vault bucket via the shared utility (web-safe)
+      await uploadMediaFile(srcData.signedUrl, 'vault', destPath, mimeType);
+      const { data: vaultData } = await supabase.from('vault_items').insert({
         couple_id: couple.id,
         uploaded_by_user_id: user.id,
         media_type: msg.media_type ?? 'photo',
@@ -446,8 +527,16 @@ export default function ChatTab() {
         allow_screenshot: msg.allow_screenshot,
         allow_save: msg.allow_save,
         allow_share: msg.allow_share,
-      });
-    } catch {}
+        chat_message_id: msg.id,
+      }).select('id').single();
+      if (vaultData?.id) {
+        // Link the message back to the vault item
+        await supabase.from('chat_messages').update({ vault_item_id: vaultData.id }).eq('id', msg.id);
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, vault_item_id: vaultData.id } : m));
+      }
+    } catch (e: any) {
+      Alert.alert('Save Failed', e?.message ?? 'Could not save to Vault. Please try again.');
+    }
   };
 
   const renderItem = ({ item, index }: { item: ChatMessage; index: number }) => {
@@ -572,7 +661,14 @@ export default function ChatTab() {
                     {attachedMedia.type === 'video' ? 'Video' : 'Photo'} — vault privacy
                   </Text>
                 </View>
-                {uploadProgress && <ActivityIndicator color="#FF5A3D" size="small" />}
+                {uploadProgress && (
+                  <View style={styles.uploadPctWrap}>
+                    <ActivityIndicator color="#FF5A3D" size="small" />
+                    {uploadPct > 0 && (
+                      <Text style={styles.uploadPctText}>{uploadPct}%</Text>
+                    )}
+                  </View>
+                )}
                 <TouchableOpacity onPress={() => setAttachedMedia(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <X color={colors.textMuted} size={16} />
                 </TouchableOpacity>
@@ -685,7 +781,11 @@ const styles = StyleSheet.create({
   playCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' },
   playTriangle: { color: '#fff', fontSize: 14, marginLeft: 3 },
   vaultBtn: { position: 'absolute', bottom: 6, right: 6, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(255,179,71,0.35)' },
+  vaultBtnSaved: { borderColor: 'rgba(76,175,80,0.4)' },
   vaultBtnText: { color: '#FFB347', fontSize: 10, fontFamily: 'Inter-SemiBold' },
+  vaultBtnTextSaved: { color: '#4CAF50' },
+  uploadPctWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  uploadPctText: { color: '#FF5A3D', fontSize: 11, fontFamily: 'Inter-Bold', minWidth: 30 },
   // Compose
   compose: { borderTopWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.sm, paddingBottom: Platform.OS === 'ios' ? 24 : Spacing.sm },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: Spacing.sm, paddingHorizontal: 4 },
