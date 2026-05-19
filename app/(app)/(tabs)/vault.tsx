@@ -45,6 +45,7 @@ export default function VaultScreen() {
 
   const blurEnabled = settings?.blur_media ?? true;
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const cameraActiveRef = useRef(false);
 
   // Unlock the vault via biometrics
   const unlockVault = useCallback(async () => {
@@ -79,7 +80,7 @@ export default function VaultScreen() {
       appStateRef.current = next;
       if ((prev === 'background' || prev === 'inactive') && next === 'active') {
         if (blurEnabled) setRevealed(new Set());
-        if (vaultFaceIdRequired) {
+        if (vaultFaceIdRequired && !cameraActiveRef.current) {
           setVaultUnlocked(false);
           unlockVault();
         }
@@ -206,7 +207,8 @@ export default function VaultScreen() {
         allow_save: settings?.vault_allow_save_default ?? false,
         allow_share: settings?.vault_allow_share_default ?? false,
       });
-      await awardPoints(couple.id, user.id, 5, 'Vault media added');
+      // Fire-and-forget: don't hold DB connections open during the grid reload
+      awardPoints(couple.id, user.id, 5, 'Vault media added');
       notifyPartner({ event_type: 'new_vault_item', couple_id: couple.id, target_route: '/(app)/(tabs)/vault' });
       await load();
     } finally {
@@ -241,6 +243,8 @@ export default function VaultScreen() {
 
   const handleTakePhoto = async () => {
     setShowAdd(false);
+    // Wait for the bottom sheet slide-out animation to finish before presenting camera
+    await new Promise(r => setTimeout(r, 350));
     try {
       const ImagePicker = await import('expo-image-picker');
       const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -248,12 +252,19 @@ export default function VaultScreen() {
         Alert.alert('Permission Required', 'Please allow camera access in Settings.');
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images', 'videos'] as any,
-        quality: 0.85,
-        videoMaxDuration: 60,
-        allowsEditing: false,
-      });
+      // Prevent the AppState listener from re-locking vault while camera is open
+      cameraActiveRef.current = true;
+      let result;
+      try {
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images', 'videos'] as any,
+          quality: 0.85,
+          videoMaxDuration: 60,
+          allowsEditing: false,
+        });
+      } finally {
+        cameraActiveRef.current = false;
+      }
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
