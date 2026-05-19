@@ -25,7 +25,7 @@ export default function TabHeader({ rightSlot }: TabHeaderProps) {
         <WarmupWordmark size={13} />
       </View>
       <View style={styles.right}>
-        <TouchableOpacity onPress={() => router.push('/weather')} activeOpacity={0.7} style={styles.tempBtn} disabled={!temp}>
+        <TouchableOpacity onPress={() => router.replace('/weather')} activeOpacity={0.7} style={styles.tempBtn} disabled={!temp}>
           <Text style={styles.tempText}>{temp}</Text>
         </TouchableOpacity>
         {rightSlot}
