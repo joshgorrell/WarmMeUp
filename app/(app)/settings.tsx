@@ -158,6 +158,23 @@ const slm = StyleSheet.create({
   chipSelected: { backgroundColor: 'rgba(255,46,138,0.08)' },
   chipDisabled: { opacity: 0.4 },
   chipLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
+  dropRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  valueWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  value: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
+  dropOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.sm,
+  },
+  dropOptionLabel: { fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
 });
 
 const LOCK_TIMEOUT_OPTIONS: { label: string; value: number | null }[] = [
@@ -213,27 +230,47 @@ function RequireUnlockAfterRow({
   colors: any;
   onSelect: (seconds: number | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const selected = LOCK_TIMEOUT_OPTIONS.find(o => o.value === current) ?? LOCK_TIMEOUT_OPTIONS[0];
   return (
-    <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
-      <Text style={[slm.label, { color: colors.text }]}>Require Unlock After</Text>
-      <Text style={[slm.sub, { color: colors.textMuted }]}>How long before you need to unlock again</Text>
-      <View style={[slm.row, { justifyContent: 'space-between' }]}>
-        {LOCK_TIMEOUT_OPTIONS.map((opt) => {
+    <>
+      <TouchableOpacity
+        style={[slm.dropRow, { borderBottomColor: colors.borderSubtle }]}
+        onPress={() => setOpen(true)}
+        activeOpacity={0.7}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={[slm.label, { color: colors.text }]}>Require Unlock After</Text>
+          <Text style={[slm.sub, { color: colors.textMuted }]}>How long before you need to unlock again</Text>
+        </View>
+        <View style={slm.valueWrap}>
+          <Text style={[slm.value, { color: colors.textSecondary }]}>{selected.label}</Text>
+          <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
+        </View>
+      </TouchableOpacity>
+      <BottomSheet
+        visible={open}
+        onClose={() => setOpen(false)}
+        title="Require Unlock After"
+        subtitle="How long before you need to unlock again"
+      >
+        {LOCK_TIMEOUT_OPTIONS.map((opt, i) => {
           const sel = current === opt.value;
+          const last = i === LOCK_TIMEOUT_OPTIONS.length - 1;
           return (
             <TouchableOpacity
               key={String(opt.value)}
-              style={[slm.chip, sel && slm.chipSelected, { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle, flex: 1, marginHorizontal: 2 }]}
-              onPress={() => onSelect(opt.value)}
-              activeOpacity={0.72}
+              style={[slm.dropOption, !last && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}
+              onPress={() => { onSelect(opt.value); setOpen(false); }}
+              activeOpacity={0.7}
             >
-              <Text style={[slm.chipLabel, { color: sel ? '#fff' : colors.textSecondary }]}>{opt.label}</Text>
-              {sel && <Check color="#FF2E8A" size={12} strokeWidth={2.5} />}
+              <Text style={[slm.dropOptionLabel, { color: sel ? '#FF2E8A' : colors.text }]}>{opt.label}</Text>
+              {sel && <Check color="#FF2E8A" size={16} strokeWidth={2.5} />}
             </TouchableOpacity>
           );
         })}
-      </View>
-    </View>
+      </BottomSheet>
+    </>
   );
 }
 

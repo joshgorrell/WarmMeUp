@@ -161,30 +161,47 @@ function RequireUnlockAfterRow({
   colors: any;
   onSelect: (seconds: number | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const selected = LOCK_TIMEOUT_OPTIONS.find(o => o.value === current) ?? LOCK_TIMEOUT_OPTIONS[0];
   return (
-    <View style={[lms.wrap, { borderBottomColor: colors.borderSubtle }]}>
-      <Text style={[lms.label, { color: colors.text }]}>Require Unlock After</Text>
-      <Text style={[lms.sub, { color: colors.textMuted }]}>How long before you need to unlock again</Text>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-        {LOCK_TIMEOUT_OPTIONS.map((opt) => {
+    <>
+      <TouchableOpacity
+        style={[rua.row, { borderBottomColor: colors.borderSubtle }]}
+        onPress={() => setOpen(true)}
+        activeOpacity={0.7}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={[rua.label, { color: colors.text }]}>Require Unlock After</Text>
+          <Text style={[rua.sub, { color: colors.textMuted }]}>How long before you need to unlock again</Text>
+        </View>
+        <View style={rua.valueWrap}>
+          <Text style={[rua.value, { color: colors.textSecondary }]}>{selected.label}</Text>
+          <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
+        </View>
+      </TouchableOpacity>
+      <BottomSheet
+        visible={open}
+        onClose={() => setOpen(false)}
+        title="Require Unlock After"
+        subtitle="How long before you need to unlock again"
+      >
+        {LOCK_TIMEOUT_OPTIONS.map((opt, i) => {
           const sel = current === opt.value;
+          const last = i === LOCK_TIMEOUT_OPTIONS.length - 1;
           return (
             <TouchableOpacity
               key={String(opt.value)}
-              style={[
-                rua.chip,
-                { borderColor: sel ? 'rgba(255,46,138,0.50)' : colors.borderSubtle, flex: 1, marginHorizontal: 2 },
-                sel && rua.chipSelected,
-              ]}
-              onPress={() => onSelect(opt.value)}
-              activeOpacity={0.72}
+              style={[rua.option, !last && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}
+              onPress={() => { onSelect(opt.value); setOpen(false); }}
+              activeOpacity={0.7}
             >
-              <Text style={[rua.chipLabel, { color: sel ? '#fff' : colors.textSecondary }]}>{opt.label}</Text>
+              <Text style={[rua.optionLabel, { color: sel ? '#FF2E8A' : colors.text }]}>{opt.label}</Text>
+              {sel && <Check color="#FF2E8A" size={16} strokeWidth={2.5} />}
             </TouchableOpacity>
           );
         })}
-      </View>
-    </View>
+      </BottomSheet>
+    </>
   );
 }
 
@@ -292,15 +309,25 @@ const lms = StyleSheet.create({
 });
 
 const rua = StyleSheet.create({
-  chip: {
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderBottomWidth: 1,
   },
-  chipSelected: { backgroundColor: 'rgba(255,46,138,0.12)' },
-  chipLabel: { fontSize: 13, fontFamily: 'Inter-Medium' },
+  label: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', marginBottom: 2 },
+  sub: { fontSize: 11, fontFamily: 'Inter-Regular' },
+  valueWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  value: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.sm,
+  },
+  optionLabel: { fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
 });
 
 // ─── Main screen ──────────────────────────────────────────────────
