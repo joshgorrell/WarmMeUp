@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { Tabs } from 'expo-router';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Hop as Home, Dice6, Flame, MessageSquareHeart, MessageCircle, Lock } from 'lucide-react-native';
+import { Hop as Home, Dice6, Flame, MessageSquareHeart, Sparkles, Lock } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gradient, FontSize, NavHeight } from '@/constants/theme';
@@ -14,7 +14,7 @@ const TABS = [
   { name: 'note', label: 'Chat', Icon: MessageSquareHeart },
   { name: 'dare', label: 'Dare', Icon: Flame },
   { name: 'dice', label: 'Dice', Icon: Dice6 },
-  { name: 'ask', label: 'Ask', Icon: MessageCircle },
+  { name: 'wish', label: 'Wish', Icon: Sparkles },
   { name: 'vault', label: 'Vault', Icon: Lock },
 ];
 
@@ -126,7 +126,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="note" />
       <Tabs.Screen name="dare" />
       <Tabs.Screen name="dice" />
-      <Tabs.Screen name="ask" />
+      <Tabs.Screen name="wish" />
       <Tabs.Screen name="vault" />
     </Tabs>
   );

@@ -15,6 +15,7 @@ interface Stats {
   diceCount: number;
   dareCount: number;
   tellMeCount: number;
+  wishCount: number;
 }
 
 export default function AdminDashboard() {
@@ -27,6 +28,7 @@ export default function AdminDashboard() {
     diceCount: 0,
     dareCount: 0,
     tellMeCount: 0,
+    wishCount: 0,
   });
   const [loading, setLoading] = useState(true);
   const [diag, setDiag] = useState<{ name: string; status: 'pending' | 'pass' | 'fail'; detail?: string }[]>([]);
@@ -109,13 +111,14 @@ export default function AdminDashboard() {
   };
 
   const fetchStats = async () => {
-    const [couples, profiles, interactions, dice, dares, tellMe] = await Promise.all([
+    const [couples, profiles, interactions, dice, dares, tellMe, wishes] = await Promise.all([
       supabase.from('couples').select('id', { count: 'exact', head: true }),
       supabase.from('profiles').select('id', { count: 'exact', head: true }),
       supabase.from('interactions').select('id', { count: 'exact', head: true }),
       supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dice'),
       supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dare'),
       supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'tell_me'),
+      supabase.from('wishes').select('id', { count: 'exact', head: true }),
     ]);
     setStats({
       coupleCount: couples.count ?? 0,
@@ -124,6 +127,7 @@ export default function AdminDashboard() {
       diceCount: dice.count ?? 0,
       dareCount: dares.count ?? 0,
       tellMeCount: tellMe.count ?? 0,
+      wishCount: wishes.count ?? 0,
     });
     setLoading(false);
   };
@@ -221,6 +225,11 @@ export default function AdminDashboard() {
             <View style={styles.breakdownItem}>
               <Text style={[styles.breakdownNum, { color: '#FF8A3D' }]}>{loading ? '—' : stats.tellMeCount}</Text>
               <Text style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Tell Me</Text>
+            </View>
+            <View style={[styles.breakdownDivider, { backgroundColor: colors.borderSubtle }]} />
+            <View style={styles.breakdownItem}>
+              <Text style={[styles.breakdownNum, { color: '#E8637A' }]}>{loading ? '—' : stats.wishCount}</Text>
+              <Text style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Wishes</Text>
             </View>
           </View>
         </View>

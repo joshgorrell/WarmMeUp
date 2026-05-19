@@ -11,6 +11,8 @@ export type NotifyEventType =
   | 'dare_completed'
   | 'new_ask'
   | 'ask_answered'
+  | 'new_wish'
+  | 'wish_fulfilled'
   | 'dice_roll'
   | 'dice_accepted'
   | 'dice_completed';

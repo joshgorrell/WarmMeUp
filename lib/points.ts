@@ -7,6 +7,8 @@ const DEFAULTS: Record<string, number> = {
   dice_complete: 25,
   ask_sent: 5,
   ask_replied: 10,
+  wish_sent: 5,
+  wish_fulfilled: 20,
   chat_message: 1,
   chat_media: 10,
   vault_upload: 10,
@@ -205,6 +207,7 @@ export async function maybeArchiveAndResetScores(coupleId: string, userId: strin
     dares_accepted: 0, dares_completed: 0, dares_skipped: 0,
     dice_accepted: 0, dice_completed: 0, dice_skipped: 0,
     asks_sent: 0, asks_replied: 0,
+    wishes_sent: 0, wishes_fulfilled: 0,
     chat_messages_sent: 0, media_sent: 0, vault_uploads: 0,
   };
 
@@ -218,6 +221,8 @@ export async function maybeArchiveAndResetScores(coupleId: string, userId: strin
     else if (r.includes('Dice') && r.includes('participation')) counts.dice_skipped++;
     else if (r.includes('Ask') && r.includes('sent')) counts.asks_sent++;
     else if (r.includes('Ask') && r.includes('replied')) counts.asks_replied++;
+    else if (r === 'Wish shared') counts.wishes_sent++;
+    else if (r === 'Wish granted') counts.wishes_fulfilled++;
     else if (r === 'Chat message') counts.chat_messages_sent++;
     else if (r === 'Chat media') counts.media_sent++;
     else if (r.includes('Vault upload')) counts.vault_uploads++;

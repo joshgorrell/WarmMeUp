@@ -4,7 +4,7 @@ import {
   Modal, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Plus, Pencil, Trash2, ChevronLeft, Dices, Zap, MessageCircle } from 'lucide-react-native';
+import { Plus, Pencil, Trash2, ChevronLeft, Dices, Zap } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -14,12 +14,11 @@ import WarmTextInput from '@/components/WarmTextInput';
 import PrimaryButton from '@/components/PrimaryButton';
 import SecondaryButton from '@/components/SecondaryButton';
 
-type Tab = 'dice' | 'dare' | 'ask';
+type Tab = 'dice' | 'dare';
 
 const TABS: { key: Tab; label: string; table: string; color: string }[] = [
   { key: 'dice', label: 'Dice', table: 'dice_prompts', color: '#FFB347' },
   { key: 'dare', label: 'Dare', table: 'dare_prompts', color: '#FF2E8A' },
-  { key: 'ask', label: 'Ask', table: 'tell_me_prompts', color: '#FF8A3D' },
 ];
 
 interface Prompt {
@@ -187,7 +186,6 @@ export default function CustomizePromptsScreen() {
     switch (key) {
       case 'dice': return <Dices color={color} size={size} strokeWidth={2} />;
       case 'dare': return <Zap color={color} size={size} strokeWidth={2} />;
-      case 'ask': return <MessageCircle color={color} size={size} strokeWidth={2} />;
     }
   };
 

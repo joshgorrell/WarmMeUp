@@ -20,6 +20,7 @@ interface CoupleStats {
   dice: number;
   dare: number;
   tell_me: number;
+  wish: number;
   chat: number;
   dare_skipped: number;
   dice_skipped: number;
@@ -105,7 +106,7 @@ export default function StatsAdmin() {
 
   const [coupleStats, setCoupleStats] = useState<CoupleStats[]>([]);
   const [topScores, setTopScores] = useState<UserScore[]>([]);
-  const [totals, setTotals] = useState({ dice: 0, dare: 0, tell_me: 0, chat: 0, dare_skipped: 0, dice_skipped: 0 });
+  const [totals, setTotals] = useState({ dice: 0, dare: 0, tell_me: 0, wish: 0, chat: 0, dare_skipped: 0, dice_skipped: 0 });
   const [loading, setLoading] = useState(true);
 
   const [activePreset, setActivePreset] = useState<PresetKey>('all');
@@ -126,6 +127,10 @@ export default function StatsAdmin() {
     if (fromTs) intQ = intQ.gte('created_at', fromTs);
     if (toTs)   intQ = intQ.lte('created_at', toTs);
 
+    let wishQ = supabase.from('wishes').select('couple_id');
+    if (fromTs) wishQ = wishQ.gte('created_at', fromTs);
+    if (toTs)   wishQ = wishQ.lte('created_at', toTs);
+
     let chatQ = supabase.from('chat_messages').select('couple_id');
     if (fromTs) chatQ = chatQ.gte('created_at', fromTs);
     if (toTs)   chatQ = chatQ.lte('created_at', toTs);
@@ -140,13 +145,14 @@ export default function StatsAdmin() {
       monthlyQ = monthlyQ.or(`year.lt.${t.year},and(year.eq.${t.year},month.lte.${t.month})`);
     }
 
-    const [couplesRes, interactionsRes, scoresRes, profilesRes, chatRes, monthlyRes] = await Promise.all([
+    const [couplesRes, interactionsRes, scoresRes, profilesRes, chatRes, monthlyRes, wishRes] = await Promise.all([
       supabase.from('couples').select('id, user_a_id, user_b_id'),
       intQ,
       supabase.from('scores').select('user_id, points').order('points', { ascending: false }).limit(10),
       supabase.from('profiles').select('id, display_name'),
       chatQ,
       monthlyQ,
+      wishQ,
     ]);
 
     const couples      = couplesRes.data      ?? [];
@@ -155,6 +161,7 @@ export default function StatsAdmin() {
     const profiles     = profilesRes.data      ?? [];
     const chatMessages = chatRes.data          ?? [];
     const monthly      = monthlyRes.data       ?? [];
+    const wishRows     = wishRes.data          ?? [];
 
     const nameMap = Object.fromEntries(profiles.map(p => [p.id, p.display_name]));
 
@@ -164,6 +171,11 @@ export default function StatsAdmin() {
       if (i.type === 'dice')         statsMap[i.couple_id].dice++;
       else if (i.type === 'dare')    statsMap[i.couple_id].dare++;
       else if (i.type === 'tell_me') statsMap[i.couple_id].tell_me++;
+    }
+
+    const wishMap: Record<string, number> = {};
+    for (const w of wishRows) {
+      wishMap[w.couple_id] = (wishMap[w.couple_id] ?? 0) + 1;
     }
 
     const chatMap: Record<string, number> = {};
@@ -182,13 +194,14 @@ export default function StatsAdmin() {
       const s  = statsMap[c.id] ?? { dice: 0, dare: 0, tell_me: 0 };
       const sk = skipMap[c.id]  ?? { dare_skipped: 0, dice_skipped: 0 };
       const chat = chatMap[c.id] ?? 0;
+      const wish = wishMap[c.id] ?? 0;
       return {
         couple_id: c.id,
         user_a_name: nameMap[c.user_a_id] ?? 'Unknown',
         user_b_name: c.user_b_id ? (nameMap[c.user_b_id] ?? 'Unknown') : null,
-        dice: s.dice, dare: s.dare, tell_me: s.tell_me, chat,
+        dice: s.dice, dare: s.dare, tell_me: s.tell_me, wish, chat,
         dare_skipped: sk.dare_skipped, dice_skipped: sk.dice_skipped,
-        total: s.dice + s.dare + s.tell_me + chat,
+        total: s.dice + s.dare + s.tell_me + wish + chat,
       };
     });
     builtStats.sort((a, b) => b.total - a.total);
@@ -205,7 +218,7 @@ export default function StatsAdmin() {
         else if (i.type === 'tell_me') acc.tell_me++;
         return acc;
       },
-      { dice: 0, dare: 0, tell_me: 0, chat: chatMessages.length, ...overallSkip },
+      { dice: 0, dare: 0, tell_me: 0, wish: wishRows.length, chat: chatMessages.length, ...overallSkip },
     );
 
     const enrichedScores: UserScore[] = scores.map(s => ({
@@ -251,6 +264,7 @@ export default function StatsAdmin() {
     { label: 'Dice Rolls',    value: totals.dice,         color: '#FFB347' },
     { label: 'Dares Sent',    value: totals.dare,         color: '#FF2E8A' },
     { label: "Ask's Sent",    value: totals.tell_me,      color: '#FF8A3D' },
+    { label: 'Wishes Shared', value: totals.wish,         color: '#E8637A' },
     { label: 'Chat Msgs',     value: totals.chat,         color: '#69A7FF' },
     { label: 'Dares Skipped', value: totals.dare_skipped, color: '#FF5A5F' },
     { label: 'Dice Skipped',  value: totals.dice_skipped, color: '#FF5A5F' },
@@ -380,6 +394,10 @@ export default function StatsAdmin() {
                 <View style={styles.miniStat}>
                   <Text style={[styles.miniNum, { color: '#FF8A3D' }]}>{cs.tell_me}</Text>
                   <Text style={[styles.miniLabel, { color: colors.textMuted }]}>Ask</Text>
+                </View>
+                <View style={styles.miniStat}>
+                  <Text style={[styles.miniNum, { color: '#E8637A' }]}>{cs.wish}</Text>
+                  <Text style={[styles.miniLabel, { color: colors.textMuted }]}>Wish</Text>
                 </View>
                 <View style={styles.miniStat}>
                   <Text style={[styles.miniNum, { color: '#69A7FF' }]}>{cs.chat}</Text>

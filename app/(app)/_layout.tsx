@@ -20,8 +20,7 @@ export default function AppLayout() {
       <Stack.Screen name="settings" />
       <Stack.Screen name="dice" />
       <Stack.Screen name="dare" />
-      <Stack.Screen name="tellme" />
-      <Stack.Screen name="vault-viewer" />
+<Stack.Screen name="vault-viewer" />
       <Stack.Screen name="customize-prompts" />
     </Stack>
   );

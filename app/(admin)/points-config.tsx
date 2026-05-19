@@ -26,6 +26,10 @@ const SECTIONS = [
     keys: ['ask_sent', 'ask_replied'],
   },
   {
+    title: 'WISH',
+    keys: ['wish_sent', 'wish_fulfilled'],
+  },
+  {
     title: 'CHAT',
     keys: ['chat_message', 'chat_media'],
   },

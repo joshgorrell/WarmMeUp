@@ -150,6 +150,8 @@ export interface MonthlyScore {
   dice_skipped: number;
   asks_sent: number;
   asks_replied: number;
+  wishes_sent: number;
+  wishes_fulfilled: number;
   chat_messages_sent: number;
   media_sent: number;
   vault_uploads: number;
@@ -196,5 +198,45 @@ export interface TellMePrompt {
   text: string;
   is_default: boolean;
   is_active: boolean;
+  created_at: string;
+}
+
+export type WishCategory =
+  | 'Romantic'
+  | 'Travel'
+  | 'Food & Drink'
+  | 'Fantasy'
+  | 'Adventure'
+  | 'Gifts'
+  | 'Date Night'
+  | 'Intimate'
+  | 'Someday';
+
+export type WishStatus = 'draft' | 'shared' | 'fulfilled' | 'archived';
+
+export interface Wish {
+  id: string;
+  couple_id: string;
+  created_by_user_id: string;
+  title: string;
+  description: string | null;
+  category: WishCategory | null;
+  image_storage_path: string | null;
+  image_storage_bucket: string | null;
+  link: string | null;
+  status: WishStatus;
+  fulfilled_at: string | null;
+  fulfilled_note: string | null;
+  fulfilled_image_path: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WishReaction {
+  id: string;
+  wish_id: string;
+  user_id: string;
+  emoji: string;
   created_at: string;
 }

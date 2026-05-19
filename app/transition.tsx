@@ -22,6 +22,9 @@ function resolveNotificationRoute(data: NotificationData): string | null {
     case 'new_ask':
     case 'ask_answered':
       return '/(app)/(tabs)/ask';
+    case 'new_wish':
+    case 'wish_fulfilled':
+      return '/(app)/(tabs)/wish';
     case 'dice_roll':
     case 'dice_accepted':
     case 'dice_completed':
