@@ -212,9 +212,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq('id', partnerId)
           .maybeSingle();
         setPartnerProfile(partnerData);
+      } else {
+        setPartnerProfile(null);
       }
       // Lazy monthly reset — archive prior month scores if needed
       maybeArchiveAndResetScores(data.id, userId).catch(() => {});
+    } else {
+      setPartnerProfile(null);
     }
     return data;
   }

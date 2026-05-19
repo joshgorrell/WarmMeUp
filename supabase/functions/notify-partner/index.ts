@@ -21,10 +21,17 @@ const EVENT_LABELS: Record<string, string> = {
   dare_completed: "completed your dare",
   new_ask: "asked you something",
   ask_answered: "answered your question",
+  new_wish: "added a new wish",
+  wish_fulfilled: "fulfilled your wish",
   dice_roll: "sent you a dice challenge",
   dice_accepted: "accepted your dice challenge",
   dice_completed: "completed your dice challenge",
+  partner_disconnected: "ended the partner connection",
 };
+
+// For partner_disconnected we always show the message regardless of discreet setting
+// so the partner knows what happened — this is a system event, not a content event.
+const ALWAYS_SHOW_EVENTS = new Set(["partner_disconnected"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -73,13 +80,18 @@ Deno.serve(async (req: Request) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Verify caller is in the couple
-    const { data: couple, error: coupleError } = await adminClient
+    // For partner_disconnected, the couple may already be inactive — query without active filter.
+    // For all other events, require active couple for security.
+    const coupleQuery = adminClient
       .from("couples")
       .select("user_a_id, user_b_id")
-      .eq("id", couple_id)
-      .eq("active", true)
-      .maybeSingle();
+      .eq("id", couple_id);
+
+    if (event_type !== "partner_disconnected") {
+      coupleQuery.eq("active", true);
+    }
+
+    const { data: couple, error: coupleError } = await coupleQuery.maybeSingle();
 
     if (coupleError || !couple) {
       return new Response(JSON.stringify({ error: "Couple not found" }), {
@@ -111,8 +123,8 @@ Deno.serve(async (req: Request) => {
       adminClient.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
     ]);
 
-    // Respect partner's notification opt-in
-    if (!partnerSettings?.push_notifications_enabled) {
+    // Respect partner's notification opt-in (system events like disconnection bypass this)
+    if (!partnerSettings?.push_notifications_enabled && !ALWAYS_SHOW_EVENTS.has(event_type)) {
       return new Response(JSON.stringify({ ok: true, skipped: "notifications_disabled" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -128,10 +140,11 @@ Deno.serve(async (req: Request) => {
 
     // Build notification text
     const senderName = senderProfile?.display_name ?? "Your partner";
-    const isDiscreet = partnerSettings?.discreet_notifications ?? true;
+    const isSystemEvent = ALWAYS_SHOW_EVENTS.has(event_type);
+    const isDiscreet = isSystemEvent ? false : (partnerSettings?.discreet_notifications ?? true);
     const notifCopy = partnerSettings?.notification_copy ?? "New activity";
 
-    const title = isDiscreet ? "Warm Me Up" : "Warm Me Up";
+    const title = "Warm Me Up";
     const bodyText = isDiscreet
       ? notifCopy
       : `${senderName} ${EVENT_LABELS[event_type] ?? "has new activity for you"}`;

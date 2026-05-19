@@ -17,6 +17,8 @@ export interface Couple {
   admin_notes: string;
   points_enabled: boolean;
   streaks_enabled: boolean;
+  subscription_owner_id: string | null;
+  disconnected_at: string | null;
   created_at: string;
 }
 

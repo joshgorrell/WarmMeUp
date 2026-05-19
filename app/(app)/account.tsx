@@ -26,6 +26,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import CommunityGuidelinesModal from '@/components/CommunityGuidelinesModal';
 import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
+import LeavePartnerSheet from '@/components/LeavePartnerSheet';
 
 const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 type PinStep = 'current' | 'new' | 'confirm' | 'recover-password';
@@ -397,6 +398,9 @@ export default function AccountScreen() {
 
   // Delete Account modal
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+
+  // Leave partner sheet
+  const [showLeaveSheet, setShowLeaveSheet] = useState(false);
   const [deleteAccountStep, setDeleteAccountStep] = useState<1 | 2>(1);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
@@ -532,24 +536,6 @@ export default function AccountScreen() {
     setOptimisticStreaksEnabled(null);
   };
 
-  const handleDisconnect = () => {
-    const partnerName = partnerProfile?.display_name ?? 'your partner';
-    Alert.alert('Disconnect from Partner', `This will disconnect you from ${partnerName}. You can reconnect anytime with a new invite code.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Disconnect', style: 'destructive', onPress: async () => {
-        if (couple?.id) {
-          await supabase.from('couples').update({ user_b_id: null, active: false }).eq('id', couple.id);
-          // Reset celebration flag for both partners so re-pairing shows the celebration again
-          const partnerId = couple.user_a_id === user?.id ? couple.user_b_id : couple.user_a_id;
-          const userIds = [user?.id, partnerId].filter(Boolean) as string[];
-          if (userIds.length > 0) {
-            await supabase.from('user_settings').update({ celebration_seen: false }).in('user_id', userIds);
-          }
-        }
-        signOut();
-      }},
-    ]);
-  };
 
   // ── Name edit ────────────────────────────────────────────────────
   const startEditName = () => { setNameInput(profile?.display_name ?? ''); setEditingName(true); };
@@ -945,17 +931,44 @@ export default function AccountScreen() {
       </View>
 
       {/* Partner card */}
-      {partnerProfile ? (
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-          <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,46,138,0.12)' }]}>
-            <Heart color="#FF2E8A" size={18} fill="#FF2E8A" />
+      {couple?.active && partnerProfile ? (
+        <View style={[styles.connectedCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.22)' }]}>
+          <View style={styles.connectedTop}>
+            <View style={styles.connectedAvatarWrap}>
+              <Avatar
+                name={partnerProfile.display_name}
+                uri={partnerProfile.avatar_url}
+                size="md"
+                bgColor="rgba(255,46,138,0.18)"
+              />
+              <View style={[styles.connectedDot, { backgroundColor: '#33D17A', borderColor: colors.card }]} />
+            </View>
+            <View style={styles.connectedInfo}>
+              <View style={styles.connectedLabelRow}>
+                <Text style={[styles.connectedLabel, { color: colors.textMuted }]}>CONNECTED WITH</Text>
+                <View style={[styles.connectedPill, { backgroundColor: 'rgba(51,209,122,0.12)', borderColor: 'rgba(51,209,122,0.28)' }]}>
+                  <View style={[styles.connectedPillDot, { backgroundColor: '#33D17A' }]} />
+                  <Text style={[styles.connectedPillText, { color: '#33D17A' }]}>Connected</Text>
+                </View>
+              </View>
+              <Text style={[styles.connectedName, { color: colors.text }]}>
+                {partnerProfile.display_name}
+              </Text>
+              <Text style={[styles.connectedHeart, { color: '#FF2E8A' }]}>
+                Connected to {partnerProfile.display_name} ❤️
+              </Text>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.cardLabel, { color: colors.textMuted }]}>CONNECTED WITH</Text>
-            <Text style={[styles.partnerName, { color: colors.text }]}>{partnerProfile.display_name}</Text>
-          </View>
+          <TouchableOpacity
+            onPress={() => setShowLeaveSheet(true)}
+            activeOpacity={0.7}
+            style={styles.manageConnectionBtn}
+          >
+            <Text style={[styles.manageConnectionText, { color: colors.textMuted }]}>Manage connection</Text>
+            <ChevronRight color={colors.textMuted} size={13} strokeWidth={2} />
+          </TouchableOpacity>
         </View>
-      ) : couple?.invite_code ? (
+      ) : !couple?.active && couple?.invite_code ? (
         <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)' }]}>
           <View style={styles.inviteHeader}>
             <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,46,138,0.12)' }]}>
@@ -1682,6 +1695,11 @@ export default function AccountScreen() {
         visible={showCommunityGuidelines}
         onClose={() => setShowCommunityGuidelines(false)}
       />
+      <LeavePartnerSheet
+        visible={showLeaveSheet}
+        onClose={() => setShowLeaveSheet(false)}
+        partnerName={partnerProfile?.display_name ?? 'your partner'}
+      />
 
       {/* ── Delete Account Modal ───────────────────────────────────── */}
       <Modal
@@ -1834,6 +1852,35 @@ const styles = StyleSheet.create({
     gap: 6, borderRadius: Radius.pill, borderWidth: 1, paddingVertical: 11,
   },
   inviteBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  // Connected state card
+  connectedCard: {
+    borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.card, marginBottom: Spacing.md,
+    gap: 10,
+  },
+  connectedTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  connectedAvatarWrap: { position: 'relative' },
+  connectedDot: {
+    position: 'absolute', bottom: 1, right: 1,
+    width: 12, height: 12, borderRadius: 6, borderWidth: 2,
+  },
+  connectedInfo: { flex: 1, gap: 2 },
+  connectedLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  connectedLabel: { fontSize: 10, fontFamily: 'Inter-SemiBold', letterSpacing: 1 },
+  connectedPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: Radius.pill, borderWidth: 1,
+    paddingHorizontal: 7, paddingVertical: 2,
+  },
+  connectedPillDot: { width: 5, height: 5, borderRadius: 3 },
+  connectedPillText: { fontSize: 10, fontFamily: 'Inter-SemiBold' },
+  connectedName: { fontSize: FontSize.body, fontFamily: 'Inter-SemiBold' },
+  connectedHeart: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular', marginTop: 1 },
+  manageConnectionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    alignSelf: 'flex-end',
+    paddingVertical: 4,
+  },
+  manageConnectionText: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular' },
   menuCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden', marginBottom: Spacing.md },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.card, borderBottomWidth: 1 },
   menuIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },

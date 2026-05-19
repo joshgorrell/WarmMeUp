@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ChevronRight, Check, KeyRound, Lock, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark } from 'lucide-react-native';
@@ -16,6 +16,7 @@ import WarmupLogo from '@/components/WarmupLogo';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { registerForPushNotifications, savePushToken, clearPushToken } from '@/lib/notifications';
 import CommunityGuidelinesModal from '@/components/CommunityGuidelinesModal';
+import LeavePartnerSheet from '@/components/LeavePartnerSheet';
 
 function OwnershipNote({ text }: { text: string }) {
   const { colors } = useTheme();
@@ -276,11 +277,12 @@ function RequireUnlockAfterRow({
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, settings, couple, refreshSettings, refreshCouple, signOut, unlockApp } = useAuth();
+  const { user, settings, couple, partnerProfile, refreshSettings, refreshCouple, signOut, unlockApp } = useAuth();
   const { colors } = useTheme();
   const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
   const [showDiscreetInfo, setShowDiscreetInfo] = useState(false);
   const [showCommunityGuidelines, setShowCommunityGuidelines] = useState(false);
+  const [showLeaveSheet, setShowLeaveSheet] = useState(false);
 
   const s = settings;
 
@@ -317,31 +319,6 @@ export default function SettingsScreen() {
     await refreshCouple();
   };
 
-  const handleDisconnect = () => {
-    Alert.alert(
-      'End Connection',
-      'This will disconnect you from your partner. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Disconnect',
-          style: 'destructive',
-          onPress: async () => {
-            if (couple?.id) {
-              await supabase.from('couples').update({ user_b_id: null, active: false }).eq('id', couple.id);
-              // Reset celebration flag for both partners so re-pairing shows the celebration again
-              const partnerId = couple.user_a_id === user?.id ? couple.user_b_id : couple.user_a_id;
-              const userIds = [user?.id, partnerId].filter(Boolean) as string[];
-              if (userIds.length > 0) {
-                await supabase.from('user_settings').update({ celebration_seen: false }).in('user_id', userIds);
-              }
-            }
-            signOut();
-          },
-        },
-      ]
-    );
-  };
 
   return (
     <AppShell scrollable={false}>
@@ -537,7 +514,7 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="ACCOUNT">
-          <SettingsRow label="End Partner Connection" danger onPress={handleDisconnect} />
+          <SettingsRow label="End Partner Connection" danger onPress={() => setShowLeaveSheet(true)} />
           <SettingsRow label="Sign Out" danger onPress={signOut} />
         </Section>
 
@@ -578,6 +555,12 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </BottomSheet>
+
+      <LeavePartnerSheet
+        visible={showLeaveSheet}
+        onClose={() => setShowLeaveSheet(false)}
+        partnerName={partnerProfile?.display_name ?? 'your partner'}
+      />
     </AppShell>
   );
 }
