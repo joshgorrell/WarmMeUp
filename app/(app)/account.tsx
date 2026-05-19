@@ -151,6 +151,7 @@ const LOCK_TIMEOUT_OPTIONS: { label: string; value: number | null }[] = [
   { label: '5 min', value: 300 },
   { label: '15 min', value: 900 },
   { label: '1 hour', value: 3600 },
+  { label: 'Never', value: -1 },
 ];
 
 function RequireUnlockAfterRow({
