@@ -157,18 +157,19 @@ export default function RegisterScreen() {
 
       const userId = session.user?.id;
       if (userId) {
-        await supabase
+        // Only update display_name + tos if this is a new account (tos not yet accepted).
+        // Returns 0 rows affected for existing users, which is fine.
+        const { data: updatedProfile } = await supabase
           .from('profiles')
           .update({ display_name: displayName.trim(), tos_accepted_at: tosAcceptedAt })
           .eq('id', userId)
-          .is('tos_accepted_at', null);
-
-        const { data: existing } = await supabase
-          .from('profiles')
+          .is('tos_accepted_at', null)
           .select('id')
-          .eq('id', userId)
           .maybeSingle();
-        if (!existing) {
+
+        // updatedProfile is non-null only when we actually wrote — meaning new user
+        const isNewUser = !!updatedProfile;
+        if (isNewUser) {
           if (pendingCode) {
             router.replace({ pathname: '/(auth)/setup-pin', params: { pendingCode } });
           } else {

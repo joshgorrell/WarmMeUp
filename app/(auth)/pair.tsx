@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy } from 'lucide-react-native';
@@ -59,7 +59,8 @@ function HeartOutline({
 
 export default function PairScreen() {
   const router = useRouter();
-  const { user, couple, refreshCouple } = useAuth();
+  const { prefilledCode } = useLocalSearchParams<{ prefilledCode?: string }>();
+  const { user, couple, refreshCouple, settings } = useAuth();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
   const headingSize = Math.min(Math.round(width * 0.086), 36);
@@ -78,11 +79,11 @@ export default function PairScreen() {
     : {};
 
   const [myCode, setMyCode] = useState('');
-  const [joinCode, setJoinCode] = useState('');
+  const [joinCode, setJoinCode] = useState(prefilledCode ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [activeModal, setActiveModal] = useState<ActiveModal>(prefilledCode ? 'join' : null);
 
   useEffect(() => {
     if (!user) return;
@@ -128,8 +129,10 @@ export default function PairScreen() {
   };
 
   const handleCopy = async () => {
+    const deepLink = `warmup://invite/${myCode}`;
+    const shareText = `Join me on Warm Me Up!\n\nTap to connect: ${deepLink}\n\nOr enter code: ${myCode}`;
     if (Platform.OS !== 'web') {
-      await Share.share({ message: `Join me on Warm Me Up! Code: ${myCode}` });
+      await Share.share({ message: shareText, url: deepLink });
     } else {
       try {
         await navigator.clipboard.writeText(myCode);
@@ -163,18 +166,57 @@ export default function PairScreen() {
         return;
       }
 
-      await supabase.from('couples').delete().eq('user_a_id', user.id).eq('active', false);
-      await supabase
+      // Update target couple first — only delete our stub if this succeeds
+      const { error: updateError } = await supabase
         .from('couples')
         .update({ user_b_id: user.id, active: true })
-        .eq('id', targetCouple.id);
+        .eq('id', targetCouple.id)
+        .is('user_b_id', null);
+
+      if (updateError) {
+        setError('Something went wrong. Please try again.');
+        return;
+      }
+
+      await supabase
+        .from('couples')
+        .delete()
+        .eq('user_a_id', user.id)
+        .eq('active', false)
+        .neq('id', targetCouple.id);
+
       await supabase.from('scores').upsert([
         { couple_id: targetCouple.id, user_id: targetCouple.user_a_id, points: 0 },
         { couple_id: targetCouple.id, user_id: user.id, points: 0 },
       ]);
 
+      // Notify User A that their partner just joined (fire-and-forget)
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (token) {
+        fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ event_type: 'partner_joined', couple_id: targetCouple.id }),
+        }).catch(() => {});
+      }
+
       await refreshCouple();
-      router.replace('/(app)/(tabs)');
+
+      // Show celebration if they haven't seen it yet
+      if (!settings?.celebration_seen) {
+        const { data: partnerProf } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', targetCouple.user_a_id)
+          .maybeSingle();
+        router.replace({
+          pathname: '/(auth)/paired-celebration',
+          params: { partnerName: partnerProf?.display_name || '' },
+        });
+      } else {
+        router.replace('/(app)/(tabs)');
+      }
     } catch (e: any) {
       setError(e.message || 'Something went wrong.');
     } finally {

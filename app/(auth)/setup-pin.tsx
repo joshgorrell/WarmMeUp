@@ -15,20 +15,39 @@ import { supabase } from '@/lib/supabase';
 import { secureKey } from '@/lib/secureKey';
 import { useLayout } from '@/hooks/useLayout';
 
-async function completePendingJoin(userId: string, code: string): Promise<string | null> {
-  const { data: targetCouple } = await supabase
+type JoinResult =
+  | { ok: true; partnerName: string | null; coupleId: string }
+  | { ok: false; reason: 'not_found' | 'already_full' | 'error' };
+
+async function completePendingJoin(userId: string, code: string): Promise<JoinResult> {
+  const { data: targetCouple, error: fetchError } = await supabase
     .from('couples')
     .select('*')
     .eq('invite_code', code.toUpperCase().trim())
     .maybeSingle();
 
-  if (!targetCouple || targetCouple.user_b_id) return null;
+  if (fetchError || !targetCouple) return { ok: false, reason: 'not_found' };
+  if (targetCouple.user_b_id && targetCouple.user_b_id !== userId) {
+    return { ok: false, reason: 'already_full' };
+  }
 
-  await supabase.from('couples').delete().eq('user_a_id', userId).eq('active', false);
-  await supabase
+  // Update target couple first — only clean up our stub if this succeeds
+  const { error: updateError } = await supabase
     .from('couples')
     .update({ user_b_id: userId, active: true })
-    .eq('id', targetCouple.id);
+    .eq('id', targetCouple.id)
+    .is('user_b_id', null);
+
+  if (updateError) return { ok: false, reason: 'error' };
+
+  // Safe to delete our own inactive placeholder now
+  await supabase
+    .from('couples')
+    .delete()
+    .eq('user_a_id', userId)
+    .eq('active', false)
+    .neq('id', targetCouple.id);
+
   await supabase.from('scores').upsert([
     { couple_id: targetCouple.id, user_id: targetCouple.user_a_id, points: 0 },
     { couple_id: targetCouple.id, user_id: userId, points: 0 },
@@ -40,7 +59,7 @@ async function completePendingJoin(userId: string, code: string): Promise<string
     .eq('id', targetCouple.user_a_id)
     .maybeSingle();
 
-  return partnerProfile?.display_name || null;
+  return { ok: true, partnerName: partnerProfile?.display_name ?? null, coupleId: targetCouple.id };
 }
 
 const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
@@ -113,15 +132,36 @@ export default function SetupPinScreen() {
         .update({ login_method: method, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
       if (pendingCode) {
-        const partnerName = await completePendingJoin(user.id, pendingCode);
-        router.replace({
-          pathname: '/(auth)/paired-celebration',
-          params: { partnerName: partnerName || '' },
-        });
+        const result = await completePendingJoin(user.id, pendingCode);
+        if (result.ok) {
+          // Notify User A that their partner just joined (fire-and-forget)
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          if (token) {
+            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
+            }).catch(() => {});
+          }
+          router.replace({
+            pathname: '/(auth)/paired-celebration',
+            params: { partnerName: result.partnerName || '' },
+          });
+        } else {
+          const msg =
+            result.reason === 'not_found' ? "That invite code couldn't be found. You can still use the app and pair later." :
+            result.reason === 'already_full' ? 'That couple is already full. You can pair with a different partner later.' :
+            'Something went wrong connecting you. You can pair with your partner from the app.';
+          setError(msg);
+          setSaving(false);
+          // Continue to onboarding after a short delay so user reads the message
+          setTimeout(() => router.replace('/(auth)/onboarding'), 3500);
+        }
         return;
       }
     } catch {
-      // Non-fatal
+      // Non-fatal — still proceed to onboarding
     } finally {
       setSaving(false);
     }

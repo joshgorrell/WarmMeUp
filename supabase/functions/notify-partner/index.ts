@@ -27,11 +27,11 @@ const EVENT_LABELS: Record<string, string> = {
   dice_accepted: "accepted your dice challenge",
   dice_completed: "completed your dice challenge",
   partner_disconnected: "ended the partner connection",
+  partner_joined: "just joined! Your space is ready.",
 };
 
-// For partner_disconnected we always show the message regardless of discreet setting
-// so the partner knows what happened — this is a system event, not a content event.
-const ALWAYS_SHOW_EVENTS = new Set(["partner_disconnected"]);
+// System events shown regardless of discreet_notifications setting
+const ALWAYS_SHOW_EVENTS = new Set(["partner_disconnected", "partner_joined"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
