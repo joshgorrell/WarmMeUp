@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Zap, Lock, Trophy, MessageCircle, Dice6, ChevronRight, Heart } from 'lucide-react-native';
+import { Zap, Lock, Trophy, MessageCircle, Dice6, ChevronRight, Heart, Camera } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -87,6 +87,7 @@ export default function HomeScreen() {
       .channel(`home_${couple.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `couple_id=eq.${couple.id}` }, loadAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, loadAll)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, loadAll)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -123,9 +124,10 @@ export default function HomeScreen() {
   const loadRecentActivity = async () => {
     if (!couple?.id || !user) return;
     const partnerName = partnerProfile?.display_name ?? 'Partner';
-    const [{ data: interactions }, { data: cashIns }] = await Promise.all([
+    const [{ data: interactions }, { data: cashIns }, { data: privacyEvents }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('cash_in_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(3),
+      supabase.from('activity_events').select('*').eq('couple_id', couple.id).eq('target_user_id', user.id).order('created_at', { ascending: false }).limit(5),
     ]);
 
     const items: ActivityItem[] = [];
@@ -184,8 +186,26 @@ export default function HomeScreen() {
         time: timeAgo(ev.created_at),
         icon: <Trophy color="#FFB347" size={16} strokeWidth={2} />,
         color: '#FFB347',
-      });
+        _rawTime: ev.created_at,
+      } as ActivityItem & { _rawTime: string });
     });
+
+    (privacyEvents ?? []).forEach((ev: any) => {
+      items.push({
+        id: `privacy_${ev.id}`,
+        label: `${partnerName} screenshotted your content`,
+        sub: ev.vault_item_id ? 'Vault item' : '',
+        time: timeAgo(ev.created_at),
+        icon: <Camera color="#FF8A3D" size={16} strokeWidth={2} />,
+        color: '#FF8A3D',
+        _rawTime: ev.created_at,
+      } as ActivityItem & { _rawTime: string });
+    });
+
+    // Sort newest first
+    (items as Array<ActivityItem & { _rawTime?: string }>).sort((a, b) =>
+      (b._rawTime ?? '').localeCompare(a._rawTime ?? '')
+    );
 
     setRecentActivity(items.slice(0, 5));
   };

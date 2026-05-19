@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Zap, Lock, Trophy, MessageCircle, Dice6 } from 'lucide-react-native';
+import { Zap, Lock, Trophy, MessageCircle, Dice6, Camera } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -10,7 +10,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
 
-type FilterTab = 'all' | 'dare' | 'tell_me' | 'dice' | 'cash' | 'chat';
+type FilterTab = 'all' | 'dare' | 'tell_me' | 'dice' | 'cash' | 'chat' | 'privacy';
 
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -19,6 +19,7 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'dice', label: 'Dice' },
   { key: 'cash', label: 'Cash In' },
   { key: 'chat', label: 'Chat' },
+  { key: 'privacy', label: 'Privacy' },
 ];
 
 type ActivityItem = {
@@ -55,22 +56,32 @@ export default function ActivityScreen() {
     : allItems.filter(i => (i as any)._type === filter);
 
   useEffect(() => {
-    if (!couple?.id) return;
+    if (!couple?.id || !user?.id) return;
     load();
+    // Mark all unread privacy events as read when the screen is opened
+    supabase
+      .from('activity_events')
+      .update({ read: true })
+      .eq('couple_id', couple.id)
+      .eq('target_user_id', user.id)
+      .eq('read', false)
+      .then(() => {});
     const ch = supabase.channel(`activity_screen_${couple.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, load)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cash_in_events', filter: `couple_id=eq.${couple.id}` }, load)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, load)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, load)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [couple?.id]);
+  }, [couple?.id, user?.id]);
 
   const load = async () => {
     if (!couple?.id || !user) return;
-    const [{ data: interactions }, { data: cashIns }, { data: chats }] = await Promise.all([
+    const [{ data: interactions }, { data: cashIns }, { data: chats }, { data: privacyEvents }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(30),
       supabase.from('cash_in_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('chat_messages').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(30),
+      supabase.from('activity_events').select('*').eq('couple_id', couple.id).eq('target_user_id', user.id).order('created_at', { ascending: false }).limit(30),
     ]);
 
     const mapped: ActivityItem[] = [];
@@ -159,6 +170,19 @@ export default function ActivityScreen() {
         icon: <MessageCircle color="#4FC3F7" size={18} strokeWidth={2} />,
         color: '#4FC3F7',
         _rawTime: msg.created_at,
+      } as ActivityItem & { _rawTime: string });
+    });
+
+    (privacyEvents ?? []).forEach((ev: any) => {
+      mapped.push({
+        id: `privacy_${ev.id}`,
+        _type: 'privacy',
+        label: `${partnerName} screenshotted your content`,
+        sub: ev.vault_item_id ? 'Vault item' : '',
+        time: timeAgo(ev.created_at),
+        icon: <Camera color="#FF8A3D" size={18} strokeWidth={2} />,
+        color: '#FF8A3D',
+        _rawTime: ev.created_at,
       } as ActivityItem & { _rawTime: string });
     });
 

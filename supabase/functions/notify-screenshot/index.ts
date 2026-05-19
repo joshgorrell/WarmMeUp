@@ -102,6 +102,16 @@ Deno.serve(async (req: Request) => {
       adminClient.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
     ]);
 
+    // Always write a persistent activity event — source of truth regardless of push settings
+    await adminClient.from("activity_events").insert({
+      couple_id,
+      actor_user_id: user.id,
+      target_user_id: partnerId,
+      event_type: "screenshot_detected",
+      vault_item_id: vault_item_id ?? null,
+      read: false,
+    });
+
     // Send push notification if the partner has opted in and has a token
     if (partnerSettings?.push_notifications_enabled && partnerProfile?.push_token) {
       const detectorName = detectorProfile?.display_name ?? "Your partner";
