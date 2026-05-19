@@ -69,14 +69,16 @@ export default function TransitionScreen() {
           });
           return;
         }
-        router.replace('/(app)/(tabs)');
-        // After gates are cleared, honour any pending notification deep-link
+        // After gates are cleared, honour any pending notification deep-link.
+        // Pass the destination as a param rather than calling router.push() 100ms
+        // later — that setTimeout races the replace and can crash the navigator.
         const intent = pendingNotificationRoute.current;
-        if (intent) {
-          pendingNotificationRoute.current = null;
-          const dest = resolveNotificationRoute(intent);
-          if (dest) setTimeout(() => router.push(dest as any), 100);
-        }
+        const notifDest = intent ? resolveNotificationRoute(intent) : null;
+        if (intent) pendingNotificationRoute.current = null;
+        router.replace({
+          pathname: '/(app)/(tabs)',
+          params: notifDest ? { pendingTab: notifDest } : {},
+        });
       } else {
         router.replace('/(auth)/pair');
       }

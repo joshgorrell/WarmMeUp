@@ -54,7 +54,7 @@ async function fetchWeatherForCoords(lat: number, lon: number): Promise<WeatherD
 
 export default function WeatherScreen() {
   const router = useRouter();
-  const { user, settings, refreshSettings, unlockApp, lockIfNeeded } = useAuth();
+  const { user, settings, refreshSettings, unlockApp, lockIfNeeded, isAuthenticatingRef } = useAuth();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const tempFontSize = Math.min(Math.round(width * 0.24), 100);
@@ -101,41 +101,50 @@ export default function WeatherScreen() {
   }, []);
 
   const handleCoastIsClear = async () => {
-    // Resolve userId — fall back to the live session if AuthContext user isn't populated yet.
-    let userId = user?.id;
-    if (!userId) {
-      const { data: { session: liveSession } } = await supabase.auth.getSession();
-      userId = liveSession?.user?.id;
-    }
+    // Signal BackgroundLockManager to stand down — it must not race a router.replace
+    // call with its own router.replace('/unlock') while we're deciding where to go.
+    isAuthenticatingRef.current = true;
+    try {
+      // Resolve userId — fall back to the live session if AuthContext user isn't populated yet.
+      let userId = user?.id;
+      if (!userId) {
+        const { data: { session: liveSession } } = await supabase.auth.getSession();
+        userId = liveSession?.user?.id;
+      }
 
-    // If settings haven't loaded yet, fetch login_method directly from the DB.
-    let loginMethod = settings?.login_method;
-    if (!loginMethod && userId) {
-      const { data } = await supabase
-        .from('user_settings')
-        .select('login_method')
-        .eq('user_id', userId)
-        .maybeSingle();
-      loginMethod = data?.login_method ?? 'pin';
-    }
-    loginMethod = loginMethod ?? 'pin';
+      // If settings haven't loaded yet, fetch login_method directly from the DB.
+      let loginMethod = settings?.login_method;
+      if (!loginMethod && userId) {
+        const { data } = await supabase
+          .from('user_settings')
+          .select('login_method')
+          .eq('user_id', userId)
+          .maybeSingle();
+        loginMethod = data?.login_method ?? 'pin';
+      }
+      loginMethod = loginMethod ?? 'pin';
 
-    if (loginMethod === 'password') {
-      // Password method has no lock gate — stamp unlock and go straight in.
-      unlockApp();
-      router.replace('/transition');
-      return;
-    }
+      if (loginMethod === 'password') {
+        // Password method has no lock gate — stamp unlock and go straight in.
+        unlockApp();
+        router.replace('/transition');
+        return;
+      }
 
-    // Check the timer BEFORE stamping — use the persisted unlock timestamp.
-    const mustLock = lockIfNeeded();
-    if (mustLock) {
-      // Lock timer has expired (or never set) — require PIN/biometric.
-      router.replace(loginMethod === 'pin' || loginMethod === 'biometric' ? '/unlock' : '/(auth)/setup-pin');
-    } else {
-      // Still within grace period — stamp a fresh unlock time and go in.
-      unlockApp();
-      router.replace('/transition');
+      // Check the timer BEFORE stamping — use the persisted unlock timestamp.
+      const mustLock = lockIfNeeded();
+      if (mustLock) {
+        // Lock timer has expired (or never set) — require PIN/biometric.
+        router.replace(loginMethod === 'pin' || loginMethod === 'biometric' ? '/unlock' : '/(auth)/setup-pin');
+      } else {
+        // Still within grace period — stamp a fresh unlock time and go in.
+        unlockApp();
+        router.replace('/transition');
+      }
+    } finally {
+      // Clear after a short delay so the navigation action has dispatched before
+      // BackgroundLockManager is allowed to fire again.
+      setTimeout(() => { isAuthenticatingRef.current = false; }, 500);
     }
   };
 

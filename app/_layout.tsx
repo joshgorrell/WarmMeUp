@@ -174,7 +174,10 @@ function BackgroundLockManager() {
         const didLock = lockIfNeeded();
         if (didLock) {
           const currentRoute = segments[segments.length - 1];
-          if (currentRoute !== 'unlock' && currentRoute !== 'transition') {
+          // 'weather' handles its own lock decision via handleCoastIsClear.
+          // 'transition' and 'unlock' are already in the lock/auth flow.
+          const safeRoutes = ['unlock', 'transition', 'weather'];
+          if (!safeRoutes.includes(currentRoute)) {
             router.replace('/unlock');
           }
         }

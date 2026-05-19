@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Zap, Lock, Trophy, MessageCircle, Dice6, ChevronRight, Heart } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
@@ -62,6 +62,7 @@ type ActivityItem = {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { pendingTab } = useLocalSearchParams<{ pendingTab?: string }>();
   const { user, profile, partnerProfile, couple } = useAuth();
   const { colors } = useTheme();
   const [myScore, setMyScore] = useState(0);
@@ -70,6 +71,13 @@ export default function HomeScreen() {
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [greetingSub] = useState(getSessionSub);
+
+  // Honour pending notification deep-link passed from transition.tsx.
+  // We navigate here instead of in transition to avoid push-on-top-of-replace races.
+  useEffect(() => {
+    if (!pendingTab) return;
+    router.push(pendingTab as any);
+  }, []);
 
   useEffect(() => {
     if (!couple?.id || !user) return;
