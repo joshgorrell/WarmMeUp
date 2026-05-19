@@ -10,7 +10,6 @@ import {
   Modal,
   KeyboardAvoidingView,
   ScrollView,
-  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +19,7 @@ import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'reac
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 function generateCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -60,10 +60,9 @@ function HeartOutline({
 export default function PairScreen() {
   const router = useRouter();
   const { user, couple, refreshCouple } = useAuth();
-  const { width, height } = useWindowDimensions();
+  const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
   const headingSize = Math.min(Math.round(width * 0.086), 36);
-  // Responsive code font: 6 chars + spacing must fit inside modal (modal padding = 2 * Spacing.xl = 64)
   const codeFontSize = Math.min(Math.round((width - 64) / 7.5), 40);
   const codeLetterSpacing = Math.min(Math.round(codeFontSize * 0.22), 10);
   const glowWidth = Math.min(width - Spacing.xl * 2, 420);
@@ -71,9 +70,12 @@ export default function PairScreen() {
   const heartsHeight = Math.min(Math.round(height * 0.22), 200);
   const heartSize = Math.round(heartsHeight * 0.68);
   const heartOverlap = -Math.round(heartSize * 0.34);
-  // Minimum sheet height so the join input is never compressed off-screen
   const minSheetHeight = Math.round(height * 0.52);
   const isAuthed = !!user;
+
+  const centerStyle = isTablet
+    ? { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const }
+    : {};
 
   const [myCode, setMyCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -180,7 +182,6 @@ export default function PairScreen() {
     }
   };
 
-  // Unauthenticated pre-check — validate the code exists, then send user to register
   const handlePreAuthJoin = async () => {
     if (!joinCode.trim()) {
       setError('Please enter the code your partner sent you.');
@@ -200,7 +201,6 @@ export default function PairScreen() {
         return;
       }
 
-      // Code is valid — head to register with the code pre-loaded
       router.push({ pathname: '/(auth)/register', params: { pendingCode: joinCode.toUpperCase().trim() } });
     } catch (e: any) {
       setError(e.message || 'Something went wrong.');
@@ -209,7 +209,6 @@ export default function PairScreen() {
     }
   };
 
-  // Unauthenticated layout — only show inline code entry, no invite card
   if (!isAuthed) {
     return (
       <View style={styles.container}>
@@ -235,75 +234,77 @@ export default function PairScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={[styles.heartsWrap, { height: heartsHeight }]} pointerEvents="none">
-              <View style={styles.heartsGlowWrap}>
-                <LinearGradient
-                  colors={['transparent', 'rgba(255,80,30,0.22)', 'rgba(255,46,138,0.28)', 'rgba(255,80,30,0.22)', 'transparent']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={[styles.heartsGlow, { width: glowWidth, height: glowWidth * 0.42 }]}
+            <View style={centerStyle}>
+              <View style={[styles.heartsWrap, { height: heartsHeight }]} pointerEvents="none">
+                <View style={styles.heartsGlowWrap}>
+                  <LinearGradient
+                    colors={['transparent', 'rgba(255,80,30,0.22)', 'rgba(255,46,138,0.28)', 'rgba(255,80,30,0.22)', 'transparent']}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={[styles.heartsGlow, { width: glowWidth, height: glowWidth * 0.42 }]}
+                  />
+                </View>
+                <View style={styles.heartsRow}>
+                  <View style={[styles.heartContainer, { marginRight: heartOverlap, zIndex: 1 }]}>
+                    <View style={styles.heartGlowOrange} />
+                    <HeartOutline size={heartSize} gradientId="heartL2" colorA="#FFB347" colorB="#FF5A3D" />
+                  </View>
+                  <View style={[styles.heartContainer, { marginLeft: heartOverlap, zIndex: 2 }]}>
+                    <View style={styles.heartGlowPink} />
+                    <HeartOutline size={heartSize} gradientId="heartR2" colorA="#FF5A3D" colorB="#FF2E8A" />
+                  </View>
+                </View>
+                <Text style={[styles.sparkle, { top: 8, left: '22%', fontSize: 12 }]}>✦</Text>
+                <Text style={[styles.sparkle, { top: 4, right: '20%', fontSize: 7 }]}>✦</Text>
+                <Text style={[styles.sparkle, { bottom: 14, left: '14%', fontSize: 8 }]}>✦</Text>
+                <Text style={[styles.sparkle, { bottom: 20, right: '15%', fontSize: 6 }]}>✦</Text>
+              </View>
+
+              <Text style={[styles.heading, { fontSize: headingSize }]}>Enter your{'\n'}partner's code</Text>
+              <Text style={styles.sub}>Type in the invite code they sent you.</Text>
+
+              <View style={styles.inlineJoin}>
+                <TextInput
+                  style={[styles.codeInput, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}
+                  value={joinCode}
+                  onChangeText={(t) => { setJoinCode(t); setError(''); }}
+                  placeholder="e.g. AB12CD"
+                  placeholderTextColor="rgba(255,255,255,0.20)"
+                  autoCapitalize="characters"
+                  maxLength={6}
                 />
+
+                {error ? <Text style={styles.joinError}>{error}</Text> : null}
+
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={handlePreAuthJoin}
+                  activeOpacity={0.85}
+                  disabled={loading}
+                >
+                  <LinearGradient
+                    colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.actionGrad}
+                  >
+                    <Text style={styles.actionLabel}>{loading ? 'Checking...' : 'Continue'}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <Text style={styles.preAuthNote}>
+                  You'll create your account on the next step, then connect automatically.
+                </Text>
               </View>
-              <View style={styles.heartsRow}>
-                <View style={[styles.heartContainer, { marginRight: heartOverlap, zIndex: 1 }]}>
-                  <View style={styles.heartGlowOrange} />
-                  <HeartOutline size={heartSize} gradientId="heartL2" colorA="#FFB347" colorB="#FF5A3D" />
-                </View>
-                <View style={[styles.heartContainer, { marginLeft: heartOverlap, zIndex: 2 }]}>
-                  <View style={styles.heartGlowPink} />
-                  <HeartOutline size={heartSize} gradientId="heartR2" colorA="#FF5A3D" colorB="#FF2E8A" />
-                </View>
-              </View>
-              <Text style={[styles.sparkle, { top: 8, left: '22%', fontSize: 12 }]}>✦</Text>
-              <Text style={[styles.sparkle, { top: 4, right: '20%', fontSize: 7 }]}>✦</Text>
-              <Text style={[styles.sparkle, { bottom: 14, left: '14%', fontSize: 8 }]}>✦</Text>
-              <Text style={[styles.sparkle, { bottom: 20, right: '15%', fontSize: 6 }]}>✦</Text>
-            </View>
-
-            <Text style={[styles.heading, { fontSize: headingSize }]}>Enter your{'\n'}partner's code</Text>
-            <Text style={styles.sub}>Type in the invite code they sent you.</Text>
-
-            <View style={styles.inlineJoin}>
-              <TextInput
-                style={[styles.codeInput, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}
-                value={joinCode}
-                onChangeText={(t) => { setJoinCode(t); setError(''); }}
-                placeholder="e.g. AB12CD"
-                placeholderTextColor="rgba(255,255,255,0.20)"
-                autoCapitalize="characters"
-                maxLength={6}
-              />
-
-              {error ? <Text style={styles.joinError}>{error}</Text> : null}
 
               <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={handlePreAuthJoin}
-                activeOpacity={0.85}
-                disabled={loading}
+                style={styles.skipRow}
+                onPress={() => router.replace('/(auth)/register')}
+                activeOpacity={0.6}
               >
-                <LinearGradient
-                  colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.actionGrad}
-                >
-                  <Text style={styles.actionLabel}>{loading ? 'Checking...' : 'Continue'}</Text>
-                </LinearGradient>
+                <Text style={styles.skipText}>Register without a code</Text>
               </TouchableOpacity>
-
-              <Text style={styles.preAuthNote}>
-                You'll create your account on the next step, then connect automatically.
-              </Text>
             </View>
-
-            <TouchableOpacity
-              style={styles.skipRow}
-              onPress={() => router.replace('/(auth)/register')}
-              activeOpacity={0.6}
-            >
-              <Text style={styles.skipText}>Register without a code</Text>
-            </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
@@ -317,105 +318,97 @@ export default function PairScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Back button — circle */}
       <TouchableOpacity style={[styles.backBtn, { top: insets.top + 12 }]} onPress={() => router.back()} activeOpacity={0.7}>
         <ChevronLeft color="rgba(255,255,255,0.75)" size={20} strokeWidth={2.2} />
       </TouchableOpacity>
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: scrollPaddingTop }]} showsVerticalScrollIndicator={false}>
-        {/* Title — center aligned matching mockup */}
-        <Text style={[styles.heading, { fontSize: headingSize }]}>Connect with{'\n'}your partner</Text>
-        <Text style={styles.sub}>This space is just for{'\n'}the two of you.</Text>
+        <View style={centerStyle}>
+          <Text style={[styles.heading, { fontSize: headingSize }]}>Connect with{'\n'}your partner</Text>
+          <Text style={styles.sub}>This space is just for{'\n'}the two of you.</Text>
 
-        {/* Neon hearts illustration */}
-        <View style={[styles.heartsWrap, { height: heartsHeight }]} pointerEvents="none">
-          {/* Wide horizontal glow bloom behind both hearts */}
-          <View style={styles.heartsGlowWrap}>
-            <LinearGradient
-              colors={['transparent', 'rgba(255,80,30,0.22)', 'rgba(255,46,138,0.28)', 'rgba(255,80,30,0.22)', 'transparent']}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={[styles.heartsGlow, { width: glowWidth, height: glowWidth * 0.42 }]}
-            />
+          <View style={[styles.heartsWrap, { height: heartsHeight }]} pointerEvents="none">
+            <View style={styles.heartsGlowWrap}>
+              <LinearGradient
+                colors={['transparent', 'rgba(255,80,30,0.22)', 'rgba(255,46,138,0.28)', 'rgba(255,80,30,0.22)', 'transparent']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={[styles.heartsGlow, { width: glowWidth, height: glowWidth * 0.42 }]}
+              />
+            </View>
+
+            <View style={styles.heartsRow}>
+              <View style={[styles.heartContainer, { marginRight: heartOverlap, zIndex: 1 }]}>
+                <View style={styles.heartGlowOrange} />
+                <HeartOutline size={heartSize} gradientId="heartL" colorA="#FFB347" colorB="#FF5A3D" />
+              </View>
+              <View style={[styles.heartContainer, { marginLeft: heartOverlap, zIndex: 2 }]}>
+                <View style={styles.heartGlowPink} />
+                <HeartOutline size={heartSize} gradientId="heartR" colorA="#FF5A3D" colorB="#FF2E8A" />
+              </View>
+            </View>
+
+            <Text style={[styles.sparkle, { top: 8, left: '22%', fontSize: 12 }]}>✦</Text>
+            <Text style={[styles.sparkle, { top: 4, right: '20%', fontSize: 7 }]}>✦</Text>
+            <Text style={[styles.sparkle, { bottom: 14, left: '14%', fontSize: 8 }]}>✦</Text>
+            <Text style={[styles.sparkle, { bottom: 20, right: '15%', fontSize: 6 }]}>✦</Text>
           </View>
 
-          <View style={styles.heartsRow}>
-            {/* Left heart — orange/amber — behind */}
-            <View style={[styles.heartContainer, { marginRight: heartOverlap, zIndex: 1 }]}>
-              <View style={styles.heartGlowOrange} />
-              <HeartOutline size={heartSize} gradientId="heartL" colorA="#FFB347" colorB="#FF5A3D" />
-            </View>
-            {/* Right heart — pink/magenta — in front */}
-            <View style={[styles.heartContainer, { marginLeft: heartOverlap, zIndex: 2 }]}>
-              <View style={styles.heartGlowPink} />
-              <HeartOutline size={heartSize} gradientId="heartR" colorA="#FF5A3D" colorB="#FF2E8A" />
-            </View>
+          <View style={styles.cards}>
+            <TouchableOpacity
+              style={styles.optionCard}
+              activeOpacity={0.8}
+              onPress={() => setActiveModal('invite')}
+            >
+              <View style={styles.optionIconOuter}>
+                <LinearGradient
+                  colors={['rgba(255,90,60,0.42)', 'rgba(255,46,138,0.30)']}
+                  style={styles.optionIconCircle}
+                >
+                  <UserPlus color="#FF6B3D" size={22} strokeWidth={1.8} />
+                </LinearGradient>
+              </View>
+              <View style={styles.optionText}>
+                <Text style={styles.optionTitle}>Invite via code</Text>
+                <Text style={styles.optionDesc}>Send them your code{'\n'}to invite.</Text>
+              </View>
+              <ChevronRight color="rgba(255,255,255,0.28)" size={20} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.optionCard}
+              activeOpacity={0.8}
+              onPress={() => setActiveModal('join')}
+            >
+              <View style={styles.optionIconOuter}>
+                <LinearGradient
+                  colors={['rgba(255,90,60,0.42)', 'rgba(255,46,138,0.30)']}
+                  style={styles.optionIconCircle}
+                >
+                  <Lock color="#FF6B3D" size={22} strokeWidth={1.8} />
+                </LinearGradient>
+              </View>
+              <View style={styles.optionText}>
+                <Text style={styles.optionTitle}>I have a code</Text>
+                <Text style={styles.optionDesc}>Enter the code they{'\n'}sent you.</Text>
+              </View>
+              <ChevronRight color="rgba(255,255,255,0.28)" size={20} />
+            </TouchableOpacity>
           </View>
 
-          {/* Sparkles */}
-          <Text style={[styles.sparkle, { top: 8, left: '22%', fontSize: 12 }]}>✦</Text>
-          <Text style={[styles.sparkle, { top: 4, right: '20%', fontSize: 7 }]}>✦</Text>
-          <Text style={[styles.sparkle, { bottom: 14, left: '14%', fontSize: 8 }]}>✦</Text>
-          <Text style={[styles.sparkle, { bottom: 20, right: '15%', fontSize: 6 }]}>✦</Text>
-        </View>
-
-        {/* Option cards */}
-        <View style={styles.cards}>
-          <TouchableOpacity
-            style={styles.optionCard}
-            activeOpacity={0.8}
-            onPress={() => setActiveModal('invite')}
-          >
-            <View style={styles.optionIconOuter}>
-              <LinearGradient
-                colors={['rgba(255,90,60,0.42)', 'rgba(255,46,138,0.30)']}
-                style={styles.optionIconCircle}
-              >
-                <UserPlus color="#FF6B3D" size={22} strokeWidth={1.8} />
-              </LinearGradient>
-            </View>
-            <View style={styles.optionText}>
-              <Text style={styles.optionTitle}>Invite via code</Text>
-              <Text style={styles.optionDesc}>Send them your code{'\n'}to invite.</Text>
-            </View>
-            <ChevronRight color="rgba(255,255,255,0.28)" size={20} />
-          </TouchableOpacity>
+          <View style={styles.noteRow}>
+            <Lock color="rgba(255,255,255,0.22)" size={13} strokeWidth={1.5} />
+            <Text style={styles.noteText}>Only one partner connection at a time.</Text>
+          </View>
 
           <TouchableOpacity
-            style={styles.optionCard}
-            activeOpacity={0.8}
-            onPress={() => setActiveModal('join')}
+            style={styles.skipRow}
+            onPress={() => router.replace('/(app)/(tabs)')}
+            activeOpacity={0.6}
           >
-            <View style={styles.optionIconOuter}>
-              <LinearGradient
-                colors={['rgba(255,90,60,0.42)', 'rgba(255,46,138,0.30)']}
-                style={styles.optionIconCircle}
-              >
-                <Lock color="#FF6B3D" size={22} strokeWidth={1.8} />
-              </LinearGradient>
-            </View>
-            <View style={styles.optionText}>
-              <Text style={styles.optionTitle}>I have a code</Text>
-              <Text style={styles.optionDesc}>Enter the code they{'\n'}sent you.</Text>
-            </View>
-            <ChevronRight color="rgba(255,255,255,0.28)" size={20} />
+            <Text style={styles.skipText}>Skip for now</Text>
           </TouchableOpacity>
         </View>
-
-        {/* One partner note */}
-        <View style={styles.noteRow}>
-          <Lock color="rgba(255,255,255,0.22)" size={13} strokeWidth={1.5} />
-          <Text style={styles.noteText}>Only one partner connection at a time.</Text>
-        </View>
-
-        {/* Skip for now */}
-        <TouchableOpacity
-          style={styles.skipRow}
-          onPress={() => router.replace('/(app)/(tabs)')}
-          activeOpacity={0.6}
-        >
-          <Text style={styles.skipText}>Skip for now</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* Invite modal */}
@@ -540,7 +533,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: Spacing.md,
   },
-  // Hearts
   heartsWrap: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -596,7 +588,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     color: 'rgba(255,180,60,0.85)',
   },
-  // Option cards
   cards: {
     gap: Spacing.md,
     marginBottom: Spacing.xl,
@@ -668,7 +659,6 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
     textDecorationColor: 'rgba(255,255,255,0.20)',
   },
-  // Modals
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',

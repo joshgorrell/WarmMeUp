@@ -10,8 +10,8 @@ export function useLayout() {
   }
 
   // Clamp content to a comfortable reading width on tablet, centered
-  const contentMaxWidth = isTablet ? Math.min(width, 680) : width;
-  const contentPadding = isTablet ? Math.max(24, (width - 680) / 2) : 20;
+  const contentMaxWidth = isTablet ? Math.min(width, 520) : width;
+  const contentPadding = isTablet ? Math.max(24, (width - 520) / 2) : 20;
 
   return { width, height, isTablet, cols, contentMaxWidth, contentPadding };
 }

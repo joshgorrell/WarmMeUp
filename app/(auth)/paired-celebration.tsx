@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,13 +15,14 @@ import { Heart } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 export default function PairedCelebrationScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { partnerName } = useLocalSearchParams<{ partnerName?: string }>();
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { width, isTablet, contentMaxWidth } = useLayout();
 
   const scale1 = useSharedValue(0);
   const scale2 = useSharedValue(0);
@@ -38,7 +39,6 @@ export default function PairedCelebrationScreen() {
     contentOpacity.value = withDelay(600, withTiming(1, { duration: 500, easing: Easing.out(Easing.ease) }));
     contentTranslate.value = withDelay(600, withTiming(0, { duration: 500, easing: Easing.out(Easing.ease) }));
 
-    // Mark celebration as seen so this screen never appears again on next app open
     if (user) {
       supabase
         .from('user_settings')
@@ -60,7 +60,7 @@ export default function PairedCelebrationScreen() {
     transform: [{ scale: scaleMain.value }],
     opacity: opacity.value,
   }));
-  const contentStyle = useAnimatedStyle(() => ({
+  const contentAnimStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
     transform: [{ translateY: contentTranslate.value }],
   }));
@@ -76,6 +76,10 @@ export default function PairedCelebrationScreen() {
     router.replace('/(app)/(tabs)');
   };
 
+  const centerStyle = isTablet
+    ? { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const }
+    : {};
+
   return (
     <View style={styles.root}>
       <LinearGradient
@@ -83,7 +87,6 @@ export default function PairedCelebrationScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Ambient glow layers */}
       <View style={[styles.glowTop, { width: width * 0.8, height: width * 0.8 }]} />
       <View style={[styles.glowBottom, { width: width * 0.6, height: width * 0.6 }]} />
 
@@ -95,7 +98,7 @@ export default function PairedCelebrationScreen() {
         <Text style={styles.skipText}>Skip</Text>
       </TouchableOpacity>
 
-      <View style={[styles.container, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
+      <View style={[styles.container, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }, centerStyle]}>
         {/* Heart graphic cluster */}
         <View style={styles.heartCluster}>
           <Animated.View style={[styles.heartOrbit, styles.heartLeft, heart1Style]}>
@@ -136,7 +139,7 @@ export default function PairedCelebrationScreen() {
         </View>
 
         {/* Content */}
-        <Animated.View style={[styles.content, contentStyle]}>
+        <Animated.View style={[styles.content, contentAnimStyle]}>
           <Text style={styles.heading}>You're connected!</Text>
           {partnerName ? (
             <Text style={styles.sub}>

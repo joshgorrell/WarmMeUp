@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, Flame, Gift, Heart, Lock, MessageCircle, Star, Zap } from 'lucide-react-native';
 import WarmupBrand from '@/components/WarmupBrand';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 type Plan = 'trial' | 'monthly' | 'yearly';
 
@@ -60,7 +60,7 @@ const FEATURES = [
 export default function SubscriptionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { width, height, isTablet, contentMaxWidth } = useLayout();
   const [selected, setSelected] = useState<Plan>('yearly');
   const [loading, setLoading] = useState(false);
 
@@ -69,9 +69,6 @@ export default function SubscriptionScreen() {
   const handleSubscribe = async () => {
     if (loading) return;
     setLoading(true);
-    // TODO: wire up RevenueCat purchase for monthly/yearly;
-    // for trial, create a row in subscriptions via service role or edge function.
-    // For now, navigate into the app to unblock development.
     setTimeout(() => {
       setLoading(false);
       router.replace('/(app)/(tabs)');
@@ -83,6 +80,10 @@ export default function SubscriptionScreen() {
   };
 
   const selectedPlan = PLANS.find((p) => p.id === selected)!;
+
+  const centerStyle = isTablet
+    ? { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const }
+    : {};
 
   return (
     <View style={styles.root}>
@@ -99,106 +100,108 @@ export default function SubscriptionScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.brandRow}>
-          <WarmupBrand logoSize={logoSize} showTagline={false} />
-        </View>
+        <View style={centerStyle}>
+          <View style={styles.brandRow}>
+            <WarmupBrand logoSize={logoSize} showTagline={false} />
+          </View>
 
-        <Text style={styles.heading}>Unlock everything</Text>
-        <Text style={styles.sub}>
-          One subscription covers you both. Your partner joins free.
-        </Text>
+          <Text style={styles.heading}>Unlock everything</Text>
+          <Text style={styles.sub}>
+            One subscription covers you both. Your partner joins free.
+          </Text>
 
-        {/* Feature list */}
-        <View style={[styles.featureList, { marginBottom: height < 700 ? 20 : 28 }]}>
-          {FEATURES.map(({ Icon, text }) => (
-            <View key={text} style={styles.featureRow}>
-              <View style={styles.featureIcon}>
-                <Icon color="#FF5A3D" size={15} strokeWidth={2} />
+          {/* Feature list */}
+          <View style={[styles.featureList, { marginBottom: height < 700 ? 20 : 28 }]}>
+            {FEATURES.map(({ Icon, text }) => (
+              <View key={text} style={styles.featureRow}>
+                <View style={styles.featureIcon}>
+                  <Icon color="#FF5A3D" size={15} strokeWidth={2} />
+                </View>
+                <Text style={styles.featureText}>{text}</Text>
               </View>
-              <Text style={styles.featureText}>{text}</Text>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
 
-        {/* Plan cards */}
-        <View style={styles.planList}>
-          {PLANS.map((plan) => {
-            const active = selected === plan.id;
-            return (
-              <TouchableOpacity
-                key={plan.id}
-                style={[styles.planCard, active && styles.planCardActive]}
-                onPress={() => setSelected(plan.id)}
-                activeOpacity={0.8}
-              >
-                {plan.badge && (
-                  <View style={styles.planBadge}>
-                    <LinearGradient
-                      colors={['#FF7B00', '#FF2E8A']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.planBadgeGrad}
-                    >
-                      <Text style={styles.planBadgeText}>{plan.badge}</Text>
-                    </LinearGradient>
-                  </View>
-                )}
+          {/* Plan cards */}
+          <View style={styles.planList}>
+            {PLANS.map((plan) => {
+              const active = selected === plan.id;
+              return (
+                <TouchableOpacity
+                  key={plan.id}
+                  style={[styles.planCard, active && styles.planCardActive]}
+                  onPress={() => setSelected(plan.id)}
+                  activeOpacity={0.8}
+                >
+                  {plan.badge && (
+                    <View style={styles.planBadge}>
+                      <LinearGradient
+                        colors={['#FF7B00', '#FF2E8A']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.planBadgeGrad}
+                      >
+                        <Text style={styles.planBadgeText}>{plan.badge}</Text>
+                      </LinearGradient>
+                    </View>
+                  )}
 
-                <View style={styles.planLeft}>
-                  <View style={[styles.radio, active && styles.radioActive]}>
-                    {active && <View style={styles.radioDot} />}
+                  <View style={styles.planLeft}>
+                    <View style={[styles.radio, active && styles.radioActive]}>
+                      {active && <View style={styles.radioDot} />}
+                    </View>
+                    <View>
+                      <Text style={[styles.planLabel, active && styles.planLabelActive]}>
+                        {plan.label}
+                      </Text>
+                      <Text style={styles.planSub}>{plan.sub}</Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={[styles.planLabel, active && styles.planLabelActive]}>
-                      {plan.label}
+
+                  <View style={styles.planRight}>
+                    <Text style={[styles.planPrice, active && styles.planPriceActive]}>
+                      {plan.price}
                     </Text>
-                    <Text style={styles.planSub}>{plan.sub}</Text>
+                    <Text style={styles.planPeriod}>{plan.period}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-                <View style={styles.planRight}>
-                  <Text style={[styles.planPrice, active && styles.planPriceActive]}>
-                    {plan.price}
-                  </Text>
-                  <Text style={styles.planPeriod}>{plan.period}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* CTA */}
-        <TouchableOpacity
-          style={styles.ctaBtn}
-          onPress={handleSubscribe}
-          activeOpacity={0.85}
-          disabled={loading}
-        >
-          <LinearGradient
-            colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.ctaGrad}
+          {/* CTA */}
+          <TouchableOpacity
+            style={styles.ctaBtn}
+            onPress={handleSubscribe}
+            activeOpacity={0.85}
+            disabled={loading}
           >
-            <Text style={styles.ctaLabel}>
-              {loading
-                ? 'Starting…'
-                : selected === 'trial'
-                ? 'Start Free Trial'
-                : `Subscribe — ${selectedPlan.price}/${selected === 'monthly' ? 'mo' : 'yr'}`}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
+            <LinearGradient
+              colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.ctaGrad}
+            >
+              <Text style={styles.ctaLabel}>
+                {loading
+                  ? 'Starting…'
+                  : selected === 'trial'
+                  ? 'Start Free Trial'
+                  : `Subscribe — ${selectedPlan.price}/${selected === 'monthly' ? 'mo' : 'yr'}`}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
 
-        <Text style={styles.legal}>
-          {selected === 'trial'
-            ? 'No credit card required. Cancel before 7 days to avoid charges.'
-            : 'Subscription auto-renews. Cancel anytime in your account settings.'}
-        </Text>
+          <Text style={styles.legal}>
+            {selected === 'trial'
+              ? 'No credit card required. Cancel before 7 days to avoid charges.'
+              : 'Subscription auto-renews. Cancel anytime in your account settings.'}
+          </Text>
 
-        <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} style={styles.restoreBtn}>
-          <Text style={styles.restoreText}>Restore Purchase</Text>
-        </TouchableOpacity>
+          <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} style={styles.restoreBtn}>
+            <Text style={styles.restoreText}>Restore Purchase</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </View>
   );
@@ -222,6 +225,7 @@ const styles = StyleSheet.create({
   },
   brandRow: {
     marginBottom: 24,
+    alignItems: 'center',
   },
   heading: {
     color: '#fff',
@@ -371,6 +375,7 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 12,
     marginBottom: 14,
+    alignSelf: 'center',
   },
   ctaGrad: {
     paddingVertical: 17,
@@ -395,6 +400,7 @@ const styles = StyleSheet.create({
   restoreBtn: {
     paddingVertical: 8,
     paddingHorizontal: 16,
+    alignSelf: 'center',
   },
   restoreText: {
     color: 'rgba(255,255,255,0.40)',

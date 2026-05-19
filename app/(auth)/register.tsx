@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  useWindowDimensions,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +20,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import TermsModal from '@/components/TermsModal';
+import { useLayout } from '@/hooks/useLayout';
 
 function getAge(dob: Date): number {
   const today = new Date();
@@ -43,10 +43,9 @@ function parseDateInput(value: string): Date | null {
 export default function RegisterScreen() {
   const router = useRouter();
   const { pendingCode } = useLocalSearchParams<{ pendingCode?: string }>();
-  const { width, height } = useWindowDimensions();
+  const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
 
-  // Proportional vertical rhythm
   const vXs = Math.round(height * 0.01);
   const vSm = Math.round(height * 0.016);
   const vMd = Math.round(height * 0.024);
@@ -88,7 +87,6 @@ export default function RegisterScreen() {
   };
 
   const handleDobChange = (text: string) => {
-    // Auto-insert slashes: 2 digits → add /, 5 digits → add /
     let cleaned = text.replace(/[^0-9]/g, '');
     if (cleaned.length > 2) cleaned = cleaned.slice(0, 2) + '/' + cleaned.slice(2);
     if (cleaned.length > 5) cleaned = cleaned.slice(0, 5) + '/' + cleaned.slice(5);
@@ -155,7 +153,6 @@ export default function RegisterScreen() {
     setOauthLoading(provider);
     try {
       const session = await signInWithProvider(provider);
-      // Web redirects away; native returns a session
       if (!session) return;
 
       const userId = session.user?.id;
@@ -212,217 +209,219 @@ export default function RegisterScreen() {
       <TermsModal visible={termsVisible} onClose={() => setTermsVisible(false)} />
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: vMd, paddingBottom: Math.max(insets.bottom, vMd) + vMd }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: vMd + insets.top, paddingBottom: Math.max(insets.bottom, vMd) + vMd }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Header row */}
-        <View style={[styles.headerRow, { marginBottom: vSm }]}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-            <ChevronLeft color="rgba(255,255,255,0.75)" size={20} strokeWidth={2.2} />
-          </TouchableOpacity>
-        </View>
+        <View style={isTablet ? [styles.innerWrap, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }] : styles.innerWrap}>
+          {/* Header row */}
+          <View style={[styles.headerRow, { marginBottom: vSm }]}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+              <ChevronLeft color="rgba(255,255,255,0.75)" size={20} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
 
-        {/* Title */}
-        <Text style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your space</Text>
-        <Text style={[styles.sub, { marginBottom: vSm }]}>Just for you and your partner.</Text>
+          {/* Title */}
+          <Text style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your space</Text>
+          <Text style={[styles.sub, { marginBottom: vSm }]}>Just for you and your partner.</Text>
 
-        {/* OAuth buttons */}
-        {(showGoogle || showApple) && (
-          <View style={[styles.oauthBlock, { gap: vXs, marginBottom: vSm }]}>
-            {showApple && (
-              <TouchableOpacity
-                style={[styles.oauthBtn, styles.appleBtn, { paddingVertical: inputPad }, !tosAccepted && styles.btnDisabled]}
-                onPress={() => handleOAuth('apple')}
-                activeOpacity={0.88}
-                disabled={oauthLoading !== null || loading}
-              >
-                <AppleIcon color={tosAccepted ? '#fff' : 'rgba(255,255,255,0.35)'} size={18} />
-                <Text style={[styles.appleBtnText, !tosAccepted && styles.textDisabled]}>
-                  {oauthLoading === 'apple' ? 'Signing in…' : 'Continue with Apple'}
-                </Text>
-              </TouchableOpacity>
-            )}
+          {/* OAuth buttons */}
+          {(showGoogle || showApple) && (
+            <View style={[styles.oauthBlock, { gap: vXs, marginBottom: vSm }]}>
+              {showApple && (
+                <TouchableOpacity
+                  style={[styles.oauthBtn, styles.appleBtn, { paddingVertical: inputPad }, !tosAccepted && styles.btnDisabled]}
+                  onPress={() => handleOAuth('apple')}
+                  activeOpacity={0.88}
+                  disabled={oauthLoading !== null || loading}
+                >
+                  <AppleIcon color={tosAccepted ? '#fff' : 'rgba(255,255,255,0.35)'} size={18} />
+                  <Text style={[styles.appleBtnText, !tosAccepted && styles.textDisabled]}>
+                    {oauthLoading === 'apple' ? 'Signing in…' : 'Continue with Apple'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-            {showGoogle && (
-              <TouchableOpacity
-                style={[styles.oauthBtn, styles.googleBtn, { paddingVertical: inputPad }, !tosAccepted && styles.googleBtnDisabled]}
-                onPress={() => handleOAuth('google')}
-                activeOpacity={0.88}
-                disabled={oauthLoading !== null || loading}
-              >
-                <GoogleIcon size={18} />
-                <Text style={[styles.googleBtnText, !tosAccepted && styles.googleTextDisabled]}>
-                  {oauthLoading === 'google' ? 'Signing in…' : 'Continue with Google'}
-                </Text>
-              </TouchableOpacity>
-            )}
+              {showGoogle && (
+                <TouchableOpacity
+                  style={[styles.oauthBtn, styles.googleBtn, { paddingVertical: inputPad }, !tosAccepted && styles.googleBtnDisabled]}
+                  onPress={() => handleOAuth('google')}
+                  activeOpacity={0.88}
+                  disabled={oauthLoading !== null || loading}
+                >
+                  <GoogleIcon size={18} />
+                  <Text style={[styles.googleBtnText, !tosAccepted && styles.googleTextDisabled]}>
+                    {oauthLoading === 'google' ? 'Signing in…' : 'Continue with Google'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
             </View>
-          </View>
-        )}
+          )}
 
-        {/* Form fields */}
-        <View style={[styles.form, { gap: vXs }]}>
-          <View style={styles.inputWrap}>
-            <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-            <TextInput
-              style={[styles.input, { paddingVertical: inputPad }]}
-              value={displayName}
-              onChangeText={setDisplayName}
-              placeholder="Your name"
-              placeholderTextColor="rgba(255,255,255,0.24)"
-              autoCapitalize="words"
-              autoComplete="name"
-              maxLength={40}
-            />
-          </View>
-
-          <View style={styles.inputWrap}>
-            <Mail color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-            <TextInput
-              style={[styles.input, { paddingVertical: inputPad }]}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email"
-              placeholderTextColor="rgba(255,255,255,0.24)"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-            />
-          </View>
-
-          <View style={styles.inputWrap}>
-            <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-            <TextInput
-              style={[styles.input, { paddingVertical: inputPad }]}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Password"
-              placeholderTextColor="rgba(255,255,255,0.24)"
-              secureTextEntry={!showPassword}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-              {showPassword
-                ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
-                : <Eye color="rgba(255,255,255,0.30)" size={16} />
-              }
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.inputWrap}>
-            <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-            <TextInput
-              style={[styles.input, { paddingVertical: inputPad }]}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Confirm Password"
-              placeholderTextColor="rgba(255,255,255,0.24)"
-              secureTextEntry={!showConfirm}
-            />
-            <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeBtn}>
-              {showConfirm
-                ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
-                : <Eye color="rgba(255,255,255,0.30)" size={16} />
-              }
-            </TouchableOpacity>
-          </View>
-
-          {/* Date of birth — 18+ age gate */}
-          <View>
-            <View style={[styles.inputWrap, dobError ? styles.inputWrapError : null]}>
-              <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+          {/* Form fields */}
+          <View style={[styles.form, { gap: vXs }]}>
+            <View style={styles.inputWrap}>
+              <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, { paddingVertical: inputPad }]}
-                value={dob}
-                onChangeText={handleDobChange}
-                placeholder="Date of Birth (MM/DD/YYYY)"
+                value={displayName}
+                onChangeText={setDisplayName}
+                placeholder="Your name"
                 placeholderTextColor="rgba(255,255,255,0.24)"
-                keyboardType="number-pad"
-                maxLength={10}
+                autoCapitalize="words"
+                autoComplete="name"
+                maxLength={40}
               />
             </View>
-            {dobError ? (
-              <Text style={styles.fieldError}>{dobError}</Text>
-            ) : (
-              <Text style={styles.fieldHint}>You must be 18 or older to use this app.</Text>
-            )}
-          </View>
 
-          {/* ToS checkbox */}
-          <TouchableOpacity
-            style={styles.tosRow}
-            onPress={() => setTosAccepted(!tosAccepted)}
-            activeOpacity={0.75}
-          >
-            <View style={[styles.checkbox, tosAccepted && styles.checkboxChecked]}>
-              {tosAccepted && (
+            <View style={styles.inputWrap}>
+              <Mail color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { paddingVertical: inputPad }]}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email"
+                placeholderTextColor="rgba(255,255,255,0.24)"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+              />
+            </View>
+
+            <View style={styles.inputWrap}>
+              <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { paddingVertical: inputPad }]}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                placeholderTextColor="rgba(255,255,255,0.24)"
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                {showPassword
+                  ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
+                  : <Eye color="rgba(255,255,255,0.30)" size={16} />
+                }
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputWrap}>
+              <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { paddingVertical: inputPad }]}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Confirm Password"
+                placeholderTextColor="rgba(255,255,255,0.24)"
+                secureTextEntry={!showConfirm}
+              />
+              <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeBtn}>
+                {showConfirm
+                  ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
+                  : <Eye color="rgba(255,255,255,0.30)" size={16} />
+                }
+              </TouchableOpacity>
+            </View>
+
+            {/* Date of birth — 18+ age gate */}
+            <View>
+              <View style={[styles.inputWrap, dobError ? styles.inputWrapError : null]}>
+                <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { paddingVertical: inputPad }]}
+                  value={dob}
+                  onChangeText={handleDobChange}
+                  placeholder="Date of Birth (MM/DD/YYYY)"
+                  placeholderTextColor="rgba(255,255,255,0.24)"
+                  keyboardType="number-pad"
+                  maxLength={10}
+                />
+              </View>
+              {dobError ? (
+                <Text style={styles.fieldError}>{dobError}</Text>
+              ) : (
+                <Text style={styles.fieldHint}>You must be 18 or older to use this app.</Text>
+              )}
+            </View>
+
+            {/* ToS checkbox */}
+            <TouchableOpacity
+              style={styles.tosRow}
+              onPress={() => setTosAccepted(!tosAccepted)}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.checkbox, tosAccepted && styles.checkboxChecked]}>
+                {tosAccepted && (
+                  <LinearGradient
+                    colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.checkboxGrad}
+                  >
+                    <Check color="#fff" size={11} strokeWidth={3} />
+                  </LinearGradient>
+                )}
+              </View>
+              <Text style={styles.tosText}>
+                I have read and agree to the{' '}
+                <Text
+                  style={styles.tosLink}
+                  onPress={(e) => { e.stopPropagation(); setTermsVisible(true); }}
+                >
+                  Terms of Service
+                </Text>
+                {' '}and{' '}
+                <Text
+                  style={styles.tosLink}
+                  onPress={(e) => { e.stopPropagation(); handlePrivacyPolicy(); }}
+                >
+                  Privacy Policy
+                </Text>
+              </Text>
+            </TouchableOpacity>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <TouchableOpacity
+              style={[styles.createBtn, !tosAccepted && styles.createBtnDisabled]}
+              onPress={handleRegister}
+              activeOpacity={0.85}
+              disabled={loading || oauthLoading !== null}
+            >
+              {tosAccepted ? (
                 <LinearGradient
                   colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
                   start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.checkboxGrad}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.createGrad, { paddingVertical: inputPad + 4 }]}
                 >
-                  <Check color="#fff" size={11} strokeWidth={3} />
+                  <Text style={styles.createLabel}>{loading ? 'Creating...' : 'Create Account'}</Text>
                 </LinearGradient>
+              ) : (
+                <View style={[styles.createGrad, styles.createGradDisabled, { paddingVertical: inputPad + 4 }]}>
+                  <Text style={styles.createLabelDisabled}>{loading ? 'Creating...' : 'Create Account'}</Text>
+                </View>
               )}
-            </View>
-            <Text style={styles.tosText}>
-              I have read and agree to the{' '}
-              <Text
-                style={styles.tosLink}
-                onPress={(e) => { e.stopPropagation(); setTermsVisible(true); }}
-              >
-                Terms of Service
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.loginRow}
+              onPress={() => router.replace('/(auth)/login')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.loginText}>
+                Already have an account?{'  '}
+                <Text style={styles.loginLink}>Sign In</Text>
               </Text>
-              {' '}and{' '}
-              <Text
-                style={styles.tosLink}
-                onPress={(e) => { e.stopPropagation(); handlePrivacyPolicy(); }}
-              >
-                Privacy Policy
-              </Text>
-            </Text>
-          </TouchableOpacity>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <TouchableOpacity
-            style={[styles.createBtn, !tosAccepted && styles.createBtnDisabled]}
-            onPress={handleRegister}
-            activeOpacity={0.85}
-            disabled={loading || oauthLoading !== null}
-          >
-            {tosAccepted ? (
-              <LinearGradient
-                colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.createGrad, { paddingVertical: inputPad + 4 }]}
-              >
-                <Text style={styles.createLabel}>{loading ? 'Creating...' : 'Create Account'}</Text>
-              </LinearGradient>
-            ) : (
-              <View style={[styles.createGrad, styles.createGradDisabled, { paddingVertical: inputPad + 4 }]}>
-                <Text style={styles.createLabelDisabled}>{loading ? 'Creating...' : 'Create Account'}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.loginRow}
-            onPress={() => router.replace('/(auth)/login')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.loginText}>
-              Already have an account?{'  '}
-              <Text style={styles.loginLink}>Sign In</Text>
-            </Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -430,10 +429,13 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#060406' },
+  root: { flex: 1 },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: Spacing.xl,
+  },
+  innerWrap: {
+    flex: 1,
   },
   headerRow: {
     flexDirection: 'row',

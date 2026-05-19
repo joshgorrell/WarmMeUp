@@ -14,6 +14,7 @@ import { ChatMessage } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 function formatTime(iso: string) {
   const d = new Date(iso);
@@ -104,6 +105,8 @@ function MediaBubble({
   getSignedUrl,
   onOpen,
   onSaveToVault,
+  bubbleWidth,
+  bubbleHeight,
 }: {
   msg: ChatMessage;
   blurEnabled: boolean;
@@ -112,6 +115,8 @@ function MediaBubble({
   getSignedUrl: (m: ChatMessage) => Promise<string | null>;
   onOpen: (m: ChatMessage) => void;
   onSaveToVault: (m: ChatMessage) => void;
+  bubbleWidth: number;
+  bubbleHeight: number;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -135,7 +140,7 @@ function MediaBubble({
 
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={handlePress} style={styles.mediaTap}>
-      <View style={styles.mediaWrap}>
+      <View style={[styles.mediaWrap, { width: bubbleWidth, height: bubbleHeight }]}>
         {!loaded ? (
           <View style={styles.mediaPlaceholder}>
             <ActivityIndicator color="#FF5A3D" size="small" />
@@ -195,6 +200,9 @@ export default function ChatTab() {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const blurEnabled = settings?.blur_media ?? true;
+  const { width: screenWidth } = useLayout();
+  const mediaBubbleWidth = Math.min(Math.round(screenWidth * 0.55), 260);
+  const mediaBubbleHeight = Math.round(mediaBubbleWidth * 0.8);
 
   // Re-blur chat media when returning from background
   useEffect(() => {
@@ -486,6 +494,8 @@ export default function ChatTab() {
                   getSignedUrl={getSignedUrl}
                   onOpen={handleOpenMedia}
                   onSaveToVault={handleSaveToVault}
+                  bubbleWidth={mediaBubbleWidth}
+                  bubbleHeight={mediaBubbleHeight}
                 />
               )}
               {item.content_text ? (

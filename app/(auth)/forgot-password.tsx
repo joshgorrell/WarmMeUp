@@ -1,20 +1,23 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions,
+  KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Mail } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import WarmupBrand from '@/components/WarmupBrand';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const { width, height, isTablet, contentMaxWidth } = useLayout();
   const logoSize = Math.max(Math.min(Math.round(width * 0.22), 96), 64);
-  const scrollPaddingTop = Math.max(Math.round(height * 0.05), 32);
+  const scrollPaddingTop = Math.max(Math.round(height * 0.05), 32) + insets.top;
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -49,106 +52,114 @@ export default function ForgotPasswordScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: scrollPaddingTop }]}
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: scrollPaddingTop, paddingBottom: insets.bottom + 50 },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <ChevronLeft color="rgba(255,255,255,0.75)" size={20} strokeWidth={2.2} />
-        </TouchableOpacity>
+        <View style={isTablet ? [styles.innerWrap, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }] : styles.innerWrap}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+            <ChevronLeft color="rgba(255,255,255,0.75)" size={20} strokeWidth={2.2} />
+          </TouchableOpacity>
 
-        <View style={styles.brandBlock}>
-          <WarmupBrand logoSize={logoSize} showTagline={false} />
-        </View>
+          <View style={styles.brandBlock}>
+            <WarmupBrand logoSize={logoSize} showTagline={false} />
+          </View>
 
-        {!sent ? (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Reset Password</Text>
-            <Text style={styles.cardSub}>
-              Enter the email for your account and we'll send a reset link.
-            </Text>
+          {!sent ? (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Reset Password</Text>
+              <Text style={styles.cardSub}>
+                Enter the email for your account and we'll send a reset link.
+              </Text>
 
-            <View style={styles.inputWrap}>
-              <Mail color="rgba(255,255,255,0.30)" size={18} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="your@email.com"
-                placeholderTextColor="rgba(255,255,255,0.24)"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                autoFocus
-              />
+              <View style={styles.inputWrap}>
+                <Mail color="rgba(255,255,255,0.30)" size={18} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="your@email.com"
+                  placeholderTextColor="rgba(255,255,255,0.24)"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  autoFocus
+                />
+              </View>
+
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+
+              <TouchableOpacity
+                style={styles.sendBtn}
+                onPress={handleSend}
+                activeOpacity={0.85}
+                disabled={loading}
+              >
+                <LinearGradient
+                  colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.sendGrad}
+                >
+                  <Text style={styles.sendLabel}>{loading ? 'Sending...' : 'Send Reset Link'}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
+          ) : (
+            <View style={styles.card}>
+              <Text style={styles.sentEmoji}>📬</Text>
+              <Text style={styles.cardTitle}>Check your inbox</Text>
+              <Text style={styles.cardSub}>
+                A password reset link has been sent to{'\n'}
+                <Text style={styles.emailHighlight}>{email}</Text>
+              </Text>
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <TouchableOpacity
-              style={styles.sendBtn}
-              onPress={handleSend}
-              activeOpacity={0.85}
-              disabled={loading}
-            >
-              <LinearGradient
-                colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.sendGrad}
+              <TouchableOpacity
+                style={styles.sendBtn}
+                onPress={() => router.replace('/(auth)/login')}
+                activeOpacity={0.85}
               >
-                <Text style={styles.sendLabel}>{loading ? 'Sending...' : 'Send Reset Link'}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.card}>
-            <Text style={styles.sentEmoji}>📬</Text>
-            <Text style={styles.cardTitle}>Check your inbox</Text>
-            <Text style={styles.cardSub}>
-              A password reset link has been sent to{'\n'}
-              <Text style={styles.emailHighlight}>{email}</Text>
+                <LinearGradient
+                  colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.sendGrad}
+                >
+                  <Text style={styles.sendLabel}>Back to Sign In</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.footerLink}
+            onPress={() => router.replace('/(auth)/login')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.footerText}>
+              Remember your password?{'  '}
+              <Text style={styles.footerAccent}>Sign In</Text>
             </Text>
-
-            <TouchableOpacity
-              style={styles.sendBtn}
-              onPress={() => router.replace('/(auth)/login')}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.sendGrad}
-              >
-                <Text style={styles.sendLabel}>Back to Sign In</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={styles.footerLink}
-          onPress={() => router.replace('/(auth)/login')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.footerText}>
-            Remember your password?{'  '}
-            <Text style={styles.footerAccent}>Sign In</Text>
-          </Text>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#060406' },
+  root: { flex: 1 },
   scroll: {
     flexGrow: 1,
     alignItems: 'center',
     paddingHorizontal: Spacing.xl,
-    paddingBottom: 50,
+  },
+  innerWrap: {
+    width: '100%',
+    alignItems: 'center',
   },
   backBtn: {
     alignSelf: 'flex-start',

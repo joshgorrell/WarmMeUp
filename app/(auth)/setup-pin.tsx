@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, useWindowDimensions, Platform, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,6 +13,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { supabase } from '@/lib/supabase';
 import { secureKey } from '@/lib/secureKey';
+import { useLayout } from '@/hooks/useLayout';
 
 async function completePendingJoin(userId: string, code: string): Promise<string | null> {
   const { data: targetCouple } = await supabase
@@ -33,7 +34,6 @@ async function completePendingJoin(userId: string, code: string): Promise<string
     { couple_id: targetCouple.id, user_id: userId, points: 0 },
   ]);
 
-  // Fetch partner's display name for the celebration screen
   const { data: partnerProfile } = await supabase
     .from('profiles')
     .select('display_name')
@@ -53,10 +53,9 @@ export default function SetupPinScreen() {
   const { user } = useAuth();
   const { pendingCode } = useLocalSearchParams<{ pendingCode?: string }>();
   const { available: bioAvailable, biometricLabel } = useBiometricAuth();
-  const { width, height } = useWindowDimensions();
+  const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
 
-  // Proportional spacing
   const vSm = Math.round(height * 0.02);
   const vMd = Math.round(height * 0.03);
   const logoSize = Math.min(Math.round(width * 0.17), 68);
@@ -131,17 +130,21 @@ export default function SetupPinScreen() {
 
   const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
 
+  const centerStyle = isTablet
+    ? { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const }
+    : {};
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#07070A', '#0D0D12', '#151018']} style={StyleSheet.absoluteFill} />
       <View style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
-        <View style={{ marginBottom: vMd }}>
+        <View style={[{ marginBottom: vMd }, centerStyle]}>
           <WarmupBrand logoSize={logoSize} showTagline={false} />
         </View>
 
         {step === 'method' ? (
           <ScrollView
-            style={styles.methodScroll}
+            style={[styles.methodScroll, centerStyle]}
             contentContainerStyle={styles.methodScrollContent}
             showsVerticalScrollIndicator={false}
           >
@@ -177,7 +180,7 @@ export default function SetupPinScreen() {
             />
           </ScrollView>
         ) : (
-          <>
+          <View style={centerStyle}>
             <Text style={styles.title}>{step === 'create' ? 'Create PIN' : 'Confirm PIN'}</Text>
             <Text style={[styles.sub, { marginBottom: vSm }]}>
               {step === 'create' ? 'This PIN protects your Warm Me Up app' : 'Enter your PIN again to confirm'}
@@ -216,7 +219,7 @@ export default function SetupPinScreen() {
               <LogIn color="rgba(255,255,255,0.4)" size={14} />
               <Text style={styles.altLinkText}>Sign in with password instead</Text>
             </TouchableOpacity>
-          </>
+          </View>
         )}
       </View>
     </View>

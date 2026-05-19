@@ -1,22 +1,25 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import WarmupLogo from '@/components/WarmupLogo';
 import WarmupWordmark from '@/components/WarmupWordmark';
+import { useLayout } from '@/hooks/useLayout';
 
 const TAGLINE_SOURCE = require('@/assets/images/image_(2).png');
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const { width, height, isTablet, contentMaxWidth } = useLayout();
   const logoSize = Math.min(Math.round(width * 0.38), 180);
   const wordmarkSize = Math.round(logoSize * 0.16);
   const taglineWidth = Math.min(width - Spacing.md * 2, 440);
   const taglineHeight = taglineWidth * (148 / 340);
-  const paddingTop = Math.max(40, Math.round(height * 0.1));
-  const paddingBottom = Math.max(28, Math.round(height * 0.07));
+  const paddingTop = Math.max(40, Math.round(height * 0.1)) + insets.top;
+  const paddingBottom = Math.max(28, Math.round(height * 0.07)) + insets.bottom;
 
   return (
     <View style={styles.root}>
@@ -25,10 +28,13 @@ export default function WelcomeScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={[styles.container, { paddingTop, paddingBottom }]}>
+      <View style={[
+        styles.container,
+        { paddingTop, paddingBottom },
+        isTablet && { alignSelf: 'center', width: '100%', maxWidth: contentMaxWidth },
+      ]}>
         {/* Hero: logo + wordmark + tagline */}
         <View style={styles.hero}>
-          {/* Glow anchored behind hero content */}
           <View style={styles.glow} />
           <WarmupLogo size={logoSize} />
           <WarmupWordmark size={wordmarkSize} style={styles.wordmark} />

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, Text, ActivityIndicator,
-  useWindowDimensions, Platform, Share, Image, AppState, Modal,
+  Platform, Share, Image, AppState, Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,13 +15,14 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { awardPoints } from '@/lib/points';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
 export default function VaultViewerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useLayout();
   const { user, couple, settings } = useAuth();
 
   const {
@@ -215,13 +216,15 @@ export default function VaultViewerScreen() {
     setVideoPlaying(!videoPlaying);
   };
 
-  const imageArea = width;
-  const imageHeight = Math.round(height * 0.72);
+  const imageArea = Math.min(width, 900);
+  const imageHeight = Math.min(Math.round(height * 0.72), 700);
+
+  const mediaLeft = (width - imageArea) / 2;
 
   return (
     <View style={[styles.root, { backgroundColor: '#000' }]}>
       {/* Full-bleed media */}
-      <View style={[styles.mediaWrap, { width: imageArea, height: imageHeight }]}>
+      <View style={[styles.mediaWrap, { width: imageArea, height: imageHeight, left: mediaLeft }]}>
         {!mediaUri ? (
           <View style={styles.loader}>
             <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
@@ -416,7 +419,6 @@ const styles = StyleSheet.create({
   mediaWrap: {
     position: 'absolute',
     top: 0,
-    left: 0,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#000',

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, useWindowDimensions,
+  View, Text, StyleSheet, TouchableOpacity,
   Platform, Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -14,6 +14,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { secureKey } from '@/lib/secureKey';
 import { supabase } from '@/lib/supabase';
+import { useLayout } from '@/hooks/useLayout';
 
 const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 const MAX_ATTEMPTS = 5;
@@ -23,13 +24,11 @@ export default function UnlockScreen() {
   const router = useRouter();
   const { user, settings, unlockApp } = useAuth();
   const { available: bioAvailable, biometricLabel, authenticate } = useBiometricAuth();
-  const { width, height } = useWindowDimensions();
+  const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
 
   const loginMethod = settings?.login_method ?? 'pin';
 
-  // Mode is initialised once — when settings first become non-null.
-  // Using null as "not yet decided" lets us defer until we have real data.
   const [mode, setMode] = useState<'biometric' | 'pin' | null>(null);
   const modeInitialised = useRef(false);
 
@@ -38,14 +37,11 @@ export default function UnlockScreen() {
   const [attempts, setAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [countdown, setCountdown] = useState(0);
-  // Tracks whether the OS biometric prompt has been triggered this session.
-  // Never reset after settings arrive — only a deliberate user action resets it.
   const biometricPrompted = useRef(false);
   const [pinMissing, setPinMissing] = useState(false);
 
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  // Proportional spacing — scales with screen height
   const vXs = Math.round(height * 0.012);
   const vSm = Math.round(height * 0.02);
   const vMd = Math.round(height * 0.03);
@@ -102,9 +98,6 @@ export default function UnlockScreen() {
     }
   }, [bioAvailable, authenticate, proceed]);
 
-  // Set the initial mode exactly once — the first time settings is non-null.
-  // After that we never override mode from settings changes so a late-arriving
-  // context update can't reset the prompt flag and re-fire Face ID.
   useEffect(() => {
     if (modeInitialised.current || !settings) return;
     modeInitialised.current = true;
@@ -112,7 +105,6 @@ export default function UnlockScreen() {
     setMode(initial);
   }, [settings]);
 
-  // Trigger biometric once when mode is first set to 'biometric'.
   useEffect(() => {
     if (mode !== 'biometric') return;
     if (biometricPrompted.current) return;
@@ -121,8 +113,6 @@ export default function UnlockScreen() {
   }, [mode, tryBiometric]);
 
   const checkPin = useCallback(async (entered: string) => {
-    // Resolve userId from context first; fall back to live session if context
-    // hasn't populated yet (e.g. fresh redirect right after sign-in).
     let userId = user?.id;
     if (!userId) {
       const { data: { session: liveSession } } = await supabase.auth.getSession();
@@ -193,86 +183,92 @@ export default function UnlockScreen() {
 
   const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
 
+  const centerStyle = isTablet
+    ? { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const }
+    : {};
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#07070A', '#0D0D12', '#151018']} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
-        <View style={{ marginBottom: vMd }}>
+        <View style={[{ marginBottom: vMd }, centerStyle]}>
           <WarmupBrand logoSize={logoSize} showTagline={false} />
         </View>
 
-        {pinMissing ? (
-          <View style={[styles.bioWrap, { gap: vSm }]}>
-            <KeyRound color="rgba(255,179,71,0.85)" size={48} strokeWidth={1.5} />
-            <Text style={styles.title}>PIN Not Found</Text>
-            <Text style={[styles.sub, { marginBottom: vSm, paddingHorizontal: Spacing.md }]}>
-              No PIN is saved on this device. Sign in with your password to set one up.
-            </Text>
-            <TouchableOpacity style={styles.setupPinBtn} onPress={goToPassword} activeOpacity={0.8}>
-              <Text style={styles.setupPinBtnText}>Sign In with Password</Text>
-            </TouchableOpacity>
-          </View>
-        ) : mode === null ? null /* settings not loaded yet — show nothing */ : mode === 'biometric' && bioAvailable ? (
-          <View style={[styles.bioWrap, { gap: vSm }]}>
-            <TouchableOpacity style={styles.bioButton} onPress={tryBiometric} activeOpacity={0.75}>
-              <BiometricIcon color="#FF2E8A" size={52} strokeWidth={1.5} />
-            </TouchableOpacity>
-            <Text style={styles.title}>Unlock with {biometricLabel}</Text>
-            <Text style={styles.sub}>Tap to authenticate</Text>
-            <TouchableOpacity style={styles.altLink} onPress={() => setMode('pin')} activeOpacity={0.7}>
-              <KeyRound color="rgba(255,255,255,0.4)" size={14} />
-              <Text style={styles.altLinkText}>Use PIN instead</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            <Text style={styles.title}>Enter PIN</Text>
-            <Text style={[styles.sub, { marginBottom: vSm }]}>Enter your 4-digit Warm Me Up PIN</Text>
-
-            <Animated.View style={[styles.dots, { marginBottom: vSm, transform: [{ translateX: shakeAnim }] }]}>
-              {Array.from({ length: 4 }).map((_, i) => (
-                <View
-                  key={i}
-                  style={[styles.dot, { backgroundColor: i < pin.length ? '#FF2E8A' : 'rgba(255,255,255,0.15)' }]}
-                />
-              ))}
-            </Animated.View>
-
-            {error ? (
-              <Text style={[styles.error, { marginBottom: vXs }]}>
-                {lockedUntil ? `Too many attempts. Try again in ${countdown}s.` : error}
+        <View style={centerStyle}>
+          {pinMissing ? (
+            <View style={[styles.bioWrap, { gap: vSm }]}>
+              <KeyRound color="rgba(255,179,71,0.85)" size={48} strokeWidth={1.5} />
+              <Text style={styles.title}>PIN Not Found</Text>
+              <Text style={[styles.sub, { marginBottom: vSm, paddingHorizontal: Spacing.md }]}>
+                No PIN is saved on this device. Sign in with your password to set one up.
               </Text>
-            ) : null}
-
-            <View style={[styles.pad, { width: padWidth, gap: keyGap, opacity: lockedUntil ? 0.35 : 1 }]}>
-              {PAD.map((k, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={[styles.key, { width: keySize, height: keyHeight }, k === '' && styles.keyEmpty]}
-                  onPress={() => handleKey(k)}
-                  activeOpacity={k === '' ? 1 : 0.6}
-                  disabled={k === '' || !!lockedUntil}
-                >
-                  <Text style={[styles.keyText, k === '⌫' && styles.keyDelete]}>{k}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={[styles.footerLinks, { marginTop: vSm }]}>
-              {loginMethod === 'biometric' && bioAvailable && (
-                <TouchableOpacity style={styles.altLink} onPress={tryBiometric} activeOpacity={0.7}>
-                  <BiometricIcon color="rgba(255,255,255,0.4)" size={14} />
-                  <Text style={styles.altLinkText}>Use {biometricLabel}</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.altLink} onPress={goToPassword} activeOpacity={0.7}>
-                <KeyRound color="rgba(255,255,255,0.4)" size={14} />
-                <Text style={styles.altLinkText}>Forgot PIN? Use password</Text>
+              <TouchableOpacity style={styles.setupPinBtn} onPress={goToPassword} activeOpacity={0.8}>
+                <Text style={styles.setupPinBtnText}>Sign In with Password</Text>
               </TouchableOpacity>
             </View>
-          </>
-        )}
+          ) : mode === null ? null : mode === 'biometric' && bioAvailable ? (
+            <View style={[styles.bioWrap, { gap: vSm }]}>
+              <TouchableOpacity style={styles.bioButton} onPress={tryBiometric} activeOpacity={0.75}>
+                <BiometricIcon color="#FF2E8A" size={52} strokeWidth={1.5} />
+              </TouchableOpacity>
+              <Text style={styles.title}>Unlock with {biometricLabel}</Text>
+              <Text style={styles.sub}>Tap to authenticate</Text>
+              <TouchableOpacity style={styles.altLink} onPress={() => setMode('pin')} activeOpacity={0.7}>
+                <KeyRound color="rgba(255,255,255,0.4)" size={14} />
+                <Text style={styles.altLinkText}>Use PIN instead</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.title}>Enter PIN</Text>
+              <Text style={[styles.sub, { marginBottom: vSm }]}>Enter your 4-digit Warm Me Up PIN</Text>
+
+              <Animated.View style={[styles.dots, { marginBottom: vSm, transform: [{ translateX: shakeAnim }] }]}>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={[styles.dot, { backgroundColor: i < pin.length ? '#FF2E8A' : 'rgba(255,255,255,0.15)' }]}
+                  />
+                ))}
+              </Animated.View>
+
+              {error ? (
+                <Text style={[styles.error, { marginBottom: vXs }]}>
+                  {lockedUntil ? `Too many attempts. Try again in ${countdown}s.` : error}
+                </Text>
+              ) : null}
+
+              <View style={[styles.pad, { width: padWidth, gap: keyGap, opacity: lockedUntil ? 0.35 : 1 }]}>
+                {PAD.map((k, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.key, { width: keySize, height: keyHeight }, k === '' && styles.keyEmpty]}
+                    onPress={() => handleKey(k)}
+                    activeOpacity={k === '' ? 1 : 0.6}
+                    disabled={k === '' || !!lockedUntil}
+                  >
+                    <Text style={[styles.keyText, k === '⌫' && styles.keyDelete]}>{k}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={[styles.footerLinks, { marginTop: vSm }]}>
+                {loginMethod === 'biometric' && bioAvailable && (
+                  <TouchableOpacity style={styles.altLink} onPress={tryBiometric} activeOpacity={0.7}>
+                    <BiometricIcon color="rgba(255,255,255,0.4)" size={14} />
+                    <Text style={styles.altLinkText}>Use {biometricLabel}</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.altLink} onPress={goToPassword} activeOpacity={0.7}>
+                  <KeyRound color="rgba(255,255,255,0.4)" size={14} />
+                  <Text style={styles.altLinkText}>Forgot PIN? Use password</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
       </View>
     </View>
   );

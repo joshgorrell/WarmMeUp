@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  useWindowDimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
@@ -14,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Dices, Zap, MessageCircle, Heart, Lock, Star, Flame, Gift } from 'lucide-react-native';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 const SLIDES = [
   {
@@ -58,25 +58,28 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const { paired } = useLocalSearchParams<{ paired?: string }>();
   const isPaired = paired === '1';
-  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Responsive sizing derived from screen dimensions
-  const headingSize = Math.min(Math.round(SCREEN_WIDTH * 0.086), 36);
+  // Cap slide width on wide screens
+  const SLIDE_WIDTH = isTablet ? Math.min(SCREEN_WIDTH, contentMaxWidth) : SCREEN_WIDTH;
+  // Horizontal padding to center the narrower slides on wide screens
+  const slideOffset = isTablet ? (SCREEN_WIDTH - SLIDE_WIDTH) / 2 : 0;
+
+  const headingSize = Math.min(Math.round(SLIDE_WIDTH * 0.086), 36);
   const isShort = SCREEN_HEIGHT < 700;
   const iconSize = Math.round(Math.min(68, SCREEN_HEIGHT * 0.082));
   const cardGap = Math.max(8, Math.round(SCREEN_HEIGHT * 0.013));
   const cardVertPad = Math.max(10, Math.round(SCREEN_HEIGHT * 0.018));
   const iconSize28 = Math.round(iconSize * 0.41);
-  // Top padding: safe area + breathing room, compressed on short screens
   const slidePaddingTop = insets.top + (isShort ? 44 : 56);
   const subtitleMb = isShort ? 12 : 20;
   const subtitleFontSize = isShort ? FontSize.sm : FontSize.body;
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    const idx = Math.round(e.nativeEvent.contentOffset.x / SLIDE_WIDTH);
     setCurrentIndex(idx);
   };
 
@@ -90,7 +93,7 @@ export default function OnboardingScreen() {
 
   const handleNext = () => {
     if (currentIndex < SLIDES.length - 1) {
-      scrollRef.current?.scrollTo({ x: SCREEN_WIDTH * (currentIndex + 1), animated: true });
+      scrollRef.current?.scrollTo({ x: SLIDE_WIDTH * (currentIndex + 1), animated: true });
       setCurrentIndex(currentIndex + 1);
     } else {
       handleFinish();
@@ -117,16 +120,21 @@ export default function OnboardingScreen() {
       <ScrollView
         ref={scrollRef}
         horizontal
-        pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleScroll}
         scrollEventThrottle={16}
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isTablet && { paddingHorizontal: slideOffset },
+        ]}
+        pagingEnabled={!isTablet}
+        snapToInterval={isTablet ? SLIDE_WIDTH : undefined}
+        decelerationRate={isTablet ? 'fast' : undefined}
+        snapToAlignment={isTablet ? 'start' : undefined}
       >
         {SLIDES.map((slide, slideIdx) => (
-          <View key={slideIdx} style={[styles.slide, { width: SCREEN_WIDTH, paddingTop: slidePaddingTop }]}>
-            {/* Vertical scroll inside each slide as a safety net on tiny screens */}
+          <View key={slideIdx} style={[styles.slide, { width: SLIDE_WIDTH, paddingTop: slidePaddingTop }]}>
             <ScrollView
               showsVerticalScrollIndicator={false}
               scrollEnabled={false}
@@ -161,7 +169,11 @@ export default function OnboardingScreen() {
         ))}
       </View>
 
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) + (isShort ? 12 : 24) }]}>
+      <View style={[
+        styles.footer,
+        { paddingBottom: Math.max(insets.bottom, 16) + (isShort ? 12 : 24) },
+        isTablet && { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' },
+      ]}>
         <TouchableOpacity style={styles.nextBtn} onPress={handleNext} activeOpacity={0.85}>
           <LinearGradient
             colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
@@ -254,9 +266,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     textAlign: 'center',
   },
-  featureList: {
-    // gap set inline
-  },
+  featureList: {},
   dots: {
     flexDirection: 'row',
     justifyContent: 'center',
