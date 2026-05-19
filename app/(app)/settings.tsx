@@ -223,7 +223,7 @@ function RequireUnlockAfterRow({
           return (
             <TouchableOpacity
               key={String(opt.value)}
-              style={[slm.chip, sel && slm.chipSelected, { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle, flex: 1, marginHorizontal: 3 }]}
+              style={[slm.chip, sel && slm.chipSelected, { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle, flex: 1, marginHorizontal: 2 }]}
               onPress={() => onSelect(opt.value)}
               activeOpacity={0.72}
             >

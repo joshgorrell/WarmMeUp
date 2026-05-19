@@ -165,7 +165,7 @@ function RequireUnlockAfterRow({
     <View style={[lms.wrap, { borderBottomColor: colors.borderSubtle }]}>
       <Text style={[lms.label, { color: colors.text }]}>Require Unlock After</Text>
       <Text style={[lms.sub, { color: colors.textMuted }]}>How long before you need to unlock again</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
         {LOCK_TIMEOUT_OPTIONS.map((opt) => {
           const sel = current === opt.value;
           return (
@@ -173,7 +173,7 @@ function RequireUnlockAfterRow({
               key={String(opt.value)}
               style={[
                 rua.chip,
-                { borderColor: sel ? 'rgba(255,46,138,0.50)' : colors.borderSubtle },
+                { borderColor: sel ? 'rgba(255,46,138,0.50)' : colors.borderSubtle, flex: 1, marginHorizontal: 2 },
                 sel && rua.chipSelected,
               ]}
               onPress={() => onSelect(opt.value)}
