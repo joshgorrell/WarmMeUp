@@ -225,15 +225,7 @@ export default function RegisterScreen() {
 
         {/* Title */}
         <Text style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your space</Text>
-        {pendingCode ? (
-          <View style={[styles.pendingCodeBanner, { marginBottom: vSm }]}>
-            <Text style={styles.pendingCodeText}>
-              Code <Text style={styles.pendingCodeValue}>{pendingCode}</Text> will connect you with your partner after you sign up.
-            </Text>
-          </View>
-        ) : (
-          <Text style={[styles.sub, { marginBottom: vSm }]}>Just for you and your partner.</Text>
-        )}
+        <Text style={[styles.sub, { marginBottom: vSm }]}>Just for you and your partner.</Text>
 
         {/* OAuth buttons */}
         {(showGoogle || showApple) && (
@@ -649,25 +641,5 @@ const styles = StyleSheet.create({
   loginLink: {
     color: '#FF7A45',
     fontFamily: 'Inter-SemiBold',
-  },
-  pendingCodeBanner: {
-    backgroundColor: 'rgba(255,90,61,0.12)',
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255,90,61,0.28)',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
-  },
-  pendingCodeText: {
-    color: 'rgba(255,255,255,0.60)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  pendingCodeValue: {
-    color: '#FF7A45',
-    fontFamily: 'Inter-Bold',
-    letterSpacing: 1,
   },
 });

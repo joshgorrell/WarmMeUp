@@ -14,14 +14,14 @@ import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { supabase } from '@/lib/supabase';
 import { secureKey } from '@/lib/secureKey';
 
-async function completePendingJoin(userId: string, code: string): Promise<void> {
+async function completePendingJoin(userId: string, code: string): Promise<string | null> {
   const { data: targetCouple } = await supabase
     .from('couples')
     .select('*')
     .eq('invite_code', code)
     .maybeSingle();
 
-  if (!targetCouple || targetCouple.user_b_id) return;
+  if (!targetCouple || targetCouple.user_b_id) return null;
 
   await supabase.from('couples').delete().eq('user_a_id', userId).eq('active', false);
   await supabase
@@ -32,6 +32,15 @@ async function completePendingJoin(userId: string, code: string): Promise<void> 
     { couple_id: targetCouple.id, user_id: targetCouple.user_a_id, points: 0 },
     { couple_id: targetCouple.id, user_id: userId, points: 0 },
   ]);
+
+  // Fetch partner's display name for the celebration screen
+  const { data: partnerProfile } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('id', targetCouple.user_a_id)
+    .maybeSingle();
+
+  return partnerProfile?.display_name || null;
 }
 
 const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
@@ -105,14 +114,19 @@ export default function SetupPinScreen() {
         .update({ login_method: method, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
       if (pendingCode) {
-        await completePendingJoin(user.id, pendingCode);
+        const partnerName = await completePendingJoin(user.id, pendingCode);
+        router.replace({
+          pathname: '/(auth)/paired-celebration',
+          params: { partnerName: partnerName || '' },
+        });
+        return;
       }
     } catch {
       // Non-fatal
     } finally {
       setSaving(false);
-      router.replace('/(auth)/pair');
     }
+    router.replace('/(auth)/onboarding');
   };
 
   const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;

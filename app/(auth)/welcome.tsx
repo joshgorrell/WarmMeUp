@@ -47,7 +47,7 @@ export default function WelcomeScreen() {
 
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => router.push('/(auth)/onboarding')}
+            onPress={() => router.push('/(auth)/register')}
             activeOpacity={0.85}
           >
             <LinearGradient

@@ -9,7 +9,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Dices, Zap, MessageCircle, Heart, Lock, Star, Flame, Gift } from 'lucide-react-native';
@@ -56,6 +56,8 @@ const SLIDES = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { paired } = useLocalSearchParams<{ paired?: string }>();
+  const isPaired = paired === '1';
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -78,16 +80,24 @@ export default function OnboardingScreen() {
     setCurrentIndex(idx);
   };
 
+  const handleFinish = () => {
+    if (isPaired) {
+      router.replace('/(app)/(tabs)');
+    } else {
+      router.replace('/(auth)/subscription');
+    }
+  };
+
   const handleNext = () => {
     if (currentIndex < SLIDES.length - 1) {
       scrollRef.current?.scrollTo({ x: SCREEN_WIDTH * (currentIndex + 1), animated: true });
       setCurrentIndex(currentIndex + 1);
     } else {
-      router.push('/(auth)/register');
+      handleFinish();
     }
   };
 
-  const handleSkip = () => router.push('/(auth)/register');
+  const handleSkip = () => handleFinish();
 
   return (
     <View style={styles.container}>

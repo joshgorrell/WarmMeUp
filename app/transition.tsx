@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Image, StyleSheet, Animated, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import WarmupLogo from '@/components/WarmupLogo';
 import WarmupWordmark from '@/components/WarmupWordmark';
 import { pendingNotificationRoute } from './_layout';
@@ -34,7 +35,7 @@ const SLOGAN_SOURCE = require('@/assets/images/image_(2).png');
 
 export default function TransitionScreen() {
   const router = useRouter();
-  const { couple, isAdmin, loading } = useAuth();
+  const { couple, partnerProfile, settings, user, isAdmin, loading } = useAuth();
   const { width } = useWindowDimensions();
   const logoW = Math.min(width * 0.5, 200);
   const sloganW = Math.min(width * 0.78, 320);
@@ -51,8 +52,23 @@ export default function TransitionScreen() {
     if (!animDone.current || !authReady.current) return;
     if (routed.current) return;
     routed.current = true;
-    Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(() => {
+    Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
       if (couple?.active || isAdmin) {
+        // Show the celebration screen once for user A (who shared the code) when
+        // the couple first becomes active and they haven't seen it yet.
+        const needsCelebration = couple?.active && !isAdmin && settings && !settings.celebration_seen;
+        if (needsCelebration && user) {
+          // Mark as seen before navigating so a reload doesn't re-show it.
+          await supabase
+            .from('user_settings')
+            .update({ celebration_seen: true, updated_at: new Date().toISOString() })
+            .eq('user_id', user.id);
+          router.replace({
+            pathname: '/(auth)/paired-celebration',
+            params: { partnerName: partnerProfile?.display_name || '' },
+          });
+          return;
+        }
         router.replace('/(app)/(tabs)');
         // After gates are cleared, honour any pending notification deep-link
         const intent = pendingNotificationRoute.current;

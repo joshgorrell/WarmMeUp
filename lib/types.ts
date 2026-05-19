@@ -40,6 +40,7 @@ export interface UserSettings {
   lock_after_seconds: number | null;
   push_notifications_enabled: boolean;
   challenge_expiry_hours: number;
+  celebration_seen: boolean;
   updated_at: string;
 }
 
