@@ -105,7 +105,7 @@ export default function AppShell({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: '#05040A' },
   fill: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   leakTopRight: {

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
-  TouchableOpacity, Image, ActivityIndicator, TextInput, Alert, AppState, AppStateStatus,
+  TouchableOpacity, TouchableWithoutFeedback, Image, ActivityIndicator, TextInput, Alert,
+  AppState, AppStateStatus, Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image as ImageIcon, Camera, X, Lock, Send, Vault, Pencil, Trash2, EyeOff } from 'lucide-react-native';
@@ -353,7 +354,7 @@ export default function ChatTab() {
       }
     }
 
-    const { data } = await supabase.from('chat_messages').insert({
+    const { data, error: insertError } = await supabase.from('chat_messages').insert({
       couple_id: couple.id,
       sender_id: user.id,
       content_text: hasText ? text.trim() : null,
@@ -366,20 +367,25 @@ export default function ChatTab() {
       vault_item_id: vaultItemId,
     }).select().single();
 
+    if (insertError || !data) {
+      Alert.alert('Send failed', 'Your message could not be sent. Please try again.');
+      setSending(false);
+      return;
+    }
+
     // Back-fill the chat_message_id on the vault item so deletions can cascade
-    if (data?.id && vaultItemId) {
+    if (data.id && vaultItemId) {
       await supabase.from('vault_items').update({ chat_message_id: data.id }).eq('id', vaultItemId);
     }
 
-    if (data) {
-      const eventKey = hasMedia ? 'chat_media' : 'chat_message';
-      const pts = await getPointValue(eventKey);
-      const reason = hasMedia ? 'Chat media' : 'Chat message';
-      await awardPoints(couple.id, user.id, pts, reason);
-      const field = hasMedia ? 'media_sent' : 'chat_messages_sent';
-      await incrementMonthlyCounter(couple.id, user.id, field, pts);
-      notifyPartner({ event_type: 'new_message', couple_id: couple.id, target_route: '/(app)/(tabs)/note' });
-    }
+    const eventKey = hasMedia ? 'chat_media' : 'chat_message';
+    const pts = await getPointValue(eventKey);
+    const reason = hasMedia ? 'Chat media' : 'Chat message';
+    await awardPoints(couple.id, user.id, pts, reason);
+    const field = hasMedia ? 'media_sent' : 'chat_messages_sent';
+    await incrementMonthlyCounter(couple.id, user.id, field, pts);
+    notifyPartner({ event_type: 'new_message', couple_id: couple.id, target_route: '/(app)/(tabs)/note' });
+
     setText('');
     setAttachedMedia(null);
     setSending(false);
@@ -614,19 +620,21 @@ export default function ChatTab() {
   const activeMsg = activeMenuId ? messages.find(m => m.id === activeMenuId) : null;
 
   return (
-    <View style={{ flex: 1 }}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={{ flex: 1, backgroundColor: '#05040A' }}>
+      <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#05040A' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <AppShell scrollable={false}>
           <TabHeader title="Chat" />
 
           {messages.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>💬</Text>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>Start the conversation</Text>
-              <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
-                Send a message, photo, or video.{'\n'}Only the two of you will see it.
-              </Text>
-            </View>
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyEmoji}>💬</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>Start the conversation</Text>
+                <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+                  Send a message, photo, or video.{'\n'}Only the two of you will see it.
+                </Text>
+              </View>
+            </TouchableWithoutFeedback>
           ) : (
             <FlatList
               ref={listRef}
@@ -636,6 +644,8 @@ export default function ChatTab() {
               contentContainerStyle={styles.list}
               showsVerticalScrollIndicator={false}
               onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
             />
           )}
 
@@ -696,6 +706,9 @@ export default function ChatTab() {
                 placeholderTextColor={colors.textMuted}
                 multiline
                 maxLength={1000}
+                returnKeyType="send"
+                blurOnSubmit={false}
+                onSubmitEditing={handleSend}
               />
               <TouchableOpacity
                 onPress={handleSend}

@@ -1,5 +1,6 @@
 import React, { Component, useEffect, useRef, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import { DarkTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
@@ -230,9 +231,10 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
     <GestureHandlerRootView style={styles.root}>
+      <NavThemeProvider value={DarkTheme}>
       <ThemeProvider>
         <AuthProvider>
-          <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+          <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: '#05040A' } }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="weather" />
             <Stack.Screen name="transition" />
@@ -249,11 +251,12 @@ export default function RootLayout() {
           <StatusBar style="light" />
         </AuthProvider>
       </ThemeProvider>
+      </NavThemeProvider>
     </GestureHandlerRootView>
     </ErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: '#05040A' },
 });

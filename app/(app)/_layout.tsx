@@ -13,7 +13,7 @@ export default function AppLayout() {
   }, [session, loading]);
 
   return (
-    <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+    <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: '#05040A' } }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="account" />
       <Stack.Screen name="activity" />
