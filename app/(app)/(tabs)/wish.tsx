@@ -340,9 +340,11 @@ function WishForm({
         if (insertError) throw insertError;
         result = data;
         if (shareNow) {
-          const pts = await getPointValue('wish_sent');
-          await awardPoints(couple.id, user.id, pts, 'Wish shared', result.id);
-          await incrementMonthlyCounter(couple.id, user.id, 'wishes_sent', pts);
+          try {
+            const pts = await getPointValue('wish_sent');
+            await awardPoints(couple.id, user.id, pts, 'Wish shared', result.id);
+            await incrementMonthlyCounter(couple.id, user.id, 'wishes_sent', pts);
+          } catch {}
           if (partnerId) {
             notifyPartner({ event_type: 'new_wish', couple_id: couple.id, target_route: '/(app)/(tabs)/wish', item_id: result.id });
           }
