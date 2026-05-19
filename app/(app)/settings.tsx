@@ -287,6 +287,12 @@ export default function SettingsScreen() {
           onPress: async () => {
             if (couple?.id) {
               await supabase.from('couples').update({ user_b_id: null, active: false }).eq('id', couple.id);
+              // Reset celebration flag for both partners so re-pairing shows the celebration again
+              const partnerId = couple.user_a_id === user?.id ? couple.user_b_id : couple.user_a_id;
+              const userIds = [user?.id, partnerId].filter(Boolean) as string[];
+              if (userIds.length > 0) {
+                await supabase.from('user_settings').update({ celebration_seen: false }).in('user_id', userIds);
+              }
             }
             signOut();
           },

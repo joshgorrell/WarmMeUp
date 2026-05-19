@@ -509,7 +509,15 @@ export default function AccountScreen() {
     Alert.alert('Disconnect from Partner', `This will disconnect you from ${partnerName}. You can reconnect anytime with a new invite code.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Disconnect', style: 'destructive', onPress: async () => {
-        if (couple?.id) await supabase.from('couples').update({ user_b_id: null, active: false }).eq('id', couple.id);
+        if (couple?.id) {
+          await supabase.from('couples').update({ user_b_id: null, active: false }).eq('id', couple.id);
+          // Reset celebration flag for both partners so re-pairing shows the celebration again
+          const partnerId = couple.user_a_id === user?.id ? couple.user_b_id : couple.user_a_id;
+          const userIds = [user?.id, partnerId].filter(Boolean) as string[];
+          if (userIds.length > 0) {
+            await supabase.from('user_settings').update({ celebration_seen: false }).in('user_id', userIds);
+          }
+        }
         signOut();
       }},
     ]);

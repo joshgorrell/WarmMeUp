@@ -151,6 +151,27 @@ Deno.serve(async (req: Request) => {
     await admin.from("dice_prompts").delete().eq("created_by_user_id", userId);
 
     // ── 3. Disconnect from couple ─────────────────────────────────
+    // Identify the partner before dissolving the couple so we can reset their
+    // celebration_seen flag — ensuring they see the celebration if they re-pair.
+    const { data: coupleRow } = await admin
+      .from("couples")
+      .select("user_a_id, user_b_id")
+      .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+      .maybeSingle();
+
+    const partnerId = coupleRow
+      ? coupleRow.user_a_id === userId
+        ? coupleRow.user_b_id
+        : coupleRow.user_a_id
+      : null;
+
+    if (partnerId) {
+      await admin
+        .from("user_settings")
+        .update({ celebration_seen: false })
+        .eq("user_id", partnerId);
+    }
+
     // If user was user_a: deactivate and orphan the couple
     await admin
       .from("couples")
