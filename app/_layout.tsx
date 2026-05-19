@@ -143,6 +143,23 @@ function NotificationHandler() {
   return null;
 }
 
+function SessionGuard() {
+  const { session, loading } = useAuth();
+  const router = useRouter();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (loading) return;
+    if (session) return;
+    const inAuthenticatedRoute = segments[0] === '(app)' || segments[0] === '(admin)';
+    if (inAuthenticatedRoute) {
+      router.replace('/(auth)/welcome');
+    }
+  }, [session, loading, segments]);
+
+  return null;
+}
+
 function BackgroundLockManager() {
   const { session, settings, lockIfNeeded, isAuthenticatingRef } = useAuth();
   const router = useRouter();
@@ -226,6 +243,7 @@ export default function RootLayout() {
             <Stack.Screen name="+not-found" />
           </Stack>
           <PrivacyOverlay />
+          <SessionGuard />
           <BackgroundLockManager />
           <NotificationHandler />
           <StatusBar style="light" />
