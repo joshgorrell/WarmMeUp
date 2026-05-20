@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Image, ActivityIndicator, TextInput, Alert,
@@ -129,7 +129,7 @@ function MediaBubble({
     getSignedUrl(msg).then(u => {
       setUrl(u);
       setLoaded(true);
-    });
+    }).catch(() => setLoaded(true));
   }, [msg.id]);
 
   const isBlurred = blurEnabled && !revealed;
@@ -195,6 +195,7 @@ export default function ChatTab() {
   const { user, couple, profile, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [attachedMedia, setAttachedMedia] = useState<AttachedMedia | null>(null);
@@ -229,7 +230,7 @@ export default function ChatTab() {
   }, [blurEnabled]);
 
   useEffect(() => {
-    if (!couple?.id) return;
+    if (!couple?.id) { setChatLoading(false); return; }
     loadMessages();
     const ch = supabase.channel(`chat_tab_${couple.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, () => loadMessages())
@@ -241,13 +242,17 @@ export default function ChatTab() {
 
   const loadMessages = useCallback(async () => {
     if (!couple?.id) return;
-    const { data } = await supabase
-      .from('chat_messages')
-      .select('*')
-      .eq('couple_id', couple.id)
-      .order('created_at', { ascending: true })
-      .limit(100);
-    if (data) setMessages(data);
+    try {
+      const { data } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('couple_id', couple.id)
+        .order('created_at', { ascending: true })
+        .limit(100);
+      if (data) setMessages(data);
+    } finally {
+      setChatLoading(false);
+    }
   }, [couple?.id]);
 
   useEffect(() => {
@@ -551,13 +556,13 @@ export default function ChatTab() {
     }
   };
 
-  const renderItem = ({ item, index }: { item: ChatMessage; index: number }) => {
+  const renderItem = useCallback(({ item, index }: { item: ChatMessage; index: number }) => {
     const isMine = item.sender_id === user?.id;
     const name = isMine ? (profile?.display_name ?? 'You') : (partnerProfile?.display_name ?? 'Partner');
     const hasMedia = !!item.media_storage_path;
     const isMenuOpen = activeMenuId === item.id;
 
-    const showDivider = index === 0 || new Date(messages[index - 1].created_at).toDateString() !== new Date(item.created_at).toDateString();
+    const showDivider = index === 0 || (index > 0 && new Date(messages[index - 1].created_at).toDateString() !== new Date(item.created_at).toDateString());
 
     return (
       <>
@@ -617,13 +622,16 @@ export default function ChatTab() {
         </View>
       </>
     );
-  };
+  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, messages, colors, blurEnabled, revealedMedia, getSignedUrl, handleOpenMedia, handleSaveToVault, handleLongPress, mediaBubbleWidth, mediaBubbleHeight]);
 
   const canSend = editingState
     ? text.trim().length > 0 && !sending
     : (text.trim().length > 0 || attachedMedia !== null) && !sending && !uploadProgress;
 
-  const activeMsg = activeMenuId ? messages.find(m => m.id === activeMenuId) : null;
+  const activeMsg = useMemo(
+    () => (activeMenuId ? messages.find(m => m.id === activeMenuId) ?? null : null),
+    [activeMenuId, messages],
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: '#05040A' }}>
@@ -631,7 +639,11 @@ export default function ChatTab() {
         <AppShell scrollable={false}>
           <TabHeader title="Chat" />
 
-          {messages.length === 0 ? (
+          {chatLoading ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator color={colors.textMuted} />
+            </View>
+          ) : messages.length === 0 ? (
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View style={styles.emptyState}>
                 <AppText style={styles.emptyEmoji}>💬</AppText>

@@ -709,28 +709,31 @@ export default function WishTab() {
   const loadWishes = useCallback(async () => {
     if (!couple?.id) return;
     setLoading(true);
-    const { data: wishData } = await supabase
-      .from('wishes')
-      .select('*')
-      .eq('couple_id', couple.id)
-      .neq('status', 'archived')
-      .order('created_at', { ascending: false });
+    try {
+      const { data: wishData } = await supabase
+        .from('wishes')
+        .select('*')
+        .eq('couple_id', couple.id)
+        .neq('status', 'archived')
+        .order('created_at', { ascending: false });
 
-    if (!wishData?.length) { setWishes([]); setLoading(false); return; }
+      if (!wishData?.length) { setWishes([]); return; }
 
-    const { data: reactions } = await supabase
-      .from('wish_reactions')
-      .select('*')
-      .in('wish_id', wishData.map(w => w.id));
+      const { data: reactions } = await supabase
+        .from('wish_reactions')
+        .select('*')
+        .in('wish_id', wishData.map(w => w.id));
 
-    const reactionMap: Record<string, WishReaction[]> = {};
-    (reactions ?? []).forEach(r => {
-      if (!reactionMap[r.wish_id]) reactionMap[r.wish_id] = [];
-      reactionMap[r.wish_id].push(r);
-    });
+      const reactionMap: Record<string, WishReaction[]> = {};
+      (reactions ?? []).forEach(r => {
+        if (!reactionMap[r.wish_id]) reactionMap[r.wish_id] = [];
+        reactionMap[r.wish_id].push(r);
+      });
 
-    setWishes(wishData.map(w => ({ ...w, reactions: reactionMap[w.id] ?? [] })));
-    setLoading(false);
+      setWishes(wishData.map(w => ({ ...w, reactions: reactionMap[w.id] ?? [] })));
+    } finally {
+      setLoading(false);
+    }
   }, [couple?.id]);
 
   useEffect(() => {
@@ -743,12 +746,12 @@ export default function WishTab() {
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id, loadWishes]);
 
-  const handleTabPress = (key: TabKey, idx: number) => {
+  const handleTabPress = useCallback((key: TabKey, idx: number) => {
     setActiveTab(key);
     Animated.spring(tabIndicator, { toValue: idx, friction: 8, tension: 80, useNativeDriver: false }).start();
-  };
+  }, [tabIndicator]);
 
-  const handleReact = async (wish: WishWithReactions, emoji: string) => {
+  const handleReact = useCallback(async (wish: WishWithReactions, emoji: string) => {
     if (!user) return;
     const existing = wish.reactions.find(r => r.user_id === user.id);
     if (existing?.emoji === emoji) {
@@ -760,19 +763,19 @@ export default function WishTab() {
       );
     }
     loadWishes();
-  };
+  }, [user, loadWishes]);
 
-  const handleArchive = async (wish: WishWithReactions) => {
+  const handleArchive = useCallback(async (wish: WishWithReactions) => {
     await supabase.from('wishes').update({ status: 'archived', updated_at: new Date().toISOString() }).eq('id', wish.id);
     setWishes(prev => prev.filter(w => w.id !== wish.id));
-  };
+  }, []);
 
-  const handleDelete = async (wish: WishWithReactions) => {
+  const handleDelete = useCallback(async (wish: WishWithReactions) => {
     await supabase.from('wishes').delete().eq('id', wish.id);
     setWishes(prev => prev.filter(w => w.id !== wish.id));
-  };
+  }, []);
 
-  const handleFormSave = (saved: WishWithReactions) => {
+  const handleFormSave = useCallback((saved: WishWithReactions) => {
     setWishes(prev => {
       const idx = prev.findIndex(w => w.id === saved.id);
       if (idx >= 0) { const next = [...prev]; next[idx] = saved; return next; }
@@ -782,13 +785,13 @@ export default function WishTab() {
     setEditingWish(null);
     if (saved.status === 'shared') setActiveTab('shared');
     else if (saved.status === 'draft') setActiveTab('mine');
-  };
+  }, []);
 
-  const handleFulfilled = (updated: WishWithReactions) => {
+  const handleFulfilled = useCallback((updated: WishWithReactions) => {
     setWishes(prev => prev.map(w => w.id === updated.id ? updated : w));
     setFulfillWish(null);
     setActiveTab('granted');
-  };
+  }, []);
 
   // Filter lists
   const myWishes = wishes.filter(w => w.created_by_user_id === user?.id && w.status !== 'fulfilled');
@@ -816,8 +819,8 @@ export default function WishTab() {
               {
                 width: `${tabWidth}%` as any,
                 left: tabIndicator.interpolate({
-                  inputRange: [0, 1, 2],
-                  outputRange: ['0%', `${tabWidth}%`, `${tabWidth * 2}%`],
+                  inputRange: [0, 1, 2, 3],
+                  outputRange: ['0%', `${tabWidth}%`, `${tabWidth * 2}%`, `${tabWidth * 3}%`],
                 }) as any,
               },
             ]}
@@ -834,7 +837,7 @@ export default function WishTab() {
       </View>
 
       {/* Content */}
-      {loading ? (
+      {loading && wishes.length === 0 ? (
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
           showsVerticalScrollIndicator={false}

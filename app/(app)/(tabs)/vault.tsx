@@ -32,7 +32,7 @@ export default function VaultScreen() {
   const insets = useSafeAreaInsets();
   const { available: bioAvailable, authenticate: bioAuthenticate } = useBiometricAuth();
   const NUM_COLS = cols(3, 4);
-  const ITEM_SIZE = (width - Spacing.screen * 2 - Spacing.sm * (NUM_COLS - 1)) / NUM_COLS;
+  const ITEM_SIZE = width > 0 ? (width - Spacing.screen * 2 - Spacing.sm * (NUM_COLS - 1)) / NUM_COLS : 100;
   const [items, setItems] = useState<VaultItem[]>([]);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [showAdd, setShowAdd] = useState(false);
