@@ -935,12 +935,12 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20, marginTop: 4 },
 
   // Scroll
-  scrollContent: { paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, gap: Spacing.sm },
+  scrollContent: { paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, gap: 6 },
 
   // Wish card
   wishCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
-  wishCardImg: { width: '100%', height: 160 },
-  wishCardBody: { padding: Spacing.card, gap: 8 },
+  wishCardImg: { width: '100%', height: 120 },
+  wishCardBody: { padding: Spacing.md, gap: 6 },
   wishCardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   wishCardMeta: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   categoryBadge: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
@@ -949,15 +949,15 @@ const styles = StyleSheet.create({
   moreBtn: { padding: 4, marginLeft: 4 },
   dotRow: { flexDirection: 'row', gap: 3 },
   dot: { width: 3.5, height: 3.5, borderRadius: 2 },
-  wishTitle: { fontSize: FontSize.md, fontFamily: 'Inter-SemiBold', lineHeight: 24 },
-  wishDesc: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20 },
+  wishTitle: { fontSize: FontSize.md, fontFamily: 'Inter-SemiBold', lineHeight: 22 },
+  wishDesc: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18 },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   linkText: { fontSize: 12, fontFamily: 'Inter-Regular', flex: 1 },
 
   // Reactions
-  reactionBar: { flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap' },
-  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4 },
-  reactionEmoji: { fontSize: 14 },
+  reactionBar: { flexDirection: 'row', gap: 4, marginTop: 2, flexWrap: 'wrap' },
+  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 3 },
+  reactionEmoji: { fontSize: 13 },
   reactionCount: { fontSize: 11, fontFamily: 'Inter-SemiBold' },
 
   // Actions menu
