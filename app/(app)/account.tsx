@@ -17,8 +17,8 @@ import AppShell from '@/components/AppShell';
 import Avatar from '@/components/Avatar';
 import BottomSheet from '@/components/BottomSheet';
 import WarmupLogo from '@/components/WarmupLogo';
+import BrandHeader from '@/components/BrandHeader';
 import QuickStatsRow from '@/components/QuickStatsRow';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UserSettings } from '@/lib/types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
@@ -334,7 +334,6 @@ const rua = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────
 export default function AccountScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { profile, partnerProfile, couple, signOut, isAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple } = useAuth();
   const { colors } = useTheme();
   const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
@@ -1307,25 +1306,27 @@ export default function AccountScreen() {
   return (
     <>
       <AppShell scrollable={false}>
+        <BrandHeader
+          avatarName={profile?.display_name ?? ''}
+          avatarUri={profile?.avatar_url ?? null}
+          rightSlot={
+            <View style={styles.headerRight}>
+              {isAdmin && (
+                <TouchableOpacity style={styles.adminBadge} onPress={() => router.push('/(admin)')} activeOpacity={0.7}>
+                  <Shield color="#FF2E8A" size={14} strokeWidth={2} />
+                  <Text style={styles.adminBadgeText}>Admin</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
+                <ChevronLeft color={colors.textSecondary} size={24} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+          }
+        />
         <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingTop: Math.max(insets.top, 16) }]}
+          contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-              <ChevronLeft color={colors.textSecondary} size={24} strokeWidth={2} />
-            </TouchableOpacity>
-            <Text style={[styles.pageTitle, { color: colors.text }]}>Account</Text>
-            {isAdmin ? (
-              <TouchableOpacity style={styles.adminBadge} onPress={() => router.push('/(admin)')} activeOpacity={0.7}>
-                <Shield color="#FF2E8A" size={14} strokeWidth={2} />
-                <Text style={styles.adminBadgeText}>Admin</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={{ width: 64 }} />
-            )}
-          </View>
 
           {/* Profile / Settings tab switcher */}
           <View style={[styles.tabBar, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
@@ -1785,9 +1786,8 @@ export default function AccountScreen() {
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 40 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  pageTitle: { fontSize: 20, fontFamily: 'Inter-Bold' },
   adminBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: 'rgba(255,46,138,0.10)', borderRadius: 20,
