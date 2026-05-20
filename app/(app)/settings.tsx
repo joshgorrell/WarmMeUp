@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, StyleSheet, ScrollView, TouchableOpacity,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { ChevronRight, Check, KeyRound, Lock, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
@@ -22,7 +23,7 @@ function OwnershipNote({ text }: { text: string }) {
   const { colors } = useTheme();
   return (
     <View style={[styles.ownerNote, { borderBottomColor: colors.borderSubtle }]}>
-      <Text style={[styles.ownerNoteText, { color: colors.textMuted }]}>{text}</Text>
+      <AppText style={[styles.ownerNoteText, { color: colors.textMuted }]}>{text}</AppText>
     </View>
   );
 }
@@ -53,14 +54,14 @@ function SettingsRow({
     <View style={[styles.row, { borderBottomColor: colors.borderSubtle }]}>
       <View style={styles.rowLeft}>
         <View style={styles.rowLabelRow}>
-          <Text style={[styles.rowLabel, { color: danger ? colors.danger : colors.text }]}>{label}</Text>
+          <AppText style={[styles.rowLabel, { color: danger ? colors.danger : colors.text }]}>{label}</AppText>
           {onInfo && (
             <TouchableOpacity onPress={onInfo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
               <CircleQuestionMark color="rgba(255,46,138,0.7)" size={14} strokeWidth={2} />
             </TouchableOpacity>
           )}
         </View>
-        {sub && <Text style={[styles.rowSub, { color: colors.textMuted }]}>{sub}</Text>}
+        {sub && <AppText style={[styles.rowSub, { color: colors.textMuted }]}>{sub}</AppText>}
       </View>
       {toggle ? (
         <Toggle value={value ?? false} onChange={onChange ?? (() => {})} disabled={disabled} />
@@ -84,7 +85,7 @@ function Section({ title, note, children }: { title: string; note?: string; chil
   const { colors } = useTheme();
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
+      <AppText style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</AppText>
       <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
         {note && <OwnershipNote text={note} />}
         {children}
@@ -111,8 +112,8 @@ function SettingsLoginMethodRow({
 
   return (
     <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
-      <Text style={[slm.label, { color: colors.text }]}>Unlock Method</Text>
-      <Text style={[slm.sub, { color: colors.textMuted }]}>How you open Warm Me Up each time</Text>
+      <AppText style={[slm.label, { color: colors.text }]}>Unlock Method</AppText>
+      <AppText style={[slm.sub, { color: colors.textMuted }]}>How you open Warm Me Up each time</AppText>
       <View style={slm.row}>
         {methods.map((m) => {
           const sel = current === m.key;
@@ -125,7 +126,7 @@ function SettingsLoginMethodRow({
               disabled={m.disabled}
             >
               {m.icon}
-              <Text style={[slm.chipLabel, { color: m.disabled ? colors.textDisabled : sel ? '#fff' : colors.textSecondary }]}>{m.label}</Text>
+              <AppText style={[slm.chipLabel, { color: m.disabled ? colors.textDisabled : sel ? '#fff' : colors.textSecondary }]}>{m.label}</AppText>
               {sel && <Check color="#FF2E8A" size={12} strokeWidth={2.5} />}
             </TouchableOpacity>
           );
@@ -198,8 +199,8 @@ function ChallengeExpiryRow({
 }) {
   return (
     <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
-      <Text style={[slm.label, { color: colors.text }]}>Dare & Dice Expiry Window</Text>
-      <Text style={[slm.sub, { color: colors.textMuted }]}>How long your partner has to respond before a challenge disappears</Text>
+      <AppText style={[slm.label, { color: colors.text }]}>Dare & Dice Expiry Window</AppText>
+      <AppText style={[slm.sub, { color: colors.textMuted }]}>How long your partner has to respond before a challenge disappears</AppText>
       <View style={[slm.row, { justifyContent: 'space-between' }]}>
         {EXPIRY_OPTIONS.map((opt) => {
           const sel = current === opt.value;
@@ -210,7 +211,7 @@ function ChallengeExpiryRow({
               onPress={() => onSelect(opt.value)}
               activeOpacity={0.72}
             >
-              <Text style={[slm.chipLabel, { color: sel ? '#fff' : colors.textSecondary, textAlign: 'center' }]}>{opt.label}</Text>
+              <AppText style={[slm.chipLabel, { color: sel ? '#fff' : colors.textSecondary, textAlign: 'center' }]}>{opt.label}</AppText>
               {sel && <Check color="#FFB347" size={12} strokeWidth={2.5} />}
             </TouchableOpacity>
           );
@@ -237,11 +238,11 @@ function RequireUnlockAfterRow({
         activeOpacity={0.7}
       >
         <View style={{ flex: 1 }}>
-          <Text style={[slm.label, { color: colors.text }]}>Require Unlock After</Text>
-          <Text style={[slm.sub, { color: colors.textMuted }]}>How long before you need to unlock again</Text>
+          <AppText style={[slm.label, { color: colors.text }]}>Require Unlock After</AppText>
+          <AppText style={[slm.sub, { color: colors.textMuted }]}>How long before you need to unlock again</AppText>
         </View>
         <View style={slm.valueWrap}>
-          <Text style={[slm.value, { color: colors.textSecondary }]}>{selected.label}</Text>
+          <AppText style={[slm.value, { color: colors.textSecondary }]}>{selected.label}</AppText>
           <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
         </View>
       </TouchableOpacity>
@@ -261,7 +262,7 @@ function RequireUnlockAfterRow({
               onPress={() => { onSelect(opt.value); setOpen(false); }}
               activeOpacity={0.7}
             >
-              <Text style={[slm.dropOptionLabel, { color: sel ? '#FF2E8A' : colors.text }]}>{opt.label}</Text>
+              <AppText style={[slm.dropOptionLabel, { color: sel ? '#FF2E8A' : colors.text }]}>{opt.label}</AppText>
               {sel && <Check color="#FF2E8A" size={16} strokeWidth={2.5} />}
             </TouchableOpacity>
           );
@@ -455,7 +456,7 @@ export default function SettingsScreen() {
               onPress={() => update({ notification_copy: copy })}
               activeOpacity={0.7}
             >
-              <Text style={[styles.rowLabel, { color: colors.text }]}>{copy}</Text>
+              <AppText style={[styles.rowLabel, { color: colors.text }]}>{copy}</AppText>
               <View style={[styles.radioOuter, { borderColor: s?.notification_copy === copy ? '#FF2E8A' : colors.borderSubtle }]}>
                 {s?.notification_copy === copy && <View style={styles.radioInner} />}
               </View>
@@ -536,20 +537,20 @@ export default function SettingsScreen() {
               <View style={styles.notifAppIconWrap}>
                 <WarmupLogo size={20} />
               </View>
-              <Text style={[styles.notifAppName, { color: colors.textMuted }]}>WARM ME UP</Text>
-              <Text style={[styles.notifTime, { color: colors.textMuted }]}>now</Text>
+              <AppText style={[styles.notifAppName, { color: colors.textMuted }]}>WARM ME UP</AppText>
+              <AppText style={[styles.notifTime, { color: colors.textMuted }]}>now</AppText>
             </View>
-            <Text style={[styles.notifTitle, { color: colors.text }]}>
+            <AppText style={[styles.notifTitle, { color: colors.text }]}>
               {s?.notification_copy ?? 'Something new is waiting'}
-            </Text>
-            <Text style={[styles.notifBody, { color: colors.textSecondary }]}>
+            </AppText>
+            <AppText style={[styles.notifBody, { color: colors.textSecondary }]}>
               Tap to open
-            </Text>
+            </AppText>
           </View>
 
-          <Text style={[styles.previewNote, { color: colors.textMuted }]}>
+          <AppText style={[styles.previewNote, { color: colors.textMuted }]}>
             No message content or previews are ever shown — just a discreet nudge.
-          </Text>
+          </AppText>
         </View>
       </BottomSheet>
 

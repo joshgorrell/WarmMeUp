@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  View, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -119,8 +121,8 @@ export default function LoginScreen() {
           <View style={[styles.panel, { padding: V_MD, gap: V_SM }]}>
             {/* Email field */}
             <View style={styles.field}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
+              <AppText style={styles.label}>Email</AppText>
+              <AppTextInput
                 style={[styles.input, { paddingVertical: INPUT_PAD }]}
                 value={email}
                 onChangeText={setEmail}
@@ -135,12 +137,12 @@ export default function LoginScreen() {
             {/* Password field */}
             <View style={styles.field}>
               <View style={styles.passwordLabelRow}>
-                <Text style={styles.label}>Password</Text>
+                <AppText style={styles.label}>Password</AppText>
                 <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')} activeOpacity={0.7}>
-                  <Text style={styles.forgotLink}>Forgot?</Text>
+                  <AppText style={styles.forgotLink}>Forgot?</AppText>
                 </TouchableOpacity>
               </View>
-              <TextInput
+              <AppTextInput
                 style={[styles.input, { paddingVertical: INPUT_PAD }]}
                 value={password}
                 onChangeText={setPassword}
@@ -150,7 +152,7 @@ export default function LoginScreen() {
               />
             </View>
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? <AppText style={styles.error}>{error}</AppText> : null}
 
             <PrimaryButton
               label="Sign In"
@@ -163,7 +165,7 @@ export default function LoginScreen() {
               <>
                 <View style={styles.dividerRow}>
                   <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>or continue with</Text>
+                  <AppText style={styles.dividerText}>or continue with</AppText>
                   <View style={styles.dividerLine} />
                 </View>
 
@@ -176,9 +178,9 @@ export default function LoginScreen() {
                       disabled={oauthLoading !== null || loading}
                     >
                       <AppleIcon color="#fff" size={18} />
-                      <Text style={styles.appleBtnText}>
+                      <AppText style={styles.appleBtnText}>
                         {oauthLoading === 'apple' ? 'Signing in…' : 'Apple'}
-                      </Text>
+                      </AppText>
                     </TouchableOpacity>
                   )}
 
@@ -190,9 +192,9 @@ export default function LoginScreen() {
                       disabled={oauthLoading !== null || loading}
                     >
                       <GoogleIcon size={18} />
-                      <Text style={styles.googleBtnText}>
+                      <AppText style={styles.googleBtnText}>
                         {oauthLoading === 'google' ? 'Signing in…' : 'Google'}
-                      </Text>
+                      </AppText>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -209,10 +211,10 @@ export default function LoginScreen() {
             )}
             activeOpacity={0.7}
           >
-            <Text style={styles.footerText}>
+            <AppText style={styles.footerText}>
               No account?{'  '}
-              <Text style={styles.footerAccent}>Create one</Text>
-            </Text>
+              <AppText style={styles.footerAccent}>Create one</AppText>
+            </AppText>
           </TouchableOpacity>
         </View>
       </ScrollView>

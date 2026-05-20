@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { TouchableOpacity, Text, StyleSheet, View, Animated } from 'react-native';
+import { TouchableOpacity, StyleSheet, View, Animated } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Gradient, FontSize, Radius } from '@/constants/theme';
 
@@ -70,7 +71,7 @@ export default function HoldToRollButton({
             end={{ x: 1, y: 0 }}
             style={styles.btnGrad}
           >
-            <Text style={styles.label}>{label}</Text>
+            <AppText style={styles.label}>{label}</AppText>
           </LinearGradient>
         </TouchableOpacity>
       </Animated.View>

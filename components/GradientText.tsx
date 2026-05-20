@@ -16,6 +16,8 @@ export default function GradientText({ children, style }: GradientTextProps) {
   if (Platform.OS === 'web') {
     return (
       <Text
+        allowFontScaling={true}
+        maxFontSizeMultiplier={1.5}
         style={[
           style,
           {

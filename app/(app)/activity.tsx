@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { Zap, Lock, Trophy, MessageCircle, Dice6, Camera } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
@@ -226,20 +227,20 @@ export default function ActivityScreen() {
               onPress={() => setFilter(tab.key)}
               activeOpacity={0.75}
             >
-              <Text style={[styles.filterTabText, { color: filter === tab.key ? '#FF2E8A' : colors.textSecondary }]}>
+              <AppText style={[styles.filterTabText, { color: filter === tab.key ? '#FF2E8A' : colors.textSecondary }]}>
                 {tab.label}
-              </Text>
+              </AppText>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
         {items.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>✨</Text>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>Nothing yet</Text>
-            <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+            <AppText style={styles.emptyEmoji}>✨</AppText>
+            <AppText style={[styles.emptyTitle, { color: colors.text }]}>Nothing yet</AppText>
+            <AppText style={[styles.emptySub, { color: colors.textSecondary }]}>
               Start a moment with your partner. Roll the dice, send a dare, or drop a note.
-            </Text>
+            </AppText>
           </View>
         ) : (
           items.map(item => (
@@ -248,14 +249,14 @@ export default function ActivityScreen() {
                 {item.icon}
               </View>
               <View style={styles.rowText}>
-                <Text style={[styles.rowLabel, { color: colors.text }]}>{item.label}</Text>
-                {item.sub ? <Text style={[styles.rowSub, { color: colors.textSecondary }]}>{item.sub}</Text> : null}
+                <AppText style={[styles.rowLabel, { color: colors.text }]}>{item.label}</AppText>
+                {item.sub ? <AppText style={[styles.rowSub, { color: colors.textSecondary }]}>{item.sub}</AppText> : null}
               </View>
               <View style={styles.rowRight}>
-                <Text style={[styles.rowTime, { color: colors.textMuted }]}>{item.time}</Text>
+                <AppText style={[styles.rowTime, { color: colors.textMuted }]}>{item.time}</AppText>
                 {item.points && (
                   <View style={[styles.pointsPill, { backgroundColor: 'rgba(255,179,71,0.12)', borderColor: 'rgba(255,179,71,0.30)' }]}>
-                    <Text style={styles.pointsText}>+{item.points}</Text>
+                    <AppText style={styles.pointsText}>+{item.points}</AppText>
                   </View>
                 )}
               </View>

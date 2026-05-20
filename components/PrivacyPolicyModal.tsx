@@ -2,12 +2,12 @@ import React from 'react';
 import {
   Modal,
   View,
-  Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
   Platform,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { X } from 'lucide-react-native';
@@ -196,8 +196,8 @@ export default function PrivacyPolicyModal({ visible, onClose }: Props) {
       <LinearGradient colors={['#060406', '#0A060A', '#0E080E']} style={styles.root}>
         <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? Spacing.md : insets.top + Spacing.sm }]}>
           <View style={styles.headerTextBlock}>
-            <Text style={styles.headerTitle}>Privacy Policy</Text>
-            <Text style={styles.headerSub}>Effective Date: May 12, 2026</Text>
+            <AppText style={styles.headerTitle}>Privacy Policy</AppText>
+            <AppText style={styles.headerSub}>Effective Date: May 12, 2026</AppText>
           </View>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.75}>
             <X color="rgba(255,255,255,0.70)" size={18} strokeWidth={2.2} />
@@ -209,16 +209,16 @@ export default function PrivacyPolicyModal({ visible, onClose }: Props) {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing.xxl }]}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.intro}>
+          <AppText style={styles.intro}>
             Your privacy matters to us.{'\n\n'}
             This Privacy Policy explains what information Warm Me Up collects, how we use it, and how we protect it.{'\n\n'}
             By using Warm Me Up, you agree to the collection and use of information as described in this policy.
-          </Text>
+          </AppText>
 
           {SECTIONS.map((section) => (
             <View key={section.title} style={styles.section}>
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-              <Text style={styles.sectionBody}>{section.body}</Text>
+              <AppText style={styles.sectionTitle}>{section.title}</AppText>
+              <AppText style={styles.sectionBody}>{section.body}</AppText>
             </View>
           ))}
         </ScrollView>
@@ -231,7 +231,7 @@ export default function PrivacyPolicyModal({ visible, onClose }: Props) {
               end={{ x: 1, y: 0 }}
               style={styles.doneGrad}
             >
-              <Text style={styles.doneLabel}>Close</Text>
+              <AppText style={styles.doneLabel}>Close</AppText>
             </LinearGradient>
           </TouchableOpacity>
         </View>

@@ -1,5 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ViewStyle, View, ActivityIndicator } from 'react-native';
+import { TouchableOpacity, StyleSheet, ViewStyle, View, ActivityIndicator } from 'react-native';
+import AppText from '@/components/AppText';
 import { useTheme } from '@/context/ThemeContext';
 import { Radius, FontSize } from '@/constants/theme';
 
@@ -49,13 +50,13 @@ export default function SecondaryButton({
       ) : (
         <View style={styles.row}>
           {leftIcon}
-          <Text style={[
+          <AppText style={[
             styles.label,
             { color: danger ? colors.danger : colors.text },
             small && styles.labelSmall,
           ]}>
             {label}
-          </Text>
+          </AppText>
           {rightIcon}
         </View>
       )}

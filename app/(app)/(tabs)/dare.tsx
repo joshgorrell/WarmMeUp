@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, StyleSheet, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Flame, CircleCheck as CheckCircle, RotateCcw, Timer } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
@@ -258,9 +259,9 @@ export default function DareTab() {
           {incomingDare && (
             <View style={styles.incomingSection}>
               <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
-                <Text style={[styles.pointsHintText, { color: colors.textSecondary }]}>
-                  Accept = <Text style={styles.pts}>+{acceptPts} pts</Text> — Complete it = <Text style={styles.pts}>+{completePts} pts</Text>
-                </Text>
+                <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>
+                  Accept = <AppText style={styles.pts}>+{acceptPts} pts</AppText> — Complete it = <AppText style={styles.pts}>+{completePts} pts</AppText>
+                </AppText>
               </View>
               <ReceivedDareCard
                 text={incomingDare.content_text}
@@ -288,11 +289,11 @@ export default function DareTab() {
               >
                 <View style={styles.verifyHeader}>
                   <CheckCircle color="#33D17A" size={20} strokeWidth={2} />
-                  <Text style={[styles.verifyTitle, { color: colors.text }]}>Partner completed the dare!</Text>
+                  <AppText style={[styles.verifyTitle, { color: colors.text }]}>Partner completed the dare!</AppText>
                 </View>
-                <Text style={[styles.verifySubtitle, { color: colors.textMuted }]}>
-                  Confirm to award them <Text style={[styles.pts, { color: '#33D17A' }]}>+{completePts} pts</Text>
-                </Text>
+                <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>
+                  Confirm to award them <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} pts</AppText>
+                </AppText>
                 <TouchableOpacity
                   style={styles.verifyBtn}
                   onPress={handleVerifyComplete}
@@ -300,12 +301,12 @@ export default function DareTab() {
                   activeOpacity={0.85}
                 >
                   <LinearGradient colors={['#33D17A', '#1A9E57']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.verifyGrad}>
-                    <Text style={styles.verifyBtnText}>{verifying ? 'Confirming…' : 'They Did It!'}</Text>
+                    <AppText style={styles.verifyBtnText}>{verifying ? 'Confirming…' : 'They Did It!'}</AppText>
                   </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}>
                   <RotateCcw color={colors.textMuted} size={13} strokeWidth={2} />
-                  <Text style={[styles.flipToggleText, { color: colors.textMuted }]}>See the dare</Text>
+                  <AppText style={[styles.flipToggleText, { color: colors.textMuted }]}>See the dare</AppText>
                 </TouchableOpacity>
               </Animated.View>
 
@@ -318,13 +319,13 @@ export default function DareTab() {
                   { transform: [{ rotateY: backRotate }] },
                 ]}
               >
-                <Text style={[styles.backLabel, { color: colors.textMuted }]}>THE DARE YOU SENT</Text>
-                <Text style={[styles.backDareText, { color: colors.text }]}>
+                <AppText style={[styles.backLabel, { color: colors.textMuted }]}>THE DARE YOU SENT</AppText>
+                <AppText style={[styles.backDareText, { color: colors.text }]}>
                   "{pendingVerification.content_text ?? 'No text recorded'}"
-                </Text>
+                </AppText>
                 <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}>
                   <RotateCcw color={colors.textMuted} size={13} strokeWidth={2} />
-                  <Text style={[styles.flipToggleText, { color: colors.textMuted }]}>Back to confirm</Text>
+                  <AppText style={[styles.flipToggleText, { color: colors.textMuted }]}>Back to confirm</AppText>
                 </TouchableOpacity>
               </Animated.View>
             </View>
@@ -334,7 +335,7 @@ export default function DareTab() {
             <>
               {error ? (
                 <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
-                  <Text style={{ color: '#FF5A5F', fontSize: 13, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</Text>
+                  <AppText style={{ color: '#FF5A5F', fontSize: 13, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</AppText>
                 </View>
               ) : null}
 
@@ -366,12 +367,12 @@ export default function DareTab() {
           {sent && (
             <View style={[styles.sentCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.25)' }]}>
               <Flame color="#FF2E8A" size={48} fill="rgba(255,46,138,0.15)" strokeWidth={1.5} />
-              <Text style={[styles.sentTitle, { color: colors.text }]}>Dare sent!</Text>
-              <Text style={[styles.sentSub, { color: colors.textSecondary }]}>Waiting to see if they're up for it.</Text>
+              <AppText style={[styles.sentTitle, { color: colors.text }]}>Dare sent!</AppText>
+              <AppText style={[styles.sentSub, { color: colors.textSecondary }]}>Waiting to see if they're up for it.</AppText>
               {senderCountdown && (
                 <View style={styles.expiryRow}>
                   <Timer color={colors.textMuted} size={13} strokeWidth={2} />
-                  <Text style={[styles.expiryText, { color: colors.textMuted }]}>Expires in {senderCountdown}</Text>
+                  <AppText style={[styles.expiryText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText>
                 </View>
               )}
               <SecondaryButton label="Send Another" onPress={() => { setSent(false); setDareText(''); setError(''); }} style={{ marginTop: Spacing.md }} />

@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Tabs } from 'expo-router';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, useWindowDimensions } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Animated, useWindowDimensions } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Hop as Home, Dice6, Flame, MessageSquareHeart, Sparkles, Lock } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -55,11 +56,11 @@ function WarmTab({
           <Icon color={iconColor} size={iconSize} strokeWidth={active ? 2 : 1.75} />
           {!!badge && badge > 0 && (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
+              <AppText style={styles.badgeText}>{badge > 9 ? '9+' : badge}</AppText>
             </View>
           )}
         </View>
-        <Text style={[styles.tabLabel, { color: labelColor, fontSize: labelFontSize }]}>{label}</Text>
+        <AppText style={[styles.tabLabel, { color: labelColor, fontSize: labelFontSize }]}>{label}</AppText>
         {active && (
           <View style={styles.underline}>
             <LinearGradient

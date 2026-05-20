@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   Alert,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -227,8 +227,8 @@ export default function RegisterScreen() {
           </View>
 
           {/* Title */}
-          <Text style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your space</Text>
-          <Text style={[styles.sub, { marginBottom: vSm }]}>Just for you and your partner.</Text>
+          <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your space</AppText>
+          <AppText style={[styles.sub, { marginBottom: vSm }]}>Just for you and your partner.</AppText>
 
           {/* OAuth buttons */}
           {(showGoogle || showApple) && (
@@ -241,9 +241,9 @@ export default function RegisterScreen() {
                   disabled={oauthLoading !== null || loading}
                 >
                   <AppleIcon color={tosAccepted ? '#fff' : 'rgba(255,255,255,0.35)'} size={18} />
-                  <Text style={[styles.appleBtnText, !tosAccepted && styles.textDisabled]}>
+                  <AppText style={[styles.appleBtnText, !tosAccepted && styles.textDisabled]}>
                     {oauthLoading === 'apple' ? 'Signing in…' : 'Continue with Apple'}
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               )}
 
@@ -255,15 +255,15 @@ export default function RegisterScreen() {
                   disabled={oauthLoading !== null || loading}
                 >
                   <GoogleIcon size={18} />
-                  <Text style={[styles.googleBtnText, !tosAccepted && styles.googleTextDisabled]}>
+                  <AppText style={[styles.googleBtnText, !tosAccepted && styles.googleTextDisabled]}>
                     {oauthLoading === 'google' ? 'Signing in…' : 'Continue with Google'}
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               )}
 
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or</Text>
+                <AppText style={styles.dividerText}>or</AppText>
                 <View style={styles.dividerLine} />
               </View>
             </View>
@@ -273,7 +273,7 @@ export default function RegisterScreen() {
           <View style={[styles.form, { gap: vXs }]}>
             <View style={styles.inputWrap}>
               <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-              <TextInput
+              <AppTextInput
                 style={[styles.input, { paddingVertical: inputPad }]}
                 value={displayName}
                 onChangeText={setDisplayName}
@@ -287,7 +287,7 @@ export default function RegisterScreen() {
 
             <View style={styles.inputWrap}>
               <Mail color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-              <TextInput
+              <AppTextInput
                 style={[styles.input, { paddingVertical: inputPad }]}
                 value={email}
                 onChangeText={setEmail}
@@ -301,7 +301,7 @@ export default function RegisterScreen() {
 
             <View style={styles.inputWrap}>
               <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-              <TextInput
+              <AppTextInput
                 style={[styles.input, { paddingVertical: inputPad }]}
                 value={password}
                 onChangeText={setPassword}
@@ -319,7 +319,7 @@ export default function RegisterScreen() {
 
             <View style={styles.inputWrap}>
               <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-              <TextInput
+              <AppTextInput
                 style={[styles.input, { paddingVertical: inputPad }]}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -339,7 +339,7 @@ export default function RegisterScreen() {
             <View>
               <View style={[styles.inputWrap, dobError ? styles.inputWrapError : null]}>
                 <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-                <TextInput
+                <AppTextInput
                   style={[styles.input, { paddingVertical: inputPad }]}
                   value={dob}
                   onChangeText={handleDobChange}
@@ -350,9 +350,9 @@ export default function RegisterScreen() {
                 />
               </View>
               {dobError ? (
-                <Text style={styles.fieldError}>{dobError}</Text>
+                <AppText style={styles.fieldError}>{dobError}</AppText>
               ) : (
-                <Text style={styles.fieldHint}>You must be 18 or older to use this app.</Text>
+                <AppText style={styles.fieldHint}>You must be 18 or older to use this app.</AppText>
               )}
             </View>
 
@@ -374,25 +374,25 @@ export default function RegisterScreen() {
                   </LinearGradient>
                 )}
               </View>
-              <Text style={styles.tosText}>
+              <AppText style={styles.tosText}>
                 I have read and agree to the{' '}
-                <Text
+                <AppText
                   style={styles.tosLink}
                   onPress={(e) => { e.stopPropagation(); setTermsVisible(true); }}
                 >
                   Terms of Service
-                </Text>
+                </AppText>
                 {' '}and{' '}
-                <Text
+                <AppText
                   style={styles.tosLink}
                   onPress={(e) => { e.stopPropagation(); handlePrivacyPolicy(); }}
                 >
                   Privacy Policy
-                </Text>
-              </Text>
+                </AppText>
+              </AppText>
             </TouchableOpacity>
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? <AppText style={styles.error}>{error}</AppText> : null}
 
             <TouchableOpacity
               style={[styles.createBtn, !tosAccepted && styles.createBtnDisabled]}
@@ -407,11 +407,11 @@ export default function RegisterScreen() {
                   end={{ x: 1, y: 0 }}
                   style={[styles.createGrad, { paddingVertical: inputPad + 4 }]}
                 >
-                  <Text style={styles.createLabel}>{loading ? 'Creating...' : 'Create Account'}</Text>
+                  <AppText style={styles.createLabel}>{loading ? 'Creating...' : 'Create Account'}</AppText>
                 </LinearGradient>
               ) : (
                 <View style={[styles.createGrad, styles.createGradDisabled, { paddingVertical: inputPad + 4 }]}>
-                  <Text style={styles.createLabelDisabled}>{loading ? 'Creating...' : 'Create Account'}</Text>
+                  <AppText style={styles.createLabelDisabled}>{loading ? 'Creating...' : 'Create Account'}</AppText>
                 </View>
               )}
             </TouchableOpacity>
@@ -421,10 +421,10 @@ export default function RegisterScreen() {
               onPress={() => router.replace('/(auth)/login')}
               activeOpacity={0.7}
             >
-              <Text style={styles.loginText}>
+              <AppText style={styles.loginText}>
                 Already have an account?{'  '}
-                <Text style={styles.loginLink}>Sign In</Text>
-              </Text>
+                <AppText style={styles.loginLink}>Sign In</AppText>
+              </AppText>
             </TouchableOpacity>
           </View>
         </View>

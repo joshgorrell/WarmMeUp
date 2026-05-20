@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Sparkles, ChevronRight, Dice6, Zap, MessageCircle } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -40,12 +41,12 @@ export default function CurrentMomentCard({ interaction, onSeeAll }: CurrentMome
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Sparkles color={Gradient.primaryMid} size={16} strokeWidth={2} />
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Current Moment</Text>
+            <AppText style={[styles.headerTitle, { color: colors.text }]}>Current Moment</AppText>
             <Badge label="Active" variant="active" gradientBorder />
           </View>
           {onSeeAll && (
             <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7} style={styles.seeAll}>
-              <Text style={[styles.seeAllText, { color: colors.textSecondary }]}>See All</Text>
+              <AppText style={[styles.seeAllText, { color: colors.textSecondary }]}>See All</AppText>
               <ChevronRight color={colors.textMuted} size={14} />
             </TouchableOpacity>
           )}
@@ -57,17 +58,17 @@ export default function CurrentMomentCard({ interaction, onSeeAll }: CurrentMome
             {typeIcon(interaction.type)}
           </View>
           <View style={styles.info}>
-            <Text style={[styles.meta, { color: colors.textMuted }]}>
+            <AppText style={[styles.meta, { color: colors.textMuted }]}>
               {typeLabel(interaction.type)}
-            </Text>
+            </AppText>
             {interaction.content_text && (
-              <Text style={[styles.result, { color: colors.text }]} numberOfLines={2}>
+              <AppText style={[styles.result, { color: colors.text }]} numberOfLines={2}>
                 {interaction.content_text}
-              </Text>
+              </AppText>
             )}
-            <Text style={[styles.statusText, { color: colors.accentPink }]}>
+            <AppText style={[styles.statusText, { color: colors.accentPink }]}>
               {statusCopy(interaction.status)}
-            </Text>
+            </AppText>
           </View>
         </View>
       </View>

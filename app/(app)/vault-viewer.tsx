@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, Text, ActivityIndicator,
+  View, StyleSheet, TouchableOpacity, ActivityIndicator,
   Platform, Share, Image, AppState, Modal,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -259,7 +260,7 @@ export default function VaultViewerScreen() {
               <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
             )}
             {videoError && (
-              <Text style={styles.videoErrorText}>Video playback unavailable</Text>
+              <AppText style={styles.videoErrorText}>Video playback unavailable</AppText>
             )}
             {avLoaded && VideoComponent && (
               <>
@@ -335,12 +336,12 @@ export default function VaultViewerScreen() {
             ) : savedToVault ? (
               <>
                 <Check color="#4CAF50" size={16} />
-                <Text style={[styles.saveVaultText, { color: '#4CAF50' }]}>Saved to Vault</Text>
+                <AppText style={[styles.saveVaultText, { color: '#4CAF50' }]}>Saved to Vault</AppText>
               </>
             ) : (
               <>
                 <Archive color="#FF8A3D" size={16} />
-                <Text style={styles.saveVaultText}>Save to Vault</Text>
+                <AppText style={styles.saveVaultText}>Save to Vault</AppText>
               </>
             )}
           </TouchableOpacity>
@@ -387,16 +388,16 @@ export default function VaultViewerScreen() {
             <View style={styles.modalIcon}>
               <AlertTriangle color="#FFB347" size={32} strokeWidth={1.5} />
             </View>
-            <Text style={styles.modalTitle}>Screenshot Detected</Text>
-            <Text style={styles.modalBody}>
+            <AppText style={styles.modalTitle}>Screenshot Detected</AppText>
+            <AppText style={styles.modalBody}>
               Screenshots of this item are restricted. Your partner has been notified.
-            </Text>
+            </AppText>
             <TouchableOpacity
               style={styles.modalBtn}
               onPress={() => setScreenshotWarning(false)}
               activeOpacity={0.8}
             >
-              <Text style={styles.modalBtnText}>Got it</Text>
+              <AppText style={styles.modalBtnText}>Got it</AppText>
             </TouchableOpacity>
           </View>
         </View>
@@ -409,7 +410,7 @@ function PermBadge({ icon, label, allowed }: { icon: React.ReactNode; label: str
   return (
     <View style={[styles.badge, { borderColor: allowed ? 'rgba(255,46,138,0.35)' : 'rgba(255,255,255,0.12)' }]}>
       {icon}
-      <Text style={[styles.badgeLabel, { color: allowed ? '#fff' : 'rgba(255,255,255,0.35)' }]}>{label}</Text>
+      <AppText style={[styles.badgeLabel, { color: allowed ? '#fff' : 'rgba(255,255,255,0.35)' }]}>{label}</AppText>
     </View>
   );
 }

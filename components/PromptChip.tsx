@@ -1,5 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ViewStyle } from 'react-native';
+import { TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { Gradient, FontSize, Radius } from '@/constants/theme';
@@ -27,7 +28,7 @@ export default function PromptChip({ label, active, onPress, style }: PromptChip
             colors={['rgba(255,90,61,0.25)', 'rgba(255,46,138,0.25)']}
             style={styles.activeFill}
           >
-            <Text style={[styles.label, { color: '#fff' }]}>{label}</Text>
+            <AppText style={[styles.label, { color: '#fff' }]}>{label}</AppText>
           </LinearGradient>
         </LinearGradient>
       </TouchableOpacity>
@@ -40,7 +41,7 @@ export default function PromptChip({ label, active, onPress, style }: PromptChip
       activeOpacity={0.8}
       style={[styles.inactive, { backgroundColor: colors.card, borderColor: colors.borderSubtle }, style]}
     >
-      <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
+      <AppText style={[styles.label, { color: colors.textSecondary }]}>{label}</AppText>
     </TouchableOpacity>
   );
 }

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Heart, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -45,19 +46,19 @@ export default function ScoreSummaryCard({
         <View style={styles.scoresRow}>
           <View style={styles.scoreUser}>
             <Avatar name={myName} size="md" bgColor="rgba(255,46,138,0.2)" />
-            <Text style={[styles.points, { color: colors.text }]}>{myScore}</Text>
-            <Text style={[styles.name, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{myName}</Text>
+            <AppText style={[styles.points, { color: colors.text }]}>{myScore}</AppText>
+            <AppText style={[styles.name, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{myName}</AppText>
           </View>
 
           <View style={styles.center}>
             <Heart color={colors.accentPink} size={22} fill="rgba(255,46,138,0.25)" strokeWidth={2} />
-            <Text style={[styles.vs, { color: colors.textMuted }]}>VS</Text>
+            <AppText style={[styles.vs, { color: colors.textMuted }]}>VS</AppText>
           </View>
 
           <View style={[styles.scoreUser, { alignItems: 'flex-end' }]}>
             <Avatar name={partnerName} size="md" bgColor="rgba(255,138,61,0.2)" />
-            <Text style={[styles.points, { color: colors.text }]}>{partnerScore}</Text>
-            <Text style={[styles.name, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{partnerName}</Text>
+            <AppText style={[styles.points, { color: colors.text }]}>{partnerScore}</AppText>
+            <AppText style={[styles.name, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{partnerName}</AppText>
           </View>
         </View>
 
@@ -76,10 +77,10 @@ export default function ScoreSummaryCard({
 
         {/* Status + View Score */}
         <View style={styles.footer}>
-          <Text style={[styles.status, { color: colors.textSecondary }]}>{status}</Text>
+          <AppText style={[styles.status, { color: colors.textSecondary }]}>{status}</AppText>
           {onViewScore && (
             <TouchableOpacity onPress={onViewScore} activeOpacity={0.7} style={styles.viewScore}>
-              <Text style={[styles.viewScoreText, { color: colors.accentPink }]}>View Score</Text>
+              <AppText style={[styles.viewScoreText, { color: colors.accentPink }]}>View Score</AppText>
               <ChevronRight color={colors.accentPink} size={14} strokeWidth={2.5} />
             </TouchableOpacity>
           )}

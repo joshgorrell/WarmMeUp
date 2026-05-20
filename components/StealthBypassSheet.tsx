@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import AppText from '@/components/AppText';
 import { ChevronRight, Clock, Sun, Infinity as InfinityIcon } from 'lucide-react-native';
 import BottomSheet from './BottomSheet';
 import { useTheme } from '@/context/ThemeContext';
@@ -40,14 +41,14 @@ export default function StealthBypassSheet({ visible, onClose, onSelect }: Steal
           >
             <View style={styles.rowLeft}>
               <Icon color={colors.textSecondary} size={18} strokeWidth={2} />
-              <Text style={[styles.rowText, { color: colors.text }]}>{label}</Text>
+              <AppText style={[styles.rowText, { color: colors.text }]}>{label}</AppText>
             </View>
             <ChevronRight color={colors.textMuted} size={16} />
           </TouchableOpacity>
         ))}
 
         <TouchableOpacity onPress={onClose} style={styles.cancel} activeOpacity={0.7}>
-          <Text style={[styles.cancelText, { color: colors.textMuted }]}>Cancel</Text>
+          <AppText style={[styles.cancelText, { color: colors.textMuted }]}>Cancel</AppText>
         </TouchableOpacity>
       </View>
     </BottomSheet>

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, StyleSheet, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { Zap } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
@@ -156,7 +157,7 @@ export default function DareScreen() {
             <>
               {error ? (
                 <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
-                  <Text style={{ color: '#FF5A5F', fontSize: 13, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</Text>
+                  <AppText style={{ color: '#FF5A5F', fontSize: 13, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</AppText>
                 </View>
               ) : null}
 
@@ -175,12 +176,12 @@ export default function DareScreen() {
                     onPress={() => setMode(m)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.modeTitle, { color: mode === m ? '#FF2E8A' : colors.text }]}>
+                    <AppText style={[styles.modeTitle, { color: mode === m ? '#FF2E8A' : colors.text }]}>
                       {m === 'tell_me' ? 'Tell Me' : 'Text Me'}
-                    </Text>
-                    <Text style={[styles.modeSub, { color: colors.textMuted }]}>
+                    </AppText>
+                    <AppText style={[styles.modeSub, { color: colors.textMuted }]}>
                       {m === 'tell_me' ? 'Say it out loud' : 'Type your dare'}
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -216,9 +217,9 @@ export default function DareScreen() {
 
           {sent && (
             <View style={[styles.sentCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.25)' }]}>
-              <Text style={styles.sentEmoji}>⚡</Text>
-              <Text style={[styles.sentTitle, { color: colors.text }]}>Dare sent!</Text>
-              <Text style={[styles.sentSub, { color: colors.textSecondary }]}>Waiting to see if they're up for it.</Text>
+              <AppText style={styles.sentEmoji}>⚡</AppText>
+              <AppText style={[styles.sentTitle, { color: colors.text }]}>Dare sent!</AppText>
+              <AppText style={[styles.sentSub, { color: colors.textSecondary }]}>Waiting to see if they're up for it.</AppText>
               <SecondaryButton label="Send Another" onPress={() => { setSent(false); setDareText(''); setError(''); }} style={{ marginTop: Spacing.md }} />
             </View>
           )}

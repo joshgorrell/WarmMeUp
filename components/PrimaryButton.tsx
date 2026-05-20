@@ -1,8 +1,9 @@
 import React from 'react';
 import {
-  TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle,
+  TouchableOpacity, StyleSheet, ViewStyle, TextStyle,
   ActivityIndicator, View,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Gradient, Radius, FontSize } from '@/constants/theme';
 
@@ -47,7 +48,7 @@ export default function PrimaryButton({
         ) : (
           <View style={styles.row}>
             {leftIcon}
-            <Text style={[styles.label, small && styles.labelSmall, textStyle]}>{label}</Text>
+            <AppText style={[styles.label, small && styles.labelSmall, textStyle]}>{label}</AppText>
             {rightIcon}
           </View>
         )}

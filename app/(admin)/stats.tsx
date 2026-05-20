@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity,
+  View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
@@ -306,9 +307,9 @@ export default function StatsAdmin() {
               {p.key === 'custom' && (
                 <Calendar size={11} color={isActive ? '#FF2E8A' : colors.textMuted} strokeWidth={2.5} />
               )}
-              <Text style={[styles.pillText, { color: isActive ? '#FF2E8A' : colors.textSecondary }]}>
+              <AppText style={[styles.pillText, { color: isActive ? '#FF2E8A' : colors.textSecondary }]}>
                 {label}
-              </Text>
+              </AppText>
               {p.key === 'custom' && (
                 <ChevronDown size={11} color={isActive ? '#FF2E8A' : colors.textMuted} strokeWidth={2.5} />
               )}
@@ -318,7 +319,7 @@ export default function StatsAdmin() {
       </ScrollView>
 
       {/* Sub-label */}
-      <Text style={[styles.sublabel, { color: colors.textMuted }]}>{sublabel}</Text>
+      <AppText style={[styles.sublabel, { color: colors.textMuted }]}>{sublabel}</AppText>
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -328,88 +329,88 @@ export default function StatsAdmin() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
           {/* Global totals */}
-          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>GLOBAL TOTALS</Text>
+          <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>GLOBAL TOTALS</AppText>
           <View style={styles.statGrid}>
             {statItems.map(item => (
               <View key={item.label} style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                <Text style={[styles.statNum, { color: item.color }]}>{item.value}</Text>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{item.label}</Text>
+                <AppText style={[styles.statNum, { color: item.color }]}>{item.value}</AppText>
+                <AppText style={[styles.statLabel, { color: colors.textSecondary }]}>{item.label}</AppText>
               </View>
             ))}
           </View>
 
           {/* Not Brave Enough */}
           <View style={[styles.braveCard, { backgroundColor: colors.card, borderColor: 'rgba(255,90,95,0.25)' }]}>
-            <Text style={[styles.braveTitle, { color: colors.text }]}>Not Brave Enough</Text>
+            <AppText style={[styles.braveTitle, { color: colors.text }]}>Not Brave Enough</AppText>
             <View style={styles.braveRow}>
               <View style={styles.braveStat}>
-                <Text style={[styles.braveNum, { color: '#FF5A5F' }]}>{totals.dare_skipped}</Text>
-                <Text style={[styles.braveLabel, { color: colors.textMuted }]}>Dares skipped</Text>
+                <AppText style={[styles.braveNum, { color: '#FF5A5F' }]}>{totals.dare_skipped}</AppText>
+                <AppText style={[styles.braveLabel, { color: colors.textMuted }]}>Dares skipped</AppText>
               </View>
               <View style={[styles.braveDivider, { backgroundColor: colors.borderSubtle }]} />
               <View style={styles.braveStat}>
-                <Text style={[styles.braveNum, { color: '#FF5A5F' }]}>{totals.dice_skipped}</Text>
-                <Text style={[styles.braveLabel, { color: colors.textMuted }]}>Dice skipped</Text>
+                <AppText style={[styles.braveNum, { color: '#FF5A5F' }]}>{totals.dice_skipped}</AppText>
+                <AppText style={[styles.braveLabel, { color: colors.textMuted }]}>Dice skipped</AppText>
               </View>
             </View>
           </View>
 
           {/* Top scores */}
-          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>TOP SCORES</Text>
+          <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>TOP SCORES</AppText>
           <View style={[styles.tableCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
             {topScores.length === 0 && (
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No scores yet.</Text>
+              <AppText style={[styles.emptyText, { color: colors.textMuted }]}>No scores yet.</AppText>
             )}
             {topScores.map((s, idx) => (
               <View
                 key={s.user_id}
                 style={[styles.tableRow, idx < topScores.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}
               >
-                <Text style={[styles.rankText, { color: idx < 3 ? '#FFB347' : colors.textMuted }]}>#{idx + 1}</Text>
-                <Text style={[styles.rowName, { color: colors.text, flex: 1 }]}>{s.display_name}</Text>
-                <Text style={[styles.rowValue, { color: '#FFB347' }]}>{s.points} pts</Text>
+                <AppText style={[styles.rankText, { color: idx < 3 ? '#FFB347' : colors.textMuted }]}>#{idx + 1}</AppText>
+                <AppText style={[styles.rowName, { color: colors.text, flex: 1 }]}>{s.display_name}</AppText>
+                <AppText style={[styles.rowValue, { color: '#FFB347' }]}>{s.points} pts</AppText>
               </View>
             ))}
           </View>
 
           {/* Per-couple breakdown */}
-          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>PER-COUPLE BREAKDOWN</Text>
+          <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>PER-COUPLE BREAKDOWN</AppText>
           {coupleStats.length === 0 && (
-            <Text style={[styles.emptyText, { color: colors.textMuted, marginBottom: Spacing.lg }]}>No data yet.</Text>
+            <AppText style={[styles.emptyText, { color: colors.textMuted, marginBottom: Spacing.lg }]}>No data yet.</AppText>
           )}
           {coupleStats.map(cs => (
             <View key={cs.couple_id} style={[styles.coupleCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-              <Text style={[styles.coupleName, { color: colors.text }]}>
+              <AppText style={[styles.coupleName, { color: colors.text }]}>
                 {cs.user_a_name}{cs.user_b_name ? ` & ${cs.user_b_name}` : ''}
-              </Text>
+              </AppText>
               <View style={styles.miniStatRow}>
                 <View style={styles.miniStat}>
-                  <Text style={[styles.miniNum, { color: '#FFB347' }]}>{cs.dice}</Text>
-                  <Text style={[styles.miniLabel, { color: colors.textMuted }]}>Dice</Text>
+                  <AppText style={[styles.miniNum, { color: '#FFB347' }]}>{cs.dice}</AppText>
+                  <AppText style={[styles.miniLabel, { color: colors.textMuted }]}>Dice</AppText>
                 </View>
                 <View style={styles.miniStat}>
-                  <Text style={[styles.miniNum, { color: '#FF2E8A' }]}>{cs.dare}</Text>
-                  <Text style={[styles.miniLabel, { color: colors.textMuted }]}>Dare</Text>
+                  <AppText style={[styles.miniNum, { color: '#FF2E8A' }]}>{cs.dare}</AppText>
+                  <AppText style={[styles.miniLabel, { color: colors.textMuted }]}>Dare</AppText>
                 </View>
                 <View style={styles.miniStat}>
-                  <Text style={[styles.miniNum, { color: '#FF8A3D' }]}>{cs.tell_me}</Text>
-                  <Text style={[styles.miniLabel, { color: colors.textMuted }]}>Ask</Text>
+                  <AppText style={[styles.miniNum, { color: '#FF8A3D' }]}>{cs.tell_me}</AppText>
+                  <AppText style={[styles.miniLabel, { color: colors.textMuted }]}>Ask</AppText>
                 </View>
                 <View style={styles.miniStat}>
-                  <Text style={[styles.miniNum, { color: '#E8637A' }]}>{cs.wish}</Text>
-                  <Text style={[styles.miniLabel, { color: colors.textMuted }]}>Wish</Text>
+                  <AppText style={[styles.miniNum, { color: '#E8637A' }]}>{cs.wish}</AppText>
+                  <AppText style={[styles.miniLabel, { color: colors.textMuted }]}>Wish</AppText>
                 </View>
                 <View style={styles.miniStat}>
-                  <Text style={[styles.miniNum, { color: '#69A7FF' }]}>{cs.chat}</Text>
-                  <Text style={[styles.miniLabel, { color: colors.textMuted }]}>Chat</Text>
+                  <AppText style={[styles.miniNum, { color: '#69A7FF' }]}>{cs.chat}</AppText>
+                  <AppText style={[styles.miniLabel, { color: colors.textMuted }]}>Chat</AppText>
                 </View>
                 <View style={styles.miniStat}>
-                  <Text style={[styles.miniNum, { color: '#FF5A5F' }]}>{cs.dare_skipped + cs.dice_skipped}</Text>
-                  <Text style={[styles.miniLabel, { color: colors.textMuted }]}>Skipped</Text>
+                  <AppText style={[styles.miniNum, { color: '#FF5A5F' }]}>{cs.dare_skipped + cs.dice_skipped}</AppText>
+                  <AppText style={[styles.miniLabel, { color: colors.textMuted }]}>Skipped</AppText>
                 </View>
                 <View style={[styles.miniStat, styles.totalStat, { borderColor: colors.borderSubtle }]}>
-                  <Text style={[styles.miniNum, { color: colors.text }]}>{cs.total}</Text>
-                  <Text style={[styles.miniLabel, { color: colors.textMuted }]}>Total</Text>
+                  <AppText style={[styles.miniNum, { color: colors.text }]}>{cs.total}</AppText>
+                  <AppText style={[styles.miniLabel, { color: colors.textMuted }]}>Total</AppText>
                 </View>
               </View>
             </View>
@@ -428,7 +429,7 @@ export default function StatsAdmin() {
         <View style={styles.pickerRow}>
           {/* From */}
           <View style={styles.pickerCol}>
-            <Text style={[styles.pickerHeading, { color: colors.textMuted }]}>FROM</Text>
+            <AppText style={[styles.pickerHeading, { color: colors.textMuted }]}>FROM</AppText>
             <ScrollView
               style={[styles.pickerScroll, { borderColor: colors.borderSubtle }]}
               showsVerticalScrollIndicator={false}
@@ -446,13 +447,13 @@ export default function StatsAdmin() {
                       active && { backgroundColor: isDark ? 'rgba(255,46,138,0.18)' : 'rgba(232,25,110,0.10)' },
                     ]}
                   >
-                    <Text style={[
+                    <AppText style={[
                       styles.pickerItemText,
                       { color: active ? '#FF2E8A' : colors.textSecondary },
                       active && { fontFamily: 'Inter-SemiBold' },
                     ]}>
                       {monthYearLabel(my)}
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                 );
               })}
@@ -463,7 +464,7 @@ export default function StatsAdmin() {
 
           {/* To */}
           <View style={styles.pickerCol}>
-            <Text style={[styles.pickerHeading, { color: colors.textMuted }]}>TO</Text>
+            <AppText style={[styles.pickerHeading, { color: colors.textMuted }]}>TO</AppText>
             <ScrollView
               style={[styles.pickerScroll, { borderColor: colors.borderSubtle }]}
               showsVerticalScrollIndicator={false}
@@ -481,13 +482,13 @@ export default function StatsAdmin() {
                       active && { backgroundColor: isDark ? 'rgba(255,46,138,0.18)' : 'rgba(232,25,110,0.10)' },
                     ]}
                   >
-                    <Text style={[
+                    <AppText style={[
                       styles.pickerItemText,
                       { color: active ? '#FF2E8A' : colors.textSecondary },
                       active && { fontFamily: 'Inter-SemiBold' },
                     ]}>
                       {monthYearLabel(my)}
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                 );
               })}
@@ -500,9 +501,9 @@ export default function StatsAdmin() {
           activeOpacity={0.85}
           style={styles.applyBtn}
         >
-          <Text style={styles.applyBtnText}>
+          <AppText style={styles.applyBtnText}>
             Apply: {monthYearLabel(customFrom)} – {monthYearLabel(customTo)}
-          </Text>
+          </AppText>
         </TouchableOpacity>
       </BottomSheet>
     </AppShell>

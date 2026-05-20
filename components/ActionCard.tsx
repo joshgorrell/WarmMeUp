@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Lock } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -78,12 +79,12 @@ export default function ActionCard({
               {isLocked ? <Lock color="rgba(255,255,255,0.30)" size={28} strokeWidth={2} /> : icon}
             </View>
 
-            <Text style={[styles.title, { color: isLocked ? colors.textMuted : colors.text }]}>
+            <AppText style={[styles.title, { color: isLocked ? colors.textMuted : colors.text }]}>
               {title}
-            </Text>
-            <Text style={[styles.sub, { color: colors.textMuted }]}>
+            </AppText>
+            <AppText style={[styles.sub, { color: colors.textMuted }]}>
               {subtitle}
-            </Text>
+            </AppText>
 
             {badge && (
               <View style={styles.badge}>

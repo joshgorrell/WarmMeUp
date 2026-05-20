@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
+  View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Zap, Lock, Trophy, MessageCircle, Dice6, ChevronRight, Heart, Camera } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -238,12 +239,12 @@ export default function HomeScreen() {
 
           {/* Greeting */}
           <View style={styles.greeting}>
-            <Text style={[styles.greetingTitle, { color: colors.text }]}>
+            <AppText style={[styles.greetingTitle, { color: colors.text }]}>
               {getGreeting()}{profile?.display_name ? `, ${profile.display_name.split(' ')[0]}` : ''}
-            </Text>
-            <Text style={[styles.greetingSub, { color: colors.textSecondary }]}>
+            </AppText>
+            <AppText style={[styles.greetingSub, { color: colors.textSecondary }]}>
               {greetingSub}
-            </Text>
+            </AppText>
           </View>
 
           {/* Current Moment */}
@@ -260,9 +261,9 @@ export default function HomeScreen() {
           {/* Recent Activity */}
           <View style={styles.activitySection}>
             <View style={styles.sectionRow}>
-              <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>RECENT ACTIVITY</Text>
+              <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>RECENT ACTIVITY</AppText>
               <TouchableOpacity onPress={() => router.push('/(app)/activity')} activeOpacity={0.7} style={styles.seeAll}>
-                <Text style={[styles.seeAllText, { color: '#FF2E8A' }]}>See all</Text>
+                <AppText style={[styles.seeAllText, { color: '#FF2E8A' }]}>See all</AppText>
                 <ChevronRight color="#FF2E8A" size={13} strokeWidth={2.5} />
               </TouchableOpacity>
             </View>
@@ -283,18 +284,18 @@ export default function HomeScreen() {
                       {item.icon}
                     </View>
                     <View style={styles.activityText}>
-                      <Text style={[styles.activityLabel, { color: colors.text }]} numberOfLines={1}>{item.label}</Text>
+                      <AppText style={[styles.activityLabel, { color: colors.text }]} numberOfLines={1}>{item.label}</AppText>
                       {item.sub ? (
-                        <Text style={[styles.activitySub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sub}</Text>
+                        <AppText style={[styles.activitySub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sub}</AppText>
                       ) : null}
                     </View>
-                    <Text style={[styles.activityTime, { color: colors.textMuted }]}>{item.time}</Text>
+                    <AppText style={[styles.activityTime, { color: colors.textMuted }]}>{item.time}</AppText>
                   </View>
                 ))}
               </View>
             ) : (
               <View style={[styles.activityEmpty, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                <Text style={[styles.activityEmptyText, { color: colors.textMuted }]}>No activity yet</Text>
+                <AppText style={[styles.activityEmptyText, { color: colors.textMuted }]}>No activity yet</AppText>
               </View>
             )}
           </View>
@@ -311,15 +312,15 @@ export default function HomeScreen() {
             >
               <View style={styles.scoreRow}>
                 <Avatar name={myName} uri={profile?.avatar_url} size="sm" bgColor="rgba(255,46,138,0.18)" />
-                <Text style={[styles.scoreName, { color: colors.textSecondary }]} numberOfLines={1}>{myName}</Text>
-                <Text style={[styles.scorePts, { color: colors.text }]}>{myScore}</Text>
+                <AppText style={[styles.scoreName, { color: colors.textSecondary }]} numberOfLines={1}>{myName}</AppText>
+                <AppText style={[styles.scorePts, { color: colors.text }]}>{myScore}</AppText>
 
                 <View style={styles.scoreVs}>
                   <Heart color="#FF2E8A" size={11} fill="rgba(255,46,138,0.20)" strokeWidth={2} />
                 </View>
 
-                <Text style={[styles.scorePts, { color: colors.text }]}>{partnerScore}</Text>
-                <Text style={[styles.scoreName, { color: colors.textSecondary, textAlign: 'right' }]} numberOfLines={1}>{partnerName}</Text>
+                <AppText style={[styles.scorePts, { color: colors.text }]}>{partnerScore}</AppText>
+                <AppText style={[styles.scoreName, { color: colors.textSecondary, textAlign: 'right' }]} numberOfLines={1}>{partnerName}</AppText>
                 <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="sm" bgColor="rgba(255,138,61,0.18)" />
               </View>
 

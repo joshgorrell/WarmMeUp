@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
+  View, StyleSheet, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, Animated, Modal, ActivityIndicator,
   Pressable, Linking,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -103,12 +105,12 @@ function WishCard({
           <View style={styles.wishCardMeta}>
             {wish.category ? (
               <View style={[styles.categoryBadge, { backgroundColor: 'rgba(232,99,122,0.12)', borderColor: 'rgba(232,99,122,0.28)' }]}>
-                <Text style={styles.categoryBadgeText}>
+                <AppText style={styles.categoryBadgeText}>
                   {getCategoryEmoji(wish.category)}  {wish.category}
-                </Text>
+                </AppText>
               </View>
             ) : null}
-            <Text style={[styles.wishAge, { color: colors.textMuted }]}>{timeAgo(wish.created_at)}</Text>
+            <AppText style={[styles.wishAge, { color: colors.textMuted }]}>{timeAgo(wish.created_at)}</AppText>
           </View>
           <TouchableOpacity onPress={() => setShowActions(v => !v)} style={styles.moreBtn} activeOpacity={0.7}>
             <View style={styles.dotRow}>
@@ -117,14 +119,14 @@ function WishCard({
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.wishTitle, { color: colors.text }]}>{wish.title}</Text>
+        <AppText style={[styles.wishTitle, { color: colors.text }]}>{wish.title}</AppText>
         {wish.description ? (
-          <Text style={[styles.wishDesc, { color: colors.textSecondary }]} numberOfLines={3}>{wish.description}</Text>
+          <AppText style={[styles.wishDesc, { color: colors.textSecondary }]} numberOfLines={3}>{wish.description}</AppText>
         ) : null}
         {wish.link ? (
           <TouchableOpacity onPress={() => wish.link && Linking.openURL(wish.link)} activeOpacity={0.7} style={styles.linkRow}>
             <ExternalLink color={WISH_ACCENT} size={12} strokeWidth={2} />
-            <Text style={[styles.linkText, { color: WISH_ACCENT }]} numberOfLines={1}>{wish.link}</Text>
+            <AppText style={[styles.linkText, { color: WISH_ACCENT }]} numberOfLines={1}>{wish.link}</AppText>
           </TouchableOpacity>
         ) : null}
 
@@ -140,8 +142,8 @@ function WishCard({
                 style={[styles.reactionBtn, mine && { backgroundColor: 'rgba(232,99,122,0.15)', borderColor: 'rgba(232,99,122,0.40)' }, !mine && { borderColor: colors.borderSubtle }]}
                 activeOpacity={0.7}
               >
-                <Text style={styles.reactionEmoji}>{emoji}</Text>
-                {count > 0 && <Text style={[styles.reactionCount, { color: mine ? WISH_ACCENT : colors.textMuted }]}>{count}</Text>}
+                <AppText style={styles.reactionEmoji}>{emoji}</AppText>
+                {count > 0 && <AppText style={[styles.reactionCount, { color: mine ? WISH_ACCENT : colors.textMuted }]}>{count}</AppText>}
               </TouchableOpacity>
             );
           })}
@@ -153,31 +155,31 @@ function WishCard({
             {!isMine && wish.status === 'shared' && (
               <TouchableOpacity onPress={() => { setShowActions(false); onFulfill(wish); }} style={styles.actionItem} activeOpacity={0.8}>
                 <Heart color={WISH_GOLD} size={15} strokeWidth={2} />
-                <Text style={[styles.actionLabel, { color: WISH_GOLD }]}>Grant this Wish</Text>
+                <AppText style={[styles.actionLabel, { color: WISH_GOLD }]}>Grant this Wish</AppText>
               </TouchableOpacity>
             )}
             {isMine && wish.status === 'shared' && (
               <TouchableOpacity onPress={() => { setShowActions(false); onFulfill(wish); }} style={styles.actionItem} activeOpacity={0.8}>
                 <Heart color={WISH_GOLD} size={15} strokeWidth={2} />
-                <Text style={[styles.actionLabel, { color: WISH_GOLD }]}>Mark as Granted</Text>
+                <AppText style={[styles.actionLabel, { color: WISH_GOLD }]}>Mark as Granted</AppText>
               </TouchableOpacity>
             )}
             {isMine && (
               <TouchableOpacity onPress={() => { setShowActions(false); onEdit(wish); }} style={styles.actionItem} activeOpacity={0.8}>
                 <Pencil color={colors.textSecondary} size={15} strokeWidth={2} />
-                <Text style={[styles.actionLabel, { color: colors.textSecondary }]}>Edit</Text>
+                <AppText style={[styles.actionLabel, { color: colors.textSecondary }]}>Edit</AppText>
               </TouchableOpacity>
             )}
             {isMine && wish.status !== 'archived' && (
               <TouchableOpacity onPress={() => { setShowActions(false); onArchive(wish); }} style={styles.actionItem} activeOpacity={0.8}>
                 <X color={colors.textMuted} size={15} strokeWidth={2} />
-                <Text style={[styles.actionLabel, { color: colors.textMuted }]}>Archive</Text>
+                <AppText style={[styles.actionLabel, { color: colors.textMuted }]}>Archive</AppText>
               </TouchableOpacity>
             )}
             {isMine && (
               <TouchableOpacity onPress={() => { setShowActions(false); onDelete(wish); }} style={styles.actionItem} activeOpacity={0.8}>
                 <Trash2 color="#FF5A5F" size={15} strokeWidth={2} />
-                <Text style={[styles.actionLabel, { color: '#FF5A5F' }]}>Delete</Text>
+                <AppText style={[styles.actionLabel, { color: '#FF5A5F' }]}>Delete</AppText>
               </TouchableOpacity>
             )}
           </View>
@@ -220,22 +222,22 @@ function GrantedCard({ wish, isMine }: { wish: WishWithReactions; isMine: boolea
       <View style={styles.grantedHeader}>
         <Animated.Text style={[styles.grantedHeart, { transform: [{ scale: pulseAnim }] }]}>❤️</Animated.Text>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.grantedLabel, { color: WISH_GOLD }]}>Wish Granted</Text>
-          <Text style={[styles.grantedTitle, { color: colors.text }]}>{wish.title}</Text>
+          <AppText style={[styles.grantedLabel, { color: WISH_GOLD }]}>Wish Granted</AppText>
+          <AppText style={[styles.grantedTitle, { color: colors.text }]}>{wish.title}</AppText>
         </View>
         {wish.category ? (
-          <Text style={styles.grantedEmoji}>{getCategoryEmoji(wish.category)}</Text>
+          <AppText style={styles.grantedEmoji}>{getCategoryEmoji(wish.category)}</AppText>
         ) : null}
       </View>
       {memImgUri && (
         <Image source={{ uri: memImgUri }} style={styles.grantedMemImg} resizeMode="cover" />
       )}
       {wish.fulfilled_note ? (
-        <Text style={[styles.grantedNote, { color: colors.textSecondary }]}>"{wish.fulfilled_note}"</Text>
+        <AppText style={[styles.grantedNote, { color: colors.textSecondary }]}>"{wish.fulfilled_note}"</AppText>
       ) : null}
-      <Text style={[styles.grantedDate, { color: colors.textMuted }]}>
+      <AppText style={[styles.grantedDate, { color: colors.textMuted }]}>
         {isMine ? 'Your wish' : "Partner's wish"} · {wish.fulfilled_at ? timeAgo(wish.fulfilled_at) : ''}
-      </Text>
+      </AppText>
     </View>
   );
 }
@@ -367,7 +369,7 @@ function WishForm({
             <TouchableOpacity onPress={onClose} style={styles.formCloseBtn} activeOpacity={0.7}>
               <X color="rgba(255,255,255,0.6)" size={20} strokeWidth={2} />
             </TouchableOpacity>
-            <Text style={styles.formTitle}>{initial ? 'Edit Wish' : 'New Wish'}</Text>
+            <AppText style={styles.formTitle}>{initial ? 'Edit Wish' : 'New Wish'}</AppText>
             <View style={{ width: 32 }} />
           </View>
 
@@ -377,18 +379,18 @@ function WishForm({
               <LinearGradient colors={['rgba(232,99,122,0.18)', 'rgba(240,169,106,0.08)']} style={styles.formIconBg}>
                 <Sparkles color={WISH_ACCENT} size={28} strokeWidth={1.5} />
               </LinearGradient>
-              <Text style={styles.formSubtitle}>What do you desire? Dream big.</Text>
+              <AppText style={styles.formSubtitle}>What do you desire? Dream big.</AppText>
             </View>
 
             {error ? (
               <View style={styles.formErrorBanner}>
-                <Text style={styles.formErrorText}>{error}</Text>
+                <AppText style={styles.formErrorText}>{error}</AppText>
               </View>
             ) : null}
 
             {/* Title */}
-            <Text style={styles.formLabel}>Title <Text style={{ color: WISH_ACCENT }}>*</Text></Text>
-            <TextInput
+            <AppText style={styles.formLabel}>Title <AppText style={{ color: WISH_ACCENT }}>*</AppText></AppText>
+            <AppTextInput
               style={styles.formInput}
               value={title}
               onChangeText={setTitle}
@@ -398,7 +400,7 @@ function WishForm({
             />
 
             {/* Category */}
-            <Text style={[styles.formLabel, { marginTop: Spacing.md }]}>Category</Text>
+            <AppText style={[styles.formLabel, { marginTop: Spacing.md }]}>Category</AppText>
             <View style={styles.categoryGrid}>
               {CATEGORIES.map(c => (
                 <TouchableOpacity
@@ -412,15 +414,15 @@ function WishForm({
                   ]}
                   activeOpacity={0.75}
                 >
-                  <Text style={styles.categoryPillEmoji}>{c.emoji}</Text>
-                  <Text style={[styles.categoryPillLabel, { color: category === c.label ? WISH_ACCENT : 'rgba(255,255,255,0.65)' }]}>{c.label}</Text>
+                  <AppText style={styles.categoryPillEmoji}>{c.emoji}</AppText>
+                  <AppText style={[styles.categoryPillLabel, { color: category === c.label ? WISH_ACCENT : 'rgba(255,255,255,0.65)' }]}>{c.label}</AppText>
                 </TouchableOpacity>
               ))}
             </View>
 
             {/* Description */}
-            <Text style={[styles.formLabel, { marginTop: Spacing.md }]}>Description</Text>
-            <TextInput
+            <AppText style={[styles.formLabel, { marginTop: Spacing.md }]}>Description</AppText>
+            <AppTextInput
               style={[styles.formInput, styles.formTextarea]}
               value={desc}
               onChangeText={setDesc}
@@ -433,7 +435,7 @@ function WishForm({
             />
 
             {/* Image */}
-            <Text style={[styles.formLabel, { marginTop: Spacing.md }]}>Photo</Text>
+            <AppText style={[styles.formLabel, { marginTop: Spacing.md }]}>Photo</AppText>
             <TouchableOpacity onPress={pickImage} style={styles.imgPicker} activeOpacity={0.75} disabled={uploading}>
               {uploading ? (
                 <ActivityIndicator color={WISH_ACCENT} />
@@ -442,19 +444,19 @@ function WishForm({
               ) : (
                 <>
                   <ImageIcon color="rgba(255,255,255,0.35)" size={22} strokeWidth={1.5} />
-                  <Text style={styles.imgPickerLabel}>Add a photo</Text>
+                  <AppText style={styles.imgPickerLabel}>Add a photo</AppText>
                 </>
               )}
               {imgUri && !uploading && (
                 <View style={styles.imgPickerOverlay}>
-                  <Text style={styles.imgPickerChange}>Tap to change</Text>
+                  <AppText style={styles.imgPickerChange}>Tap to change</AppText>
                 </View>
               )}
             </TouchableOpacity>
 
             {/* Link */}
-            <Text style={[styles.formLabel, { marginTop: Spacing.md }]}>Link</Text>
-            <TextInput
+            <AppText style={[styles.formLabel, { marginTop: Spacing.md }]}>Link</AppText>
+            <AppTextInput
               style={styles.formInput}
               value={link}
               onChangeText={setLink}
@@ -478,7 +480,7 @@ function WishForm({
                 {saving ? <ActivityIndicator color="#fff" size="small" /> : (
                   <>
                     <Sparkles color="#fff" size={16} strokeWidth={2} />
-                    <Text style={styles.formCTAText}>{initial ? 'Save Changes' : 'Share with Partner'}</Text>
+                    <AppText style={styles.formCTAText}>{initial ? 'Save Changes' : 'Share with Partner'}</AppText>
                   </>
                 )}
               </LinearGradient>
@@ -490,7 +492,7 @@ function WishForm({
                 style={[styles.formDraftBtn, (!title.trim() || saving) && { opacity: 0.45 }]}
                 activeOpacity={0.75}
               >
-                <Text style={styles.formDraftText}>Save as Draft</Text>
+                <AppText style={styles.formDraftText}>Save as Draft</AppText>
               </TouchableOpacity>
             )}
 
@@ -608,9 +610,9 @@ function FulfillSheet({
         <Pressable style={[styles.sheetContainer, { backgroundColor: '#0D0D14' }]} onPress={e => e.stopPropagation()}>
           {done ? (
             <Animated.View style={[styles.celebWrap, { transform: [{ scale: Animated.add(0.5, Animated.multiply(celebAnim, 0.5)) }], opacity: celebAnim }]}>
-              <Text style={styles.celebHeart}>❤️</Text>
-              <Text style={styles.celebTitle}>Wish Granted!</Text>
-              <Text style={styles.celebSub}>You made it happen.</Text>
+              <AppText style={styles.celebHeart}>❤️</AppText>
+              <AppText style={styles.celebTitle}>Wish Granted!</AppText>
+              <AppText style={styles.celebSub}>You made it happen.</AppText>
             </Animated.View>
           ) : (
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -618,16 +620,16 @@ function FulfillSheet({
                 <View style={styles.sheetHandle} />
                 <View style={styles.sheetHeaderRow}>
                   <Heart color={WISH_GOLD} size={22} strokeWidth={1.5} />
-                  <Text style={styles.sheetTitle}>Grant this Wish</Text>
+                  <AppText style={styles.sheetTitle}>Grant this Wish</AppText>
                 </View>
                 {wish && (
-                  <Text style={styles.sheetWishTitle}>"{wish.title}"</Text>
+                  <AppText style={styles.sheetWishTitle}>"{wish.title}"</AppText>
                 )}
 
-                {error ? <Text style={styles.sheetError}>{error}</Text> : null}
+                {error ? <AppText style={styles.sheetError}>{error}</AppText> : null}
 
-                <Text style={styles.sheetLabel}>Add a memory note</Text>
-                <TextInput
+                <AppText style={styles.sheetLabel}>Add a memory note</AppText>
+                <AppTextInput
                   style={[styles.sheetInput, styles.sheetTextarea]}
                   value={note}
                   onChangeText={setNote}
@@ -644,12 +646,12 @@ function FulfillSheet({
                     memImgUri ? (
                       <>
                         <Image source={{ uri: memImgUri }} style={StyleSheet.absoluteFill as any} resizeMode="cover" />
-                        <View style={styles.imgPickerOverlay}><Text style={styles.imgPickerChange}>Tap to change</Text></View>
+                        <View style={styles.imgPickerOverlay}><AppText style={styles.imgPickerChange}>Tap to change</AppText></View>
                       </>
                     ) : (
                       <>
                         <ImageIcon color="rgba(255,255,255,0.35)" size={18} strokeWidth={1.5} />
-                        <Text style={styles.sheetImgPickerLabel}>Attach a memory photo</Text>
+                        <AppText style={styles.sheetImgPickerLabel}>Attach a memory photo</AppText>
                       </>
                     )
                   }
@@ -665,13 +667,13 @@ function FulfillSheet({
                     {saving ? <ActivityIndicator color="#fff" size="small" /> : (
                       <>
                         <Heart color="#fff" size={16} strokeWidth={2} fill="#fff" />
-                        <Text style={styles.sheetGrantText}>Wish Granted ❤️</Text>
+                        <AppText style={styles.sheetGrantText}>Wish Granted ❤️</AppText>
                       </>
                     )}
                   </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={onClose} style={styles.sheetCancelBtn} activeOpacity={0.7}>
-                  <Text style={styles.sheetCancelText}>Cancel</Text>
+                  <AppText style={styles.sheetCancelText}>Cancel</AppText>
                 </TouchableOpacity>
                 <View style={{ height: 32 }} />
               </ScrollView>
@@ -822,10 +824,10 @@ export default function WishTab() {
         </View>
         {TAB_DEFS.map((t, i) => (
           <TouchableOpacity key={t.key} style={styles.tabBtn} onPress={() => handleTabPress(t.key, i)} activeOpacity={0.7}>
-            <Text style={[
+            <AppText style={[
               styles.tabBtnLabel,
               activeTab === t.key ? { color: WISH_ACCENT, fontFamily: 'Inter-SemiBold' } : { color: colors.textMuted, fontFamily: 'Inter-Regular' },
-            ]}>{t.label}</Text>
+            ]}>{t.label}</AppText>
           </TouchableOpacity>
         ))}
       </View>
@@ -848,13 +850,13 @@ export default function WishTab() {
               >
                 <Sparkles color={WISH_ACCENT} size={32} strokeWidth={1.5} />
               </LinearGradient>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              <AppText style={[styles.emptyTitle, { color: colors.text }]}>
                 {activeTab === 'granted' ? 'No granted wishes yet' :
                   activeTab === 'mine' ? 'Start dreaming' :
                   activeTab === 'theirs' ? 'No wishes from your partner yet' :
                   'Your shared wishes will appear here'}
-              </Text>
-              <Text style={[styles.emptySub, { color: colors.textMuted }]}>
+              </AppText>
+              <AppText style={[styles.emptySub, { color: colors.textMuted }]}>
                 {activeTab === 'granted'
                   ? 'When a wish comes true, it lives here forever ❤️'
                   : activeTab === 'mine'
@@ -862,7 +864,7 @@ export default function WishTab() {
                   : activeTab === 'theirs'
                   ? "Their wishes will appear here once shared"
                   : 'Share something you desire and invite your partner into your dreams'}
-              </Text>
+              </AppText>
             </View>
           ) : (
             displayedWishes.map(w =>

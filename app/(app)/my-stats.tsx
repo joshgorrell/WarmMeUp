@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
+  View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, ChevronRight, Zap, MessageCircle, Star, Vault, Trophy, Flame, Clock, EyeOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,8 +26,8 @@ function BraveMeter({ completed, skipped, label, color, countOnly }: { completed
   return (
     <View style={bm.wrap}>
       <View style={bm.labelRow}>
-        <Text style={[bm.label, { color: '#fff' }]}>{label}</Text>
-        <Text style={[bm.counts, { color: 'rgba(255,255,255,0.6)' }]}>{countLabel}</Text>
+        <AppText style={[bm.label, { color: '#fff' }]}>{label}</AppText>
+        <AppText style={[bm.counts, { color: 'rgba(255,255,255,0.6)' }]}>{countLabel}</AppText>
       </View>
       <View style={[bm.track, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
         {ratio > 0 && (
@@ -34,9 +35,9 @@ function BraveMeter({ completed, skipped, label, color, countOnly }: { completed
         )}
       </View>
       {!countOnly && total > 0 && (
-        <Text style={[bm.pct, { color: 'rgba(255,255,255,0.5)' }]}>
+        <AppText style={[bm.pct, { color: 'rgba(255,255,255,0.5)' }]}>
           {Math.round(ratio * 100)}% brave
-        </Text>
+        </AppText>
       )}
     </View>
   );
@@ -292,12 +293,12 @@ export default function MyStatsScreen() {
         </TouchableOpacity>
         <View style={styles.monthCenter}>
           {allTime ? (
-            <Text style={[styles.monthLabel, { color: colors.text }]}>All Time</Text>
+            <AppText style={[styles.monthLabel, { color: colors.text }]}>All Time</AppText>
           ) : (
-            <Text style={[styles.monthLabel, { color: colors.text }]}>
+            <AppText style={[styles.monthLabel, { color: colors.text }]}>
               {MONTH_NAMES[month - 1]} {year}
-              {isCurrentMonth ? <Text style={[styles.currentBadge, { color: colors.accentPink ?? '#FF2E8A' }]}> · Current</Text> : null}
-            </Text>
+              {isCurrentMonth ? <AppText style={[styles.currentBadge, { color: colors.accentPink ?? '#FF2E8A' }]}> · Current</AppText> : null}
+            </AppText>
           )}
         </View>
         <View style={styles.navRight}>
@@ -329,9 +330,9 @@ export default function MyStatsScreen() {
           {!(couple?.points_enabled ?? true) && (
             <View style={[styles.hiddenBanner, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: colors.borderSubtle }]}>
               <EyeOff color={colors.textMuted} size={16} strokeWidth={1.75} />
-              <Text style={[styles.hiddenBannerText, { color: colors.textMuted }]}>
+              <AppText style={[styles.hiddenBannerText, { color: colors.textMuted }]}>
                 Points are hidden — scores shown below are still being tracked in the background.
-              </Text>
+              </AppText>
             </View>
           )}
 
@@ -340,23 +341,23 @@ export default function MyStatsScreen() {
             <View style={styles.vsInner}>
               <View style={styles.vsSide}>
                 <View style={[styles.vsAvatar, { backgroundColor: 'rgba(255,90,61,0.20)' }]}>
-                  <Text style={[styles.vsAvatarText, { color: '#FF5A3D' }]}>{myName.charAt(0).toUpperCase()}</Text>
+                  <AppText style={[styles.vsAvatarText, { color: '#FF5A3D' }]}>{myName.charAt(0).toUpperCase()}</AppText>
                 </View>
-                <Text style={[styles.vsName, { color: colors.textSecondary }]}>{myName}</Text>
-                <Text style={[styles.vsPts, { color: colors.text }]}>{myPts}</Text>
-                <Text style={[styles.vsPtsLabel, { color: colors.textMuted }]}>pts</Text>
+                <AppText style={[styles.vsName, { color: colors.textSecondary }]}>{myName}</AppText>
+                <AppText style={[styles.vsPts, { color: colors.text }]}>{myPts}</AppText>
+                <AppText style={[styles.vsPtsLabel, { color: colors.textMuted }]}>pts</AppText>
               </View>
               <View style={styles.vsCenter}>
                 <Trophy color="#FFB347" size={22} strokeWidth={2} />
-                <Text style={[styles.vsVS, { color: colors.textMuted }]}>VS</Text>
+                <AppText style={[styles.vsVS, { color: colors.textMuted }]}>VS</AppText>
               </View>
               <View style={styles.vsSide}>
                 <View style={[styles.vsAvatar, { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
-                  <Text style={[styles.vsAvatarText, { color: '#FF8A3D' }]}>{partnerName.charAt(0).toUpperCase()}</Text>
+                  <AppText style={[styles.vsAvatarText, { color: '#FF8A3D' }]}>{partnerName.charAt(0).toUpperCase()}</AppText>
                 </View>
-                <Text style={[styles.vsName, { color: colors.textSecondary }]}>{partnerName}</Text>
-                <Text style={[styles.vsPts, { color: colors.text }]}>{partnerPts}</Text>
-                <Text style={[styles.vsPtsLabel, { color: colors.textMuted }]}>pts</Text>
+                <AppText style={[styles.vsName, { color: colors.textSecondary }]}>{partnerName}</AppText>
+                <AppText style={[styles.vsPts, { color: colors.text }]}>{partnerPts}</AppText>
+                <AppText style={[styles.vsPtsLabel, { color: colors.textMuted }]}>pts</AppText>
               </View>
             </View>
             {totalPts > 0 && (
@@ -367,8 +368,8 @@ export default function MyStatsScreen() {
             {(couple?.streaks_enabled ?? true) && (
               <View style={styles.streakRow}>
                 <Flame color="#FF5A5F" size={13} strokeWidth={2} />
-                <Text style={[styles.streakValue, { color: colors.text }]}>{streak}</Text>
-                <Text style={[styles.streakLabel, { color: colors.textMuted }]}>day streak</Text>
+                <AppText style={[styles.streakValue, { color: colors.text }]}>{streak}</AppText>
+                <AppText style={[styles.streakLabel, { color: colors.textMuted }]}>day streak</AppText>
               </View>
             )}
           </LinearGradient>
@@ -377,7 +378,7 @@ export default function MyStatsScreen() {
           <View style={[styles.braveSection, { backgroundColor: 'rgba(255,45,45,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
             <View style={styles.braveSectionHeader}>
               <Flame color="#FF5A5F" size={18} strokeWidth={2} />
-              <Text style={[styles.braveSectionTitle, { color: colors.text }]}>Brave Meter</Text>
+              <AppText style={[styles.braveSectionTitle, { color: colors.text }]}>Brave Meter</AppText>
             </View>
             <BraveMeter
               completed={(myStats?.dares_completed ?? 0)}
@@ -403,25 +404,25 @@ export default function MyStatsScreen() {
           </View>
 
           {/* Category breakdown */}
-          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>YOUR BREAKDOWN</Text>
+          <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>YOUR BREAKDOWN</AppText>
           {categories.map(cat => (
             <View key={cat.label} style={[styles.catCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
               <View style={[styles.catIcon, { backgroundColor: cat.bg, borderColor: cat.border }]}>
                 {cat.icon}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.catLabel, { color: colors.text }]}>{cat.label}</Text>
-                {cat.extra ? <Text style={[styles.catExtra, { color: colors.textMuted }]}>{cat.extra}</Text> : null}
+                <AppText style={[styles.catLabel, { color: colors.text }]}>{cat.label}</AppText>
+                {cat.extra ? <AppText style={[styles.catExtra, { color: colors.textMuted }]}>{cat.extra}</AppText> : null}
               </View>
               <View style={styles.catValues}>
                 <View style={styles.catVal}>
-                  <Text style={[styles.catNum, { color: colors.text }]}>{cat.myVal}</Text>
-                  <Text style={[styles.catValLabel, { color: colors.textMuted }]}>{myName.split(' ')[0]}</Text>
+                  <AppText style={[styles.catNum, { color: colors.text }]}>{cat.myVal}</AppText>
+                  <AppText style={[styles.catValLabel, { color: colors.textMuted }]}>{myName.split(' ')[0]}</AppText>
                 </View>
                 <View style={[styles.catDivider, { backgroundColor: colors.borderSubtle }]} />
                 <View style={styles.catVal}>
-                  <Text style={[styles.catNum, { color: colors.text }]}>{cat.partnerVal}</Text>
-                  <Text style={[styles.catValLabel, { color: colors.textMuted }]}>{partnerName.split(' ')[0]}</Text>
+                  <AppText style={[styles.catNum, { color: colors.text }]}>{cat.partnerVal}</AppText>
+                  <AppText style={[styles.catValLabel, { color: colors.textMuted }]}>{partnerName.split(' ')[0]}</AppText>
                 </View>
               </View>
             </View>
@@ -429,8 +430,8 @@ export default function MyStatsScreen() {
 
           {!myStats && !isCurrentMonth && !allTime && (
             <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No data for this month</Text>
-              <Text style={[styles.emptySub, { color: colors.textSecondary }]}>Stats are saved at the end of each month.</Text>
+              <AppText style={[styles.emptyTitle, { color: colors.text }]}>No data for this month</AppText>
+              <AppText style={[styles.emptySub, { color: colors.textSecondary }]}>Stats are saved at the end of each month.</AppText>
             </View>
           )}
         </ScrollView>

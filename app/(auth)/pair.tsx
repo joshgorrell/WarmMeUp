@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   Share,
   Platform,
   Modal,
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -390,17 +390,17 @@ export default function PairScreen() {
                     <HeartOutline size={heartSize} gradientId="heartR2" colorA="#FF5A3D" colorB="#FF2E8A" />
                   </View>
                 </View>
-                <Text style={[styles.sparkle, { top: 8, left: '22%', fontSize: 12 }]}>✦</Text>
-                <Text style={[styles.sparkle, { top: 4, right: '20%', fontSize: 7 }]}>✦</Text>
-                <Text style={[styles.sparkle, { bottom: 14, left: '14%', fontSize: 8 }]}>✦</Text>
-                <Text style={[styles.sparkle, { bottom: 20, right: '15%', fontSize: 6 }]}>✦</Text>
+                <AppText style={[styles.sparkle, { top: 8, left: '22%', fontSize: 12 }]}>✦</AppText>
+                <AppText style={[styles.sparkle, { top: 4, right: '20%', fontSize: 7 }]}>✦</AppText>
+                <AppText style={[styles.sparkle, { bottom: 14, left: '14%', fontSize: 8 }]}>✦</AppText>
+                <AppText style={[styles.sparkle, { bottom: 20, right: '15%', fontSize: 6 }]}>✦</AppText>
               </View>
 
-              <Text style={[styles.heading, { fontSize: headingSize }]}>Enter your{'\n'}partner's code</Text>
-              <Text style={styles.sub}>Type in the invite code they sent you.</Text>
+              <AppText style={[styles.heading, { fontSize: headingSize }]}>Enter your{'\n'}partner's code</AppText>
+              <AppText style={styles.sub}>Type in the invite code they sent you.</AppText>
 
               <View style={styles.inlineJoin}>
-                <TextInput
+                <AppTextInput
                   style={[styles.codeInput, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}
                   value={joinCode}
                   onChangeText={(t) => { setJoinCode(t); setError(''); }}
@@ -410,7 +410,7 @@ export default function PairScreen() {
                   maxLength={6}
                 />
 
-                {error ? <Text style={styles.joinError}>{error}</Text> : null}
+                {error ? <AppText style={styles.joinError}>{error}</AppText> : null}
 
                 <TouchableOpacity
                   style={styles.actionBtn}
@@ -424,13 +424,13 @@ export default function PairScreen() {
                     end={{ x: 1, y: 0 }}
                     style={styles.actionGrad}
                   >
-                    <Text style={styles.actionLabel}>{loading ? 'Checking...' : 'Continue'}</Text>
+                    <AppText style={styles.actionLabel}>{loading ? 'Checking...' : 'Continue'}</AppText>
                   </LinearGradient>
                 </TouchableOpacity>
 
-                <Text style={styles.preAuthNote}>
+                <AppText style={styles.preAuthNote}>
                   You'll create your account on the next step, then connect automatically.
-                </Text>
+                </AppText>
               </View>
 
               <TouchableOpacity
@@ -438,7 +438,7 @@ export default function PairScreen() {
                 onPress={() => router.replace('/(auth)/register')}
                 activeOpacity={0.6}
               >
-                <Text style={styles.skipText}>Register without a code</Text>
+                <AppText style={styles.skipText}>Register without a code</AppText>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -460,8 +460,8 @@ export default function PairScreen() {
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: scrollPaddingTop }]} showsVerticalScrollIndicator={false}>
         <View style={centerStyle}>
-          <Text style={[styles.heading, { fontSize: headingSize }]}>Connect with{'\n'}your partner</Text>
-          <Text style={styles.sub}>This space is just for{'\n'}the two of you.</Text>
+          <AppText style={[styles.heading, { fontSize: headingSize }]}>Connect with{'\n'}your partner</AppText>
+          <AppText style={styles.sub}>This space is just for{'\n'}the two of you.</AppText>
 
           <View style={[styles.heartsWrap, { height: heartsHeight }]} pointerEvents="none">
             <View style={styles.heartsGlowWrap}>
@@ -484,10 +484,10 @@ export default function PairScreen() {
               </View>
             </View>
 
-            <Text style={[styles.sparkle, { top: 8, left: '22%', fontSize: 12 }]}>✦</Text>
-            <Text style={[styles.sparkle, { top: 4, right: '20%', fontSize: 7 }]}>✦</Text>
-            <Text style={[styles.sparkle, { bottom: 14, left: '14%', fontSize: 8 }]}>✦</Text>
-            <Text style={[styles.sparkle, { bottom: 20, right: '15%', fontSize: 6 }]}>✦</Text>
+            <AppText style={[styles.sparkle, { top: 8, left: '22%', fontSize: 12 }]}>✦</AppText>
+            <AppText style={[styles.sparkle, { top: 4, right: '20%', fontSize: 7 }]}>✦</AppText>
+            <AppText style={[styles.sparkle, { bottom: 14, left: '14%', fontSize: 8 }]}>✦</AppText>
+            <AppText style={[styles.sparkle, { bottom: 20, right: '15%', fontSize: 6 }]}>✦</AppText>
           </View>
 
           <View style={styles.cards}>
@@ -505,8 +505,8 @@ export default function PairScreen() {
                 </LinearGradient>
               </View>
               <View style={styles.optionText}>
-                <Text style={styles.optionTitle}>Invite via code</Text>
-                <Text style={styles.optionDesc}>Send them your code{'\n'}to invite.</Text>
+                <AppText style={styles.optionTitle}>Invite via code</AppText>
+                <AppText style={styles.optionDesc}>Send them your code{'\n'}to invite.</AppText>
               </View>
               <ChevronRight color="rgba(255,255,255,0.28)" size={20} />
             </TouchableOpacity>
@@ -525,8 +525,8 @@ export default function PairScreen() {
                 </LinearGradient>
               </View>
               <View style={styles.optionText}>
-                <Text style={styles.optionTitle}>I have a code</Text>
-                <Text style={styles.optionDesc}>Enter the code they{'\n'}sent you.</Text>
+                <AppText style={styles.optionTitle}>I have a code</AppText>
+                <AppText style={styles.optionDesc}>Enter the code they{'\n'}sent you.</AppText>
               </View>
               <ChevronRight color="rgba(255,255,255,0.28)" size={20} />
             </TouchableOpacity>
@@ -534,7 +534,7 @@ export default function PairScreen() {
 
           <View style={styles.noteRow}>
             <Lock color="rgba(255,255,255,0.22)" size={13} strokeWidth={1.5} />
-            <Text style={styles.noteText}>Only one partner connection at a time.</Text>
+            <AppText style={styles.noteText}>Only one partner connection at a time.</AppText>
           </View>
 
           <TouchableOpacity
@@ -542,7 +542,7 @@ export default function PairScreen() {
             onPress={() => router.replace('/(app)/(tabs)')}
             activeOpacity={0.6}
           >
-            <Text style={styles.skipText}>Skip for now</Text>
+            <AppText style={styles.skipText}>Skip for now</AppText>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -555,11 +555,11 @@ export default function PairScreen() {
             <TouchableOpacity style={styles.modalClose} onPress={() => setActiveModal(null)}>
               <X color="rgba(255,255,255,0.80)" size={20} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Your invite code</Text>
-            <Text style={styles.modalSub}>Share this with your partner to connect.</Text>
+            <AppText style={styles.modalTitle}>Your invite code</AppText>
+            <AppText style={styles.modalSub}>Share this with your partner to connect.</AppText>
 
             <View style={styles.codeBox}>
-              <Text style={[styles.codeDisplayText, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}>{myCode || '------'}</Text>
+              <AppText style={[styles.codeDisplayText, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}>{myCode || '------'}</AppText>
               <TouchableOpacity
                 style={styles.refreshBtn}
                 onPress={handleRefreshCode}
@@ -582,11 +582,11 @@ export default function PairScreen() {
                 style={styles.actionGrad}
               >
                 <Copy color="#fff" size={16} />
-                <Text style={styles.actionLabel}>{copied ? 'Copied!' : 'Copy & Share Code'}</Text>
+                <AppText style={styles.actionLabel}>{copied ? 'Copied!' : 'Copy & Share Code'}</AppText>
               </LinearGradient>
             </TouchableOpacity>
 
-            <Text style={styles.waitingText}>Waiting for your partner to join...</Text>
+            <AppText style={styles.waitingText}>Waiting for your partner to join...</AppText>
           </View>
         </View>
       </Modal>
@@ -606,10 +606,10 @@ export default function PairScreen() {
               >
                 <X color="rgba(255,255,255,0.80)" size={20} />
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>Enter partner's code</Text>
-              <Text style={styles.modalSub}>Ask your partner for their 6-character invite code.</Text>
+              <AppText style={styles.modalTitle}>Enter partner's code</AppText>
+              <AppText style={styles.modalSub}>Ask your partner for their 6-character invite code.</AppText>
 
-              <TextInput
+              <AppTextInput
                 style={[styles.codeInput, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}
                 value={joinCode}
                 onChangeText={setJoinCode}
@@ -620,7 +620,7 @@ export default function PairScreen() {
                 autoFocus
               />
 
-              {error ? <Text style={styles.joinError}>{error}</Text> : null}
+              {error ? <AppText style={styles.joinError}>{error}</AppText> : null}
 
               <TouchableOpacity
                 style={styles.actionBtn}
@@ -634,7 +634,7 @@ export default function PairScreen() {
                   end={{ x: 1, y: 0 }}
                   style={styles.actionGrad}
                 >
-                  <Text style={styles.actionLabel}>{loading ? 'Connecting...' : 'Connect'}</Text>
+                  <AppText style={styles.actionLabel}>{loading ? 'Connecting...' : 'Connect'}</AppText>
                 </LinearGradient>
               </TouchableOpacity>
             </View>

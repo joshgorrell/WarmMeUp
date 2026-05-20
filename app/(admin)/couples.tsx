@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, TextInput, Alert, ActivityIndicator,
+  View, StyleSheet, ScrollView, TouchableOpacity,
+  Modal, Alert, ActivityIndicator,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
 import { ChevronRight, Users, X, Check, TriangleAlert as AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -113,7 +115,7 @@ export default function CouplesAdmin() {
           {couples.length === 0 && (
             <View style={styles.emptyWrap}>
               <Users color={colors.textMuted} size={36} strokeWidth={1.5} />
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No couples registered yet.</Text>
+              <AppText style={[styles.emptyText, { color: colors.textMuted }]}>No couples registered yet.</AppText>
             </View>
           )}
           {couples.map(c => (
@@ -124,21 +126,21 @@ export default function CouplesAdmin() {
               activeOpacity={0.8}
             >
               <View style={[styles.avatarPair, { backgroundColor: c.active ? 'rgba(255,46,138,0.10)' : 'rgba(255,90,95,0.10)' }]}>
-                <Text style={styles.avatarEmoji}>{c.active ? '❤️' : '🔒'}</Text>
+                <AppText style={styles.avatarEmoji}>{c.active ? '❤️' : '🔒'}</AppText>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.coupleName, { color: colors.text }]}>
+                <AppText style={[styles.coupleName, { color: colors.text }]}>
                   {c.user_a_name}{c.user_b_name ? ` & ${c.user_b_name}` : ' (unpaired)'}
-                </Text>
+                </AppText>
                 <View style={styles.metaRow}>
                   <View style={[styles.statusBadge, { backgroundColor: c.active ? 'rgba(51,209,122,0.12)' : 'rgba(255,90,95,0.12)' }]}>
-                    <Text style={[styles.statusText, { color: c.active ? '#33D17A' : colors.danger }]}>
+                    <AppText style={[styles.statusText, { color: c.active ? '#33D17A' : colors.danger }]}>
                       {c.active ? 'Active' : 'Inactive'}
-                    </Text>
+                    </AppText>
                   </View>
-                  <Text style={[styles.dateText, { color: colors.textMuted }]}>
+                  <AppText style={[styles.dateText, { color: colors.textMuted }]}>
                     {new Date(c.created_at).toLocaleDateString()}
-                  </Text>
+                  </AppText>
                 </View>
               </View>
               <ChevronRight color={colors.textMuted} size={16} />
@@ -152,7 +154,7 @@ export default function CouplesAdmin() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: isDark ? '#0F0F17' : '#FFF8F3', borderColor: colors.borderSubtle }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Couple Details</Text>
+              <AppText style={[styles.modalTitle, { color: colors.text }]}>Couple Details</AppText>
               <TouchableOpacity onPress={() => setSelected(null)} activeOpacity={0.7}>
                 <X color={colors.textMuted} size={22} strokeWidth={2} />
               </TouchableOpacity>
@@ -162,30 +164,30 @@ export default function CouplesAdmin() {
               <ScrollView showsVerticalScrollIndicator={false}>
                 {/* Names */}
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>USERS</Text>
-                  <Text style={[styles.detailValue, { color: colors.text }]}>{selected.user_a_name}</Text>
+                  <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>USERS</AppText>
+                  <AppText style={[styles.detailValue, { color: colors.text }]}>{selected.user_a_name}</AppText>
                   {selected.user_b_name && (
-                    <Text style={[styles.detailValue, { color: colors.text }]}>{selected.user_b_name}</Text>
+                    <AppText style={[styles.detailValue, { color: colors.text }]}>{selected.user_b_name}</AppText>
                   )}
                 </View>
 
                 {/* Invite code */}
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>INVITE CODE</Text>
-                  <Text style={[styles.codeText, { color: colors.text }]}>{selected.invite_code}</Text>
+                  <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>INVITE CODE</AppText>
+                  <AppText style={[styles.codeText, { color: colors.text }]}>{selected.invite_code}</AppText>
                 </View>
 
                 {/* Created */}
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>PAIRED ON</Text>
-                  <Text style={[styles.detailValue, { color: colors.text }]}>
+                  <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>PAIRED ON</AppText>
+                  <AppText style={[styles.detailValue, { color: colors.text }]}>
                     {new Date(selected.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                  </Text>
+                  </AppText>
                 </View>
 
                 {/* Notes */}
-                <Text style={[styles.notesLabel, { color: colors.textMuted }]}>ADMIN NOTES</Text>
-                <TextInput
+                <AppText style={[styles.notesLabel, { color: colors.textMuted }]}>ADMIN NOTES</AppText>
+                <AppTextInput
                   style={[styles.notesInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
                   value={notes}
                   onChangeText={setNotes}
@@ -204,7 +206,7 @@ export default function CouplesAdmin() {
                   ) : (
                     <>
                       <Check color={colors.textSecondary} size={16} strokeWidth={2} />
-                      <Text style={[styles.saveNotesBtnText, { color: colors.textSecondary }]}>Save Notes</Text>
+                      <AppText style={[styles.saveNotesBtnText, { color: colors.textSecondary }]}>Save Notes</AppText>
                     </>
                   )}
                 </TouchableOpacity>
@@ -226,9 +228,9 @@ export default function CouplesAdmin() {
                   ) : (
                     <RefreshCw color="#33D17A" size={18} strokeWidth={2} />
                   )}
-                  <Text style={[styles.dangerBtnText, { color: selected.active ? colors.danger : '#33D17A' }]}>
+                  <AppText style={[styles.dangerBtnText, { color: selected.active ? colors.danger : '#33D17A' }]}>
                     {selected.active ? 'Deactivate Couple' : 'Reactivate Couple'}
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               </ScrollView>
             )}

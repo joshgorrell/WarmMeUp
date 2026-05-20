@@ -1,5 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ViewStyle, View } from 'react-native';
+import { TouchableOpacity, StyleSheet, ViewStyle, View } from 'react-native';
+import AppText from '@/components/AppText';
 import GradientText from './GradientText';
 import { useTheme } from '@/context/ThemeContext';
 import { Radius, FontSize } from '@/constants/theme';
@@ -43,9 +44,9 @@ export default function GhostButton({
             {label}
           </GradientText>
         ) : (
-          <Text style={[styles.label, { color: colors.textSecondary, fontSize: small ? FontSize.sm : FontSize.body }]}>
+          <AppText style={[styles.label, { color: colors.textSecondary, fontSize: small ? FontSize.sm : FontSize.body }]}>
             {label}
-          </Text>
+          </AppText>
         )}
         {rightIcon}
       </View>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity, CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2, Star, UserCog } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
@@ -186,7 +187,7 @@ export default function AdminDashboard() {
         onBack={() => router.back()}
         rightSlot={
           <View style={[styles.adminBadge, { backgroundColor: 'rgba(255,179,71,0.15)', borderColor: 'rgba(255,179,71,0.35)' }]}>
-            <Text style={styles.adminBadgeText}>ADMIN</Text>
+            <AppText style={styles.adminBadgeText}>ADMIN</AppText>
           </View>
         }
       />
@@ -195,47 +196,47 @@ export default function AdminDashboard() {
         {/* Stats row */}
         <View style={styles.statsRow}>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-            <Text style={[styles.statNum, { color: colors.text }]}>{loading ? '—' : stats.coupleCount}</Text>
-            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Couples</Text>
+            <AppText style={[styles.statNum, { color: colors.text }]}>{loading ? '—' : stats.coupleCount}</AppText>
+            <AppText style={[styles.statLabel, { color: colors.textMuted }]}>Couples</AppText>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-            <Text style={[styles.statNum, { color: colors.text }]}>{loading ? '—' : stats.userCount}</Text>
-            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Users</Text>
+            <AppText style={[styles.statNum, { color: colors.text }]}>{loading ? '—' : stats.userCount}</AppText>
+            <AppText style={[styles.statLabel, { color: colors.textMuted }]}>Users</AppText>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-            <Text style={[styles.statNum, { color: colors.text }]}>{loading ? '—' : stats.interactionCount}</Text>
-            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Interactions</Text>
+            <AppText style={[styles.statNum, { color: colors.text }]}>{loading ? '—' : stats.interactionCount}</AppText>
+            <AppText style={[styles.statLabel, { color: colors.textMuted }]}>Interactions</AppText>
           </View>
         </View>
 
         {/* Interaction breakdown */}
         <View style={[styles.breakdownCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>INTERACTION BREAKDOWN</Text>
+          <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>INTERACTION BREAKDOWN</AppText>
           <View style={styles.breakdownRow}>
             <View style={styles.breakdownItem}>
-              <Text style={[styles.breakdownNum, { color: '#FFB347' }]}>{loading ? '—' : stats.diceCount}</Text>
-              <Text style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Dice</Text>
+              <AppText style={[styles.breakdownNum, { color: '#FFB347' }]}>{loading ? '—' : stats.diceCount}</AppText>
+              <AppText style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Dice</AppText>
             </View>
             <View style={[styles.breakdownDivider, { backgroundColor: colors.borderSubtle }]} />
             <View style={styles.breakdownItem}>
-              <Text style={[styles.breakdownNum, { color: '#FF2E8A' }]}>{loading ? '—' : stats.dareCount}</Text>
-              <Text style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Dares</Text>
+              <AppText style={[styles.breakdownNum, { color: '#FF2E8A' }]}>{loading ? '—' : stats.dareCount}</AppText>
+              <AppText style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Dares</AppText>
             </View>
             <View style={[styles.breakdownDivider, { backgroundColor: colors.borderSubtle }]} />
             <View style={styles.breakdownItem}>
-              <Text style={[styles.breakdownNum, { color: '#FF8A3D' }]}>{loading ? '—' : stats.tellMeCount}</Text>
-              <Text style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Tell Me</Text>
+              <AppText style={[styles.breakdownNum, { color: '#FF8A3D' }]}>{loading ? '—' : stats.tellMeCount}</AppText>
+              <AppText style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Tell Me</AppText>
             </View>
             <View style={[styles.breakdownDivider, { backgroundColor: colors.borderSubtle }]} />
             <View style={styles.breakdownItem}>
-              <Text style={[styles.breakdownNum, { color: '#E8637A' }]}>{loading ? '—' : stats.wishCount}</Text>
-              <Text style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Wishes</Text>
+              <AppText style={[styles.breakdownNum, { color: '#E8637A' }]}>{loading ? '—' : stats.wishCount}</AppText>
+              <AppText style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Wishes</AppText>
             </View>
           </View>
         </View>
 
         {/* Navigation cards */}
-        <Text style={[styles.sectionLabel, { color: colors.textMuted, marginBottom: Spacing.sm }]}>MANAGE</Text>
+        <AppText style={[styles.sectionLabel, { color: colors.textMuted, marginBottom: Spacing.sm }]}>MANAGE</AppText>
         {navItems.map(item => (
           <TouchableOpacity
             key={item.route}
@@ -247,15 +248,15 @@ export default function AdminDashboard() {
               {item.icon}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.navLabel, { color: colors.text }]}>{item.label}</Text>
-              <Text style={[styles.navSub, { color: colors.textMuted }]}>{item.sub}</Text>
+              <AppText style={[styles.navLabel, { color: colors.text }]}>{item.label}</AppText>
+              <AppText style={[styles.navSub, { color: colors.textMuted }]}>{item.sub}</AppText>
             </View>
             <ChevronRight color={colors.textMuted} size={18} />
           </TouchableOpacity>
         ))}
 
         {/* Diagnostics */}
-        <Text style={[styles.sectionLabel, { color: colors.textMuted, marginTop: Spacing.lg, marginBottom: Spacing.sm }]}>DIAGNOSTICS</Text>
+        <AppText style={[styles.sectionLabel, { color: colors.textMuted, marginTop: Spacing.lg, marginBottom: Spacing.sm }]}>DIAGNOSTICS</AppText>
         <View style={[styles.breakdownCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle, gap: Spacing.sm }]}>
           <TouchableOpacity
             onPress={runDiagnostics}
@@ -264,7 +265,7 @@ export default function AdminDashboard() {
             activeOpacity={0.8}
           >
             <Activity color="#69A7FF" size={16} strokeWidth={2.2} />
-            <Text style={styles.diagBtnText}>{diagRunning ? 'Running checks…' : 'Run RLS & storage checks'}</Text>
+            <AppText style={styles.diagBtnText}>{diagRunning ? 'Running checks…' : 'Run RLS & storage checks'}</AppText>
           </TouchableOpacity>
           {diag.map(c => (
             <View key={c.name} style={styles.diagRow}>
@@ -276,9 +277,9 @@ export default function AdminDashboard() {
                 <Loader2 color={colors.textMuted} size={16} strokeWidth={2.2} />
               )}
               <View style={{ flex: 1 }}>
-                <Text style={[styles.diagName, { color: colors.text }]}>{c.name}</Text>
+                <AppText style={[styles.diagName, { color: colors.text }]}>{c.name}</AppText>
                 {c.detail ? (
-                  <Text style={[styles.diagDetail, { color: c.status === 'fail' ? colors.danger : colors.textMuted }]}>{c.detail}</Text>
+                  <AppText style={[styles.diagDetail, { color: c.status === 'fail' ? colors.danger : colors.textMuted }]}>{c.detail}</AppText>
                 ) : null}
               </View>
             </View>

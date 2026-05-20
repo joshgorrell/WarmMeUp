@@ -1,8 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Alert, Platform, TextInput,
+  View, StyleSheet, ScrollView, TouchableOpacity, Share, Alert, Platform,
   ActivityIndicator, Modal, Image, Linking,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, Mail, KeyRound, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders, RefreshCw } from 'lucide-react-native';
@@ -39,7 +41,7 @@ function Section({ title, note, onInfo, children }: { title: string; note?: stri
   return (
     <View style={styles.section}>
       <View style={styles.sectionTitleRow}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
+        <AppText style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</AppText>
         {onInfo && (
           <TouchableOpacity onPress={onInfo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
             <CircleQuestionMark color="rgba(255,46,138,0.7)" size={14} strokeWidth={2} />
@@ -49,7 +51,7 @@ function Section({ title, note, onInfo, children }: { title: string; note?: stri
       <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
         {note && (
           <View style={[styles.ownerNote, { borderBottomColor: colors.borderSubtle }]}>
-            <Text style={[styles.ownerNoteText, { color: colors.textMuted }]}>{note}</Text>
+            <AppText style={[styles.ownerNoteText, { color: colors.textMuted }]}>{note}</AppText>
           </View>
         )}
         {children}
@@ -73,14 +75,14 @@ function SettingsRow({
     <View style={[styles.row, { borderBottomColor: last ? 'transparent' : colors.borderSubtle, borderBottomWidth: last ? 0 : 1 }]}>
       <View style={styles.rowLeft}>
         <View style={styles.rowLabelRow}>
-          <Text style={[styles.rowLabel, { color: labelColor }]}>{label}</Text>
+          <AppText style={[styles.rowLabel, { color: labelColor }]}>{label}</AppText>
           {onInfo && (
             <TouchableOpacity onPress={onInfo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
               <CircleQuestionMark color="rgba(255,46,138,0.7)" size={14} strokeWidth={2} />
             </TouchableOpacity>
           )}
         </View>
-        {sub && <Text style={[styles.rowSub, { color: colors.textMuted }]}>{sub}</Text>}
+        {sub && <AppText style={[styles.rowSub, { color: colors.textMuted }]}>{sub}</AppText>}
       </View>
       {toggle
         ? <Toggle value={value ?? false} onChange={onChange ?? (() => {})} disabled={disabled} />
@@ -102,8 +104,8 @@ function InlineField({
   const { colors } = useTheme();
   return (
     <View style={[styles.inlineFieldRow, { borderBottomColor: last ? 'transparent' : colors.borderSubtle, borderBottomWidth: last ? 0 : 1 }]}>
-      <Text style={[styles.inlineFieldLabel, { color: colors.textMuted }]}>{label}</Text>
-      <TextInput
+      <AppText style={[styles.inlineFieldLabel, { color: colors.textMuted }]}>{label}</AppText>
+      <AppTextInput
         style={[styles.inlineFieldInput, { color: colors.text }]}
         value={value}
         onChangeText={onChange}
@@ -140,7 +142,7 @@ function Numpad({ onKey }: { onKey: (k: string) => void }) {
           activeOpacity={k === '' ? 1 : 0.6}
           disabled={k === ''}
         >
-          <Text style={[styles.numKeyText, k === '⌫' && styles.numKeyDelete]}>{k}</Text>
+          <AppText style={[styles.numKeyText, k === '⌫' && styles.numKeyDelete]}>{k}</AppText>
         </TouchableOpacity>
       ))}
     </View>
@@ -173,11 +175,11 @@ function RequireUnlockAfterRow({
         activeOpacity={0.7}
       >
         <View style={{ flex: 1 }}>
-          <Text style={[rua.label, { color: colors.text }]}>Require Unlock After</Text>
-          <Text style={[rua.sub, { color: colors.textMuted }]}>How long before you need to unlock again</Text>
+          <AppText style={[rua.label, { color: colors.text }]}>Require Unlock After</AppText>
+          <AppText style={[rua.sub, { color: colors.textMuted }]}>How long before you need to unlock again</AppText>
         </View>
         <View style={rua.valueWrap}>
-          <Text style={[rua.value, { color: colors.textSecondary }]}>{selected.label}</Text>
+          <AppText style={[rua.value, { color: colors.textSecondary }]}>{selected.label}</AppText>
           <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
         </View>
       </TouchableOpacity>
@@ -197,7 +199,7 @@ function RequireUnlockAfterRow({
               onPress={() => { onSelect(opt.value); setOpen(false); }}
               activeOpacity={0.7}
             >
-              <Text style={[rua.optionLabel, { color: sel ? '#FF2E8A' : colors.text }]}>{opt.label}</Text>
+              <AppText style={[rua.optionLabel, { color: sel ? '#FF2E8A' : colors.text }]}>{opt.label}</AppText>
               {sel && <Check color="#FF2E8A" size={16} strokeWidth={2.5} />}
             </TouchableOpacity>
           );
@@ -243,10 +245,10 @@ function LoginMethodSelector({
 
   return (
     <View style={[lms.wrap, { borderBottomColor: colors.borderSubtle }, inactive && lms.wrapInactive]}>
-      <Text style={[lms.label, { color: inactive ? colors.textDisabled : colors.text }]}>Unlock Method</Text>
-      <Text style={[lms.sub, { color: colors.textMuted }]}>How you open Warm Me Up each time</Text>
+      <AppText style={[lms.label, { color: inactive ? colors.textDisabled : colors.text }]}>Unlock Method</AppText>
+      <AppText style={[lms.sub, { color: colors.textMuted }]}>How you open Warm Me Up each time</AppText>
       {inactive && (
-        <Text style={[lms.inactiveNote, { color: colors.textMuted }]}>Not used — unlock is set to Never</Text>
+        <AppText style={[lms.inactiveNote, { color: colors.textMuted }]}>Not used — unlock is set to Never</AppText>
       )}
       <View style={[lms.options, inactive && lms.optionsInactive]}>
         {methods.map((m, idx) => {
@@ -268,8 +270,8 @@ function LoginMethodSelector({
             >
               <View style={lms.optionIcon}>{m.icon}</View>
               <View style={{ flex: 1 }}>
-                <Text style={[lms.optionLabel, { color: isDisabled ? colors.textDisabled : colors.text }]}>{m.label}</Text>
-                <Text style={[lms.optionSub, { color: colors.textMuted }]}>{m.sub}</Text>
+                <AppText style={[lms.optionLabel, { color: isDisabled ? colors.textDisabled : colors.text }]}>{m.label}</AppText>
+                <AppText style={[lms.optionSub, { color: colors.textMuted }]}>{m.sub}</AppText>
               </View>
               {selected && !inactive && (
                 <View style={lms.checkWrap}>
@@ -933,7 +935,7 @@ export default function AccountScreen() {
         <View style={{ flex: 1 }}>
           {editingName ? (
             <View ref={nameWrapRef} style={styles.nameEditRow}>
-              <TextInput
+              <AppTextInput
                 style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
                 value={nameInput}
                 onChangeText={setNameInput}
@@ -954,14 +956,14 @@ export default function AccountScreen() {
             </View>
           ) : (
             <TouchableOpacity onPress={startEditName} style={styles.nameRow} activeOpacity={0.7}>
-              <Text style={[styles.name, { color: colors.text }]}>{profile?.display_name ?? 'Your Name'}</Text>
+              <AppText style={[styles.name, { color: colors.text }]}>{profile?.display_name ?? 'Your Name'}</AppText>
               <Pencil color={colors.textMuted} size={14} strokeWidth={2} />
             </TouchableOpacity>
           )}
-          <Text style={[styles.emailText, { color: colors.textMuted }]}>{user?.email ?? ''}</Text>
-          {uploadingAvatar && <Text style={[styles.emailText, { color: '#FF2E8A', marginTop: 4 }]}>Uploading...</Text>}
-          {avatarError && !uploadingAvatar && <Text style={[styles.emailText, { color: colors.danger, marginTop: 4 }]}>{avatarError}</Text>}
-          {nameError && <Text style={[styles.emailText, { color: colors.danger, marginTop: 4 }]}>{nameError}</Text>}
+          <AppText style={[styles.emailText, { color: colors.textMuted }]}>{user?.email ?? ''}</AppText>
+          {uploadingAvatar && <AppText style={[styles.emailText, { color: '#FF2E8A', marginTop: 4 }]}>Uploading...</AppText>}
+          {avatarError && !uploadingAvatar && <AppText style={[styles.emailText, { color: colors.danger, marginTop: 4 }]}>{avatarError}</AppText>}
+          {nameError && <AppText style={[styles.emailText, { color: colors.danger, marginTop: 4 }]}>{nameError}</AppText>}
         </View>
       </View>
 
@@ -989,18 +991,18 @@ export default function AccountScreen() {
             </View>
             <View style={styles.connectedInfo}>
               <View style={styles.connectedLabelRow}>
-                <Text style={[styles.connectedLabel, { color: colors.textMuted }]}>CONNECTED WITH</Text>
+                <AppText style={[styles.connectedLabel, { color: colors.textMuted }]}>CONNECTED WITH</AppText>
                 <View style={[styles.connectedPill, { backgroundColor: 'rgba(51,209,122,0.12)', borderColor: 'rgba(51,209,122,0.28)' }]}>
                   <View style={[styles.connectedPillDot, { backgroundColor: '#33D17A' }]} />
-                  <Text style={[styles.connectedPillText, { color: '#33D17A' }]}>Connected</Text>
+                  <AppText style={[styles.connectedPillText, { color: '#33D17A' }]}>Connected</AppText>
                 </View>
               </View>
-              <Text style={[styles.connectedName, { color: colors.text }]}>
+              <AppText style={[styles.connectedName, { color: colors.text }]}>
                 {partnerProfile.display_name}
-              </Text>
-              <Text style={[styles.connectedHeart, { color: '#FF2E8A' }]}>
+              </AppText>
+              <AppText style={[styles.connectedHeart, { color: '#FF2E8A' }]}>
                 Connected to {partnerProfile.display_name} ❤️
-              </Text>
+              </AppText>
             </View>
           </View>
           <TouchableOpacity
@@ -1008,7 +1010,7 @@ export default function AccountScreen() {
             activeOpacity={0.7}
             style={styles.manageConnectionBtn}
           >
-            <Text style={[styles.manageConnectionText, { color: colors.textMuted }]}>Manage connection</Text>
+            <AppText style={[styles.manageConnectionText, { color: colors.textMuted }]}>Manage connection</AppText>
             <ChevronRight color={colors.textMuted} size={13} strokeWidth={2} />
           </TouchableOpacity>
         </View>
@@ -1019,12 +1021,12 @@ export default function AccountScreen() {
               <UserPlus color="#FF2E8A" size={18} strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.cardLabel, { color: colors.textMuted }]}>INVITE YOUR PARTNER</Text>
-              <Text style={[styles.inviteHint, { color: colors.textSecondary }]}>Share your code to connect</Text>
+              <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>INVITE YOUR PARTNER</AppText>
+              <AppText style={[styles.inviteHint, { color: colors.textSecondary }]}>Share your code to connect</AppText>
             </View>
           </View>
           <View style={[styles.codeBox, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: 'rgba(255,46,138,0.20)' }]}>
-            <Text style={[styles.codeText, { color: colors.text }]}>{couple.invite_code}</Text>
+            <AppText style={[styles.codeText, { color: colors.text }]}>{couple.invite_code}</AppText>
             <TouchableOpacity
               style={styles.codeRefreshBtn}
               onPress={handleRefreshCode}
@@ -1044,14 +1046,14 @@ export default function AccountScreen() {
               onPress={handleCopyCode} activeOpacity={0.75}
             >
               <Copy color={copied ? '#33D17A' : colors.textSecondary} size={15} strokeWidth={2} />
-              <Text style={[styles.inviteBtnText, { color: copied ? '#33D17A' : colors.textSecondary }]}>{copied ? 'Copied!' : 'Copy'}</Text>
+              <AppText style={[styles.inviteBtnText, { color: copied ? '#33D17A' : colors.textSecondary }]}>{copied ? 'Copied!' : 'Copy'}</AppText>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.inviteBtn, { borderColor: 'rgba(255,46,138,0.35)', backgroundColor: 'rgba(255,46,138,0.07)' }]}
               onPress={handleShareCode} activeOpacity={0.75}
             >
               <Share2 color="#FF2E8A" size={15} strokeWidth={2} />
-              <Text style={[styles.inviteBtnText, { color: '#FF2E8A' }]}>Share</Text>
+              <AppText style={[styles.inviteBtnText, { color: '#FF2E8A' }]}>Share</AppText>
             </TouchableOpacity>
           </View>
           <TouchableOpacity
@@ -1060,7 +1062,7 @@ export default function AccountScreen() {
             activeOpacity={0.7}
           >
             <X color="rgba(255,90,90,0.70)" size={13} strokeWidth={2.2} />
-            <Text style={styles.cancelInviteText}>Cancel invite</Text>
+            <AppText style={styles.cancelInviteText}>Cancel invite</AppText>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -1075,7 +1077,7 @@ export default function AccountScreen() {
           <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
             <Trophy color="#FFB347" size={18} strokeWidth={2} />
           </View>
-          <Text style={[styles.menuText, { color: colors.text }]}>My Stats</Text>
+          <AppText style={[styles.menuText, { color: colors.text }]}>My Stats</AppText>
           <ChevronRight color={colors.textMuted} size={16} />
         </TouchableOpacity>
 
@@ -1087,7 +1089,7 @@ export default function AccountScreen() {
           <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
             <SlidersHorizontal color="#FFB347" size={18} strokeWidth={2} />
           </View>
-          <Text style={[styles.menuText, { color: colors.text }]}>Customize Prompts</Text>
+          <AppText style={[styles.menuText, { color: colors.text }]}>Customize Prompts</AppText>
           <ChevronRight color={colors.textMuted} size={16} />
         </TouchableOpacity>
 
@@ -1099,7 +1101,7 @@ export default function AccountScreen() {
           <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
             <RotateCcw color="#FFB347" size={18} strokeWidth={2} />
           </View>
-          <Text style={[styles.menuText, { color: colors.text }]}>Reset Points</Text>
+          <AppText style={[styles.menuText, { color: colors.text }]}>Reset Points</AppText>
           <ChevronRight color={colors.textMuted} size={16} />
         </TouchableOpacity>
 
@@ -1111,7 +1113,7 @@ export default function AccountScreen() {
           <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,90,95,0.08)' }]}>
             <Trash2 color={colors.danger} size={18} strokeWidth={2} />
           </View>
-          <Text style={[styles.menuText, { color: colors.danger }]}>Delete History</Text>
+          <AppText style={[styles.menuText, { color: colors.danger }]}>Delete History</AppText>
           <ChevronRight color={colors.danger} size={16} />
         </TouchableOpacity>
 
@@ -1123,7 +1125,7 @@ export default function AccountScreen() {
           <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,90,95,0.08)' }]}>
             <LogOut color={colors.danger} size={18} strokeWidth={2} />
           </View>
-          <Text style={[styles.menuText, { color: colors.danger }]}>Sign Out</Text>
+          <AppText style={[styles.menuText, { color: colors.danger }]}>Sign Out</AppText>
           <ChevronRight color={colors.danger} size={16} />
         </TouchableOpacity>
       </View>
@@ -1144,8 +1146,8 @@ export default function AccountScreen() {
       <Section title="LOGIN & SECURITY">
         <View style={[styles.row, { borderBottomColor: colors.borderSubtle, borderBottomWidth: 1 }]}>
           <View style={styles.rowLeft}>
-            <Text style={[styles.rowLabel, { color: colors.text }]}>Email Address</Text>
-            <Text style={[styles.rowSub, { color: colors.textMuted }]}>{user?.email ?? '—'}</Text>
+            <AppText style={[styles.rowLabel, { color: colors.text }]}>Email Address</AppText>
+            <AppText style={[styles.rowSub, { color: colors.textMuted }]}>{user?.email ?? '—'}</AppText>
           </View>
           <Mail color={colors.textMuted} size={16} strokeWidth={1.5} />
         </View>
@@ -1156,7 +1158,7 @@ export default function AccountScreen() {
           activeOpacity={0.7}
         >
           <View style={styles.rowLeft}>
-            <Text style={[styles.rowLabel, { color: colors.text }]}>Change Email</Text>
+            <AppText style={[styles.rowLabel, { color: colors.text }]}>Change Email</AppText>
           </View>
           {showChangeEmail ? <X color={colors.textMuted} size={16} /> : <ChevronRight color={colors.textMuted} size={16} />}
         </TouchableOpacity>
@@ -1166,15 +1168,15 @@ export default function AccountScreen() {
             {emailSuccess ? (
               <View style={styles.inlineSuccess}>
                 <Check color="#33D17A" size={16} strokeWidth={2.5} />
-                <Text style={[styles.inlineSuccessText, { color: '#33D17A' }]}>Confirmation sent — check your new inbox.</Text>
+                <AppText style={[styles.inlineSuccessText, { color: '#33D17A' }]}>Confirmation sent — check your new inbox.</AppText>
               </View>
             ) : (
               <>
                 <InlineField label="New Email" value={newEmail} onChange={setNewEmail} placeholder="you@example.com" last />
-                {emailError && <Text style={[styles.inlineError, { color: colors.danger }]}>{emailError}</Text>}
-                <Text style={[styles.inlineNote, { color: colors.textMuted }]}>
+                {emailError && <AppText style={[styles.inlineError, { color: colors.danger }]}>{emailError}</AppText>}
+                <AppText style={[styles.inlineNote, { color: colors.textMuted }]}>
                   A confirmation link will be sent to your new address. Your email changes once you click it.
-                </Text>
+                </AppText>
                 <TouchableOpacity
                   style={[styles.inlineSubmitBtn, { backgroundColor: '#FF2E8A', opacity: savingEmail ? 0.6 : 1 }]}
                   onPress={handleSaveEmail}
@@ -1183,7 +1185,7 @@ export default function AccountScreen() {
                 >
                   {savingEmail
                     ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={styles.inlineSubmitText}>Send Confirmation</Text>
+                    : <AppText style={styles.inlineSubmitText}>Send Confirmation</AppText>
                   }
                 </TouchableOpacity>
               </>
@@ -1197,7 +1199,7 @@ export default function AccountScreen() {
           activeOpacity={0.7}
         >
           <View style={styles.rowLeft}>
-            <Text style={[styles.rowLabel, { color: colors.text }]}>Change Password</Text>
+            <AppText style={[styles.rowLabel, { color: colors.text }]}>Change Password</AppText>
           </View>
           {showChangePw ? <X color={colors.textMuted} size={16} /> : <ChevronRight color={colors.textMuted} size={16} />}
         </TouchableOpacity>
@@ -1207,14 +1209,14 @@ export default function AccountScreen() {
             {pwSuccess ? (
               <View style={styles.inlineSuccess}>
                 <Check color="#33D17A" size={16} strokeWidth={2.5} />
-                <Text style={[styles.inlineSuccessText, { color: '#33D17A' }]}>Password updated successfully.</Text>
+                <AppText style={[styles.inlineSuccessText, { color: '#33D17A' }]}>Password updated successfully.</AppText>
               </View>
             ) : (
               <>
                 <InlineField label="Current Password" value={currentPw} onChange={setCurrentPw} secure placeholder="••••••••" />
                 <InlineField label="New Password" value={newPw} onChange={setNewPw} secure placeholder="8+ characters" />
                 <InlineField label="Confirm New" value={confirmPw} onChange={setConfirmPw} secure placeholder="••••••••" last />
-                {pwError && <Text style={[styles.inlineError, { color: colors.danger }]}>{pwError}</Text>}
+                {pwError && <AppText style={[styles.inlineError, { color: colors.danger }]}>{pwError}</AppText>}
                 <TouchableOpacity
                   style={[styles.inlineSubmitBtn, { backgroundColor: '#FF2E8A', opacity: savingPw ? 0.6 : 1 }]}
                   onPress={handleSavePassword}
@@ -1223,7 +1225,7 @@ export default function AccountScreen() {
                 >
                   {savingPw
                     ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={styles.inlineSubmitText}>Update Password</Text>
+                    : <AppText style={styles.inlineSubmitText}>Update Password</AppText>
                   }
                 </TouchableOpacity>
               </>
@@ -1380,7 +1382,7 @@ export default function AccountScreen() {
               {isAdmin && (
                 <TouchableOpacity style={styles.adminBadge} onPress={() => router.push('/(admin)')} activeOpacity={0.7}>
                   <Shield color="#FF2E8A" size={14} strokeWidth={2} />
-                  <Text style={styles.adminBadgeText}>Admin</Text>
+                  <AppText style={styles.adminBadgeText}>Admin</AppText>
                 </TouchableOpacity>
               )}
               <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
@@ -1409,9 +1411,9 @@ export default function AccountScreen() {
                   style={[StyleSheet.absoluteFill, { borderRadius: Radius.pill }]}
                 />
               )}
-              <Text style={[styles.tabLabel, { color: activeTab === 'profile' ? '#fff' : colors.textMuted }]}>
+              <AppText style={[styles.tabLabel, { color: activeTab === 'profile' ? '#fff' : colors.textMuted }]}>
                 Profile
-              </Text>
+              </AppText>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.tabItem}
@@ -1426,9 +1428,9 @@ export default function AccountScreen() {
                   style={[StyleSheet.absoluteFill, { borderRadius: Radius.pill }]}
                 />
               )}
-              <Text style={[styles.tabLabel, { color: activeTab === 'settings' ? '#fff' : colors.textMuted }]}>
+              <AppText style={[styles.tabLabel, { color: activeTab === 'settings' ? '#fff' : colors.textMuted }]}>
                 Settings
-              </Text>
+              </AppText>
             </TouchableOpacity>
           </View>
 
@@ -1447,16 +1449,16 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,179,71,0.12)' }]}>
                   <RotateCcw color="#FFB347" size={28} strokeWidth={1.5} />
                 </View>
-                <Text style={[styles.dataModalTitle, { color: colors.text }]}>Reset All Points?</Text>
-                <Text style={[styles.dataModalBody, { color: colors.textSecondary }]}>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Reset All Points?</AppText>
+                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
                   This will reset all points back to zero — including all-time history. It's like starting the game over fresh!{'\n\n'}Your content, vault, and settings are not affected. This cannot be undone.
-                </Text>
+                </AppText>
                 <View style={styles.dataModalBtns}>
                   <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => setResetPointsOpen(false)} activeOpacity={0.7} disabled={resetting}>
-                    <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                    <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Cancel</AppText>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.dataModalResetBtn} onPress={handleResetPoints} activeOpacity={0.8} disabled={resetting}>
-                    {resetting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.dataModalResetBtnText}>Yes, Reset</Text>}
+                    {resetting ? <ActivityIndicator color="#fff" size="small" /> : <AppText style={styles.dataModalResetBtnText}>Yes, Reset</AppText>}
                   </TouchableOpacity>
                 </View>
               </>
@@ -1465,10 +1467,10 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(51,209,122,0.12)' }]}>
                   <Check color="#33D17A" size={28} strokeWidth={2} />
                 </View>
-                <Text style={[styles.dataModalTitle, { color: colors.text }]}>Points Reset</Text>
-                <Text style={[styles.dataModalBody, { color: colors.textSecondary }]}>Both scores are back to zero. Ready for a fresh start!</Text>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Points Reset</AppText>
+                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>Both scores are back to zero. Ready for a fresh start!</AppText>
                 <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => { setResetPointsOpen(false); setResetDone(false); }} activeOpacity={0.7}>
-                  <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</Text>
+                  <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</AppText>
                 </TouchableOpacity>
               </>
             )}
@@ -1486,17 +1488,17 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,59,48,0.10)' }]}>
                   <Trash2 color="#FF3B30" size={28} strokeWidth={1.5} />
                 </View>
-                <Text style={[styles.dataModalTitle, { color: colors.text }]}>Delete History</Text>
-                <Text style={[styles.dataModalBody, { color: colors.textSecondary }]}>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Delete History</AppText>
+                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
                   Your profile, settings, partner connection, and custom prompts will all be kept. Choose what to delete:
-                </Text>
+                </AppText>
                 <TouchableOpacity style={[styles.dataOptionBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]} onPress={() => setDeleteStep('confirm-content')} activeOpacity={0.8}>
                   <View style={[styles.dataOptionIcon, { backgroundColor: 'rgba(255,90,61,0.10)' }]}>
                     <MessageSquare color="#FF5A3D" size={20} strokeWidth={2} />
                   </View>
                   <View style={styles.dataOptionText}>
-                    <Text style={[styles.dataOptionTitle, { color: colors.text }]}>All Content</Text>
-                    <Text style={[styles.dataOptionSub, { color: colors.textSecondary }]}>Chat, dares, dice, asks, scores — Vault stays</Text>
+                    <AppText style={[styles.dataOptionTitle, { color: colors.text }]}>All Content</AppText>
+                    <AppText style={[styles.dataOptionSub, { color: colors.textSecondary }]}>Chat, dares, dice, asks, scores — Vault stays</AppText>
                   </View>
                   <ChevronRight color={colors.textMuted} size={16} />
                 </TouchableOpacity>
@@ -1505,13 +1507,13 @@ export default function AccountScreen() {
                     <FolderOpen color="#FF3B30" size={20} strokeWidth={2} />
                   </View>
                   <View style={styles.dataOptionText}>
-                    <Text style={[styles.dataOptionTitle, { color: colors.danger }]}>All Content + Vault</Text>
-                    <Text style={[styles.dataOptionSub, { color: colors.textSecondary }]}>Everything above, plus all Vault photos and videos</Text>
+                    <AppText style={[styles.dataOptionTitle, { color: colors.danger }]}>All Content + Vault</AppText>
+                    <AppText style={[styles.dataOptionSub, { color: colors.textSecondary }]}>Everything above, plus all Vault photos and videos</AppText>
                   </View>
                   <ChevronRight color={colors.danger} size={16} />
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => setDeleteStep(null)} activeOpacity={0.7}>
-                  <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                  <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Cancel</AppText>
                 </TouchableOpacity>
               </>
             )}
@@ -1521,16 +1523,16 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,59,48,0.10)' }]}>
                   <AlertTriangle color="#FF3B30" size={28} strokeWidth={1.5} />
                 </View>
-                <Text style={[styles.dataModalTitle, { color: colors.text }]}>Delete All Content?</Text>
-                <Text style={[styles.dataModalBody, { color: colors.textSecondary }]}>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Delete All Content?</AppText>
+                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
                   This will permanently delete all chat messages, dares, dice challenges, asks, scores, and point history.{'\n\n'}Your Vault is not affected. This cannot be undone.
-                </Text>
+                </AppText>
                 <View style={styles.dataModalBtns}>
                   <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => setDeleteStep('choose')} activeOpacity={0.7} disabled={deleting}>
-                    <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Back</Text>
+                    <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Back</AppText>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.dataModalDeleteBtn} onPress={() => handleDeleteHistory(false)} activeOpacity={0.8} disabled={deleting}>
-                    {deleting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.dataModalDeleteBtnText}>Yes, Delete</Text>}
+                    {deleting ? <ActivityIndicator color="#fff" size="small" /> : <AppText style={styles.dataModalDeleteBtnText}>Yes, Delete</AppText>}
                   </TouchableOpacity>
                 </View>
               </>
@@ -1541,16 +1543,16 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,59,48,0.10)' }]}>
                   <AlertTriangle color="#FF3B30" size={28} strokeWidth={1.5} />
                 </View>
-                <Text style={[styles.dataModalTitle, { color: colors.text }]}>Delete Everything?</Text>
-                <Text style={[styles.dataModalBody, { color: colors.textSecondary }]}>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Delete Everything?</AppText>
+                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
                   This will permanently delete all chat messages, dares, dice challenges, asks, scores, point history, and all Vault photos and videos.{'\n\n'}This cannot be undone.
-                </Text>
+                </AppText>
                 <View style={styles.dataModalBtns}>
                   <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => setDeleteStep('choose')} activeOpacity={0.7} disabled={deleting}>
-                    <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Back</Text>
+                    <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Back</AppText>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.dataModalDeleteBtn} onPress={() => handleDeleteHistory(true)} activeOpacity={0.8} disabled={deleting}>
-                    {deleting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.dataModalDeleteBtnText}>Yes, Delete All</Text>}
+                    {deleting ? <ActivityIndicator color="#fff" size="small" /> : <AppText style={styles.dataModalDeleteBtnText}>Yes, Delete All</AppText>}
                   </TouchableOpacity>
                 </View>
               </>
@@ -1561,12 +1563,12 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(51,209,122,0.12)' }]}>
                   <Check color="#33D17A" size={28} strokeWidth={2} />
                 </View>
-                <Text style={[styles.dataModalTitle, { color: colors.text }]}>All Clear</Text>
-                <Text style={[styles.dataModalBody, { color: colors.textSecondary }]}>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>All Clear</AppText>
+                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
                   Your history has been deleted. Your settings and connection are intact — ready for a fresh start.
-                </Text>
+                </AppText>
                 <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => { setDeleteStep(null); setDeleteDone(false); }} activeOpacity={0.7}>
-                  <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</Text>
+                  <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</AppText>
                 </TouchableOpacity>
               </>
             )}
@@ -1585,12 +1587,12 @@ export default function AccountScreen() {
                 <View style={[styles.pinModalIcon, { backgroundColor: 'rgba(51,209,122,0.12)' }]}>
                   <Check color="#33D17A" size={28} strokeWidth={2} />
                 </View>
-                <Text style={[styles.pinModalTitle, { color: colors.text }]}>PIN Updated</Text>
-                <Text style={[styles.pinModalSub, { color: colors.textSecondary }]}>
+                <AppText style={[styles.pinModalTitle, { color: colors.text }]}>PIN Updated</AppText>
+                <AppText style={[styles.pinModalSub, { color: colors.textSecondary }]}>
                   Your new PIN is saved securely on this device.
-                </Text>
+                </AppText>
                 <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: Spacing.sm, alignSelf: 'stretch' }]} onPress={closePinModal} activeOpacity={0.7}>
-                  <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</Text>
+                  <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</AppText>
                 </TouchableOpacity>
               </>
             ) : pinStep === 'recover-password' ? (
@@ -1601,12 +1603,12 @@ export default function AccountScreen() {
                 <View style={[styles.pinModalIcon, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
                   <Lock color="#FF2E8A" size={26} strokeWidth={1.5} />
                 </View>
-                <Text style={[styles.pinModalTitle, { color: colors.text }]}>Verify Identity</Text>
-                <Text style={[styles.pinModalSub, { color: colors.textSecondary }]}>
+                <AppText style={[styles.pinModalTitle, { color: colors.text }]}>Verify Identity</AppText>
+                <AppText style={[styles.pinModalSub, { color: colors.textSecondary }]}>
                   Enter your app password to reset your PIN.
-                </Text>
+                </AppText>
                 <View style={[styles.pinRecoverField, { borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}>
-                  <TextInput
+                  <AppTextInput
                     style={[styles.pinRecoverInput, { color: colors.text }]}
                     value={pinRecoverPw}
                     onChangeText={setPinRecoverPw}
@@ -1618,7 +1620,7 @@ export default function AccountScreen() {
                     autoFocus
                   />
                 </View>
-                {pinError ? <Text style={[styles.pinError, { color: colors.danger }]}>{pinError}</Text> : null}
+                {pinError ? <AppText style={[styles.pinError, { color: colors.danger }]}>{pinError}</AppText> : null}
                 <TouchableOpacity
                   style={[styles.pinRecoverBtn, { backgroundColor: '#FF2E8A', opacity: pinSaving ? 0.6 : 1 }]}
                   onPress={handlePinRecoverVerify}
@@ -1627,7 +1629,7 @@ export default function AccountScreen() {
                 >
                   {pinSaving
                     ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={styles.pinRecoverBtnText}>Verify & Continue</Text>
+                    : <AppText style={styles.pinRecoverBtnText}>Verify & Continue</AppText>
                   }
                 </TouchableOpacity>
               </>
@@ -1639,18 +1641,18 @@ export default function AccountScreen() {
                 <View style={[styles.pinModalIcon, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
                   <KeyRound color="#FF2E8A" size={26} strokeWidth={1.5} />
                 </View>
-                <Text style={[styles.pinModalTitle, { color: colors.text }]}>
+                <AppText style={[styles.pinModalTitle, { color: colors.text }]}>
                   {pinStep === 'current' ? 'Enter Current PIN' : pinStep === 'new' ? 'Enter New PIN' : 'Confirm New PIN'}
-                </Text>
-                <Text style={[styles.pinModalSub, { color: colors.textSecondary }]}>
+                </AppText>
+                <AppText style={[styles.pinModalSub, { color: colors.textSecondary }]}>
                   {pinStep === 'current' ? 'Enter your current 4-digit PIN to continue' : pinStep === 'new' ? 'Choose a new 4-digit PIN' : 'Re-enter your new PIN to confirm'}
-                </Text>
+                </AppText>
                 <PinDots length={getPinValue().length} />
-                {pinError ? <Text style={[styles.pinError, { color: colors.danger }]}>{pinError}</Text> : null}
+                {pinError ? <AppText style={[styles.pinError, { color: colors.danger }]}>{pinError}</AppText> : null}
                 <Numpad onKey={handlePinKey} />
                 {pinStep === 'current' && (
                   <TouchableOpacity onPress={handleForgotPin} activeOpacity={0.7} style={styles.forgotPinBtn}>
-                    <Text style={[styles.forgotPinText, { color: colors.textMuted }]}>Forgot PIN?</Text>
+                    <AppText style={[styles.forgotPinText, { color: colors.textMuted }]}>Forgot PIN?</AppText>
                   </TouchableOpacity>
                 )}
               </>
@@ -1715,16 +1717,16 @@ export default function AccountScreen() {
             <View key={title} style={[styles.secInfoRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
               <View style={[styles.secInfoIcon, { backgroundColor: bg }]}>{icon}</View>
               <View style={styles.secInfoText}>
-                <Text style={[styles.secInfoTitle, { color: colors.text }]}>{title}</Text>
-                <Text style={[styles.secInfoDesc, { color: colors.textSecondary }]}>{desc}</Text>
+                <AppText style={[styles.secInfoTitle, { color: colors.text }]}>{title}</AppText>
+                <AppText style={[styles.secInfoDesc, { color: colors.textSecondary }]}>{desc}</AppText>
               </View>
             </View>
           ))}
           <View style={[styles.secInfoFooter, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: 'rgba(255,46,138,0.18)' }]}>
             <Shield color="#FF2E8A" size={14} strokeWidth={2} />
-            <Text style={[styles.secInfoFooterText, { color: colors.textSecondary }]}>
+            <AppText style={[styles.secInfoFooterText, { color: colors.textSecondary }]}>
               Your moments are safe. We built this app to protect your privacy at every step.
-            </Text>
+            </AppText>
           </View>
         </View>
       </BottomSheet>
@@ -1741,19 +1743,19 @@ export default function AccountScreen() {
               <View style={styles.notifAppIconWrap}>
                 <WarmupLogo size={20} />
               </View>
-              <Text style={[styles.notifAppName, { color: colors.textMuted }]}>WARM ME UP</Text>
-              <Text style={[styles.notifTime, { color: colors.textMuted }]}>now</Text>
+              <AppText style={[styles.notifAppName, { color: colors.textMuted }]}>WARM ME UP</AppText>
+              <AppText style={[styles.notifTime, { color: colors.textMuted }]}>now</AppText>
             </View>
-            <Text style={[styles.notifTitle, { color: colors.text }]}>
+            <AppText style={[styles.notifTitle, { color: colors.text }]}>
               {s?.notification_copy ?? 'Something new is waiting'}
-            </Text>
-            <Text style={[styles.notifBody, { color: colors.textSecondary }]}>
+            </AppText>
+            <AppText style={[styles.notifBody, { color: colors.textSecondary }]}>
               Tap to open
-            </Text>
+            </AppText>
           </View>
-          <Text style={[styles.previewNote, { color: colors.textMuted }]}>
+          <AppText style={[styles.previewNote, { color: colors.textMuted }]}>
             No message content or previews are ever shown — just a discreet nudge.
-          </Text>
+          </AppText>
         </View>
       </BottomSheet>
 
@@ -1775,10 +1777,10 @@ export default function AccountScreen() {
           <View style={styles.cancelInviteIconWrap}>
             <X color="#FF5A5F" size={24} strokeWidth={2} />
           </View>
-          <Text style={[styles.cancelInviteSheetTitle, { color: colors.text }]}>Cancel invite?</Text>
-          <Text style={[styles.cancelInviteSheetBody, { color: colors.textSecondary }]}>
+          <AppText style={[styles.cancelInviteSheetTitle, { color: colors.text }]}>Cancel invite?</AppText>
+          <AppText style={[styles.cancelInviteSheetBody, { color: colors.textSecondary }]}>
             Your partner won't be able to use this code. You can generate a new one any time.
-          </Text>
+          </AppText>
           <TouchableOpacity
             style={[styles.cancelInviteConfirmBtn, cancellingInvite && { opacity: 0.6 }]}
             onPress={handleCancelInvite}
@@ -1787,7 +1789,7 @@ export default function AccountScreen() {
           >
             {cancellingInvite
               ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={styles.cancelInviteConfirmText}>Yes, cancel invite</Text>
+              : <AppText style={styles.cancelInviteConfirmText}>Yes, cancel invite</AppText>
             }
           </TouchableOpacity>
           <TouchableOpacity
@@ -1796,7 +1798,7 @@ export default function AccountScreen() {
             activeOpacity={0.7}
             disabled={cancellingInvite}
           >
-            <Text style={[styles.cancelInviteKeepText, { color: colors.textSecondary }]}>Keep it</Text>
+            <AppText style={[styles.cancelInviteKeepText, { color: colors.textSecondary }]}>Keep it</AppText>
           </TouchableOpacity>
         </View>
       </BottomSheet>
@@ -1815,24 +1817,24 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,59,48,0.10)' }]}>
                   <UserX color="#FF3B30" size={28} strokeWidth={1.5} />
                 </View>
-                <Text style={[styles.dataModalTitle, { color: colors.text }]}>Delete My Account?</Text>
-                <Text style={[styles.dataModalBody, { color: colors.textSecondary }]}>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Delete My Account?</AppText>
+                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
                   This will permanently delete your account, profile, partner connection, messages, vault items, and all app data. This cannot be undone.
-                </Text>
+                </AppText>
                 <View style={styles.dataModalBtns}>
                   <TouchableOpacity
                     style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]}
                     onPress={() => { setDeleteAccountOpen(false); setDeleteAccountStep(1); }}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                    <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Cancel</AppText>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.dataModalDeleteBtn}
                     onPress={() => { setDeleteAccountError(null); setDeleteAccountStep(2); }}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.dataModalDeleteBtnText}>Continue</Text>
+                    <AppText style={styles.dataModalDeleteBtnText}>Continue</AppText>
                   </TouchableOpacity>
                 </View>
               </>
@@ -1841,14 +1843,14 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,59,48,0.15)' }]}>
                   <AlertTriangle color="#FF3B30" size={28} strokeWidth={1.5} />
                 </View>
-                <Text style={[styles.dataModalTitle, { color: colors.text }]}>Are You Sure?</Text>
-                <Text style={[styles.dataModalBody, { color: colors.textSecondary }]}>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Are You Sure?</AppText>
+                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
                   This is permanent. Once deleted, your account, all messages, vault content, and connection with your partner cannot be recovered.
-                </Text>
+                </AppText>
                 {deleteAccountError && (
-                  <Text style={[styles.inlineError, { color: colors.danger, textAlign: 'center' }]}>
+                  <AppText style={[styles.inlineError, { color: colors.danger, textAlign: 'center' }]}>
                     {deleteAccountError}
-                  </Text>
+                  </AppText>
                 )}
                 <View style={styles.dataModalBtns}>
                   <TouchableOpacity
@@ -1857,7 +1859,7 @@ export default function AccountScreen() {
                     disabled={deletingAccount}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Go Back</Text>
+                    <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Go Back</AppText>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.dataModalDeleteBtn}
@@ -1867,7 +1869,7 @@ export default function AccountScreen() {
                   >
                     {deletingAccount
                       ? <ActivityIndicator color="#fff" size="small" />
-                      : <Text style={styles.dataModalDeleteBtnText}>Delete Forever</Text>
+                      : <AppText style={styles.dataModalDeleteBtnText}>Delete Forever</AppText>
                     }
                   </TouchableOpacity>
                 </View>

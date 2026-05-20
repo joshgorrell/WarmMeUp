@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  View, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -70,14 +72,14 @@ export default function ForgotPasswordScreen() {
 
           {!sent ? (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Reset Password</Text>
-              <Text style={styles.cardSub}>
+              <AppText style={styles.cardTitle}>Reset Password</AppText>
+              <AppText style={styles.cardSub}>
                 Enter the email for your account and we'll send a reset link.
-              </Text>
+              </AppText>
 
               <View style={styles.inputWrap}>
                 <Mail color="rgba(255,255,255,0.30)" size={18} style={styles.inputIcon} />
-                <TextInput
+                <AppTextInput
                   style={styles.input}
                   value={email}
                   onChangeText={setEmail}
@@ -90,7 +92,7 @@ export default function ForgotPasswordScreen() {
                 />
               </View>
 
-              {error ? <Text style={styles.error}>{error}</Text> : null}
+              {error ? <AppText style={styles.error}>{error}</AppText> : null}
 
               <TouchableOpacity
                 style={styles.sendBtn}
@@ -104,18 +106,18 @@ export default function ForgotPasswordScreen() {
                   end={{ x: 1, y: 0 }}
                   style={styles.sendGrad}
                 >
-                  <Text style={styles.sendLabel}>{loading ? 'Sending...' : 'Send Reset Link'}</Text>
+                  <AppText style={styles.sendLabel}>{loading ? 'Sending...' : 'Send Reset Link'}</AppText>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.card}>
-              <Text style={styles.sentEmoji}>📬</Text>
-              <Text style={styles.cardTitle}>Check your inbox</Text>
-              <Text style={styles.cardSub}>
+              <AppText style={styles.sentEmoji}>📬</AppText>
+              <AppText style={styles.cardTitle}>Check your inbox</AppText>
+              <AppText style={styles.cardSub}>
                 A password reset link has been sent to{'\n'}
-                <Text style={styles.emailHighlight}>{email}</Text>
-              </Text>
+                <AppText style={styles.emailHighlight}>{email}</AppText>
+              </AppText>
 
               <TouchableOpacity
                 style={styles.sendBtn}
@@ -128,7 +130,7 @@ export default function ForgotPasswordScreen() {
                   end={{ x: 1, y: 0 }}
                   style={styles.sendGrad}
                 >
-                  <Text style={styles.sendLabel}>Back to Sign In</Text>
+                  <AppText style={styles.sendLabel}>Back to Sign In</AppText>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -139,10 +141,10 @@ export default function ForgotPasswordScreen() {
             onPress={() => router.replace('/(auth)/login')}
             activeOpacity={0.7}
           >
-            <Text style={styles.footerText}>
+            <AppText style={styles.footerText}>
               Remember your password?{'  '}
-              <Text style={styles.footerAccent}>Sign In</Text>
-            </Text>
+              <AppText style={styles.footerAccent}>Sign In</AppText>
+            </AppText>
           </TouchableOpacity>
         </View>
       </ScrollView>

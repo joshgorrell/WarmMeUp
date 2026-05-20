@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, StyleSheet, ScrollView, TouchableOpacity,
   Modal, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { Plus, Pencil, Trash2, ChevronLeft, Dices, Zap } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
@@ -196,7 +197,7 @@ export default function CustomizePromptsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
           <ChevronLeft color={colors.text} size={24} strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Customize Prompts</Text>
+        <AppText style={[styles.headerTitle, { color: colors.text }]}>Customize Prompts</AppText>
         <View style={{ width: 40 }} />
       </View>
 
@@ -212,9 +213,9 @@ export default function CustomizePromptsScreen() {
               activeOpacity={0.75}
             >
               {tabIcon(tab.key, active ? tab.color : colors.textMuted)}
-              <Text style={[styles.tabLabel, { color: active ? tab.color : colors.textMuted }]}>
+              <AppText style={[styles.tabLabel, { color: active ? tab.color : colors.textMuted }]}>
                 {tab.label}
-              </Text>
+              </AppText>
             </TouchableOpacity>
           );
         })}
@@ -233,16 +234,16 @@ export default function CustomizePromptsScreen() {
           <>
             {error ? (
               <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
-                <Text style={{ color: colors.danger, fontSize: FontSize.sm, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</Text>
+                <AppText style={{ color: colors.danger, fontSize: FontSize.sm, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</AppText>
               </View>
             ) : null}
 
             <View style={styles.sectionHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ALL PROMPTS</Text>
-                <Text style={[styles.sectionHint, { color: colors.textMuted }]}>
+                <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>ALL PROMPTS</AppText>
+                <AppText style={[styles.sectionHint, { color: colors.textMuted }]}>
                   Edit or delete any prompt. Changes only affect your account.
-                </Text>
+                </AppText>
               </View>
               <TouchableOpacity
                 style={[styles.addBtn, { backgroundColor: `${currentTab.color}18`, borderColor: `${currentTab.color}50` }]}
@@ -250,23 +251,23 @@ export default function CustomizePromptsScreen() {
                 activeOpacity={0.75}
               >
                 <Plus color={currentTab.color} size={14} strokeWidth={2.5} />
-                <Text style={[styles.addBtnText, { color: currentTab.color }]}>Add</Text>
+                <AppText style={[styles.addBtnText, { color: currentTab.color }]}>Add</AppText>
               </TouchableOpacity>
             </View>
 
             {!couple?.id ? (
               <View style={[styles.listCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                <AppText style={[styles.emptyText, { color: colors.textMuted }]}>
                   Connect with your partner to customize prompts.
-                </Text>
+                </AppText>
               </View>
             ) : visiblePrompts.length === 0 ? (
               <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                 {tabIcon(activeTab, colors.textMuted, 28)}
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>No prompts</Text>
-                <Text style={[styles.emptyHint, { color: colors.textMuted }]}>
+                <AppText style={[styles.emptyTitle, { color: colors.text }]}>No prompts</AppText>
+                <AppText style={[styles.emptyHint, { color: colors.textMuted }]}>
                   Tap Add to create prompts just for the two of you.
-                </Text>
+                </AppText>
               </View>
             ) : (
               <View style={[styles.listCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
@@ -282,7 +283,7 @@ export default function CustomizePromptsScreen() {
                       {p.is_default && (
                         <View style={[styles.defaultDot, { backgroundColor: currentTab.color }]} />
                       )}
-                      <Text
+                      <AppText
                         style={[
                           styles.promptText,
                           { color: p.is_default ? colors.textSecondary : colors.text },
@@ -290,7 +291,7 @@ export default function CustomizePromptsScreen() {
                         numberOfLines={2}
                       >
                         {p.text}
-                      </Text>
+                      </AppText>
                     </View>
                     <View style={styles.rowActions}>
                       <TouchableOpacity
@@ -332,14 +333,14 @@ export default function CustomizePromptsScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={[styles.modalCard, { backgroundColor: colors.modalBg, borderColor: colors.borderSubtle }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
+            <AppText style={[styles.modalTitle, { color: colors.text }]}>
               {editingPrompt ? 'Edit Prompt' : `New ${currentTab.label} Prompt`}
-            </Text>
-            <Text style={[styles.modalHint, { color: colors.textMuted }]}>
+            </AppText>
+            <AppText style={[styles.modalHint, { color: colors.textMuted }]}>
               {editingPrompt?.is_default
                 ? 'Your edited version will replace this prompt for your account only.'
                 : `This will appear in your ${currentTab.label.toLowerCase()} prompt pool.`}
-            </Text>
+            </AppText>
             <WarmTextInput
               value={draftText}
               onChangeText={setDraftText}
@@ -351,7 +352,7 @@ export default function CustomizePromptsScreen() {
               containerStyle={{ marginBottom: Spacing.md }}
             />
             {error ? (
-              <Text style={[styles.modalError, { color: colors.danger }]}>{error}</Text>
+              <AppText style={[styles.modalError, { color: colors.danger }]}>{error}</AppText>
             ) : null}
             <PrimaryButton
               label={editingPrompt ? 'Save Changes' : 'Add Prompt'}

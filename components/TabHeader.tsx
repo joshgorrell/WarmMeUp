@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import Avatar from './Avatar';
 import WarmupLogo from './WarmupLogo';
@@ -26,7 +27,7 @@ export default function TabHeader({ rightSlot }: TabHeaderProps) {
       </View>
       <View style={styles.right}>
         <TouchableOpacity onPress={() => router.replace('/weather')} activeOpacity={0.7} style={styles.tempBtn} disabled={!temp}>
-          <Text style={styles.tempText}>{temp}</Text>
+          <AppText style={styles.tempText}>{temp}</AppText>
         </TouchableOpacity>
         {rightSlot}
         <TouchableOpacity onPress={() => router.push('/(app)/account')} activeOpacity={0.85}>

@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, ActivityIndicator, TouchableOpacity,
+  View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
 import { Check, Save } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
@@ -96,14 +98,14 @@ export default function PointsConfigAdmin() {
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={[styles.noticeBanner, { backgroundColor: 'rgba(255,179,71,0.08)', borderColor: 'rgba(255,179,71,0.25)' }]}>
-            <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
+            <AppText style={[styles.noticeText, { color: colors.textSecondary }]}>
               Changes apply to all new point events immediately. Existing earned points are not affected.
-            </Text>
+            </AppText>
           </View>
 
           {SECTIONS.map(section => (
             <View key={section.title} style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{section.title}</Text>
+              <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>{section.title}</AppText>
               <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                 {section.keys.map((key, idx) => {
                   const cfg = configs.find(c => c.event_key === key);
@@ -120,11 +122,11 @@ export default function PointsConfigAdmin() {
                       ]}
                     >
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.configLabel, { color: colors.text }]}>{cfg.label}</Text>
-                        <Text style={[styles.configKey, { color: colors.textMuted }]}>{key}</Text>
+                        <AppText style={[styles.configLabel, { color: colors.text }]}>{cfg.label}</AppText>
+                        <AppText style={[styles.configKey, { color: colors.textMuted }]}>{key}</AppText>
                       </View>
                       <View style={styles.inputWrap}>
-                        <TextInput
+                        <AppTextInput
                           style={[
                             styles.ptsInput,
                             {
@@ -139,7 +141,7 @@ export default function PointsConfigAdmin() {
                           maxLength={4}
                           selectTextOnFocus
                         />
-                        <Text style={[styles.ptsLabel, { color: colors.textMuted }]}>pts</Text>
+                        <AppText style={[styles.ptsLabel, { color: colors.textMuted }]}>pts</AppText>
                       </View>
                       {dirty && (
                         <TouchableOpacity

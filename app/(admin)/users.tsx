@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, StyleSheet, ScrollView, TouchableOpacity,
   Modal, Alert, ActivityIndicator,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { ChevronRight, UserCog, X, ShieldCheck, ShieldOff, Crown } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
@@ -93,7 +94,7 @@ export default function UsersAdmin() {
           {users.length === 0 && (
             <View style={styles.emptyWrap}>
               <UserCog color={colors.textMuted} size={36} strokeWidth={1.5} />
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No users found.</Text>
+              <AppText style={[styles.emptyText, { color: colors.textMuted }]}>No users found.</AppText>
             </View>
           )}
           {users.map(u => (
@@ -117,30 +118,30 @@ export default function UsersAdmin() {
               </View>
               <View style={{ flex: 1 }}>
                 <View style={styles.nameRow}>
-                  <Text style={[styles.userName, { color: colors.text }]}>{u.display_name}</Text>
+                  <AppText style={[styles.userName, { color: colors.text }]}>{u.display_name}</AppText>
                   {u.id === myProfile?.id && (
                     <View style={[styles.youBadge, { backgroundColor: 'rgba(120,120,130,0.12)' }]}>
-                      <Text style={[styles.youBadgeText, { color: colors.textMuted }]}>YOU</Text>
+                      <AppText style={[styles.youBadgeText, { color: colors.textMuted }]}>YOU</AppText>
                     </View>
                   )}
                 </View>
                 <View style={styles.metaRow}>
                   {u.is_super_admin ? (
                     <View style={[styles.roleBadge, { backgroundColor: 'rgba(255,179,0,0.12)' }]}>
-                      <Text style={[styles.roleText, { color: '#FFB300' }]}>Super Admin</Text>
+                      <AppText style={[styles.roleText, { color: '#FFB300' }]}>Super Admin</AppText>
                     </View>
                   ) : u.is_admin ? (
                     <View style={[styles.roleBadge, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
-                      <Text style={[styles.roleText, { color: '#FF2E8A' }]}>Admin</Text>
+                      <AppText style={[styles.roleText, { color: '#FF2E8A' }]}>Admin</AppText>
                     </View>
                   ) : (
                     <View style={[styles.roleBadge, { backgroundColor: 'rgba(120,120,130,0.08)' }]}>
-                      <Text style={[styles.roleText, { color: colors.textMuted }]}>User</Text>
+                      <AppText style={[styles.roleText, { color: colors.textMuted }]}>User</AppText>
                     </View>
                   )}
-                  <Text style={[styles.dateText, { color: colors.textMuted }]}>
+                  <AppText style={[styles.dateText, { color: colors.textMuted }]}>
                     Joined {new Date(u.created_at).toLocaleDateString()}
-                  </Text>
+                  </AppText>
                 </View>
               </View>
               <ChevronRight color={colors.textMuted} size={16} />
@@ -154,7 +155,7 @@ export default function UsersAdmin() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: isDark ? '#0F0F17' : '#FFF8F3', borderColor: colors.borderSubtle }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>User Details</Text>
+              <AppText style={[styles.modalTitle, { color: colors.text }]}>User Details</AppText>
               <TouchableOpacity onPress={() => setSelected(null)} activeOpacity={0.7}>
                 <X color={colors.textMuted} size={22} strokeWidth={2} />
               </TouchableOpacity>
@@ -164,22 +165,22 @@ export default function UsersAdmin() {
               <ScrollView showsVerticalScrollIndicator={false}>
                 {/* Name & role block */}
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>DISPLAY NAME</Text>
-                  <Text style={[styles.detailValue, { color: colors.text }]}>{selected.display_name}</Text>
+                  <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>DISPLAY NAME</AppText>
+                  <AppText style={[styles.detailValue, { color: colors.text }]}>{selected.display_name}</AppText>
                 </View>
 
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>ROLE</Text>
-                  <Text style={[styles.detailValue, { color: colors.text }]}>
+                  <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>ROLE</AppText>
+                  <AppText style={[styles.detailValue, { color: colors.text }]}>
                     {selected.is_super_admin ? 'Super Admin' : selected.is_admin ? 'Admin' : 'Regular User'}
-                  </Text>
+                  </AppText>
                 </View>
 
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>MEMBER SINCE</Text>
-                  <Text style={[styles.detailValue, { color: colors.text }]}>
+                  <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>MEMBER SINCE</AppText>
+                  <AppText style={[styles.detailValue, { color: colors.text }]}>
                     {new Date(selected.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                  </Text>
+                  </AppText>
                 </View>
 
                 {/* Grant / Revoke — only super-admin, not self, not other super-admins */}
@@ -201,12 +202,12 @@ export default function UsersAdmin() {
                     ) : selected.is_admin ? (
                       <>
                         <ShieldOff color={colors.danger} size={20} strokeWidth={2} />
-                        <Text style={[styles.actionBtnText, { color: colors.danger }]}>Revoke Admin Access</Text>
+                        <AppText style={[styles.actionBtnText, { color: colors.danger }]}>Revoke Admin Access</AppText>
                       </>
                     ) : (
                       <>
                         <ShieldCheck color="#FF2E8A" size={20} strokeWidth={2} />
-                        <Text style={[styles.actionBtnText, { color: '#FF2E8A' }]}>Grant Admin Access</Text>
+                        <AppText style={[styles.actionBtnText, { color: '#FF2E8A' }]}>Grant Admin Access</AppText>
                       </>
                     )}
                   </TouchableOpacity>
@@ -215,25 +216,25 @@ export default function UsersAdmin() {
                 {/* Explanatory note for non-super-admin viewers */}
                 {!isSuperAdmin && (
                   <View style={[styles.noteBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                    <Text style={[styles.noteText, { color: colors.textMuted }]}>
+                    <AppText style={[styles.noteText, { color: colors.textMuted }]}>
                       Only the Super Admin can grant or revoke admin privileges.
-                    </Text>
+                    </AppText>
                   </View>
                 )}
 
                 {isSuperAdmin && isSelf && (
                   <View style={[styles.noteBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                    <Text style={[styles.noteText, { color: colors.textMuted }]}>
+                    <AppText style={[styles.noteText, { color: colors.textMuted }]}>
                       You cannot change your own admin status.
-                    </Text>
+                    </AppText>
                   </View>
                 )}
 
                 {isSuperAdmin && selected.is_super_admin && !isSelf && (
                   <View style={[styles.noteBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                    <Text style={[styles.noteText, { color: colors.textMuted }]}>
+                    <AppText style={[styles.noteText, { color: colors.textMuted }]}>
                       Super Admin privileges can only be changed directly in the database.
-                    </Text>
+                    </AppText>
                   </View>
                 )}
               </ScrollView>

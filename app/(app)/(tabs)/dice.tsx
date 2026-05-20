@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView,
+  View, StyleSheet, TouchableOpacity, Animated, ScrollView,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CircleCheck as CheckCircle, Timer } from 'lucide-react-native';
@@ -379,9 +380,9 @@ export default function DiceTab() {
         {incomingChallenge && (
           <View style={styles.challengeSection}>
             <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,179,71,0.08)', borderColor: 'rgba(255,179,71,0.25)' }]}>
-              <Text style={[styles.pointsHintText, { color: colors.textSecondary }]}>
-                Accept = <Text style={styles.pts}>+{acceptPts} pts</Text> — Complete it = <Text style={styles.pts}>+{completePts} pts</Text>
-              </Text>
+              <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>
+                Accept = <AppText style={styles.pts}>+{acceptPts} pts</AppText> — Complete it = <AppText style={styles.pts}>+{completePts} pts</AppText>
+              </AppText>
             </View>
             <ReceivedDiceChallengeCard
               text={incomingChallenge.content_text}
@@ -401,16 +402,16 @@ export default function DiceTab() {
           <View style={[styles.verifyCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.35)' }]}>
             <View style={styles.verifyHeader}>
               <CheckCircle color="#33D17A" size={20} strokeWidth={2} />
-              <Text style={[styles.verifyTitle, { color: colors.text }]}>Partner accepted your roll!</Text>
+              <AppText style={[styles.verifyTitle, { color: colors.text }]}>Partner accepted your roll!</AppText>
             </View>
             {pendingVerification.content_text ? (
-              <Text style={[styles.verifyDareText, { color: colors.textSecondary }]}>
+              <AppText style={[styles.verifyDareText, { color: colors.textSecondary }]}>
                 "{pendingVerification.content_text}"
-              </Text>
+              </AppText>
             ) : null}
-            <Text style={[styles.verifySubtitle, { color: colors.textMuted }]}>
-              When they complete it, confirm here — they earn <Text style={[styles.pts, { color: '#33D17A' }]}>+{completePts} pts</Text>
-            </Text>
+            <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>
+              When they complete it, confirm here — they earn <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} pts</AppText>
+            </AppText>
             <TouchableOpacity
               style={styles.verifyBtn}
               onPress={handleVerifyComplete}
@@ -418,7 +419,7 @@ export default function DiceTab() {
               activeOpacity={0.85}
             >
               <LinearGradient colors={['#33D17A', '#1A9E57']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.verifyGrad}>
-                <Text style={styles.verifyBtnText}>{verifying ? 'Verifying…' : 'They Did It!'}</Text>
+                <AppText style={styles.verifyBtnText}>{verifying ? 'Verifying…' : 'They Did It!'}</AppText>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -437,9 +438,9 @@ export default function DiceTab() {
                 disabled={rolling}
               >
                 {active && <View style={[StyleSheet.absoluteFill, styles.toggleActiveBg]} />}
-                <Text style={[styles.toggleText, { color: active ? '#FFB347' : colors.textMuted }]}>
+                <AppText style={[styles.toggleText, { color: active ? '#FFB347' : colors.textMuted }]}>
                   {option === 'self' ? 'For Me' : 'For My Partner'}
-                </Text>
+                </AppText>
               </TouchableOpacity>
             );
           })}
@@ -485,7 +486,7 @@ export default function DiceTab() {
                   />
                   {!result && !rolling && (
                     <View style={styles.hintOverlay} pointerEvents="none">
-                      <Text style={styles.hintText}>{hintText}</Text>
+                      <AppText style={styles.hintText}>{hintText}</AppText>
                     </View>
                   )}
                 </View>
@@ -498,18 +499,18 @@ export default function DiceTab() {
             style={[styles.sentWrap, { opacity: sentOpacity, transform: [{ translateY: sentTranslate }] }]}
             pointerEvents="none"
           >
-            <Text style={[styles.sent, { color: colors.textMuted }]}>{sentSubtitle}</Text>
+            <AppText style={[styles.sent, { color: colors.textMuted }]}>{sentSubtitle}</AppText>
             {senderCountdown && rolledForResult === 'partner' && (
               <View style={styles.expiryRow}>
                 <Timer color={colors.textMuted} size={12} strokeWidth={2} />
-                <Text style={[styles.expiryText, { color: colors.textMuted }]}>Expires in {senderCountdown}</Text>
+                <AppText style={[styles.expiryText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText>
               </View>
             )}
           </Animated.View>
 
           {error ? (
             <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
-              <Text style={{ color: colors.danger, fontSize: FontSize.sm, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</Text>
+              <AppText style={{ color: colors.danger, fontSize: FontSize.sm, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</AppText>
             </View>
           ) : null}
         </View>

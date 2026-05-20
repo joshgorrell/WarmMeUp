@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView,
+  View, StyleSheet, TouchableOpacity, Platform, ScrollView,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -248,8 +249,8 @@ export default function SetupPinScreen() {
             contentContainerStyle={styles.methodScrollContent}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.title}>How do you want to open Warm Me Up?</Text>
-            <Text style={[styles.sub, { marginBottom: vMd }]}>You can change this anytime in Settings.</Text>
+            <AppText style={styles.title}>How do you want to open Warm Me Up?</AppText>
+            <AppText style={[styles.sub, { marginBottom: vMd }]}>You can change this anytime in Settings.</AppText>
 
             {bioAvailable && (
               <MethodCard
@@ -281,10 +282,10 @@ export default function SetupPinScreen() {
           </ScrollView>
         ) : (
           <View style={centerStyle}>
-            <Text style={styles.title}>{step === 'create' ? 'Create PIN' : 'Confirm PIN'}</Text>
-            <Text style={[styles.sub, { marginBottom: vSm }]}>
+            <AppText style={styles.title}>{step === 'create' ? 'Create PIN' : 'Confirm PIN'}</AppText>
+            <AppText style={[styles.sub, { marginBottom: vSm }]}>
               {step === 'create' ? 'This PIN protects your Warm Me Up app' : 'Enter your PIN again to confirm'}
-            </Text>
+            </AppText>
 
             <View style={[styles.dots, { marginBottom: vSm }]}>
               {Array.from({ length: 4 }).map((_, i) => (
@@ -295,7 +296,7 @@ export default function SetupPinScreen() {
               ))}
             </View>
 
-            {error ? <Text style={[styles.error, { marginBottom: vSm }]}>{error}</Text> : null}
+            {error ? <AppText style={[styles.error, { marginBottom: vSm }]}>{error}</AppText> : null}
 
             <View style={[styles.pad, { width: padWidth, gap: keyGap }]}>
               {PAD.map((k, i) => (
@@ -306,7 +307,7 @@ export default function SetupPinScreen() {
                   activeOpacity={k === '' ? 1 : 0.6}
                   disabled={k === ''}
                 >
-                  <Text style={[styles.keyText, k === '⌫' && styles.keyDelete]}>{k}</Text>
+                  <AppText style={[styles.keyText, k === '⌫' && styles.keyDelete]}>{k}</AppText>
                 </TouchableOpacity>
               ))}
             </View>
@@ -317,7 +318,7 @@ export default function SetupPinScreen() {
               activeOpacity={0.7}
             >
               <LogIn color="rgba(255,255,255,0.4)" size={14} />
-              <Text style={styles.altLinkText}>Sign in with password instead</Text>
+              <AppText style={styles.altLinkText}>Sign in with password instead</AppText>
             </TouchableOpacity>
           </View>
         )}
@@ -346,14 +347,14 @@ function MethodCard({
       <View style={styles.methodIconWrap}>{icon}</View>
       <View style={styles.methodTextWrap}>
         <View style={styles.methodTitleRow}>
-          <Text style={styles.methodTitle}>{title}</Text>
+          <AppText style={styles.methodTitle}>{title}</AppText>
           {recommended && (
             <View style={styles.recommendedBadge}>
-              <Text style={styles.recommendedText}>Recommended</Text>
+              <AppText style={styles.recommendedText}>Recommended</AppText>
             </View>
           )}
         </View>
-        <Text style={styles.methodDesc}>{description}</Text>
+        <AppText style={styles.methodDesc}>{description}</AppText>
       </View>
     </TouchableOpacity>
   );

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Gradient, FontSize } from '@/constants/theme';
 
@@ -32,7 +33,7 @@ export default function Badge({ label, variant = 'default', gradientBorder = fal
         style={styles.gradientWrap}
       >
         <View style={[styles.inner, { backgroundColor: c.bg }]}>
-          <Text style={[styles.label, { color: c.text }]}>{label}</Text>
+          <AppText style={[styles.label, { color: c.text }]}>{label}</AppText>
         </View>
       </LinearGradient>
     );
@@ -40,7 +41,7 @@ export default function Badge({ label, variant = 'default', gradientBorder = fal
 
   return (
     <View style={[styles.plain, { backgroundColor: c.bg, borderColor: c.border }]}>
-      <Text style={[styles.label, { color: c.text }]}>{label}</Text>
+      <AppText style={[styles.label, { color: c.text }]}>{label}</AppText>
     </View>
   );
 }

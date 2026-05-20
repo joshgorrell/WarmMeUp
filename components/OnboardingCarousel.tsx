@@ -1,7 +1,6 @@
 import React, { useRef, useState, useCallback } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   FlatList,
@@ -11,6 +10,7 @@ import {
   ViewToken,
   Image,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -61,8 +61,8 @@ function FeatureRow({
     <View style={[fr.row, highlight && fr.rowHL]}>
       <View style={[fr.iconWrap, highlight && fr.iconWrapHL]}>{icon}</View>
       <View style={fr.texts}>
-        <Text style={[fr.label, highlight && fr.labelHL]}>{label}</Text>
-        {sub ? <Text style={fr.sub}>{sub}</Text> : null}
+        <AppText style={[fr.label, highlight && fr.labelHL]}>{label}</AppText>
+        {sub ? <AppText style={fr.sub}>{sub}</AppText> : null}
       </View>
     </View>
   );
@@ -115,7 +115,7 @@ function CouplePill({ icon, label, color }: { icon: React.ReactNode; label: stri
   return (
     <View style={[cp.pill, { borderColor: `${color}44` }]}>
       {icon}
-      <Text style={[cp.label, { color }]}>{label}</Text>
+      <AppText style={[cp.label, { color }]}>{label}</AppText>
     </View>
   );
 }
@@ -177,12 +177,12 @@ function VisualWhyDifferent() {
         ] as Array<{ Icon: React.ComponentType<any>; color: string; label: string }>).map(({ Icon, color, label }, i) => (
           <View key={i} style={[vs.whyChip, { borderColor: `${color}38` }]}>
             <Icon color={color} size={20} strokeWidth={1.8} />
-            <Text style={[vs.whyChipLabel, { color: `${color}CC` }]}>{label}</Text>
+            <AppText style={[vs.whyChipLabel, { color: `${color}CC` }]}>{label}</AppText>
           </View>
         ))}
       </View>
       <View style={vs.whyTagPill}>
-        <Text style={vs.whyTagText}>More intimate than social media</Text>
+        <AppText style={vs.whyTagText}>More intimate than social media</AppText>
       </View>
     </View>
   );
@@ -193,18 +193,18 @@ function VisualChat() {
     <View style={[vs.center, { gap: 9, paddingHorizontal: 20 }]}>
       <View style={vs.chatBadge}>
         <Lock color="#FF8A3D" size={11} strokeWidth={2.5} />
-        <Text style={vs.chatBadgeText}>Couple-only chat</Text>
+        <AppText style={vs.chatBadgeText}>Couple-only chat</AppText>
       </View>
       <View style={[vs.bubble, vs.bubbleLeft]}>
-        <Text style={vs.bubbleText}>What are you thinking? 💭</Text>
+        <AppText style={vs.bubbleText}>What are you thinking? 💭</AppText>
       </View>
       <View style={[vs.bubble, vs.bubbleRight]}>
-        <Text style={vs.bubbleText}>Only you would know... 🔒</Text>
+        <AppText style={vs.bubbleText}>Only you would know... 🔒</AppText>
       </View>
       <View style={[vs.bubble, vs.bubbleLeft]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Mic color="#FF8A3D" size={13} strokeWidth={2} />
-          <Text style={vs.bubbleText}>Voice note  0:08</Text>
+          <AppText style={vs.bubbleText}>Voice note  0:08</AppText>
         </View>
       </View>
     </View>
@@ -228,14 +228,14 @@ function VisualDare() {
       </View>
       <View style={vs.dareCards}>
         <View style={[vs.dareCard, { borderColor: 'rgba(255,138,61,0.38)' }]}>
-          <Text style={[vs.dareWord, { color: 'rgba(255,255,255,0.68)' }]}>Truth</Text>
-          <Text style={[vs.dareWord, { color: 'rgba(255,255,255,0.42)', fontSize: 11 }]}>or</Text>
-          <Text style={[vs.dareWord, { color: '#FF8A3D' }]}>Dare?</Text>
-          <Text style={vs.dareQ}>?</Text>
+          <AppText style={[vs.dareWord, { color: 'rgba(255,255,255,0.68)' }]}>Truth</AppText>
+          <AppText style={[vs.dareWord, { color: 'rgba(255,255,255,0.42)', fontSize: 11 }]}>or</AppText>
+          <AppText style={[vs.dareWord, { color: '#FF8A3D' }]}>Dare?</AppText>
+          <AppText style={vs.dareQ}>?</AppText>
         </View>
         <View style={[vs.dareCard, { borderColor: 'rgba(255,46,138,0.42)', backgroundColor: 'rgba(255,46,138,0.08)' }]}>
-          <Text style={[vs.dareWord, { color: 'rgba(255,255,255,0.68)', fontSize: 11 }]}>Accept</Text>
-          <Text style={[vs.dareWord, { color: '#FF2E8A' }]}>the dare?</Text>
+          <AppText style={[vs.dareWord, { color: 'rgba(255,255,255,0.68)', fontSize: 11 }]}>Accept</AppText>
+          <AppText style={[vs.dareWord, { color: '#FF2E8A' }]}>the dare?</AppText>
           <View style={vs.dareCheck}>
             <Check color="#FF2E8A" size={16} strokeWidth={3} />
           </View>
@@ -291,18 +291,18 @@ function VisualWish() {
       <View style={vs.polaroidStack}>
         <View style={[vs.polaroid, vs.polBack]}>
           <LinearGradient colors={['#1a0e18', '#2a1428']} style={vs.polImg} />
-          <Text style={vs.polCaption}>A Weekend Away ❤️</Text>
+          <AppText style={vs.polCaption}>A Weekend Away ❤️</AppText>
         </View>
         <View style={[vs.polaroid, vs.polFront]}>
           <LinearGradient colors={['#18122a', '#0e1020']} style={vs.polImg}>
             <MapPin color="rgba(255,138,61,0.75)" size={18} strokeWidth={1.8} />
           </LinearGradient>
-          <Text style={vs.polCaption}>Someday in Paris 🗼</Text>
+          <AppText style={vs.polCaption}>Someday in Paris 🗼</AppText>
         </View>
       </View>
       <View style={vs.wishTagRow}>
         <Heart color="#FF2E8A" size={11} strokeWidth={2} fill="#FF2E8A" />
-        <Text style={vs.wishTagText}>Some wishes become unforgettable memories ❤️</Text>
+        <AppText style={vs.wishTagText}>Some wishes become unforgettable memories ❤️</AppText>
       </View>
     </View>
   );
@@ -333,7 +333,7 @@ function VisualVault() {
       </View>
       <View style={vs.vaultPill}>
         <Shield color="#00B4C8" size={11} strokeWidth={2} />
-        <Text style={vs.vaultPillText}>Encrypted & private</Text>
+        <AppText style={vs.vaultPillText}>Encrypted & private</AppText>
       </View>
     </View>
   );
@@ -352,14 +352,14 @@ function VisualSettings() {
       <View style={vs.settingsAvatar}>
         <User color="rgba(255,255,255,0.6)" size={28} strokeWidth={1.6} />
       </View>
-      <Text style={vs.settingsAvatarLabel}>Your Profile</Text>
+      <AppText style={vs.settingsAvatarLabel}>Your Profile</AppText>
       <View style={vs.settingsMock}>
         {rows.map(({ Icon, color, label }, i) => (
           <View key={i} style={[vs.settingsRow, i < rows.length - 1 && vs.settingsRowBorder]}>
             <View style={[vs.settingsIconWrap, { backgroundColor: `${color}1E` }]}>
               <Icon color={color} size={13} strokeWidth={2} />
             </View>
-            <Text style={vs.settingsRowLabel}>{label}</Text>
+            <AppText style={vs.settingsRowLabel}>{label}</AppText>
             <ChevronRight color="rgba(255,255,255,0.25)" size={14} strokeWidth={2} />
           </View>
         ))}
@@ -383,7 +383,7 @@ function VisualEveryCouple() {
         <Heart color="#FF2E8A" size={isShort ? 64 : 78} strokeWidth={1.2} fill="rgba(255,46,138,0.18)" />
       </Animated.View>
       <Users color="rgba(255,255,255,0.45)" size={22} strokeWidth={1.8} style={{ marginBottom: 5 }} />
-      <Text style={vs.coupleLabel}>WarmMeUp is for every couple</Text>
+      <AppText style={vs.coupleLabel}>WarmMeUp is for every couple</AppText>
     </View>
   );
 }
@@ -987,15 +987,15 @@ const SLIDES: SlideData[] = [
 
 // ─── Headline with accent word ────────────────────────────────────────────────
 function Headline({ text, accentWord, accentColor }: { text: string; accentWord?: string; accentColor: string }) {
-  if (!accentWord) return <Text style={hl.h}>{text}</Text>;
+  if (!accentWord) return <AppText style={hl.h}>{text}</AppText>;
   const idx = text.indexOf(accentWord);
-  if (idx === -1) return <Text style={hl.h}>{text}</Text>;
+  if (idx === -1) return <AppText style={hl.h}>{text}</AppText>;
   return (
-    <Text style={hl.h}>
+    <AppText style={hl.h}>
       {text.slice(0, idx)}
-      <Text style={[hl.h, { color: accentColor }]}>{accentWord}</Text>
+      <AppText style={[hl.h, { color: accentColor }]}>{accentWord}</AppText>
       {text.slice(idx + accentWord.length)}
-    </Text>
+    </AppText>
   );
 }
 const hl = StyleSheet.create({
@@ -1046,10 +1046,10 @@ function Slide({ item, width, visualH }: { item: SlideData; width: number; visua
       </View>
       <View style={sl.content}>
         {item.posterTitle ? (
-          <Text style={[sl.posterTitle, { color: item.accentColor }]}>{item.posterTitle}</Text>
+          <AppText style={[sl.posterTitle, { color: item.accentColor }]}>{item.posterTitle}</AppText>
         ) : null}
         <Headline text={item.headline} accentWord={item.headlineAccent} accentColor={item.accentColor} />
-        {item.subtext ? <Text style={sl.subtext}>{item.subtext}</Text> : null}
+        {item.subtext ? <AppText style={sl.subtext}>{item.subtext}</AppText> : null}
         {item.rows.length > 0 && (
           <View style={sl.rows}>
             {item.rows.map((row, i) => (
@@ -1160,7 +1160,7 @@ export default function OnboardingCarousel({ mode, onComplete }: Props) {
 
       {/* Header */}
       <View style={[s.header, { paddingTop: topPad }]}>
-        <Text style={s.counter}>{currentIndex + 1} / {SLIDES.length}</Text>
+        <AppText style={s.counter}>{currentIndex + 1} / {SLIDES.length}</AppText>
         <ProgressBar current={currentIndex} total={SLIDES.length} />
         <TouchableOpacity
           style={s.skipBtn}
@@ -1168,7 +1168,7 @@ export default function OnboardingCarousel({ mode, onComplete }: Props) {
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={s.skipText}>Skip</Text>
+          <AppText style={s.skipText}>Skip</AppText>
         </TouchableOpacity>
       </View>
 
@@ -1202,12 +1202,12 @@ export default function OnboardingCarousel({ mode, onComplete }: Props) {
                 style={s.primaryGrad}
               >
                 <Sparkles color="#fff" size={15} strokeWidth={2.2} />
-                <Text style={s.primaryLabel}>Get Started</Text>
+                <AppText style={s.primaryLabel}>Get Started</AppText>
               </LinearGradient>
             </TouchableOpacity>
             <TouchableOpacity style={s.secondaryBtn} onPress={() => onComplete('invite-partner')} activeOpacity={0.8}>
               <UserPlus color="rgba(255,255,255,0.72)" size={15} strokeWidth={2} />
-              <Text style={s.secondaryLabel}>Invite Your Partner</Text>
+              <AppText style={s.secondaryLabel}>Invite Your Partner</AppText>
             </TouchableOpacity>
           </>
         ) : (
@@ -1218,7 +1218,7 @@ export default function OnboardingCarousel({ mode, onComplete }: Props) {
               end={{ x: 1, y: 0 }}
               style={s.primaryGrad}
             >
-              <Text style={s.primaryLabel}>Next</Text>
+              <AppText style={s.primaryLabel}>Next</AppText>
             </LinearGradient>
           </TouchableOpacity>
         )}

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, StyleSheet, ScrollView, TouchableOpacity,
   Image, RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon } from 'lucide-react-native';
@@ -310,13 +311,13 @@ export default function VaultScreen() {
         <View style={styles.vaultGate}>
           <LinearGradient colors={['#07070A', '#0D0D12']} style={StyleSheet.absoluteFill} />
           <Shield color="#FF2E8A" size={48} strokeWidth={1.5} />
-          <Text style={styles.vaultGateTitle}>Vault is Locked</Text>
-          <Text style={styles.vaultGateSub}>Biometric verification required to view Vault content.</Text>
-          {vaultAuthError ? <Text style={styles.vaultGateError}>{vaultAuthError}</Text> : null}
+          <AppText style={styles.vaultGateTitle}>Vault is Locked</AppText>
+          <AppText style={styles.vaultGateSub}>Biometric verification required to view Vault content.</AppText>
+          {vaultAuthError ? <AppText style={styles.vaultGateError}>{vaultAuthError}</AppText> : null}
           <TouchableOpacity style={[styles.vaultGateBtn, unlockingRef.current && { opacity: 0.6 }]} onPress={unlockVault} activeOpacity={0.8} disabled={unlockingRef.current}>
             {unlockingRef.current
               ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={styles.vaultGateBtnText}>Unlock Vault</Text>
+              : <AppText style={styles.vaultGateBtnText}>Unlock Vault</AppText>
             }
           </TouchableOpacity>
         </View>
@@ -335,9 +336,9 @@ export default function VaultScreen() {
         {/* Privacy notice */}
         <View style={[styles.privNotice, { backgroundColor: 'rgba(255,46,138,0.07)', borderColor: 'rgba(255,46,138,0.18)' }]}>
           <Shield color="#FF2E8A" size={14} strokeWidth={2} />
-          <Text style={[styles.privText, { color: colors.textSecondary }]}>
+          <AppText style={[styles.privText, { color: colors.textSecondary }]}>
             Protected media. Privacy defaults are set in your Profile.
-          </Text>
+          </AppText>
         </View>
 
         {items.length === 0 ? (
@@ -345,10 +346,10 @@ export default function VaultScreen() {
             <View style={[styles.emptyIconWrap, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
               <Shield color="rgba(255,255,255,0.20)" size={48} strokeWidth={1.5} />
             </View>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>Nothing yet</Text>
-            <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+            <AppText style={[styles.emptyTitle, { color: colors.text }]}>Nothing yet</AppText>
+            <AppText style={[styles.emptySub, { color: colors.textSecondary }]}>
               Something new is waiting. Add your first private moment.
-            </Text>
+            </AppText>
           </View>
         ) : (
           <View style={styles.grid}>
@@ -404,11 +405,11 @@ export default function VaultScreen() {
                 <ActivityIndicator color="#FF2E8A" size="large" />
               </Animated.View>
               {uploadPct > 0 && (
-                <Text style={styles.uploadPct}>{uploadPct}%</Text>
+                <AppText style={styles.uploadPct}>{uploadPct}%</AppText>
               )}
             </View>
-            <Text style={[styles.uploadText, { color: colors.text }]}>Uploading to Vault…</Text>
-            <Text style={[styles.uploadSub, { color: colors.textMuted }]}>This will not be saved to your device.</Text>
+            <AppText style={[styles.uploadText, { color: colors.text }]}>Uploading to Vault…</AppText>
+            <AppText style={[styles.uploadSub, { color: colors.textMuted }]}>This will not be saved to your device.</AppText>
           </View>
         </View>
       )}
@@ -436,11 +437,11 @@ export default function VaultScreen() {
         <View style={styles.sheetContent}>
           <View style={[styles.defaultsRow, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: 'rgba(255,46,138,0.18)' }]}>
             <Shield color="#FF2E8A" size={16} strokeWidth={2} />
-            <Text style={[styles.defaultsText, { color: colors.textSecondary }]}>
+            <AppText style={[styles.defaultsText, { color: colors.textSecondary }]}>
               Screenshot: {settings?.vault_allow_screenshot_default ? 'On' : 'Off'}
               {'  ·  '}Save: {settings?.vault_allow_save_default ? 'On' : 'Off'}
               {'  ·  '}Share: {settings?.vault_allow_share_default ? 'On' : 'Off'}
-            </Text>
+            </AppText>
           </View>
 
           <TouchableOpacity
@@ -449,7 +450,7 @@ export default function VaultScreen() {
             style={styles.manageLink}
           >
             <Settings color="#FF2E8A" size={14} strokeWidth={2} />
-            <Text style={[styles.manageLinkText, { color: '#FF2E8A' }]}>Manage in My Profile</Text>
+            <AppText style={[styles.manageLinkText, { color: '#FF2E8A' }]}>Manage in My Profile</AppText>
           </TouchableOpacity>
 
           <View style={styles.pickerRow}>
@@ -459,8 +460,8 @@ export default function VaultScreen() {
               activeOpacity={0.75}
             >
               <ImageIcon color="#FF2E8A" size={24} strokeWidth={1.8} />
-              <Text style={[styles.pickerLabel, { color: colors.text }]}>Photo Library</Text>
-              <Text style={[styles.pickerSub, { color: colors.textMuted }]}>Choose existing</Text>
+              <AppText style={[styles.pickerLabel, { color: colors.text }]}>Photo Library</AppText>
+              <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Choose existing</AppText>
             </TouchableOpacity>
             {Platform.OS !== 'web' && (
               <TouchableOpacity
@@ -469,8 +470,8 @@ export default function VaultScreen() {
                 activeOpacity={0.75}
               >
                 <Camera color="#FF8A3D" size={24} strokeWidth={1.8} />
-                <Text style={[styles.pickerLabel, { color: colors.text }]}>Camera</Text>
-                <Text style={[styles.pickerSub, { color: colors.textMuted }]}>Take now</Text>
+                <AppText style={[styles.pickerLabel, { color: colors.text }]}>Camera</AppText>
+                <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Take now</AppText>
               </TouchableOpacity>
             )}
           </View>

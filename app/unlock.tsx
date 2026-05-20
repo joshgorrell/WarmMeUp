@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, StyleSheet, TouchableOpacity,
   Platform, Animated,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -209,12 +210,12 @@ export default function UnlockScreen() {
           {pinMissing ? (
             <View style={[styles.bioWrap, { gap: vSm }]}>
               <KeyRound color="rgba(255,179,71,0.85)" size={48} strokeWidth={1.5} />
-              <Text style={styles.title}>PIN Not Found</Text>
-              <Text style={[styles.sub, { marginBottom: vSm, paddingHorizontal: Spacing.md }]}>
+              <AppText style={styles.title}>PIN Not Found</AppText>
+              <AppText style={[styles.sub, { marginBottom: vSm, paddingHorizontal: Spacing.md }]}>
                 No PIN is saved on this device. Sign in with your password to set one up.
-              </Text>
+              </AppText>
               <TouchableOpacity style={styles.setupPinBtn} onPress={goToPassword} activeOpacity={0.8}>
-                <Text style={styles.setupPinBtnText}>Sign In with Password</Text>
+                <AppText style={styles.setupPinBtnText}>Sign In with Password</AppText>
               </TouchableOpacity>
             </View>
           ) : mode === null ? null : mode === 'biometric' && bioAvailable ? (
@@ -222,17 +223,17 @@ export default function UnlockScreen() {
               <TouchableOpacity style={styles.bioButton} onPress={tryBiometric} activeOpacity={0.75}>
                 <BiometricIcon color="#FF2E8A" size={52} strokeWidth={1.5} />
               </TouchableOpacity>
-              <Text style={styles.title}>Unlock with {biometricLabel}</Text>
-              <Text style={styles.sub}>Tap to authenticate</Text>
+              <AppText style={styles.title}>Unlock with {biometricLabel}</AppText>
+              <AppText style={styles.sub}>Tap to authenticate</AppText>
               <TouchableOpacity style={styles.altLink} onPress={() => { biometricAlreadyPrompted = false; setMode('pin'); }} activeOpacity={0.7}>
                 <KeyRound color="rgba(255,255,255,0.4)" size={14} />
-                <Text style={styles.altLinkText}>Use PIN instead</Text>
+                <AppText style={styles.altLinkText}>Use PIN instead</AppText>
               </TouchableOpacity>
             </View>
           ) : (
             <>
-              <Text style={styles.title}>Enter PIN</Text>
-              <Text style={[styles.sub, { marginBottom: vSm }]}>Enter your 4-digit Warm Me Up PIN</Text>
+              <AppText style={styles.title}>Enter PIN</AppText>
+              <AppText style={[styles.sub, { marginBottom: vSm }]}>Enter your 4-digit Warm Me Up PIN</AppText>
 
               <Animated.View style={[styles.dots, { marginBottom: vSm, transform: [{ translateX: shakeAnim }] }]}>
                 {Array.from({ length: 4 }).map((_, i) => (
@@ -244,9 +245,9 @@ export default function UnlockScreen() {
               </Animated.View>
 
               {error ? (
-                <Text style={[styles.error, { marginBottom: vXs }]}>
+                <AppText style={[styles.error, { marginBottom: vXs }]}>
                   {lockedUntil ? `Too many attempts. Try again in ${countdown}s.` : error}
-                </Text>
+                </AppText>
               ) : null}
 
               <View style={[styles.pad, { width: padWidth, gap: keyGap, opacity: lockedUntil ? 0.35 : 1 }]}>
@@ -258,7 +259,7 @@ export default function UnlockScreen() {
                     activeOpacity={k === '' ? 1 : 0.6}
                     disabled={k === '' || !!lockedUntil}
                   >
-                    <Text style={[styles.keyText, k === '⌫' && styles.keyDelete]}>{k}</Text>
+                    <AppText style={[styles.keyText, k === '⌫' && styles.keyDelete]}>{k}</AppText>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -267,12 +268,12 @@ export default function UnlockScreen() {
                 {loginMethod === 'biometric' && bioAvailable && (
                   <TouchableOpacity style={styles.altLink} onPress={tryBiometric} activeOpacity={0.7}>
                     <BiometricIcon color="rgba(255,255,255,0.4)" size={14} />
-                    <Text style={styles.altLinkText}>Use {biometricLabel}</Text>
+                    <AppText style={styles.altLinkText}>Use {biometricLabel}</AppText>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={styles.altLink} onPress={goToPassword} activeOpacity={0.7}>
                   <KeyRound color="rgba(255,255,255,0.4)" size={14} />
-                  <Text style={styles.altLinkText}>Forgot PIN? Use password</Text>
+                  <AppText style={styles.altLinkText}>Forgot PIN? Use password</AppText>
                 </TouchableOpacity>
               </View>
             </>

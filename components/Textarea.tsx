@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import {
-  TextInput as RNTextInput, View, Text, StyleSheet, TextInputProps, ViewStyle,
+  TextInput as RNTextInput, View, StyleSheet, TextInputProps, ViewStyle,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Radius } from '@/constants/theme';
 
@@ -27,11 +28,13 @@ export default function Textarea({
   return (
     <View style={containerStyle}>
       {label && (
-        <Text style={[styles.label, { color: colors.textMuted }]}>{label}</Text>
+        <AppText style={[styles.label, { color: colors.textMuted }]}>{label}</AppText>
       )}
       <RNTextInput
         {...rest}
         multiline
+        allowFontScaling={true}
+        maxFontSizeMultiplier={1.5}
         onFocus={(e) => { setFocused(true); rest.onFocus?.(e); }}
         onBlur={(e) => { setFocused(false); rest.onBlur?.(e); }}
         placeholderTextColor={colors.textMuted}
@@ -50,7 +53,7 @@ export default function Textarea({
       {charLimit && (
         <Text style={[styles.charCount, { color: colors.textMuted }]}>
           {len}/{charLimit}
-        </Text>
+        </AppText>
       )}
     </View>
   );

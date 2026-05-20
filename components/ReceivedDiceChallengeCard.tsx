@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CircleCheck as CheckCircle, Circle as XCircle, Dices, Clock } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -69,11 +70,11 @@ export default function ReceivedDiceChallengeCard({
         },
       ]}
     >
-      <Text style={[styles.label, { color: colors.textMuted }]}>
+      <AppText style={[styles.label, { color: colors.textMuted }]}>
         {stage === 'pending' && 'YOUR PARTNER ROLLED FOR YOU'}
         {stage === 'accepted' && 'CHALLENGE ACCEPTED — COMPLETE IT!'}
         {stage === 'waiting' && 'WAITING FOR PARTNER TO CONFIRM'}
-      </Text>
+      </AppText>
 
       {stage === 'pending' && expiresAt && (
         <CountdownRing
@@ -83,9 +84,9 @@ export default function ReceivedDiceChallengeCard({
         />
       )}
 
-      <Text style={[styles.text, { color: colors.text }]}>
+      <AppText style={[styles.text, { color: colors.text }]}>
         {text ?? 'They chose your next move.'}
-      </Text>
+      </AppText>
 
       {stage === 'pending' && (
         <View style={styles.row}>
@@ -108,7 +109,7 @@ export default function ReceivedDiceChallengeCard({
               ) : (
                 <>
                   <CheckCircle color="#fff" size={18} />
-                  <Text style={styles.actionText}>Challenge Accepted</Text>
+                  <AppText style={styles.actionText}>Challenge Accepted</AppText>
                 </>
               )}
             </LinearGradient>
@@ -123,7 +124,7 @@ export default function ReceivedDiceChallengeCard({
             accessibilityLabel="Decline the dice challenge"
           >
             <XCircle color={colors.textSecondary} size={18} />
-            <Text style={[styles.rejectText, { color: colors.textSecondary }]}>No Way!</Text>
+            <AppText style={[styles.rejectText, { color: colors.textSecondary }]}>No Way!</AppText>
           </TouchableOpacity>
         </View>
       )}
@@ -147,7 +148,7 @@ export default function ReceivedDiceChallengeCard({
               ) : (
                 <>
                   <Dices color="#fff" size={18} />
-                  <Text style={styles.actionText}>I Did It!</Text>
+                  <AppText style={styles.actionText}>I Did It!</AppText>
                 </>
               )}
             </LinearGradient>
@@ -158,9 +159,9 @@ export default function ReceivedDiceChallengeCard({
       {stage === 'waiting' && (
         <View style={[styles.waitingRow, { borderColor: 'rgba(51,209,122,0.25)', backgroundColor: 'rgba(51,209,122,0.07)' }]}>
           <Clock color="#33D17A" size={16} strokeWidth={2} />
-          <Text style={[styles.waitingText, { color: '#33D17A' }]}>
+          <AppText style={[styles.waitingText, { color: '#33D17A' }]}>
             Waiting for your partner to confirm...
-          </Text>
+          </AppText>
         </View>
       )}
     </View>

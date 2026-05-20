@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { View, Image, StyleSheet } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Gradient, FontSize } from '@/constants/theme';
 
@@ -40,7 +41,7 @@ export default function Avatar({ name, uri, size = 'md', bgColor }: AvatarProps)
         {uri ? (
           <Image source={{ uri }} style={{ width: dim, height: dim, borderRadius: dim / 2 }} />
         ) : (
-          <Text style={[styles.initial, { fontSize }]}>{initial}</Text>
+          <AppText style={[styles.initial, { fontSize }]}>{initial}</AppText>
         )}
       </View>
     </LinearGradient>

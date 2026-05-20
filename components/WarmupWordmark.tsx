@@ -20,6 +20,8 @@ export default function WarmupWordmark({ style, size = 13 }: WarmupWordmarkProps
   if (Platform.OS === 'web') {
     return (
       <Text
+        allowFontScaling={true}
+        maxFontSizeMultiplier={1.5}
         style={[
           styles.web,
           {

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
+  View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Image, ActivityIndicator, TextInput, Alert,
   AppState, AppStateStatus, Keyboard,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
 import { Image as ImageIcon, Camera, X, Lock, Send, Vault, Pencil, Trash2, EyeOff } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
@@ -87,12 +89,12 @@ function BubbleMenu({
       ]}>
         <TouchableOpacity style={styles.menuItem} onPress={onEdit} activeOpacity={0.75}>
           <Pencil color="#FF8A3D" size={14} strokeWidth={2} />
-          <Text style={[styles.menuText, { color: colors.text }]}>Edit</Text>
+          <AppText style={[styles.menuText, { color: colors.text }]}>Edit</AppText>
         </TouchableOpacity>
         <View style={[styles.menuDivider, { backgroundColor: 'rgba(255,255,255,0.10)' }]} />
         <TouchableOpacity style={styles.menuItem} onPress={onDelete} activeOpacity={0.75}>
           <Trash2 color="#FF4444" size={14} strokeWidth={2} />
-          <Text style={[styles.menuText, { color: '#FF4444' }]}>Delete</Text>
+          <AppText style={[styles.menuText, { color: '#FF4444' }]}>Delete</AppText>
         </TouchableOpacity>
       </View>
     </>
@@ -162,7 +164,7 @@ function MediaBubble({
         {msg.media_type === 'video' && loaded && url && (
           <View style={styles.playOverlay}>
             <View style={styles.playCircle}>
-              <Text style={styles.playTriangle}>&#9654;</Text>
+              <AppText style={styles.playTriangle}>&#9654;</AppText>
             </View>
           </View>
         )}
@@ -178,9 +180,9 @@ function MediaBubble({
             activeOpacity={0.8}
           >
             <Vault color={msg.vault_item_id ? '#4CAF50' : '#FFB347'} size={13} strokeWidth={2} />
-            <Text style={[styles.vaultBtnText, msg.vault_item_id ? styles.vaultBtnTextSaved : null]}>
+            <AppText style={[styles.vaultBtnText, msg.vault_item_id ? styles.vaultBtnTextSaved : null]}>
               {msg.vault_item_id ? 'In Vault' : 'Save to Vault'}
-            </Text>
+            </AppText>
           </TouchableOpacity>
         )}
       </View>
@@ -558,14 +560,14 @@ export default function ChatTab() {
         {showDivider && (
           <View style={styles.dateDivider}>
             <View style={[styles.dateLine, { backgroundColor: colors.borderSubtle }]} />
-            <Text style={[styles.dateText, { color: colors.textMuted }]}>{getDividerLabel(item.created_at)}</Text>
+            <AppText style={[styles.dateText, { color: colors.textMuted }]}>{getDividerLabel(item.created_at)}</AppText>
             <View style={[styles.dateLine, { backgroundColor: colors.borderSubtle }]} />
           </View>
         )}
         <View style={[styles.msgRow, isMine ? styles.msgRowRight : styles.msgRowLeft]}>
           {!isMine && (
             <View style={[styles.msgAvatar, { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
-              <Text style={styles.msgAvatarText}>{name.charAt(0).toUpperCase()}</Text>
+              <AppText style={styles.msgAvatarText}>{name.charAt(0).toUpperCase()}</AppText>
             </View>
           )}
           <TouchableOpacity
@@ -594,16 +596,16 @@ export default function ChatTab() {
                 />
               )}
               {item.content_text ? (
-                <Text style={[styles.bubbleText, { color: colors.text }]}>{item.content_text}</Text>
+                <AppText style={[styles.bubbleText, { color: colors.text }]}>{item.content_text}</AppText>
               ) : null}
               <View style={styles.bubbleMeta}>
-                <Text style={[styles.bubbleTime, { color: isMine ? 'rgba(255,255,255,0.45)' : colors.textMuted }]}>
+                <AppText style={[styles.bubbleTime, { color: isMine ? 'rgba(255,255,255,0.45)' : colors.textMuted }]}>
                   {formatTime(item.created_at)}
-                </Text>
+                </AppText>
                 {item.edited_at && (
-                  <Text style={[styles.editedLabel, { color: isMine ? 'rgba(255,255,255,0.35)' : colors.textMuted }]}>
+                  <AppText style={[styles.editedLabel, { color: isMine ? 'rgba(255,255,255,0.35)' : colors.textMuted }]}>
                     edited
-                  </Text>
+                  </AppText>
                 )}
               </View>
             </View>
@@ -628,11 +630,11 @@ export default function ChatTab() {
           {messages.length === 0 ? (
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View style={styles.emptyState}>
-                <Text style={styles.emptyEmoji}>💬</Text>
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>Start the conversation</Text>
-                <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+                <AppText style={styles.emptyEmoji}>💬</AppText>
+                <AppText style={[styles.emptyTitle, { color: colors.text }]}>Start the conversation</AppText>
+                <AppText style={[styles.emptySub, { color: colors.textSecondary }]}>
                   Send a message, photo, or video.{'\n'}Only the two of you will see it.
-                </Text>
+                </AppText>
               </View>
             </TouchableWithoutFeedback>
           ) : (
@@ -653,7 +655,7 @@ export default function ChatTab() {
           {editingState && (
             <View style={[styles.editBanner, { backgroundColor: 'rgba(255,138,61,0.12)', borderTopColor: 'rgba(255,138,61,0.3)' }]}>
               <Pencil color="#FF8A3D" size={13} strokeWidth={2} />
-              <Text style={[styles.editBannerText, { color: '#FF8A3D' }]}>Editing message</Text>
+              <AppText style={[styles.editBannerText, { color: '#FF8A3D' }]}>Editing message</AppText>
               <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <X color="#FF8A3D" size={15} strokeWidth={2.5} />
               </TouchableOpacity>
@@ -667,15 +669,15 @@ export default function ChatTab() {
                 <Image source={{ uri: attachedMedia.uri }} style={styles.previewThumb} />
                 <View style={styles.previewInfo}>
                   <Lock color="#FF8A3D" size={11} />
-                  <Text style={[styles.previewLabel, { color: colors.textMuted }]}>
+                  <AppText style={[styles.previewLabel, { color: colors.textMuted }]}>
                     {attachedMedia.type === 'video' ? 'Video' : 'Photo'} — vault privacy
-                  </Text>
+                  </AppText>
                 </View>
                 {uploadProgress && (
                   <View style={styles.uploadPctWrap}>
                     <ActivityIndicator color="#FF5A3D" size="small" />
                     {uploadPct > 0 && (
-                      <Text style={styles.uploadPctText}>{uploadPct}%</Text>
+                      <AppText style={styles.uploadPctText}>{uploadPct}%</AppText>
                     )}
                   </View>
                 )}
@@ -697,7 +699,7 @@ export default function ChatTab() {
                   )}
                 </>
               )}
-              <TextInput
+              <AppTextInput
                 ref={inputRef}
                 style={[styles.input, { color: colors.text, backgroundColor: colors.bg2 ?? 'rgba(255,255,255,0.06)' }]}
                 value={text}

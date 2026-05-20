@@ -9,7 +9,8 @@ import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, Text, AppState, AppStateStatus, Platform, Image } from 'react-native';
+import { StyleSheet, View, AppState, AppStateStatus, Platform, Image } from 'react-native';
+import AppText from '@/components/AppText';
 import type { NotificationData } from '@/lib/notifications';
 
 // Warm the image decode cache as early as possible — before the transition/unlock screens mount.
@@ -33,9 +34,9 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     if (this.state.hasError) {
       return (
         <View style={{ flex: 1, backgroundColor: '#07070A', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: '#fff', fontSize: 16, textAlign: 'center', paddingHorizontal: 32 }}>
+          <AppText style={{ color: '#fff', fontSize: 16, textAlign: 'center', paddingHorizontal: 32 }}>
             Something went wrong. Please restart the app.
-          </Text>
+          </AppText>
         </View>
       );
     }

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -58,7 +59,7 @@ export default function WelcomeScreen() {
 
         {/* Bottom: subtitle + CTAs */}
         <View style={styles.actions}>
-          <Text style={styles.subtitle}>A private space for a playful connection.</Text>
+          <AppText style={styles.subtitle}>A private space for a playful connection.</AppText>
 
           <TouchableOpacity
             style={styles.primaryBtn}
@@ -74,27 +75,27 @@ export default function WelcomeScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.primaryGrad}
             >
-              <Text style={styles.primaryLabel}>Get Started</Text>
+              <AppText style={styles.primaryLabel}>Get Started</AppText>
             </LinearGradient>
           </TouchableOpacity>
 
           <View style={styles.linkRow}>
-            <Text style={styles.linkText}>Already have a code? </Text>
+            <AppText style={styles.linkText}>Already have a code? </AppText>
             <TouchableOpacity onPress={() => router.push(codeToPreserve
               ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
               : '/(auth)/pair'
             )} activeOpacity={0.7}>
-              <Text style={styles.linkAccent}>Enter</Text>
+              <AppText style={styles.linkAccent}>Enter</AppText>
             </TouchableOpacity>
           </View>
 
           <View style={styles.linkRow}>
-            <Text style={styles.linkText}>Already have an account? </Text>
+            <AppText style={styles.linkText}>Already have an account? </AppText>
             <TouchableOpacity onPress={() => router.push(codeToPreserve
               ? { pathname: '/(auth)/login', params: { pendingCode: codeToPreserve } }
               : '/(auth)/login'
             )} activeOpacity={0.7}>
-              <Text style={styles.linkAccent}>Sign In</Text>
+              <AppText style={styles.linkAccent}>Sign In</AppText>
             </TouchableOpacity>
           </View>
 
@@ -103,7 +104,7 @@ export default function WelcomeScreen() {
             activeOpacity={0.7}
             style={styles.previewLink}
           >
-            <Text style={styles.previewLinkText}>See how it works →</Text>
+            <AppText style={styles.previewLinkText}>See how it works →</AppText>
           </TouchableOpacity>
         </View>
       </View>

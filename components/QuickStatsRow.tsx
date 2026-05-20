@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Flame, Activity, Star } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -36,8 +37,8 @@ function StatItem({
             {icon}
           </LinearGradient>
         </View>
-        <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
-        <Text style={[styles.statLabel, { color: colors.textMuted }]}>{label}</Text>
+        <AppText style={[styles.statValue, { color: colors.text }]}>{value}</AppText>
+        <AppText style={[styles.statLabel, { color: colors.textMuted }]}>{label}</AppText>
       </View>
       {showDivider && (
         <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />

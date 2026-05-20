@@ -2,12 +2,12 @@ import React from 'react';
 import {
   Modal,
   View,
-  Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
   Platform,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { X } from 'lucide-react-native';
@@ -154,8 +154,8 @@ export default function CommunityGuidelinesModal({ visible, onClose }: Props) {
         {/* Header */}
         <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? Spacing.md : insets.top + Spacing.sm }]}>
           <View style={styles.headerTextBlock}>
-            <Text style={styles.headerTitle}>Community Guidelines</Text>
-            <Text style={styles.headerSub}>How we keep this space safe and playful</Text>
+            <AppText style={styles.headerTitle}>Community Guidelines</AppText>
+            <AppText style={styles.headerSub}>How we keep this space safe and playful</AppText>
           </View>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.75}>
             <X color="rgba(255,255,255,0.70)" size={18} strokeWidth={2.2} />
@@ -168,18 +168,18 @@ export default function CommunityGuidelinesModal({ visible, onClose }: Props) {
           showsVerticalScrollIndicator={false}
         >
           {/* Intro */}
-          <Text style={styles.intro}>
+          <AppText style={styles.intro}>
             Welcome to Warm Me Up.{'\n\n'}
             Warm Me Up was created to give couples a more private, playful, and customizable space to stay connected.{'\n\n'}
             This app is built around trust, consent, privacy, respect, and fun.{'\n\n'}
             We ask every user to help keep it that way.
-          </Text>
+          </AppText>
 
           {/* Sections */}
           {SECTIONS.map((section) => (
             <View key={section.title} style={styles.section}>
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-              <Text style={styles.sectionBody}>{section.body}</Text>
+              <AppText style={styles.sectionTitle}>{section.title}</AppText>
+              <AppText style={styles.sectionBody}>{section.body}</AppText>
             </View>
           ))}
         </ScrollView>
@@ -193,7 +193,7 @@ export default function CommunityGuidelinesModal({ visible, onClose }: Props) {
               end={{ x: 1, y: 0 }}
               style={styles.doneGrad}
             >
-              <Text style={styles.doneLabel}>Close</Text>
+              <AppText style={styles.doneLabel}>Close</AppText>
             </LinearGradient>
           </TouchableOpacity>
         </View>

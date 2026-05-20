@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Platform,
+  View, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Platform,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Cloud, Wind, EyeOff, MapPin, MoveHorizontal as MoreHorizontal } from 'lucide-react-native';
@@ -179,7 +180,7 @@ export default function WeatherScreen() {
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <View style={styles.locationRow}>
           <MapPin color="rgba(255,255,255,0.8)" size={14} />
-          <Text style={styles.location}>{weather.location}</Text>
+          <AppText style={styles.location}>{weather.location}</AppText>
         </View>
 
         <View style={styles.topRight}>
@@ -195,27 +196,27 @@ export default function WeatherScreen() {
       >
         {/* Main temp */}
         <View style={styles.topSection}>
-          <Text style={[styles.temp, { fontSize: tempFontSize, lineHeight: tempFontSize * 1.08 }]}>
+          <AppText style={[styles.temp, { fontSize: tempFontSize, lineHeight: tempFontSize * 1.08 }]}>
             {weather.currentTemp}
-          </Text>
-          <Text style={styles.condition}>{weather.condition}</Text>
-          <Text style={styles.hiLo}>{weather.hiLo}</Text>
+          </AppText>
+          <AppText style={styles.condition}>{weather.condition}</AppText>
+          <AppText style={styles.hiLo}>{weather.hiLo}</AppText>
         </View>
 
         {/* Hourly */}
         <View style={styles.card}>
           <View style={styles.cardRow}>
             <Wind color="rgba(255,255,255,0.45)" size={13} />
-            <Text style={styles.cardLabel}>HOURLY FORECAST</Text>
+            <AppText style={styles.cardLabel}>HOURLY FORECAST</AppText>
           </View>
           <View style={styles.divider} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.hourlyRow}>
               {weather.hourly.map((h) => (
                 <View key={h.time} style={styles.hourItem}>
-                  <Text style={styles.hourTime}>{h.time}</Text>
-                  <Text style={styles.hourIcon}>{h.icon}</Text>
-                  <Text style={styles.hourTemp}>{h.temp}</Text>
+                  <AppText style={styles.hourTime}>{h.time}</AppText>
+                  <AppText style={styles.hourIcon}>{h.icon}</AppText>
+                  <AppText style={styles.hourTemp}>{h.temp}</AppText>
                 </View>
               ))}
             </View>
@@ -226,7 +227,7 @@ export default function WeatherScreen() {
         <View style={styles.card}>
           <View style={styles.cardRow}>
             <Cloud color="rgba(255,255,255,0.45)" size={13} />
-            <Text style={styles.cardLabel}>5-DAY FORECAST</Text>
+            <AppText style={styles.cardLabel}>5-DAY FORECAST</AppText>
           </View>
           <View style={styles.divider} />
           {weather.forecast.map((f, i) => (
@@ -234,12 +235,12 @@ export default function WeatherScreen() {
               key={f.day}
               style={[styles.forecastRow, i < weather.forecast.length - 1 && styles.forecastDivider]}
             >
-              <Text style={[styles.forecastDay, { width: forecastDayWidth }]}>{f.day}</Text>
-              <Text style={styles.forecastIcon}>{f.icon}</Text>
-              <Text style={styles.forecastCond}>{f.cond}</Text>
+              <AppText style={[styles.forecastDay, { width: forecastDayWidth }]}>{f.day}</AppText>
+              <AppText style={styles.forecastIcon}>{f.icon}</AppText>
+              <AppText style={styles.forecastCond}>{f.cond}</AppText>
               <View style={styles.forecastTemps}>
-                <Text style={styles.forecastHigh}>{f.high}</Text>
-                <Text style={styles.forecastLow}>{f.low}</Text>
+                <AppText style={styles.forecastHigh}>{f.high}</AppText>
+                <AppText style={styles.forecastLow}>{f.low}</AppText>
               </View>
             </View>
           ))}
@@ -253,8 +254,8 @@ export default function WeatherScreen() {
             { label: 'VISIBILITY', val: weather.visibility },
           ].map((e) => (
             <View key={e.label} style={styles.extraCard}>
-              <Text style={styles.extraLabel}>{e.label}</Text>
-              <Text style={styles.extraValue}>{e.val}</Text>
+              <AppText style={styles.extraLabel}>{e.label}</AppText>
+              <AppText style={styles.extraValue}>{e.val}</AppText>
             </View>
           ))}
         </View>
@@ -267,8 +268,8 @@ export default function WeatherScreen() {
       <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 24 }]}>
         <TouchableOpacity style={styles.clearBtn} onPress={handleCoastIsClear} activeOpacity={0.88}>
           <View style={styles.clearBtnInner}>
-            <Text style={styles.waveEmoji}>〰</Text>
-            <Text style={styles.clearBtnText}>The Coast is Clear</Text>
+            <AppText style={styles.waveEmoji}>〰</AppText>
+            <AppText style={styles.clearBtnText}>The Coast is Clear</AppText>
           </View>
         </TouchableOpacity>
       </View>

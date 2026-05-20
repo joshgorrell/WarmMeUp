@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Modal, ActivityIndicator, Switch,
+  View, StyleSheet, ScrollView, TouchableOpacity,
+  Modal, ActivityIndicator, Switch,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
 import { Plus, Trash2, Pencil, X, Check, ChevronDown, ChevronUp, Tag } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -218,14 +220,14 @@ export default function PromptsAdmin() {
             onPress={() => setActiveTab(tab)}
             activeOpacity={0.8}
           >
-            <Text
+            <AppText
               style={[
                 styles.tabText,
                 { color: activeTab === tab ? TAB_COLORS[tab] : colors.textMuted },
               ]}
             >
               {TAB_LABELS[tab]}
-            </Text>
+            </AppText>
           </TouchableOpacity>
         ))}
       </View>
@@ -249,16 +251,16 @@ export default function PromptsAdmin() {
               >
                 <View style={styles.labelsSectionLeft}>
                   <Tag color={accentColor} size={16} strokeWidth={2} />
-                  <Text style={[styles.labelsSectionTitle, { color: colors.text }]}>Manage Face Labels</Text>
+                  <AppText style={[styles.labelsSectionTitle, { color: colors.text }]}>Manage Face Labels</AppText>
                 </View>
                 <View style={styles.labelChipsPreview}>
                   {faceLabels.slice(0, labelsExpanded ? 0 : 4).map(l => (
                     <View key={l.id} style={[styles.labelChipSmall, { backgroundColor: `${l.color}22`, borderColor: `${l.color}55` }]}>
-                      <Text style={[styles.labelChipSmallText, { color: l.color }]}>{l.label}</Text>
+                      <AppText style={[styles.labelChipSmallText, { color: l.color }]}>{l.label}</AppText>
                     </View>
                   ))}
                   {!labelsExpanded && faceLabels.length > 4 && (
-                    <Text style={[styles.labelChipSmallText, { color: colors.textMuted }]}>+{faceLabels.length - 4}</Text>
+                    <AppText style={[styles.labelChipSmallText, { color: colors.textMuted }]}>+{faceLabels.length - 4}</AppText>
                   )}
                 </View>
                 {labelsExpanded
@@ -279,7 +281,7 @@ export default function PromptsAdmin() {
                         >
                           {confirmingLabel ? (
                             <>
-                              <Text style={[styles.labelRowName, { color: colors.danger, flex: 1 }]}>Delete label?</Text>
+                              <AppText style={[styles.labelRowName, { color: colors.danger, flex: 1 }]}>Delete label?</AppText>
                               <View style={styles.labelRowActions}>
                                 <TouchableOpacity
                                   onPress={() => setDeletingLabelId(null)}
@@ -300,7 +302,7 @@ export default function PromptsAdmin() {
                           ) : (
                             <>
                               <View style={[styles.labelColorSwatch, { backgroundColor: label.color }]} />
-                              <Text style={[styles.labelRowName, { color: colors.text }]}>{label.label}</Text>
+                              <AppText style={[styles.labelRowName, { color: colors.text }]}>{label.label}</AppText>
                               <View style={styles.labelRowActions}>
                                 <TouchableOpacity
                                   onPress={() => openEditLabel(label)}
@@ -329,7 +331,7 @@ export default function PromptsAdmin() {
                     activeOpacity={0.8}
                   >
                     <Plus color={accentColor} size={15} strokeWidth={2.5} />
-                    <Text style={[styles.addLabelBtnText, { color: accentColor }]}>Add Label</Text>
+                    <AppText style={[styles.addLabelBtnText, { color: accentColor }]}>Add Label</AppText>
                   </TouchableOpacity>
                 </View>
               )}
@@ -338,7 +340,7 @@ export default function PromptsAdmin() {
 
           {prompts.length === 0 && (
             <View style={styles.emptyWrap}>
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No prompts yet. Tap + to add one.</Text>
+              <AppText style={[styles.emptyText, { color: colors.textMuted }]}>No prompts yet. Tap + to add one.</AppText>
             </View>
           )}
           {prompts.map(p => {
@@ -359,7 +361,7 @@ export default function PromptsAdmin() {
               >
                 {confirming ? (
                   <>
-                    <Text style={[styles.promptText, { color: colors.danger, flex: 1 }]}>Delete this prompt?</Text>
+                    <AppText style={[styles.promptText, { color: colors.danger, flex: 1 }]}>Delete this prompt?</AppText>
                     <TouchableOpacity
                       onPress={() => setDeletingPromptId(null)}
                       style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.06)' }]}
@@ -378,20 +380,20 @@ export default function PromptsAdmin() {
                 ) : (
                   <>
                     <View style={{ flex: 1, gap: 4 }}>
-                      <Text style={[styles.promptText, { color: colors.text }]}>{p.text}</Text>
+                      <AppText style={[styles.promptText, { color: colors.text }]}>{p.text}</AppText>
                       <View style={styles.promptMeta}>
                         {assignedLabel && labelColor ? (
                           <View style={[styles.labelBadge, { backgroundColor: `${labelColor}22`, borderColor: `${labelColor}55` }]}>
-                            <Text style={[styles.labelBadgeText, { color: labelColor }]}>{assignedLabel}</Text>
+                            <AppText style={[styles.labelBadgeText, { color: labelColor }]}>{assignedLabel}</AppText>
                           </View>
                         ) : activeTab === 'dice' ? (
                           <View style={[styles.labelBadge, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: colors.borderSubtle }]}>
-                            <Text style={[styles.labelBadgeText, { color: colors.textMuted }]}>Any Face</Text>
+                            <AppText style={[styles.labelBadgeText, { color: colors.textMuted }]}>Any Face</AppText>
                           </View>
                         ) : null}
-                        <Text style={[styles.promptStatus, { color: p.is_active ? '#33D17A' : colors.danger }]}>
+                        <AppText style={[styles.promptStatus, { color: p.is_active ? '#33D17A' : colors.danger }]}>
                           {p.is_active ? 'Active' : 'Inactive'}
-                        </Text>
+                        </AppText>
                       </View>
                     </View>
                     <Switch
@@ -436,14 +438,14 @@ export default function PromptsAdmin() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: isDark ? '#0F0F17' : '#FFF8F3', borderColor: colors.borderSubtle }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
+              <AppText style={[styles.modalTitle, { color: colors.text }]}>
                 {editingPrompt ? 'Edit Prompt' : `New ${TAB_LABELS[activeTab]} Prompt`}
-              </Text>
+              </AppText>
               <TouchableOpacity onPress={() => setModalVisible(false)} activeOpacity={0.7}>
                 <X color={colors.textMuted} size={22} strokeWidth={2} />
               </TouchableOpacity>
             </View>
-            <TextInput
+            <AppTextInput
               style={[
                 styles.input,
                 { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.card },
@@ -456,14 +458,14 @@ export default function PromptsAdmin() {
               autoFocus
               maxLength={300}
             />
-            <Text style={[styles.charCount, { color: colors.textMuted }]}>{draftText.length}/300</Text>
+            <AppText style={[styles.charCount, { color: colors.textMuted }]}>{draftText.length}/300</AppText>
 
             {/* Face label picker — only for dice prompts */}
             {activeTab === 'dice' && faceLabels.length > 0 && (
               <View style={styles.labelPickerSection}>
-                <Text style={[styles.labelPickerTitle, { color: colors.textSecondary }]}>
+                <AppText style={[styles.labelPickerTitle, { color: colors.textSecondary }]}>
                   Face Label
-                </Text>
+                </AppText>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.labelPickerRow}>
                   <TouchableOpacity
                     style={[
@@ -476,9 +478,9 @@ export default function PromptsAdmin() {
                     onPress={() => setDraftFaceLabel(null)}
                     activeOpacity={0.75}
                   >
-                    <Text style={[styles.labelChipText, { color: draftFaceLabel === null ? colors.text : colors.textMuted }]}>
+                    <AppText style={[styles.labelChipText, { color: draftFaceLabel === null ? colors.text : colors.textMuted }]}>
                       ANY
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                   {faceLabels.map(l => {
                     const selected = draftFaceLabel === l.label;
@@ -496,9 +498,9 @@ export default function PromptsAdmin() {
                         activeOpacity={0.75}
                       >
                         <View style={[styles.labelChipDot, { backgroundColor: l.color, opacity: selected ? 1 : 0.45 }]} />
-                        <Text style={[styles.labelChipText, { color: selected ? l.color : colors.textMuted }]}>
+                        <AppText style={[styles.labelChipText, { color: selected ? l.color : colors.textMuted }]}>
                           {l.label}
-                        </Text>
+                        </AppText>
                       </TouchableOpacity>
                     );
                   })}
@@ -520,7 +522,7 @@ export default function PromptsAdmin() {
               ) : (
                 <>
                   <Check color="#fff" size={18} strokeWidth={2.5} />
-                  <Text style={styles.saveBtnText}>Save Prompt</Text>
+                  <AppText style={styles.saveBtnText}>Save Prompt</AppText>
                 </>
               )}
             </TouchableOpacity>
@@ -533,16 +535,16 @@ export default function PromptsAdmin() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: isDark ? '#0F0F17' : '#FFF8F3', borderColor: colors.borderSubtle }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
+              <AppText style={[styles.modalTitle, { color: colors.text }]}>
                 {editingLabel ? 'Edit Label' : 'New Face Label'}
-              </Text>
+              </AppText>
               <TouchableOpacity onPress={() => setLabelModalVisible(false)} activeOpacity={0.7}>
                 <X color={colors.textMuted} size={22} strokeWidth={2} />
               </TouchableOpacity>
             </View>
 
-            <Text style={[styles.labelPickerTitle, { color: colors.textSecondary }]}>Label Name</Text>
-            <TextInput
+            <AppText style={[styles.labelPickerTitle, { color: colors.textSecondary }]}>Label Name</AppText>
+            <AppTextInput
               style={[
                 styles.input,
                 styles.inputShort,
@@ -556,10 +558,10 @@ export default function PromptsAdmin() {
               maxLength={12}
             />
 
-            <Text style={[styles.labelPickerTitle, { color: colors.textSecondary, marginTop: 4 }]}>Accent Color</Text>
+            <AppText style={[styles.labelPickerTitle, { color: colors.textSecondary, marginTop: 4 }]}>Accent Color</AppText>
             <View style={styles.colorPreviewRow}>
               <View style={[styles.colorPreviewSwatch, { backgroundColor: draftLabelColor }]} />
-              <TextInput
+              <AppTextInput
                 style={[
                   styles.colorHexInput,
                   { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.card },
@@ -589,9 +591,9 @@ export default function PromptsAdmin() {
 
             {draftLabelName.trim() ? (
               <View style={styles.labelPreviewRow}>
-                <Text style={[styles.labelPickerTitle, { color: colors.textSecondary }]}>Preview</Text>
+                <AppText style={[styles.labelPickerTitle, { color: colors.textSecondary }]}>Preview</AppText>
                 <View style={[styles.labelBadge, { backgroundColor: `${draftLabelColor}22`, borderColor: `${draftLabelColor}55` }]}>
-                  <Text style={[styles.labelBadgeText, { color: draftLabelColor }]}>{draftLabelName.trim().toUpperCase()}</Text>
+                  <AppText style={[styles.labelBadgeText, { color: draftLabelColor }]}>{draftLabelName.trim().toUpperCase()}</AppText>
                 </View>
               </View>
             ) : null}
@@ -610,7 +612,7 @@ export default function PromptsAdmin() {
               ) : (
                 <>
                   <Check color="#fff" size={18} strokeWidth={2.5} />
-                  <Text style={styles.saveBtnText}>Save Label</Text>
+                  <AppText style={styles.saveBtnText}>Save Label</AppText>
                 </>
               )}
             </TouchableOpacity>

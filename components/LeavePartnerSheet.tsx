@@ -1,7 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator,
+  View, Modal, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
+import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, TriangleAlert as AlertTriangle, ArrowLeft } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -99,9 +101,9 @@ export default function LeavePartnerSheet({ visible, onClose, partnerName }: Lea
                   <ArrowLeft color={colors.textMuted} size={18} strokeWidth={2} />
                 </TouchableOpacity>
               )}
-              <Text style={[styles.title, { color: colors.text }]}>
+              <AppText style={[styles.title, { color: colors.text }]}>
                 {step === 1 ? 'End Partner Connection' : 'Are you sure?'}
-              </Text>
+              </AppText>
             </View>
             <TouchableOpacity
               onPress={resetAndClose}
@@ -155,9 +157,9 @@ function Step1({
         <AlertTriangle color="#FF5A5F" size={28} strokeWidth={1.8} />
       </View>
 
-      <Text style={[styles.bodyTitle, { color: colors.text }]}>
+      <AppText style={[styles.bodyTitle, { color: colors.text }]}>
         Before you continue
-      </Text>
+      </AppText>
 
       <View style={styles.bulletList}>
         <BulletItem colors={colors} text={`Your connection with ${partnerName} will be removed.`} />
@@ -166,9 +168,9 @@ function Step1({
         <BulletItem colors={colors} text="Reconnecting later requires a new invite code." />
       </View>
 
-      <Text style={[styles.bodyNote, { color: colors.textMuted }]}>
+      <AppText style={[styles.bodyNote, { color: colors.textMuted }]}>
         This action affects both partners. It cannot be undone automatically.
-      </Text>
+      </AppText>
 
       <View style={styles.buttonRow}>
         <TouchableOpacity
@@ -176,14 +178,14 @@ function Step1({
           onPress={onKeepConnected}
           activeOpacity={0.75}
         >
-          <Text style={[styles.keepBtnText, { color: colors.textSecondary }]}>Keep Connected</Text>
+          <AppText style={[styles.keepBtnText, { color: colors.textSecondary }]}>Keep Connected</AppText>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.continueBtn, { borderColor: 'rgba(255,90,95,0.35)', backgroundColor: 'rgba(255,90,95,0.08)' }]}
           onPress={onContinue}
           activeOpacity={0.75}
         >
-          <Text style={[styles.continueBtnText]}>Continue</Text>
+          <AppText style={[styles.continueBtnText]}>Continue</AppText>
         </TouchableOpacity>
       </View>
     </View>
@@ -211,15 +213,15 @@ function Step2({
 }) {
   return (
     <View style={styles.body}>
-      <Text style={[styles.step2Subtitle, { color: colors.textSecondary }]}>
+      <AppText style={[styles.step2Subtitle, { color: colors.textSecondary }]}>
         This cannot be undone automatically. To confirm, type the word below.
-      </Text>
+      </AppText>
 
       <View style={[styles.confirmWordWrap, { backgroundColor: 'rgba(255,90,95,0.07)', borderColor: 'rgba(255,90,95,0.25)' }]}>
-        <Text style={[styles.confirmWord]}>Leave</Text>
+        <AppText style={[styles.confirmWord]}>Leave</AppText>
       </View>
 
-      <TextInput
+      <AppTextInput
         style={[
           styles.confirmInput,
           {
@@ -240,7 +242,7 @@ function Step2({
       />
 
       {error && (
-        <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
+        <AppText style={[styles.errorText, { color: colors.danger }]}>{error}</AppText>
       )}
 
       <TouchableOpacity
@@ -257,14 +259,14 @@ function Step2({
         {leaving ? (
           <ActivityIndicator color="#fff" size="small" />
         ) : (
-          <Text style={[styles.leaveBtnText, { color: canConfirm ? '#fff' : 'rgba(255,90,95,0.45)' }]}>
+          <AppText style={[styles.leaveBtnText, { color: canConfirm ? '#fff' : 'rgba(255,90,95,0.45)' }]}>
             End Connection
-          </Text>
+          </AppText>
         )}
       </TouchableOpacity>
 
       <TouchableOpacity onPress={onBack} activeOpacity={0.7} style={styles.goBackLink}>
-        <Text style={[styles.goBackText, { color: colors.textMuted }]}>Go back</Text>
+        <AppText style={[styles.goBackText, { color: colors.textMuted }]}>Go back</AppText>
       </TouchableOpacity>
     </View>
   );
@@ -274,7 +276,7 @@ function BulletItem({ colors, text }: { colors: any; text: string }) {
   return (
     <View style={styles.bulletRow}>
       <View style={[styles.bulletDot, { backgroundColor: 'rgba(255,90,95,0.55)' }]} />
-      <Text style={[styles.bulletText, { color: colors.textSecondary }]}>{text}</Text>
+      <AppText style={[styles.bulletText, { color: colors.textSecondary }]}>{text}</AppText>
     </View>
   );
 }

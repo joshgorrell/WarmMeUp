@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -95,7 +96,7 @@ export default function PairedCelebrationScreen() {
         onPress={handleSkip}
         activeOpacity={0.7}
       >
-        <Text style={styles.skipText}>Skip</Text>
+        <AppText style={styles.skipText}>Skip</AppText>
       </TouchableOpacity>
 
       <View style={[styles.container, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }, centerStyle]}>
@@ -140,17 +141,17 @@ export default function PairedCelebrationScreen() {
 
         {/* Content */}
         <Animated.View style={[styles.content, contentAnimStyle]}>
-          <Text style={styles.heading}>You're connected!</Text>
+          <AppText style={styles.heading}>You're connected!</AppText>
           {partnerName ? (
-            <Text style={styles.sub}>
-              You and <Text style={styles.partnerName}>{partnerName}</Text> are now paired.{'\n'}
+            <AppText style={styles.sub}>
+              You and <AppText style={styles.partnerName}>{partnerName}</AppText> are now paired.{'\n'}
               Your private space is ready.
-            </Text>
+            </AppText>
           ) : (
-            <Text style={styles.sub}>
+            <AppText style={styles.sub}>
               You and your partner are now paired.{'\n'}
               Your private space is ready.
-            </Text>
+            </AppText>
           )}
 
           <View style={styles.divider} />
@@ -162,8 +163,8 @@ export default function PairedCelebrationScreen() {
               { emoji: '🔒', label: 'Share privately' },
             ].map((f) => (
               <View key={f.label} style={styles.featureChip}>
-                <Text style={styles.featureEmoji}>{f.emoji}</Text>
-                <Text style={styles.featureLabel}>{f.label}</Text>
+                <AppText style={styles.featureEmoji}>{f.emoji}</AppText>
+                <AppText style={styles.featureLabel}>{f.label}</AppText>
               </View>
             ))}
           </View>
@@ -175,7 +176,7 @@ export default function PairedCelebrationScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.ctaGrad}
             >
-              <Text style={styles.ctaLabel}>Let's go</Text>
+              <AppText style={styles.ctaLabel}>Let's go</AppText>
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>

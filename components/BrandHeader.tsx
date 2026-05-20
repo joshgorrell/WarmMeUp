@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import WarmupLogo from './WarmupLogo';
 import WarmupWordmark from './WarmupWordmark';
@@ -34,7 +35,7 @@ export default function BrandHeader({
       {/* Right: temp + avatar or custom slot */}
       <View style={styles.right}>
         <TouchableOpacity onPress={() => router.replace('/weather')} activeOpacity={0.7} style={styles.tempBtn} disabled={!temp}>
-          <Text style={styles.tempText}>{temp}</Text>
+          <AppText style={styles.tempText}>{temp}</AppText>
         </TouchableOpacity>
         {rightSlot ?? (
           avatarName && onAvatarPress ? (

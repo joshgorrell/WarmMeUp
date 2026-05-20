@@ -1,5 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ViewStyle, View } from 'react-native';
+import { TouchableOpacity, StyleSheet, ViewStyle, View } from 'react-native';
+import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/context/ThemeContext';
 import { Gradient, Radius, FontSize } from '@/constants/theme';
@@ -43,7 +44,7 @@ export default function PillButton({
         >
           <View style={styles.row}>
             {leftIcon}
-            <Text style={[styles.label, { color: '#fff' }]}>{label}</Text>
+            <AppText style={[styles.label, { color: '#fff' }]}>{label}</AppText>
             {rightIcon}
           </View>
         </LinearGradient>
@@ -68,7 +69,7 @@ export default function PillButton({
     >
       <View style={styles.row}>
         {leftIcon}
-        <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
+        <AppText style={[styles.label, { color: colors.textSecondary }]}>{label}</AppText>
         {rightIcon}
       </View>
     </TouchableOpacity>

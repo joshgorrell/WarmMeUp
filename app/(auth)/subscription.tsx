@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -105,10 +105,10 @@ export default function SubscriptionScreen() {
             <WarmupBrand logoSize={logoSize} showTagline={false} />
           </View>
 
-          <Text style={styles.heading}>Unlock everything</Text>
-          <Text style={styles.sub}>
+          <AppText style={styles.heading}>Unlock everything</AppText>
+          <AppText style={styles.sub}>
             One subscription covers you both. Your partner joins free.
-          </Text>
+          </AppText>
 
           {/* Feature list */}
           <View style={[styles.featureList, { marginBottom: height < 700 ? 20 : 28 }]}>
@@ -117,7 +117,7 @@ export default function SubscriptionScreen() {
                 <View style={styles.featureIcon}>
                   <Icon color="#FF5A3D" size={15} strokeWidth={2} />
                 </View>
-                <Text style={styles.featureText}>{text}</Text>
+                <AppText style={styles.featureText}>{text}</AppText>
               </View>
             ))}
           </View>
@@ -141,7 +141,7 @@ export default function SubscriptionScreen() {
                         end={{ x: 1, y: 0 }}
                         style={styles.planBadgeGrad}
                       >
-                        <Text style={styles.planBadgeText}>{plan.badge}</Text>
+                        <AppText style={styles.planBadgeText}>{plan.badge}</AppText>
                       </LinearGradient>
                     </View>
                   )}
@@ -151,18 +151,18 @@ export default function SubscriptionScreen() {
                       {active && <View style={styles.radioDot} />}
                     </View>
                     <View>
-                      <Text style={[styles.planLabel, active && styles.planLabelActive]}>
+                      <AppText style={[styles.planLabel, active && styles.planLabelActive]}>
                         {plan.label}
-                      </Text>
-                      <Text style={styles.planSub}>{plan.sub}</Text>
+                      </AppText>
+                      <AppText style={styles.planSub}>{plan.sub}</AppText>
                     </View>
                   </View>
 
                   <View style={styles.planRight}>
-                    <Text style={[styles.planPrice, active && styles.planPriceActive]}>
+                    <AppText style={[styles.planPrice, active && styles.planPriceActive]}>
                       {plan.price}
-                    </Text>
-                    <Text style={styles.planPeriod}>{plan.period}</Text>
+                    </AppText>
+                    <AppText style={styles.planPeriod}>{plan.period}</AppText>
                   </View>
                 </TouchableOpacity>
               );
@@ -182,24 +182,24 @@ export default function SubscriptionScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.ctaGrad}
             >
-              <Text style={styles.ctaLabel}>
+              <AppText style={styles.ctaLabel}>
                 {loading
                   ? 'Starting…'
                   : selected === 'trial'
                   ? 'Start Free Trial'
                   : `Subscribe — ${selectedPlan.price}/${selected === 'monthly' ? 'mo' : 'yr'}`}
-              </Text>
+              </AppText>
             </LinearGradient>
           </TouchableOpacity>
 
-          <Text style={styles.legal}>
+          <AppText style={styles.legal}>
             {selected === 'trial'
               ? 'No credit card required. Cancel before 7 days to avoid charges.'
               : 'Subscription auto-renews. Cancel anytime in your account settings.'}
-          </Text>
+          </AppText>
 
           <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} style={styles.restoreBtn}>
-            <Text style={styles.restoreText}>Restore Purchase</Text>
+            <AppText style={styles.restoreText}>Restore Purchase</AppText>
           </TouchableOpacity>
         </View>
       </ScrollView>

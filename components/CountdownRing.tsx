@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import AppText from '@/components/AppText';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 
 const SIZE = 88;
@@ -99,8 +100,8 @@ export default function CountdownRing({ expiresAt, totalSeconds, onExpire }: Cou
         />
       </Svg>
       <View style={styles.textWrap} pointerEvents="none">
-        <Text style={[styles.timeText, fraction <= 0.083 && styles.urgent]}>{timeText}</Text>
-        <Text style={styles.label}>left</Text>
+        <AppText style={[styles.timeText, fraction <= 0.083 && styles.urgent]}>{timeText}</AppText>
+        <AppText style={styles.label}>left</AppText>
       </View>
     </View>
   );
