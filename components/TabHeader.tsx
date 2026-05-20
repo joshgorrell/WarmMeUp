@@ -21,10 +21,10 @@ export default function TabHeader({ rightSlot }: TabHeaderProps) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.brand}>
+      <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/')} activeOpacity={0.7} style={styles.brand}>
         <WarmupLogo size={28} />
         <WarmupWordmark size={13} />
-      </View>
+      </TouchableOpacity>
       <View style={styles.right}>
         <TouchableOpacity onPress={() => router.replace('/weather')} activeOpacity={0.7} style={styles.tempBtn} disabled={!temp}>
           <AppText style={styles.tempText}>{temp}</AppText>

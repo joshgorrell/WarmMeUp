@@ -693,7 +693,7 @@ export default function WishTab() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>('shared');
   const [wishes, setWishes] = useState<WishWithReactions[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingWish, setEditingWish] = useState<WishWithReactions | null>(null);
   const [fulfillWish, setFulfillWish] = useState<WishWithReactions | null>(null);
@@ -708,6 +708,7 @@ export default function WishTab() {
 
   const loadWishes = useCallback(async () => {
     if (!couple?.id) return;
+    setLoading(true);
     const { data: wishData } = await supabase
       .from('wishes')
       .select('*')
@@ -733,7 +734,8 @@ export default function WishTab() {
   }, [couple?.id]);
 
   useEffect(() => {
-    if (authLoading || !couple?.id) return;
+    if (authLoading) return;
+    if (!couple?.id) { setLoading(false); return; }
     loadWishes();
     const ch = supabase.channel(`wish_tab_${couple.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wishes', filter: `couple_id=eq.${couple.id}` }, loadWishes)
