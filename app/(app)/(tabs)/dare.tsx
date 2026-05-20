@@ -165,21 +165,21 @@ export default function DareTab() {
     setError('');
     try {
       const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-      if (!partnerId) throw new Error('Partner not connected yet');
+      const receiverId = partnerId ?? user.id;
       await deactivatePreviousEphemeral(couple.id);
       const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
       const { error: insertError } = await supabase.from('interactions').insert({
         couple_id: couple.id,
         type: 'dare',
         sender_id: user.id,
-        receiver_id: partnerId,
+        receiver_id: receiverId,
         content_text: dareText.trim(),
         status: 'sent',
         is_active: true,
         expires_at: expiresAt,
       });
       if (insertError) throw insertError;
-      notifyPartner({ event_type: 'new_dare', couple_id: couple.id, target_route: '/(app)/(tabs)/dare' });
+      if (partnerId) notifyPartner({ event_type: 'new_dare', couple_id: couple.id, target_route: '/(app)/(tabs)/dare' });
       setSent(true);
       await checkStates();
     } catch {

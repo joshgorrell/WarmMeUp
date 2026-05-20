@@ -85,13 +85,13 @@ export default function DareScreen() {
     setError('');
     try {
       const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-      if (!partnerId) throw new Error('Partner not connected yet');
+      const receiverId = partnerId ?? user.id;
       await deactivatePreviousEphemeral(couple.id);
       const { data, error: insertError } = await supabase.from('interactions').insert({
         couple_id: couple.id,
         type: 'dare',
         sender_id: user.id,
-        receiver_id: partnerId,
+        receiver_id: receiverId,
         content_text: mode === 'text_me' ? dareText.trim() : null,
         mode,
         status: 'sent',

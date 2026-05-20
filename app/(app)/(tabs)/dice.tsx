@@ -231,34 +231,33 @@ export default function DiceTab() {
         try {
           if (couple?.id && user) {
             const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-            if (partnerId) {
-              await deactivatePreviousEphemeral(couple.id);
-              const diceExpiresAt = forPartner
-                ? new Date(Date.now() + expirySeconds * 1000).toISOString()
-                : null;
-              const { data: interaction, error: insertError } = await supabase
-                .from('interactions')
-                .insert({
-                  couple_id: couple.id,
-                  type: 'dice',
-                  sender_id: user.id,
-                  receiver_id: partnerId,
-                  content_text: prompt,
-                  status: 'sent',
-                  is_active: true,
-                  rolled_for: rolledFor,
-                  ...(diceExpiresAt ? { expires_at: diceExpiresAt } : {}),
-                })
-                .select()
-                .single();
-              if (insertError) throw insertError;
-              if (interaction && !forPartner) {
-                await awardPoints(couple.id, user.id, 1, 'Dice self-roll sent', interaction.id);
-              }
-              if (forPartner) {
-                notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice' });
-                await checkStates();
-              }
+            const receiverId = partnerId ?? user.id;
+            await deactivatePreviousEphemeral(couple.id);
+            const diceExpiresAt = forPartner
+              ? new Date(Date.now() + expirySeconds * 1000).toISOString()
+              : null;
+            const { data: interaction, error: insertError } = await supabase
+              .from('interactions')
+              .insert({
+                couple_id: couple.id,
+                type: 'dice',
+                sender_id: user.id,
+                receiver_id: receiverId,
+                content_text: prompt,
+                status: 'sent',
+                is_active: true,
+                rolled_for: rolledFor,
+                ...(diceExpiresAt ? { expires_at: diceExpiresAt } : {}),
+              })
+              .select()
+              .single();
+            if (insertError) throw insertError;
+            if (interaction && !forPartner) {
+              await awardPoints(couple.id, user.id, 1, 'Dice self-roll sent', interaction.id);
+            }
+            if (forPartner && partnerId) {
+              notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice' });
+              await checkStates();
             }
           }
           showResult(prompt, 'you');
