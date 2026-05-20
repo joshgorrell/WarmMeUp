@@ -13,7 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { VaultItem } from '@/lib/types';
 import { awardPoints } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
-import { uploadMediaFile, PICKER_OPTIONS } from '@/lib/uploadMedia';
+import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType } from '@/lib/uploadMedia';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLayout } from '@/hooks/useLayout';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
@@ -269,7 +269,7 @@ export default function VaultScreen() {
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
-      await uploadToVault(asset.uri, isVideo ? 'video' : 'photo', isVideo ? 'video/mp4' : 'image/jpeg');
+      await uploadToVault(asset.uri, isVideo ? 'video' : 'photo', resolveAssetMimeType(asset));
     } catch (e: any) {
       setUploading(false);
       Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
@@ -296,7 +296,7 @@ export default function VaultScreen() {
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
-      await uploadToVault(asset.uri, isVideo ? 'video' : 'photo', isVideo ? 'video/mp4' : 'image/jpeg');
+      await uploadToVault(asset.uri, isVideo ? 'video' : 'photo', resolveAssetMimeType(asset));
     } catch (e: any) {
       setUploading(false);
       Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');

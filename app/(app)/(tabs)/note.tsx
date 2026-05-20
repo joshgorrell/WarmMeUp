@@ -13,7 +13,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { awardPoints, getPointValue, incrementMonthlyCounter } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
-import { uploadMediaFile, PICKER_OPTIONS } from '@/lib/uploadMedia';
+import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType } from '@/lib/uploadMedia';
 import { ChatMessage } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
@@ -286,7 +286,7 @@ export default function ChatTab() {
       setAttachedMedia({
         uri: asset.uri,
         type: isVideo ? 'video' : 'photo',
-        mimeType: isVideo ? 'video/mp4' : 'image/jpeg',
+        mimeType: resolveAssetMimeType(asset),
         fileName: `chat_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`,
       });
     } catch (e: any) {
