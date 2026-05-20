@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -12,7 +12,16 @@ const TAGLINE_SOURCE = require('@/assets/images/image_(2).png');
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { pendingCode, prefilledCode, code } = useLocalSearchParams<{ pendingCode?: string; prefilledCode?: string; code?: string }>();
+  const codeToPreserve = (pendingCode || prefilledCode || code || '').toUpperCase().trim();
   const insets = useSafeAreaInsets();
+
+  // If a code arrived via deep-link params, forward immediately to pair screen.
+  useEffect(() => {
+    if (codeToPreserve) {
+      router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } });
+    }
+  }, [codeToPreserve]);
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const logoSize = Math.min(Math.round(width * 0.38), 180);
   const wordmarkSize = Math.round(logoSize * 0.16);
@@ -53,7 +62,10 @@ export default function WelcomeScreen() {
 
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => router.push('/(auth)/register')}
+            onPress={() => router.push(codeToPreserve
+              ? { pathname: '/(auth)/register', params: { pendingCode: codeToPreserve } }
+              : '/(auth)/register'
+            )}
             activeOpacity={0.85}
           >
             <LinearGradient
@@ -68,14 +80,20 @@ export default function WelcomeScreen() {
 
           <View style={styles.linkRow}>
             <Text style={styles.linkText}>Already have a code? </Text>
-            <TouchableOpacity onPress={() => router.push('/(auth)/pair')} activeOpacity={0.7}>
+            <TouchableOpacity onPress={() => router.push(codeToPreserve
+              ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
+              : '/(auth)/pair'
+            )} activeOpacity={0.7}>
               <Text style={styles.linkAccent}>Enter</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.linkRow}>
             <Text style={styles.linkText}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/(auth)/login')} activeOpacity={0.7}>
+            <TouchableOpacity onPress={() => router.push(codeToPreserve
+              ? { pathname: '/(auth)/login', params: { pendingCode: codeToPreserve } }
+              : '/(auth)/login'
+            )} activeOpacity={0.7}>
               <Text style={styles.linkAccent}>Sign In</Text>
             </TouchableOpacity>
           </View>

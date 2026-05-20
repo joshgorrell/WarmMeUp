@@ -3,10 +3,11 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { signInWithProvider, isOAuthSupported } from '@/lib/oauth';
+import { savePendingCode } from '@/lib/inviteCode';
 import WarmupBrand from '@/components/WarmupBrand';
 import PrimaryButton from '@/components/PrimaryButton';
 import AppleIcon from '@/components/icons/AppleIcon';
@@ -20,6 +21,8 @@ const INPUT_PAD = 14;
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { pendingCode, prefilledCode } = useLocalSearchParams<{ pendingCode?: string; prefilledCode?: string }>();
+  const codeToPreserve = (pendingCode || prefilledCode || '').toUpperCase().trim();
   const { width, isTablet, contentMaxWidth } = useLayout();
   const logoSize = Math.min(Math.round(width * 0.18), 72);
   const sloganWidth = Math.min(Math.round(width * 0.52), 210);
@@ -40,7 +43,11 @@ export default function LoginScreen() {
     try {
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) throw err;
-      router.replace('/transition');
+      if (codeToPreserve) {
+        router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } });
+      } else {
+        router.replace('/transition');
+      }
     } catch (e: any) {
       setError(e.message || 'Sign in failed.');
     } finally {
@@ -52,6 +59,8 @@ export default function LoginScreen() {
     setError('');
     setOauthLoading(provider);
     try {
+      // Persist code before OAuth redirect — app may restart during the flow.
+      if (codeToPreserve) await savePendingCode(codeToPreserve);
       const session = await signInWithProvider(provider);
       if (!session) return;
 
@@ -63,9 +72,15 @@ export default function LoginScreen() {
           .eq('id', userId)
           .maybeSingle();
         if (!existing) {
-          router.replace('/(auth)/setup-pin');
+          router.replace(codeToPreserve
+            ? { pathname: '/(auth)/setup-pin', params: { pendingCode: codeToPreserve } }
+            : '/(auth)/setup-pin'
+          );
         } else {
-          router.replace('/transition');
+          router.replace(codeToPreserve
+            ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
+            : '/transition'
+          );
         }
       }
     } catch (e: any) {
@@ -188,7 +203,10 @@ export default function LoginScreen() {
           {/* Footer */}
           <TouchableOpacity
             style={[styles.footerLink, { marginTop: V_SM }]}
-            onPress={() => router.replace('/(auth)/register')}
+            onPress={() => router.replace(codeToPreserve
+              ? { pathname: '/(auth)/register', params: { pendingCode: codeToPreserve } }
+              : '/(auth)/register'
+            )}
             activeOpacity={0.7}
           >
             <Text style={styles.footerText}>

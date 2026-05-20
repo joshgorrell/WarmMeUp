@@ -539,7 +539,7 @@ export default function AccountScreen() {
   };
 
   const handleInvitePartner = async () => {
-    if (!user) return;
+    if (!user || creatingCouple) return;
     if (couple?.invite_code) { handleShareCode(); return; }
     setCreatingCouple(true);
     try {
