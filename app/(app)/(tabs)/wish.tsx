@@ -297,7 +297,7 @@ function WishForm({
       setUploading(true);
       const response = await fetch(asset.uri);
       const blob = await response.blob();
-      const storagePath = `wishes/${couple.id}/${user.id}/${Date.now()}.jpg`;
+      const storagePath = `${couple.id}/${user.id}/wish_${Date.now()}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from('vault')
         .upload(storagePath, blob, { contentType: 'image/jpeg', upsert: false });
@@ -551,7 +551,7 @@ function FulfillSheet({
       setUploading(true);
       const resp = await fetch(asset.uri);
       const blob = await resp.blob();
-      const path = `wishes/memories/${couple.id}/${Date.now()}.jpg`;
+      const path = `${couple.id}/${user.id}/wish_memory_${Date.now()}.jpg`;
       const { error: upErr } = await supabase.storage.from('vault').upload(path, blob, { contentType: 'image/jpeg' });
       if (upErr) throw upErr;
       setMemImgPath(path);
