@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ScrollView,
-  KeyboardAvoidingView, Platform, Animated, Modal, ActivityIndicator,
+  KeyboardAvoidingView, Platform, Animated, Modal,
   Pressable, Linking,
 } from 'react-native';
 import AppText from '@/components/AppText';
@@ -688,7 +688,7 @@ function FulfillSheet({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function WishTab() {
-  const { user, couple, loading: authLoading } = useAuth();
+  const { user, couple } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>('shared');
@@ -734,7 +734,6 @@ export default function WishTab() {
   }, [couple?.id]);
 
   useEffect(() => {
-    if (authLoading) return;
     if (!couple?.id) { setLoading(false); return; }
     loadWishes();
     const ch = supabase.channel(`wish_tab_${couple.id}`)
@@ -742,7 +741,7 @@ export default function WishTab() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wish_reactions' }, loadWishes)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [authLoading, couple?.id, loadWishes]);
+  }, [couple?.id, loadWishes]);
 
   const handleTabPress = (key: TabKey, idx: number) => {
     setActiveTab(key);
@@ -836,9 +835,19 @@ export default function WishTab() {
 
       {/* Content */}
       {loading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator color={WISH_ACCENT} />
-        </View>
+        <ScrollView
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+          showsVerticalScrollIndicator={false}
+          pointerEvents="none"
+        >
+          {[0.9, 0.7, 0.8].map((opacity, i) => (
+            <View key={i} style={[styles.skeletonCard, { borderColor: colors.borderSubtle, opacity }]}>
+              <View style={[styles.skeletonLine, { width: '40%', height: 10, backgroundColor: colors.borderSubtle }]} />
+              <View style={[styles.skeletonLine, { width: '75%', height: 14, backgroundColor: colors.borderSubtle }]} />
+              <View style={[styles.skeletonLine, { width: '55%', height: 10, backgroundColor: colors.borderSubtle }]} />
+            </View>
+          ))}
+        </ScrollView>
       ) : (
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
@@ -929,8 +938,9 @@ const styles = StyleSheet.create({
   tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 10 },
   tabBtnLabel: { fontSize: 13, letterSpacing: 0.1 },
 
-  // Loading / empty
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
+  // Skeleton
+  skeletonCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: 10 },
+  skeletonLine: { borderRadius: 6 },
   emptyWrap: { alignItems: 'center', paddingTop: 56, paddingHorizontal: Spacing.xl, gap: 12 },
   emptyIconWrap: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   emptyTitle: { fontSize: FontSize.lg, fontFamily: 'Inter-SemiBold', textAlign: 'center' },
