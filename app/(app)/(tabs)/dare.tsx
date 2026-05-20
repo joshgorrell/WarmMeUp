@@ -56,7 +56,7 @@ const FALLBACK_DARES = [
 ];
 
 export default function DareTab() {
-  const { user, couple, settings } = useAuth();
+  const { user, couple, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
@@ -179,7 +179,7 @@ export default function DareTab() {
         expires_at: expiresAt,
       });
       if (insertError) throw insertError;
-      if (partnerId) notifyPartner({ event_type: 'new_dare', couple_id: couple.id, target_route: '/(app)/(tabs)/dare' });
+      if (partnerId) notifyPartner({ event_type: 'new_dare', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
       setSent(true);
       await checkStates();
     } catch {
@@ -194,7 +194,7 @@ export default function DareTab() {
     const status = accepted ? 'accepted' : 'rejected';
     await supabase.from('interactions').update({ status, is_active: false }).eq('id', incomingDare.id);
     const eventType = accepted ? 'dare_accepted' : 'dare_rejected';
-    notifyPartner({ event_type: eventType, couple_id: couple.id, target_route: '/(app)/(tabs)/dare' });
+    notifyPartner({ event_type: eventType, couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
     if (accepted) {
       const pts = await getPointValue('dare_accept');
       await awardPoints(couple.id, user.id, pts, 'Dare accepted', incomingDare.id);
@@ -225,7 +225,7 @@ export default function DareTab() {
         'dare_complete'
       );
       await incrementMonthlyCounter(couple.id, pendingVerification.receiver_id, 'dares_completed', completePts);
-      notifyPartner({ event_type: 'dare_completed', couple_id: couple.id, target_route: '/(app)/(tabs)/dare' });
+      notifyPartner({ event_type: 'dare_completed', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
       setPendingVerification(null);
     } catch {
       setError('Could not verify. Please try again.');

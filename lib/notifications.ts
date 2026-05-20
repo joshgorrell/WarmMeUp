@@ -67,6 +67,8 @@ export async function clearPushToken(userId: string) {
 
 /**
  * Fire-and-forget: call the notify-partner Edge Function.
+ * Pass partnerUserId to skip the call entirely when the user has no partner yet
+ * (avoids a 404 on solo / pending-pair couples).
  * Silently swallows errors — never block the UI on this.
  */
 export async function notifyPartner(payload: {
@@ -74,7 +76,11 @@ export async function notifyPartner(payload: {
   couple_id: string;
   target_route?: string;
   item_id?: string;
+  partnerUserId?: string | null;
 }) {
+  // No partner connected yet — nothing to notify
+  if ('partnerUserId' in payload && !payload.partnerUserId) return;
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;

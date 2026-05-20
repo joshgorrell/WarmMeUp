@@ -51,7 +51,7 @@ export default function Textarea({
         textAlignVertical="top"
       />
       {charLimit && (
-        <Text style={[styles.charCount, { color: colors.textMuted }]}>
+        <AppText style={[styles.charCount, { color: colors.textMuted }]}>
           {len}/{charLimit}
         </AppText>
       )}

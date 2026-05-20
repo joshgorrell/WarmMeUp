@@ -26,6 +26,9 @@ async function uploadNative(
   mimeType: string,
   onProgress?: (pct: number) => void,
 ): Promise<UploadResult> {
+  // getUser() validates the token server-side and triggers a refresh if expired,
+  // then we re-read the session to get the freshened access_token.
+  await supabase.auth.getUser();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
 
@@ -103,7 +106,7 @@ export const PICKER_OPTIONS = {
  * iOS often reports image/heic but transcodes to JPEG when quality < 1,
  * so we normalise HEIC/HEIF → image/jpeg to match the bucket allow-list.
  */
-export function resolveAssetMimeType(asset: { mimeType?: string | null; type?: string }): string {
+export function resolveAssetMimeType(asset: { mimeType?: string | null; type?: string | null }): string {
   const raw = asset.mimeType?.toLowerCase() ?? '';
   if (raw === 'image/heic' || raw === 'image/heif' || raw === 'image/heif-sequence') {
     return 'image/jpeg';

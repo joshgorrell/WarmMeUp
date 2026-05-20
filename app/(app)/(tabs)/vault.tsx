@@ -26,7 +26,7 @@ import { FontSize, Spacing, Radius, NavHeight } from '@/constants/theme';
 
 export default function VaultScreen() {
   const router = useRouter();
-  const { user, couple, settings, isAuthenticatingRef } = useAuth();
+  const { user, couple, partnerProfile, settings, isAuthenticatingRef } = useAuth();
   const { colors } = useTheme();
   const { width, cols } = useLayout();
   const insets = useSafeAreaInsets();
@@ -245,7 +245,7 @@ export default function VaultScreen() {
       });
       if (dbError) throw dbError;
       awardPoints(couple.id, user.id, 5, 'Vault media added');
-      notifyPartner({ event_type: 'new_vault_item', couple_id: couple.id, target_route: '/(app)/(tabs)/vault' });
+      notifyPartner({ event_type: 'new_vault_item', couple_id: couple.id, target_route: '/(app)/(tabs)/vault', partnerUserId: partnerProfile?.id });
       await load();
     } catch (e: any) {
       Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');

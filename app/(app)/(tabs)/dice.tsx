@@ -66,7 +66,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 type RolledFor = 'self' | 'partner';
 
 export default function DiceTab() {
-  const { user, couple, settings } = useAuth();
+  const { user, couple, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
@@ -256,7 +256,7 @@ export default function DiceTab() {
               await awardPoints(couple.id, user.id, 1, 'Dice self-roll sent', interaction.id);
             }
             if (forPartner && partnerId) {
-              notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice' });
+              notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
               await checkStates();
             }
           }
@@ -276,7 +276,7 @@ export default function DiceTab() {
     if (accepted) {
       // Keep is_active true so the receiver can later tap "I Did It!"
       await supabase.from('interactions').update({ status: 'accepted' }).eq('id', incomingChallenge.id);
-      notifyPartner({ event_type: 'dice_accepted', couple_id: couple.id, target_route: '/(app)/(tabs)/dice' });
+      notifyPartner({ event_type: 'dice_accepted', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
       const pts = await getPointValue('dice_accept');
       await awardPoints(couple.id, user.id, pts, 'Dice challenge accepted', incomingChallenge.id);
       await incrementMonthlyCounter(couple.id, user.id, 'dice_accepted', pts);
@@ -284,7 +284,7 @@ export default function DiceTab() {
       setIncomingChallenge({ ...incomingChallenge, status: 'accepted' });
     } else {
       await supabase.from('interactions').update({ status: 'rejected', is_active: false }).eq('id', incomingChallenge.id);
-      notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice' });
+      notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
       await awardPoints(couple.id, user.id, 1, 'Dice — participation', incomingChallenge.id);
       await incrementMonthlyCounter(couple.id, user.id, 'dice_skipped', 0);
       setIncomingChallenge(null);
@@ -298,7 +298,7 @@ export default function DiceTab() {
       completion_requested_at: new Date().toISOString(),
       is_active: false,
     }).eq('id', incomingChallenge.id);
-    notifyPartner({ event_type: 'dice_accepted', couple_id: couple.id, target_route: '/(app)/(tabs)/dice' });
+    notifyPartner({ event_type: 'dice_accepted', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
     setIncomingChallenge({ ...incomingChallenge, status: 'pending_verification' });
   };
 
@@ -314,7 +314,7 @@ export default function DiceTab() {
         'dice_complete'
       );
       await incrementMonthlyCounter(couple.id, pendingVerification.receiver_id, 'dice_completed', completePts);
-      notifyPartner({ event_type: 'dice_completed', couple_id: couple.id, target_route: '/(app)/(tabs)/dice' });
+      notifyPartner({ event_type: 'dice_completed', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
       setPendingVerification(null);
     } catch {
       setError('Could not verify. Please try again.');

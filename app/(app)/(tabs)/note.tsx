@@ -395,7 +395,7 @@ export default function ChatTab() {
     } catch {
       // points/stats are non-critical; message was already sent successfully
     }
-    notifyPartner({ event_type: 'new_message', couple_id: couple.id, target_route: '/(app)/(tabs)/note' });
+    notifyPartner({ event_type: 'new_message', couple_id: couple.id, target_route: '/(app)/(tabs)/note', partnerUserId: partnerProfile?.id });
 
     setText('');
     setAttachedMedia(null);

@@ -348,7 +348,7 @@ function WishForm({
             await incrementMonthlyCounter(couple.id, user.id, 'wishes_sent', pts);
           } catch {}
           if (partnerId) {
-            notifyPartner({ event_type: 'new_wish', couple_id: couple.id, target_route: '/(app)/(tabs)/wish', item_id: result.id });
+            notifyPartner({ event_type: 'new_wish', couple_id: couple.id, target_route: '/(app)/(tabs)/wish', item_id: result.id, partnerUserId: partnerId });
           }
         }
       }
@@ -587,7 +587,7 @@ function FulfillSheet({
       await awardPoints(couple.id, user.id, pts, 'Wish granted', wish.id);
       if (partnerId) {
         await awardPoints(couple.id, partnerId, pts, 'Wish granted', wish.id);
-        notifyPartner({ event_type: 'wish_fulfilled', couple_id: couple.id, target_route: '/(app)/(tabs)/wish', item_id: wish.id });
+        notifyPartner({ event_type: 'wish_fulfilled', couple_id: couple.id, target_route: '/(app)/(tabs)/wish', item_id: wish.id, partnerUserId: partnerId });
       }
       await incrementMonthlyCounter(couple.id, user.id, 'wishes_fulfilled', pts);
 
