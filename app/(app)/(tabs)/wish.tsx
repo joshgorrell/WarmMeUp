@@ -703,7 +703,7 @@ export default function WishTab() {
     { key: 'shared',  label: 'Ours' },
     { key: 'mine',    label: 'Mine' },
     { key: 'theirs',  label: 'Theirs' },
-    { key: 'granted', label: 'Granted ❤️' },
+    { key: 'granted', label: 'Granted' },
   ];
 
   const loadWishes = useCallback(async () => {
