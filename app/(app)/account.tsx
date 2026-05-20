@@ -402,6 +402,10 @@ export default function AccountScreen() {
 
   // Leave partner sheet
   const [showLeaveSheet, setShowLeaveSheet] = useState(false);
+
+  // Cancel pending invite
+  const [showCancelInviteSheet, setShowCancelInviteSheet] = useState(false);
+  const [cancellingInvite, setCancellingInvite] = useState(false);
   const [deleteAccountStep, setDeleteAccountStep] = useState<1 | 2>(1);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
@@ -509,6 +513,21 @@ export default function AccountScreen() {
     }
     await refreshCouple();
     setCodeRefreshing(false);
+  };
+
+  const handleCancelInvite = async () => {
+    if (!couple?.id || couple.active || cancellingInvite) return;
+    setCancellingInvite(true);
+    const { error } = await supabase
+      .from('couples')
+      .delete()
+      .eq('id', couple.id)
+      .eq('active', false);
+    if (!error) {
+      await refreshCouple();
+    }
+    setCancellingInvite(false);
+    setShowCancelInviteSheet(false);
   };
 
   const handleInvitePartner = async () => {
@@ -1027,6 +1046,14 @@ export default function AccountScreen() {
               <Text style={[styles.inviteBtnText, { color: '#FF2E8A' }]}>Share</Text>
             </TouchableOpacity>
           </View>
+          <TouchableOpacity
+            style={styles.cancelInviteBtn}
+            onPress={() => setShowCancelInviteSheet(true)}
+            activeOpacity={0.7}
+          >
+            <X color="rgba(255,90,90,0.70)" size={13} strokeWidth={2.2} />
+            <Text style={styles.cancelInviteText}>Cancel invite</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
@@ -1733,6 +1760,38 @@ export default function AccountScreen() {
         partnerName={partnerProfile?.display_name ?? 'your partner'}
       />
 
+      {/* Cancel pending invite confirmation sheet */}
+      <BottomSheet visible={showCancelInviteSheet} onClose={() => { if (!cancellingInvite) setShowCancelInviteSheet(false); }}>
+        <View style={styles.cancelInviteSheet}>
+          <View style={styles.cancelInviteIconWrap}>
+            <X color="#FF5A5F" size={24} strokeWidth={2} />
+          </View>
+          <Text style={[styles.cancelInviteSheetTitle, { color: colors.text }]}>Cancel invite?</Text>
+          <Text style={[styles.cancelInviteSheetBody, { color: colors.textSecondary }]}>
+            Your partner won't be able to use this code. You can generate a new one any time.
+          </Text>
+          <TouchableOpacity
+            style={[styles.cancelInviteConfirmBtn, cancellingInvite && { opacity: 0.6 }]}
+            onPress={handleCancelInvite}
+            activeOpacity={0.8}
+            disabled={cancellingInvite}
+          >
+            {cancellingInvite
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={styles.cancelInviteConfirmText}>Yes, cancel invite</Text>
+            }
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.cancelInviteKeepBtn}
+            onPress={() => setShowCancelInviteSheet(false)}
+            activeOpacity={0.7}
+            disabled={cancellingInvite}
+          >
+            <Text style={[styles.cancelInviteKeepText, { color: colors.textSecondary }]}>Keep it</Text>
+          </TouchableOpacity>
+        </View>
+      </BottomSheet>
+
       {/* ── Delete Account Modal ───────────────────────────────────── */}
       <Modal
         visible={deleteAccountOpen}
@@ -2009,4 +2068,69 @@ const styles = StyleSheet.create({
   reportInput: { width: '100%', borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', minHeight: 100, lineHeight: 20 },
   footerLogoWrap: { alignItems: 'center', paddingTop: Spacing.xxl, paddingBottom: Spacing.xl, opacity: 0.7 },
   footerLogo: { width: 320, height: 160 },
+  cancelInviteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    alignSelf: 'center',
+  },
+  cancelInviteText: {
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    color: 'rgba(255,90,90,0.70)',
+    textDecorationLine: 'underline',
+    textDecorationColor: 'rgba(255,90,90,0.40)',
+  },
+  cancelInviteSheet: {
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
+  },
+  cancelInviteIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,90,90,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  cancelInviteSheetTitle: {
+    fontSize: FontSize.xl,
+    fontFamily: 'Inter-Bold',
+    textAlign: 'center',
+  },
+  cancelInviteSheetBody: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 21,
+    paddingHorizontal: Spacing.sm,
+  },
+  cancelInviteConfirmBtn: {
+    width: '100%',
+    borderRadius: Radius.pill,
+    backgroundColor: '#FF5A5F',
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50,
+    marginTop: 4,
+  },
+  cancelInviteConfirmText: {
+    color: '#fff',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-SemiBold',
+  },
+  cancelInviteKeepBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  cancelInviteKeepText: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+  },
 });
