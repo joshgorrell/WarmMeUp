@@ -84,6 +84,7 @@ export default function MyStatsScreen() {
   const [partnerStats, setPartnerStats] = useState<MonthlyScore | null>(null);
   const [currentMonthPoints, setCurrentMonthPoints] = useState<{ me: number; partner: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [allTime, setAllTime] = useState(false);
   const [streak, setStreak] = useState(0);
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
@@ -137,7 +138,7 @@ export default function MyStatsScreen() {
 
   const loadAllTime = useCallback(async () => {
     if (!couple?.id || !user) return;
-    setLoading(true);
+    setRefreshing(true);
 
     const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
     const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -149,6 +150,7 @@ export default function MyStatsScreen() {
       partnerId ? supabase.from('point_events').select('reason, points').eq('couple_id', couple.id).eq('user_id', partnerId).gte('created_at', periodStart) : Promise.resolve({ data: [] }),
       supabase.from('scores').select('points').eq('couple_id', couple.id).eq('user_id', user.id).maybeSingle(),
       partnerId ? supabase.from('scores').select('points').eq('couple_id', couple.id).eq('user_id', partnerId).maybeSingle() : Promise.resolve({ data: null }),
+      loadStreak(),
     ]);
 
     const myCurrentStats = buildStatsFromEvents(myEventsRes.data ?? [], user.id);
@@ -167,13 +169,13 @@ export default function MyStatsScreen() {
       partner: ((partnerScoreRes as any).data?.points ?? 0) + (sumMonthlyScores(partnerArchived)?.points ?? 0),
     });
 
-    await loadStreak();
     setLoading(false);
+    setRefreshing(false);
   }, [couple?.id, user, buildStatsFromEvents, loadStreak]);
 
   const load = useCallback(async () => {
     if (!couple?.id || !user) return;
-    setLoading(true);
+    setRefreshing(true);
 
     const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
 
@@ -185,6 +187,7 @@ export default function MyStatsScreen() {
         partnerId ? supabase.from('scores').select('points').eq('couple_id', couple.id).eq('user_id', partnerId).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from('point_events').select('reason, points').eq('couple_id', couple.id).eq('user_id', user.id).gte('created_at', periodStart),
         partnerId ? supabase.from('point_events').select('reason, points').eq('couple_id', couple.id).eq('user_id', partnerId).gte('created_at', periodStart) : Promise.resolve({ data: [] }),
+        loadStreak(),
       ]);
 
       setCurrentMonthPoints({
@@ -198,14 +201,15 @@ export default function MyStatsScreen() {
       const [myRes, partnerRes] = await Promise.all([
         supabase.from('monthly_scores').select('*').eq('couple_id', couple.id).eq('user_id', user.id).eq('year', year).eq('month', month).maybeSingle(),
         partnerId ? supabase.from('monthly_scores').select('*').eq('couple_id', couple.id).eq('user_id', partnerId).eq('year', year).eq('month', month).maybeSingle() : Promise.resolve({ data: null }),
+        loadStreak(),
       ]);
       setMyStats(myRes.data);
       setPartnerStats((partnerRes as any).data);
       setCurrentMonthPoints(null);
     }
 
-    await loadStreak();
     setLoading(false);
+    setRefreshing(false);
   }, [couple?.id, user, year, month, isCurrentMonth, buildStatsFromEvents, loadStreak]);
 
   useEffect(() => {
@@ -277,8 +281,10 @@ export default function MyStatsScreen() {
   const myName = profile?.display_name ?? 'You';
   const partnerName = partnerProfile?.display_name ?? 'Partner';
 
+  const isFirstLoad = loading && myStats === null && partnerStats === null;
+
   return (
-    <AppShell>
+    <AppShell noTopPadding>
       <ScreenHeader title="My Stats" onBack={() => router.back()} />
 
       {/* Month selector */}
@@ -302,6 +308,7 @@ export default function MyStatsScreen() {
           )}
         </View>
         <View style={styles.navRight}>
+          {refreshing && <ActivityIndicator size="small" color="#FF5A3D" style={{ marginRight: 4 }} />}
           <TouchableOpacity
             onPress={() => setAllTime(v => !v)}
             style={[styles.allTimeBtn, allTime && { backgroundColor: 'rgba(255,90,61,0.15)', borderColor: 'rgba(255,90,61,0.35)' }]}
@@ -320,7 +327,7 @@ export default function MyStatsScreen() {
         </View>
       </View>
 
-      {loading ? (
+      {isFirstLoad ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator color="#FF5A3D" />
         </View>
