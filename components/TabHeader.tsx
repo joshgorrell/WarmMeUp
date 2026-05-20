@@ -16,8 +16,8 @@ interface TabHeaderProps {
 
 export default function TabHeader({ rightSlot }: TabHeaderProps) {
   const router = useRouter();
-  const { profile } = useAuth();
-  const temp = useWeather();
+  const { profile, settings } = useAuth();
+  const temp = useWeather(settings?.weather_lat, settings?.weather_lon, profile?.id);
 
   return (
     <View style={styles.container}>

@@ -6,6 +6,7 @@ import WarmupLogo from './WarmupLogo';
 import WarmupWordmark from './WarmupWordmark';
 import Avatar from './Avatar';
 import { useWeather } from '@/hooks/useWeather';
+import { useAuth } from '@/context/AuthContext';
 import { Spacing } from '@/constants/theme';
 
 interface BrandHeaderProps {
@@ -22,7 +23,8 @@ export default function BrandHeader({
   onAvatarPress,
 }: BrandHeaderProps) {
   const router = useRouter();
-  const temp = useWeather();
+  const { profile, settings } = useAuth();
+  const temp = useWeather(settings?.weather_lat, settings?.weather_lon, profile?.id);
 
   return (
     <View style={styles.container}>

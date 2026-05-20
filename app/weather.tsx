@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Platform,
+  View, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Platform, Linking,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { Spacing, FontSize, Radius } from '@/constants/theme';
 import StealthBypassSheet from '@/components/StealthBypassSheet';
 
-// Hardcoded fallback — shown while loading or when GPS/network unavailable
+// Shown only when permission is denied and no cached coords exist
 const FALLBACK = {
   location: 'San Diego, CA',
   currentTemp: '72°',
@@ -53,6 +53,13 @@ async function fetchWeatherForCoords(lat: number, lon: number): Promise<WeatherD
   return res.json();
 }
 
+async function cacheCoords(userId: string, lat: number, lon: number) {
+  await supabase
+    .from('user_settings')
+    .update({ weather_lat: lat, weather_lon: lon, updated_at: new Date().toISOString() })
+    .eq('user_id', userId);
+}
+
 export default function WeatherScreen() {
   const router = useRouter();
   const { user, settings, refreshSettings, unlockApp, lockIfNeeded, isAuthenticatingRef } = useAuth();
@@ -61,45 +68,71 @@ export default function WeatherScreen() {
   const tempFontSize = Math.min(Math.round(width * 0.24), 100);
   const forecastDayWidth = width >= 600 ? 110 : 90;
   const [showStealthSheet, setShowStealthSheet] = useState(false);
-  const [weather, setWeather] = useState<WeatherData>(FALLBACK);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
+      // Step 1: If cached coords exist, fetch immediately so the user sees
+      // their real location with no delay while the live GPS warms up.
+      const cachedLat = settings?.weather_lat;
+      const cachedLon = settings?.weather_lon;
+      if (cachedLat != null && cachedLon != null) {
+        try {
+          const data = await fetchWeatherForCoords(cachedLat, cachedLon);
+          if (!cancelled) setWeather(data);
+        } catch { /* will be overwritten by live GPS or fall through to FALLBACK */ }
+      }
+
+      // Step 2: Get a fresh live GPS fix and update display + cache.
       try {
+        let lat: number, lon: number;
+
         if (Platform.OS === 'web') {
-          if (!navigator?.geolocation) return;
-          await new Promise<void>((resolve) => {
-            navigator.geolocation.getCurrentPosition(
-              async (pos) => {
-                if (cancelled) { resolve(); return; }
-                try {
-                  const data = await fetchWeatherForCoords(pos.coords.latitude, pos.coords.longitude);
-                  if (!cancelled) setWeather(data);
-                } catch { /* keep fallback */ }
-                resolve();
-              },
-              () => resolve(),
-              { timeout: 8000 }
-            );
-          });
+          if (!navigator?.geolocation) {
+            if (!cancelled && !cachedLat) setWeather(FALLBACK);
+            return;
+          }
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 })
+          );
+          lat = pos.coords.latitude;
+          lon = pos.coords.longitude;
         } else {
           const Location = await import('expo-location');
           const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status !== 'granted' || cancelled) return;
+          if (status !== 'granted') {
+            if (!cancelled) {
+              setPermissionDenied(true);
+              // Only show fallback if we have nothing to show yet
+              if (!cachedLat) setWeather(FALLBACK);
+            }
+            return;
+          }
           const pos = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.Balanced,
           });
-          if (cancelled) return;
-          const data = await fetchWeatherForCoords(pos.coords.latitude, pos.coords.longitude);
-          if (!cancelled) setWeather(data);
+          lat = pos.coords.latitude;
+          lon = pos.coords.longitude;
+        }
+
+        if (cancelled) return;
+        const data = await fetchWeatherForCoords(lat, lon);
+        if (!cancelled) setWeather(data);
+
+        // Persist coords for instant display next open
+        if (user?.id) {
+          cacheCoords(user.id, lat, lon);
         }
       } catch {
-        // silently keep fallback
+        if (!cancelled && !cachedLat) setWeather(FALLBACK);
       }
     })();
+
     return () => { cancelled = true; };
-  }, []);
+  }, [settings?.weather_lat, settings?.weather_lon]);
 
   const handleCoastIsClear = async () => {
     // Signal BackgroundLockManager to stand down — it must not race a router.replace
@@ -180,7 +213,9 @@ export default function WeatherScreen() {
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <View style={styles.locationRow}>
           <MapPin color="rgba(255,255,255,0.8)" size={14} />
-          <AppText style={styles.location}>{weather.location}</AppText>
+          <AppText style={styles.location}>
+            {weather ? weather.location : 'Locating…'}
+          </AppText>
         </View>
 
         <View style={styles.topRight}>
@@ -194,71 +229,87 @@ export default function WeatherScreen() {
         contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 72 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Main temp */}
-        <View style={styles.topSection}>
-          <AppText style={[styles.temp, { fontSize: tempFontSize, lineHeight: tempFontSize * 1.08 }]}>
-            {weather.currentTemp}
-          </AppText>
-          <AppText style={styles.condition}>{weather.condition}</AppText>
-          <AppText style={styles.hiLo}>{weather.hiLo}</AppText>
-        </View>
+        {weather ? (
+          <>
+            {/* Main temp */}
+            <View style={styles.topSection}>
+              <AppText style={[styles.temp, { fontSize: tempFontSize, lineHeight: tempFontSize * 1.08 }]}>
+                {weather.currentTemp}
+              </AppText>
+              <AppText style={styles.condition}>{weather.condition}</AppText>
+              <AppText style={styles.hiLo}>{weather.hiLo}</AppText>
+              {permissionDenied && (
+                <TouchableOpacity onPress={() => Linking.openSettings()} activeOpacity={0.7}>
+                  <AppText style={styles.permissionHint}>
+                    Enable Location in Settings for local weather
+                  </AppText>
+                </TouchableOpacity>
+              )}
+            </View>
 
-        {/* Hourly */}
-        <View style={styles.card}>
-          <View style={styles.cardRow}>
-            <Wind color="rgba(255,255,255,0.45)" size={13} />
-            <AppText style={styles.cardLabel}>HOURLY FORECAST</AppText>
-          </View>
-          <View style={styles.divider} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.hourlyRow}>
-              {weather.hourly.map((h) => (
-                <View key={h.time} style={styles.hourItem}>
-                  <AppText style={styles.hourTime}>{h.time}</AppText>
-                  <AppText style={styles.hourIcon}>{h.icon}</AppText>
-                  <AppText style={styles.hourTemp}>{h.temp}</AppText>
+            {/* Hourly */}
+            <View style={styles.card}>
+              <View style={styles.cardRow}>
+                <Wind color="rgba(255,255,255,0.45)" size={13} />
+                <AppText style={styles.cardLabel}>HOURLY FORECAST</AppText>
+              </View>
+              <View style={styles.divider} />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.hourlyRow}>
+                  {weather.hourly.map((h) => (
+                    <View key={h.time} style={styles.hourItem}>
+                      <AppText style={styles.hourTime}>{h.time}</AppText>
+                      <AppText style={styles.hourIcon}>{h.icon}</AppText>
+                      <AppText style={styles.hourTemp}>{h.temp}</AppText>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+
+            {/* 5-day */}
+            <View style={styles.card}>
+              <View style={styles.cardRow}>
+                <Cloud color="rgba(255,255,255,0.45)" size={13} />
+                <AppText style={styles.cardLabel}>5-DAY FORECAST</AppText>
+              </View>
+              <View style={styles.divider} />
+              {weather.forecast.map((f, i) => (
+                <View
+                  key={f.day}
+                  style={[styles.forecastRow, i < weather.forecast.length - 1 && styles.forecastDivider]}
+                >
+                  <AppText style={[styles.forecastDay, { width: forecastDayWidth }]}>{f.day}</AppText>
+                  <AppText style={styles.forecastIcon}>{f.icon}</AppText>
+                  <AppText style={styles.forecastCond}>{f.cond}</AppText>
+                  <View style={styles.forecastTemps}>
+                    <AppText style={styles.forecastHigh}>{f.high}</AppText>
+                    <AppText style={styles.forecastLow}>{f.low}</AppText>
+                  </View>
                 </View>
               ))}
             </View>
-          </ScrollView>
-        </View>
 
-        {/* 5-day */}
-        <View style={styles.card}>
-          <View style={styles.cardRow}>
-            <Cloud color="rgba(255,255,255,0.45)" size={13} />
-            <AppText style={styles.cardLabel}>5-DAY FORECAST</AppText>
+            {/* Extra tiles */}
+            <View style={styles.extraRow}>
+              {[
+                { label: 'HUMIDITY', val: weather.humidity },
+                { label: 'UV INDEX', val: weather.uvIndex },
+                { label: 'VISIBILITY', val: weather.visibility },
+              ].map((e) => (
+                <View key={e.label} style={styles.extraCard}>
+                  <AppText style={styles.extraLabel}>{e.label}</AppText>
+                  <AppText style={styles.extraValue}>{e.val}</AppText>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : (
+          <View style={styles.loadingSection}>
+            <AppText style={styles.loadingTemp}>—°</AppText>
+            <AppText style={styles.loadingLabel}>Fetching local weather…</AppText>
           </View>
-          <View style={styles.divider} />
-          {weather.forecast.map((f, i) => (
-            <View
-              key={f.day}
-              style={[styles.forecastRow, i < weather.forecast.length - 1 && styles.forecastDivider]}
-            >
-              <AppText style={[styles.forecastDay, { width: forecastDayWidth }]}>{f.day}</AppText>
-              <AppText style={styles.forecastIcon}>{f.icon}</AppText>
-              <AppText style={styles.forecastCond}>{f.cond}</AppText>
-              <View style={styles.forecastTemps}>
-                <AppText style={styles.forecastHigh}>{f.high}</AppText>
-                <AppText style={styles.forecastLow}>{f.low}</AppText>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Extra tiles */}
-        <View style={styles.extraRow}>
-          {[
-            { label: 'HUMIDITY', val: weather.humidity },
-            { label: 'UV INDEX', val: weather.uvIndex },
-            { label: 'VISIBILITY', val: weather.visibility },
-          ].map((e) => (
-            <View key={e.label} style={styles.extraCard}>
-              <AppText style={styles.extraLabel}>{e.label}</AppText>
-              <AppText style={styles.extraValue}>{e.val}</AppText>
-            </View>
-          ))}
-        </View>
+        )}
 
         {/* Spacer so content isn't hidden under the absolute-positioned bottom button */}
         <View style={{ height: insets.bottom + 120 }} />
@@ -369,4 +420,21 @@ const styles = StyleSheet.create({
   waveEmoji: { color: 'rgba(255,255,255,0.7)', fontSize: 18 },
   clearBtnText: { color: '#fff', fontSize: FontSize.md, fontFamily: 'Inter-SemiBold', letterSpacing: 0.2 },
   stealthIcon: { position: 'absolute', right: Spacing.xl, padding: 6 },
+  permissionHint: {
+    color: 'rgba(255,200,100,0.75)', fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular', marginTop: 10, textDecorationLine: 'underline',
+    textAlign: 'center',
+  },
+  loadingSection: {
+    alignItems: 'center', justifyContent: 'center',
+    paddingTop: Spacing.xl * 3,
+  },
+  loadingTemp: {
+    color: 'rgba(255,255,255,0.2)', fontFamily: 'Inter-Bold',
+    letterSpacing: -3, fontSize: 90, lineHeight: 97,
+  },
+  loadingLabel: {
+    color: 'rgba(255,255,255,0.3)', fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular', marginTop: Spacing.sm,
+  },
 });
