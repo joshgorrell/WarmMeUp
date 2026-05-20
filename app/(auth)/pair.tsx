@@ -14,15 +14,21 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw } from 'lucide-react-native';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 
+const CODE_ALPHABET = 'ACDEFGHJKLMNPQRTUVWXY34679';
+
 function generateCode(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  }
+  return code;
 }
 
 type ActiveModal = 'invite' | 'join' | null;
@@ -83,6 +89,7 @@ export default function PairScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeModal, setActiveModal] = useState<ActiveModal>(prefilledCode ? 'join' : null);
 
   useEffect(() => {
@@ -140,6 +147,20 @@ export default function PairScreen() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const handleRefreshCode = async () => {
+    if (!couple?.id || refreshing) return;
+    setRefreshing(true);
+    const newCode = generateCode();
+    const { error: updateError } = await supabase
+      .from('couples')
+      .update({ invite_code: newCode })
+      .eq('id', couple.id);
+    if (!updateError) {
+      setMyCode(newCode);
+    }
+    setRefreshing(false);
   };
 
   const handleJoin = async () => {
@@ -466,6 +487,18 @@ export default function PairScreen() {
 
             <View style={styles.codeBox}>
               <Text style={[styles.codeDisplayText, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}>{myCode || '------'}</Text>
+              <TouchableOpacity
+                style={styles.refreshBtn}
+                onPress={handleRefreshCode}
+                activeOpacity={0.7}
+                disabled={refreshing}
+              >
+                <RefreshCw
+                  color={refreshing ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.45)'}
+                  size={15}
+                  strokeWidth={2}
+                />
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={styles.actionBtn} onPress={handleCopy} activeOpacity={0.85}>
@@ -737,6 +770,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.10)',
     paddingVertical: Spacing.lg,
     alignItems: 'center',
+    position: 'relative',
+  },
+  refreshBtn: {
+    position: 'absolute',
+    right: 14,
+    top: '50%',
+    marginTop: -10,
+    padding: 4,
   },
   codeDisplayText: {
     color: '#fff',
