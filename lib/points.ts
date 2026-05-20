@@ -56,7 +56,7 @@ export async function awardPoints(
     points,
     reason,
   });
-  if (eventError) throw eventError;
+  if (eventError) return; // points are non-critical; never crash the caller
 
   const { data: existing } = await supabase
     .from('scores')

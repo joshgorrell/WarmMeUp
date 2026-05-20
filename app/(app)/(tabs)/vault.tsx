@@ -230,7 +230,7 @@ export default function VaultScreen() {
       const storagePath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
       await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct));
 
-      await supabase.from('vault_items').insert({
+      const { error: dbError } = await supabase.from('vault_items').insert({
         couple_id: couple.id,
         uploaded_by_user_id: user.id,
         media_type: mediaType,
@@ -243,9 +243,12 @@ export default function VaultScreen() {
         allow_share: settings?.vault_allow_share_default ?? false,
         chat_message_id: null,
       });
+      if (dbError) throw dbError;
       awardPoints(couple.id, user.id, 5, 'Vault media added');
       notifyPartner({ event_type: 'new_vault_item', couple_id: couple.id, target_route: '/(app)/(tabs)/vault' });
       await load();
+    } catch (e: any) {
+      Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
     } finally {
       stopSpin();
       setUploading(false);

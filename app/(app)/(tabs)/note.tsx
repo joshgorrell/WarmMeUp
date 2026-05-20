@@ -380,12 +380,16 @@ export default function ChatTab() {
       await supabase.from('vault_items').update({ chat_message_id: data.id }).eq('id', vaultItemId);
     }
 
-    const eventKey = hasMedia ? 'chat_media' : 'chat_message';
-    const pts = await getPointValue(eventKey);
-    const reason = hasMedia ? 'Chat media' : 'Chat message';
-    await awardPoints(couple.id, user.id, pts, reason);
-    const field = hasMedia ? 'media_sent' : 'chat_messages_sent';
-    await incrementMonthlyCounter(couple.id, user.id, field, pts);
+    try {
+      const eventKey = hasMedia ? 'chat_media' : 'chat_message';
+      const pts = await getPointValue(eventKey);
+      const reason = hasMedia ? 'Chat media' : 'Chat message';
+      await awardPoints(couple.id, user.id, pts, reason);
+      const field = hasMedia ? 'media_sent' : 'chat_messages_sent';
+      await incrementMonthlyCounter(couple.id, user.id, field, pts);
+    } catch {
+      // points/stats are non-critical; message was already sent successfully
+    }
     notifyPartner({ event_type: 'new_message', couple_id: couple.id, target_route: '/(app)/(tabs)/note' });
 
     setText('');
