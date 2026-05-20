@@ -5,13 +5,15 @@ import { useAuth } from '@/context/AuthContext';
 
 /**
  * Deep link handler for warmup://invite/[CODE]
- * Redirects unauthenticated users to the pair screen pre-filled with the code.
- * Redirects authenticated users the same way — pair.tsx handles both cases.
+ *
+ * - Unauthenticated: route to pair screen pre-filled with the code.
+ * - Authenticated, already connected: route straight to the app (no need to pair).
+ * - Authenticated, not connected: route to pair screen pre-filled with the code.
  */
 export default function InviteDeepLink() {
   const router = useRouter();
   const { code } = useLocalSearchParams<{ code: string }>();
-  const { session, loading } = useAuth();
+  const { session, loading, couple } = useAuth();
 
   useEffect(() => {
     if (loading) return;
@@ -22,10 +24,17 @@ export default function InviteDeepLink() {
     }
     if (!session) {
       router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: upperCode } });
-    } else {
-      router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: upperCode } });
+      return;
     }
-  }, [loading, session, code]);
+    // Authenticated user — check connection state
+    if (couple?.active) {
+      // Already connected; deep link has nothing to do here
+      router.replace('/(app)/(tabs)');
+      return;
+    }
+    // Authenticated but not yet paired — open pair screen with the code
+    router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: upperCode } });
+  }, [loading, session, couple, code]);
 
   return <View style={styles.bg} />;
 }

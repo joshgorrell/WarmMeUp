@@ -11,6 +11,7 @@ import { secureKey } from '@/lib/secureKey';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
+import { generateInviteCode, codeExpiresAt } from '@/lib/inviteCode';
 import { FontSize, Spacing, Radius, Gradient } from '@/constants/theme';
 import Toggle from '@/components/Toggle';
 import AppShell from '@/components/AppShell';
@@ -495,12 +496,17 @@ export default function AccountScreen() {
   };
 
   const handleRefreshCode = async () => {
-    if (!couple?.id || codeRefreshing) return;
+    if (!couple?.id || codeRefreshing || couple.active) return;
     setCodeRefreshing(true);
-    const alphabet = 'ACDEFGHJKLMNPQRTUVWXY34679';
-    let newCode = '';
-    for (let i = 0; i < 6; i++) newCode += alphabet[Math.floor(Math.random() * alphabet.length)];
-    await supabase.from('couples').update({ invite_code: newCode }).eq('id', couple.id);
+    const newCode = generateInviteCode();
+    const { error } = await supabase
+      .from('couples')
+      .update({ invite_code: newCode, invite_code_expires_at: codeExpiresAt() })
+      .eq('id', couple.id);
+    if (error) {
+      setCodeRefreshing(false);
+      return;
+    }
     await refreshCouple();
     setCodeRefreshing(false);
   };

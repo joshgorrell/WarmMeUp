@@ -14,12 +14,22 @@ import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { supabase } from '@/lib/supabase';
 import { secureKey } from '@/lib/secureKey';
 import { useLayout } from '@/hooks/useLayout';
+import { isCodeExpired, loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
 
 type JoinResult =
   | { ok: true; partnerName: string | null; coupleId: string }
-  | { ok: false; reason: 'not_found' | 'already_full' | 'error' };
+  | { ok: false; reason: 'not_found' | 'expired' | 'already_full' | 'self' | 'already_connected' | 'error' };
 
 async function completePendingJoin(userId: string, code: string): Promise<JoinResult> {
+  // Check if User B already has an active couple — prevent double-connecting
+  const { data: existingCouple } = await supabase
+    .from('couples')
+    .select('id, active')
+    .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+    .eq('active', true)
+    .maybeSingle();
+  if (existingCouple) return { ok: false, reason: 'already_connected' };
+
   const { data: targetCouple, error: fetchError } = await supabase
     .from('couples')
     .select('*')
@@ -27,20 +37,62 @@ async function completePendingJoin(userId: string, code: string): Promise<JoinRe
     .maybeSingle();
 
   if (fetchError || !targetCouple) return { ok: false, reason: 'not_found' };
+
+  // Self-invite guard
+  if (targetCouple.user_a_id === userId) return { ok: false, reason: 'self' };
+
+  // Expiry check (null = legacy row with no expiry, treat as valid)
+  if (isCodeExpired(targetCouple.invite_code_expires_at)) return { ok: false, reason: 'expired' };
+
+  // Already used / full check
   if (targetCouple.user_b_id && targetCouple.user_b_id !== userId) {
     return { ok: false, reason: 'already_full' };
   }
 
-  // Update target couple first — only clean up our stub if this succeeds
+  const now = new Date().toISOString();
+
+  // Conditional update — atomic: only succeeds if user_b_id is still null
   const { error: updateError } = await supabase
     .from('couples')
-    .update({ user_b_id: userId, active: true })
+    .update({ user_b_id: userId, active: true, invite_code_used_at: now })
     .eq('id', targetCouple.id)
     .is('user_b_id', null);
 
-  if (updateError) return { ok: false, reason: 'error' };
+  if (updateError) {
+    // Re-fetch to give accurate reason (race: another user just claimed it)
+    const { data: refetched } = await supabase
+      .from('couples')
+      .select('user_b_id')
+      .eq('id', targetCouple.id)
+      .maybeSingle();
+    if (refetched?.user_b_id && refetched.user_b_id !== userId) {
+      return { ok: false, reason: 'already_full' };
+    }
+    return { ok: false, reason: 'error' };
+  }
 
-  // Safe to delete our own inactive placeholder now
+  // Stamp subscription_owner_id with whichever user has an active subscription
+  const { data: subA } = await supabase
+    .from('subscriptions')
+    .select('id')
+    .eq('user_id', targetCouple.user_a_id)
+    .eq('status', 'active')
+    .maybeSingle();
+  const { data: subB } = await supabase
+    .from('subscriptions')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle();
+  const subscriptionOwnerId = subA ? targetCouple.user_a_id : subB ? userId : null;
+  if (subscriptionOwnerId) {
+    await supabase
+      .from('couples')
+      .update({ subscription_owner_id: subscriptionOwnerId })
+      .eq('id', targetCouple.id);
+  }
+
+  // Clean up User B's own inactive placeholder
   await supabase
     .from('couples')
     .delete()
@@ -131,10 +183,15 @@ export default function SetupPinScreen() {
         .from('user_settings')
         .update({ login_method: method, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
-      if (pendingCode) {
-        const result = await completePendingJoin(user.id, pendingCode);
+
+      // Use route param first, fall back to persisted storage (survives OAuth redirects)
+      const code = pendingCode || (await loadPendingCode()) || '';
+
+      if (code) {
+        const result = await completePendingJoin(user.id, code);
         if (result.ok) {
-          // Notify User A that their partner just joined (fire-and-forget)
+          await clearPendingCode();
+          // Notify User A (fire-and-forget)
           const { data: sessionData } = await supabase.auth.getSession();
           const token = sessionData?.session?.access_token;
           if (token) {
@@ -149,13 +206,16 @@ export default function SetupPinScreen() {
             params: { partnerName: result.partnerName || '' },
           });
         } else {
+          await clearPendingCode();
           const msg =
-            result.reason === 'not_found' ? "That invite code couldn't be found. You can still use the app and pair later." :
-            result.reason === 'already_full' ? 'That couple is already full. You can pair with a different partner later.' :
-            'Something went wrong connecting you. You can pair with your partner from the app.';
+            result.reason === 'expired' ? "This invite code has expired. Ask your partner to generate a new one." :
+            result.reason === 'self' ? "You can't use your own invite code." :
+            result.reason === 'already_connected' ? "You're already connected to a partner." :
+            result.reason === 'not_found' ? "That invite code couldn't be found. You can pair from the app later." :
+            result.reason === 'already_full' ? 'That code has already been used. You can pair with a different partner from the app.' :
+            'Something went wrong connecting you. You can pair from the app later.';
           setError(msg);
           setSaving(false);
-          // Continue to onboarding after a short delay so user reads the message
           setTimeout(() => router.replace('/(auth)/onboarding'), 3500);
         }
         return;

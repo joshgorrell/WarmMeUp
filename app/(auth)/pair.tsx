@@ -20,16 +20,13 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
-
-const CODE_ALPHABET = 'ACDEFGHJKLMNPQRTUVWXY34679';
-
-function generateCode(): string {
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
-  }
-  return code;
-}
+import {
+  generateInviteCode,
+  codeExpiresAt,
+  isCodeExpired,
+  validateCodeFormat,
+  savePendingCode,
+} from '@/lib/inviteCode';
 
 type ActiveModal = 'invite' | 'join' | null;
 
@@ -113,19 +110,38 @@ export default function PairScreen() {
 
   const loadOrCreateCouple = async () => {
     if (!user) return;
+
+    // If user is already in an active couple, skip straight to the app
+    const { data: active } = await supabase
+      .from('couples')
+      .select('id')
+      .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+      .eq('active', true)
+      .maybeSingle();
+    if (active) {
+      router.replace('/(app)/(tabs)');
+      return;
+    }
+
     const { data: existing } = await supabase
       .from('couples')
       .select('*')
       .eq('user_a_id', user.id)
+      .eq('active', false)
       .maybeSingle();
 
     if (existing) {
       setMyCode(existing.invite_code);
     } else {
-      const code = generateCode();
+      const code = generateInviteCode();
       const { data: newCouple, error: insertError } = await supabase
         .from('couples')
-        .insert({ user_a_id: user.id, invite_code: code, active: false })
+        .insert({
+          user_a_id: user.id,
+          invite_code: code,
+          active: false,
+          invite_code_expires_at: codeExpiresAt(),
+        })
         .select()
         .single();
       if (!insertError && newCouple) {
@@ -150,12 +166,12 @@ export default function PairScreen() {
   };
 
   const handleRefreshCode = async () => {
-    if (!couple?.id || refreshing) return;
+    if (!couple?.id || refreshing || couple.active) return;
     setRefreshing(true);
-    const newCode = generateCode();
+    const newCode = generateInviteCode();
     const { error: updateError } = await supabase
       .from('couples')
-      .update({ invite_code: newCode })
+      .update({ invite_code: newCode, invite_code_expires_at: codeExpiresAt() })
       .eq('id', couple.id);
     if (!updateError) {
       setMyCode(newCode);
@@ -164,14 +180,33 @@ export default function PairScreen() {
   };
 
   const handleJoin = async () => {
-    if (!joinCode.trim() || !user) return;
+    const normalized = joinCode.toUpperCase().trim();
+    if (!normalized || !user) return;
+
+    if (!validateCodeFormat(normalized)) {
+      setError('Codes are 6 characters (letters and numbers). Double-check and try again.');
+      return;
+    }
+
     setError('');
     setLoading(true);
     try {
+      // Prevent double-connecting
+      const { data: existingActive } = await supabase
+        .from('couples')
+        .select('id')
+        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+        .eq('active', true)
+        .maybeSingle();
+      if (existingActive) {
+        setError("You're already connected to a partner.");
+        return;
+      }
+
       const { data: targetCouple } = await supabase
         .from('couples')
         .select('*')
-        .eq('invite_code', joinCode.toUpperCase().trim())
+        .eq('invite_code', normalized)
         .maybeSingle();
 
       if (!targetCouple) {
@@ -182,21 +217,45 @@ export default function PairScreen() {
         setError("That's your own code! Share it with your partner.");
         return;
       }
+      if (isCodeExpired(targetCouple.invite_code_expires_at)) {
+        setError('This code has expired. Ask your partner to generate a new one.');
+        return;
+      }
       if (targetCouple.user_b_id && targetCouple.user_b_id !== user.id) {
-        setError('This couple is already full.');
+        setError('This code has already been used.');
         return;
       }
 
-      // Update target couple first — only delete our stub if this succeeds
+      const now = new Date().toISOString();
       const { error: updateError } = await supabase
         .from('couples')
-        .update({ user_b_id: user.id, active: true })
+        .update({ user_b_id: user.id, active: true, invite_code_used_at: now })
         .eq('id', targetCouple.id)
         .is('user_b_id', null);
 
       if (updateError) {
-        setError('Something went wrong. Please try again.');
+        // Re-fetch to provide an accurate error message
+        const { data: refetched } = await supabase
+          .from('couples')
+          .select('user_b_id')
+          .eq('id', targetCouple.id)
+          .maybeSingle();
+        if (refetched?.user_b_id && refetched.user_b_id !== user.id) {
+          setError('This code was just used by someone else.');
+        } else {
+          setError('Something went wrong. Please try again.');
+        }
         return;
+      }
+
+      // Stamp subscription_owner_id
+      const { data: subA } = await supabase
+        .from('subscriptions').select('id').eq('user_id', targetCouple.user_a_id).eq('status', 'active').maybeSingle();
+      const { data: subB } = await supabase
+        .from('subscriptions').select('id').eq('user_id', user.id).eq('status', 'active').maybeSingle();
+      const subOwnerId = subA ? targetCouple.user_a_id : subB ? user.id : null;
+      if (subOwnerId) {
+        await supabase.from('couples').update({ subscription_owner_id: subOwnerId }).eq('id', targetCouple.id);
       }
 
       await supabase
@@ -211,7 +270,7 @@ export default function PairScreen() {
         { couple_id: targetCouple.id, user_id: user.id, points: 0 },
       ]);
 
-      // Notify User A that their partner just joined (fire-and-forget)
+      // Notify User A (fire-and-forget)
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (token) {
@@ -224,7 +283,6 @@ export default function PairScreen() {
 
       await refreshCouple();
 
-      // Show celebration if they haven't seen it yet
       if (!settings?.celebration_seen) {
         const { data: partnerProf } = await supabase
           .from('profiles')
@@ -246,8 +304,13 @@ export default function PairScreen() {
   };
 
   const handlePreAuthJoin = async () => {
-    if (!joinCode.trim()) {
+    const normalized = joinCode.toUpperCase().trim();
+    if (!normalized) {
       setError('Please enter the code your partner sent you.');
+      return;
+    }
+    if (!validateCodeFormat(normalized)) {
+      setError('Codes are 6 characters (letters and numbers). Double-check and try again.');
       return;
     }
     setError('');
@@ -255,16 +318,26 @@ export default function PairScreen() {
     try {
       const { data: targetCouple } = await supabase
         .from('couples')
-        .select('id')
-        .eq('invite_code', joinCode.toUpperCase().trim())
+        .select('id, invite_code_expires_at, user_b_id')
+        .eq('invite_code', normalized)
         .maybeSingle();
 
       if (!targetCouple) {
         setError('Invalid code. Check with your partner.');
         return;
       }
+      if (isCodeExpired(targetCouple.invite_code_expires_at)) {
+        setError('This code has expired. Ask your partner to generate a new one.');
+        return;
+      }
+      if (targetCouple.user_b_id) {
+        setError('This code has already been used.');
+        return;
+      }
 
-      router.push({ pathname: '/(auth)/register', params: { pendingCode: joinCode.toUpperCase().trim() } });
+      // Persist so the code survives OAuth redirects and app restarts
+      await savePendingCode(normalized);
+      router.push({ pathname: '/(auth)/register', params: { pendingCode: normalized } });
     } catch (e: any) {
       setError(e.message || 'Something went wrong.');
     } finally {

@@ -21,6 +21,7 @@ import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import TermsModal from '@/components/TermsModal';
 import { useLayout } from '@/hooks/useLayout';
+import { savePendingCode } from '@/lib/inviteCode';
 
 function getAge(dob: Date): number {
   const today = new Date();
@@ -151,6 +152,9 @@ export default function RegisterScreen() {
     if (!tosAccepted) { requireTos(); return; }
     setError('');
     setOauthLoading(provider);
+    // Persist pendingCode before the OAuth redirect — the app may restart during
+    // the OAuth flow and route params won't survive.
+    if (pendingCode) await savePendingCode(pendingCode);
     try {
       const session = await signInWithProvider(provider);
       if (!session) return;
