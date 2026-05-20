@@ -1,21 +1,11 @@
 import { Platform } from 'react-native';
-import * as LegacyFileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from './supabase';
 
 export type UploadResult = {
   storagePath: string;
 };
 
-/**
- * Reliably uploads a local file URI to Supabase Storage with real upload-progress
- * reporting. Uses expo-file-system to read the file (avoids the unreliable
- * fetch→blob pattern on React Native) and XHR directly against the Supabase
- * Storage REST API so we can fire onprogress events.
- *
- * On web, falls back to the standard supabase-js upload (fetch-based) because
- * expo-file-system is not available and local URIs from the web picker are
- * object-URL blobs that fetch() handles correctly.
- */
 export async function uploadMediaFile(
   localUri: string,
   bucket: string,
@@ -36,62 +26,36 @@ async function uploadNative(
   mimeType: string,
   onProgress?: (pct: number) => void,
 ): Promise<UploadResult> {
-  // Get a fresh session token
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
 
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${storagePath}`;
 
-  // Read file as base64 using expo-file-system — works reliably for all local
-  // URIs including PHAsset-backed file:// paths on iOS and content:// on Android.
-  const base64 = await LegacyFileSystem.readAsStringAsync(localUri, {
-    encoding: 'base64',
+  const result = await FileSystem.uploadAsync(uploadUrl, localUri, {
+    httpMethod: 'POST',
+    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+      'Content-Type': mimeType,
+      'x-upsert': 'false',
+    },
+    sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
+    mimeType,
   });
 
-  // Decode base64 → binary string → Uint8Array
-  const binaryStr = atob(base64);
-  const bytes = new Uint8Array(binaryStr.length);
-  for (let i = 0; i < binaryStr.length; i++) {
-    bytes[i] = binaryStr.charCodeAt(i);
+  if (result.status < 200 || result.status >= 300) {
+    let msg = `Upload failed (${result.status})`;
+    try {
+      const body = JSON.parse(result.body);
+      if (body?.error || body?.message) msg = body.error ?? body.message;
+    } catch {}
+    throw new Error(msg);
   }
 
-  return new Promise<UploadResult>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', uploadUrl);
-    xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
-    xhr.setRequestHeader('Content-Type', mimeType);
-    xhr.setRequestHeader('x-upsert', 'false');
-    // Required by Supabase storage
-    xhr.setRequestHeader('apikey', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!);
-
-    if (xhr.upload && onProgress) {
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          onProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      };
-    }
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        onProgress?.(100);
-        resolve({ storagePath });
-      } else {
-        let msg = `Upload failed (${xhr.status})`;
-        try {
-          const body = JSON.parse(xhr.responseText);
-          if (body?.error || body?.message) msg = body.error ?? body.message;
-        } catch {}
-        reject(new Error(msg));
-      }
-    };
-
-    xhr.onerror = () => reject(new Error('Network error during upload'));
-    xhr.ontimeout = () => reject(new Error('Upload timed out'));
-
-    xhr.send(bytes.buffer);
-  });
+  onProgress?.(100);
+  return { storagePath };
 }
 
 async function uploadWeb(
@@ -101,7 +65,6 @@ async function uploadWeb(
   mimeType: string,
   onProgress?: (pct: number) => void,
 ): Promise<UploadResult> {
-  // On web, localUri is an object URL — fetch it as a blob and use supabase-js
   const response = await fetch(localUri);
   const blob = await response.blob();
   const { error } = await supabase.storage
@@ -118,7 +81,5 @@ export const PICKER_OPTIONS = {
   quality: 0.8,
   videoMaxDuration: 60,
   allowsEditing: false,
-  // Ask iOS to export as a copy so we always get a writable file:// URI rather
-  // than a PHAsset reference, which is what causes silent failures on iOS 14+.
   exportsVideoAsCopy: true,
 };
