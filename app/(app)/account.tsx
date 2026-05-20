@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, Mail, KeyRound, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders } from 'lucide-react-native';
+import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, Mail, KeyRound, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders, RefreshCw } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
 import { secureKey } from '@/lib/secureKey';
 import { useAuth } from '@/context/AuthContext';
@@ -343,6 +343,7 @@ export default function AccountScreen() {
 
   // Profile tab state
   const [copied, setCopied] = useState(false);
+  const [codeRefreshing, setCodeRefreshing] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -491,6 +492,17 @@ export default function AccountScreen() {
   const handleShareCode = async () => {
     if (!couple?.invite_code) return;
     try { await Share.share({ message: `Join me on Warm Me Up! Use this code to connect: ${couple.invite_code}` }); } catch {}
+  };
+
+  const handleRefreshCode = async () => {
+    if (!couple?.id || codeRefreshing) return;
+    setCodeRefreshing(true);
+    const alphabet = 'ACDEFGHJKLMNPQRTUVWXY34679';
+    let newCode = '';
+    for (let i = 0; i < 6; i++) newCode += alphabet[Math.floor(Math.random() * alphabet.length)];
+    await supabase.from('couples').update({ invite_code: newCode }).eq('id', couple.id);
+    await refreshCouple();
+    setCodeRefreshing(false);
   };
 
   const handleInvitePartner = async () => {
@@ -980,6 +992,18 @@ export default function AccountScreen() {
           </View>
           <View style={[styles.codeBox, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: 'rgba(255,46,138,0.20)' }]}>
             <Text style={[styles.codeText, { color: colors.text }]}>{couple.invite_code}</Text>
+            <TouchableOpacity
+              style={styles.codeRefreshBtn}
+              onPress={handleRefreshCode}
+              activeOpacity={0.7}
+              disabled={codeRefreshing}
+            >
+              <RefreshCw
+                color={codeRefreshing ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.45)'}
+                size={15}
+                strokeWidth={2}
+              />
+            </TouchableOpacity>
           </View>
           <View style={styles.inviteActions}>
             <TouchableOpacity
@@ -1845,7 +1869,8 @@ const styles = StyleSheet.create({
   inviteCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.card, marginBottom: Spacing.md, gap: Spacing.md },
   inviteHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   inviteHint: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', marginTop: 2 },
-  codeBox: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, alignItems: 'center' },
+  codeBox: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, alignItems: 'center', position: 'relative' },
+  codeRefreshBtn: { position: 'absolute', right: Spacing.md, top: '50%', marginTop: -10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   codeText: { fontSize: 22, fontFamily: 'Inter-Bold', letterSpacing: 6 },
   inviteActions: { flexDirection: 'row', gap: Spacing.sm },
   inviteBtn: {
