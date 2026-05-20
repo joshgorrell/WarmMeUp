@@ -939,8 +939,8 @@ const styles = StyleSheet.create({
 
   // Wish card
   wishCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
-  wishCardImg: { width: '100%', height: 120 },
-  wishCardBody: { padding: Spacing.md, gap: 6 },
+  wishCardImg: { width: '100%', height: 100 },
+  wishCardBody: { padding: Spacing.sm, gap: 4 },
   wishCardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   wishCardMeta: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   categoryBadge: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
@@ -949,15 +949,15 @@ const styles = StyleSheet.create({
   moreBtn: { padding: 4, marginLeft: 4 },
   dotRow: { flexDirection: 'row', gap: 3 },
   dot: { width: 3.5, height: 3.5, borderRadius: 2 },
-  wishTitle: { fontSize: FontSize.md, fontFamily: 'Inter-SemiBold', lineHeight: 22 },
-  wishDesc: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18 },
+  wishTitle: { fontSize: 14, fontFamily: 'Inter-SemiBold', lineHeight: 20 },
+  wishDesc: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 16 },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   linkText: { fontSize: 12, fontFamily: 'Inter-Regular', flex: 1 },
 
   // Reactions
   reactionBar: { flexDirection: 'row', gap: 4, marginTop: 2, flexWrap: 'wrap' },
-  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 3 },
-  reactionEmoji: { fontSize: 13 },
+  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 5, paddingVertical: 2 },
+  reactionEmoji: { fontSize: 12 },
   reactionCount: { fontSize: 11, fontFamily: 'Inter-SemiBold' },
 
   // Actions menu
