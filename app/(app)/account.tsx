@@ -209,12 +209,13 @@ function RequireUnlockAfterRow({
 
 // ─── Login method selector ────────────────────────────────────────
 function LoginMethodSelector({
-  current, bioAvailable, biometricLabel, colors, onSelect,
+  current, bioAvailable, biometricLabel, colors, inactive, onSelect,
 }: {
   current: 'password' | 'pin' | 'biometric';
   bioAvailable: boolean;
   biometricLabel: string;
   colors: any;
+  inactive: boolean;
   onSelect: (method: 'password' | 'pin' | 'biometric') => void;
 }) {
   const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
@@ -241,32 +242,36 @@ function LoginMethodSelector({
   ];
 
   return (
-    <View style={[lms.wrap, { borderBottomColor: colors.borderSubtle }]}>
-      <Text style={[lms.label, { color: colors.text }]}>Unlock Method</Text>
+    <View style={[lms.wrap, { borderBottomColor: colors.borderSubtle }, inactive && lms.wrapInactive]}>
+      <Text style={[lms.label, { color: inactive ? colors.textDisabled : colors.text }]}>Unlock Method</Text>
       <Text style={[lms.sub, { color: colors.textMuted }]}>How you open Warm Me Up each time</Text>
-      <View style={lms.options}>
+      {inactive && (
+        <Text style={[lms.inactiveNote, { color: colors.textMuted }]}>Not used — unlock is set to Never</Text>
+      )}
+      <View style={[lms.options, inactive && lms.optionsInactive]}>
         {methods.map((m, idx) => {
           const selected = current === m.key;
+          const isDisabled = m.disabled || inactive;
           return (
             <TouchableOpacity
               key={m.key}
               style={[
                 lms.option,
-                { borderColor: selected ? 'rgba(255,46,138,0.45)' : colors.borderSubtle },
-                selected && lms.optionSelected,
-                m.disabled && lms.optionDisabled,
+                { borderColor: selected && !inactive ? 'rgba(255,46,138,0.45)' : colors.borderSubtle },
+                selected && !inactive && lms.optionSelected,
+                isDisabled && lms.optionDisabled,
                 idx === methods.length - 1 && lms.optionLast,
               ]}
-              onPress={() => !m.disabled && onSelect(m.key)}
-              activeOpacity={m.disabled ? 1 : 0.72}
-              disabled={m.disabled}
+              onPress={() => !isDisabled && onSelect(m.key)}
+              activeOpacity={isDisabled ? 1 : 0.72}
+              disabled={isDisabled}
             >
               <View style={lms.optionIcon}>{m.icon}</View>
               <View style={{ flex: 1 }}>
-                <Text style={[lms.optionLabel, { color: m.disabled ? colors.textDisabled : colors.text }]}>{m.label}</Text>
+                <Text style={[lms.optionLabel, { color: isDisabled ? colors.textDisabled : colors.text }]}>{m.label}</Text>
                 <Text style={[lms.optionSub, { color: colors.textMuted }]}>{m.sub}</Text>
               </View>
-              {selected && (
+              {selected && !inactive && (
                 <View style={lms.checkWrap}>
                   <Check color="#FF2E8A" size={14} strokeWidth={2.5} />
                 </View>
@@ -281,9 +286,12 @@ function LoginMethodSelector({
 
 const lms = StyleSheet.create({
   wrap: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.md, borderBottomWidth: 1 },
+  wrapInactive: { opacity: 0.5 },
   label: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', marginBottom: 2 },
-  sub: { fontSize: 11, fontFamily: 'Inter-Regular', marginBottom: Spacing.sm },
+  sub: { fontSize: 11, fontFamily: 'Inter-Regular', marginBottom: 4 },
+  inactiveNote: { fontSize: 11, fontFamily: 'Inter-Regular', fontStyle: 'italic', marginBottom: Spacing.sm },
   options: { gap: 6 },
+  optionsInactive: { pointerEvents: 'none' },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1238,6 +1246,7 @@ export default function AccountScreen() {
           bioAvailable={bioAvailable}
           biometricLabel={biometricLabel}
           colors={colors}
+          inactive={(s?.lock_after_seconds ?? null) === -1}
           onSelect={async (method) => {
             if (method === 'biometric') {
               const result = await bioAuthenticate('Confirm biometrics to enable this method');
