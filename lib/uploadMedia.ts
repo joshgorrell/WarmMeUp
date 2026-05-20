@@ -41,8 +41,7 @@ async function uploadNative(
       'Content-Type': mimeType,
       'x-upsert': 'false',
     },
-    sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
-    mimeType,
+    sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
   });
 
   if (result.status < 200 || result.status >= 300) {

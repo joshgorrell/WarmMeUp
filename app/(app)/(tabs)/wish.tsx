@@ -688,7 +688,7 @@ function FulfillSheet({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function WishTab() {
-  const { user, couple } = useAuth();
+  const { user, couple, loading: authLoading } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabKey>('shared');
@@ -733,14 +733,14 @@ export default function WishTab() {
   }, [couple?.id]);
 
   useEffect(() => {
-    if (!couple?.id) return;
+    if (authLoading || !couple?.id) return;
     loadWishes();
     const ch = supabase.channel(`wish_tab_${couple.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wishes', filter: `couple_id=eq.${couple.id}` }, loadWishes)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wish_reactions' }, loadWishes)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [couple?.id, loadWishes]);
+  }, [authLoading, couple?.id, loadWishes]);
 
   const handleTabPress = (key: TabKey, idx: number) => {
     setActiveTab(key);
