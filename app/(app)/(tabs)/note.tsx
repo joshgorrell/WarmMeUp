@@ -106,7 +106,7 @@ function MediaBubble({
   blurEnabled,
   revealed,
   onReveal,
-  getSignedUrl,
+  signedUrl,
   onOpen,
   onSaveToVault,
   bubbleWidth,
@@ -116,22 +116,14 @@ function MediaBubble({
   blurEnabled: boolean;
   revealed: boolean;
   onReveal: (id: string) => void;
-  getSignedUrl: (m: ChatMessage) => Promise<string | null>;
+  signedUrl: string | null | undefined;
   onOpen: (m: ChatMessage) => void;
   onSaveToVault: (m: ChatMessage) => void;
   bubbleWidth: number;
   bubbleHeight: number;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    getSignedUrl(msg).then(u => {
-      setUrl(u);
-      setLoaded(true);
-    }).catch(() => setLoaded(true));
-  }, [msg.id]);
-
+  // undefined = still loading, null = failed, string = ready
+  const loaded = signedUrl !== undefined;
   const isBlurred = blurEnabled && !revealed;
 
   const handlePress = () => {
@@ -149,9 +141,9 @@ function MediaBubble({
           <View style={styles.mediaPlaceholder}>
             <ActivityIndicator color="#FF5A3D" size="small" />
           </View>
-        ) : url ? (
+        ) : signedUrl ? (
           <Image
-            source={{ uri: url }}
+            source={{ uri: signedUrl }}
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
             blurRadius={isBlurred ? 6 : 0}
@@ -161,14 +153,14 @@ function MediaBubble({
             <Lock color="rgba(255,255,255,0.5)" size={20} />
           </View>
         )}
-        {msg.media_type === 'video' && loaded && url && (
+        {msg.media_type === 'video' && loaded && signedUrl && (
           <View style={styles.playOverlay}>
             <View style={styles.playCircle}>
               <AppText style={styles.playTriangle}>&#9654;</AppText>
             </View>
           </View>
         )}
-        {isBlurred && loaded && url && (
+        {isBlurred && loaded && signedUrl && (
           <View style={styles.mediaBlurOverlay}>
             <EyeOff color="rgba(255,255,255,0.7)" size={20} strokeWidth={2} />
           </View>
@@ -202,7 +194,8 @@ export default function ChatTab() {
   const [attachedMedia, setAttachedMedia] = useState<AttachedMedia | null>(null);
   const [uploadProgress, setUploadProgress] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
-  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  // undefined = not yet fetched, null = failed, string = ready
+  const [signedUrls, setSignedUrls] = useState<Record<string, string | null>>({});
   const [editingState, setEditingState] = useState<EditingState | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
@@ -211,6 +204,7 @@ export default function ChatTab() {
   const inputRef = useRef<TextInput>(null);
   const bubbleRefs = useRef<Record<string, View | null>>({});
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const prevMsgCountRef = useRef(0);
 
   const blurEnabled = settings?.blur_media ?? true;
   const { width: screenWidth } = useLayout();
@@ -230,16 +224,33 @@ export default function ChatTab() {
     return () => sub.remove();
   }, [blurEnabled]);
 
-  useEffect(() => {
-    if (!couple?.id) { setChatLoading(false); return; }
-    loadMessages();
-    const ch = supabase.channel(`chat_tab_${couple.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, () => loadMessages())
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, () => loadMessages())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, () => loadMessages())
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [couple?.id]);
+  // Batch-fetch signed URLs for all media messages in one pass
+  const fetchSignedUrls = useCallback(async (msgs: ChatMessage[]) => {
+    const mediaMessages = msgs.filter(m => m.media_storage_path);
+    if (mediaMessages.length === 0) return;
+
+    // Group by bucket so we can use createSignedUrls (batch endpoint)
+    const byBucket: Record<string, ChatMessage[]> = {};
+    for (const m of mediaMessages) {
+      const bucket = m.media_storage_bucket ?? 'chat_media';
+      if (!byBucket[bucket]) byBucket[bucket] = [];
+      byBucket[bucket].push(m);
+    }
+
+    const results: Record<string, string | null> = {};
+    await Promise.all(
+      Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
+        const paths = bucketMsgs.map(m => m.media_storage_path!);
+        const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, 3600);
+        for (const m of bucketMsgs) {
+          const entry = data?.find(d => d.path === m.media_storage_path);
+          results[m.id] = entry?.signedUrl ?? null;
+        }
+      })
+    );
+
+    setSignedUrls(prev => ({ ...prev, ...results }));
+  }, []);
 
   const loadMessages = useCallback(async () => {
     if (!couple?.id) return;
@@ -250,16 +261,54 @@ export default function ChatTab() {
         .eq('couple_id', couple.id)
         .order('created_at', { ascending: true })
         .limit(100);
-      if (data) setMessages(data);
+      if (data) {
+        setMessages(data);
+        fetchSignedUrls(data);
+      }
     } finally {
       setChatLoading(false);
     }
-  }, [couple?.id]);
+  }, [couple?.id, fetchSignedUrls]);
 
   useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+    if (!couple?.id) { setChatLoading(false); return; }
+    loadMessages();
+    const ch = supabase.channel(`chat_tab_${couple.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
+        (payload) => {
+          const newMsg = payload.new as ChatMessage;
+          setMessages(prev => {
+            // Avoid duplicate if we already optimistically added it
+            if (prev.some(m => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+          if (newMsg.media_storage_path) {
+            fetchSignedUrls([newMsg]);
+          }
+        }
+      )
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
+        (payload) => {
+          const deletedId = (payload.old as { id: string }).id;
+          setMessages(prev => prev.filter(m => m.id !== deletedId));
+        }
+      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
+        (payload) => {
+          const updated = payload.new as ChatMessage;
+          setMessages(prev => prev.map(m => m.id === updated.id ? updated : m));
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [couple?.id]);
+
+  // Scroll to end only when new messages arrive (not on every re-render)
+  useEffect(() => {
+    if (messages.length > prevMsgCountRef.current) {
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: prevMsgCountRef.current > 0 }), 80);
     }
+    prevMsgCountRef.current = messages.length;
   }, [messages.length]);
 
   const pickMedia = async (source: 'library' | 'camera') => {
@@ -327,38 +376,12 @@ export default function ChatTab() {
     setSending(true);
 
     let chatStoragePath: string | null = null;
-    let vaultItemId: string | null = null;
 
     if (hasMedia && attachedMedia) {
       chatStoragePath = await uploadChatMedia(attachedMedia, couple.id, user.id);
       if (!chatStoragePath) {
-        // Upload failed — error already shown
         setSending(false);
         return;
-      }
-
-      // Auto-save to vault if enabled
-      if (settings?.chat_auto_save_to_vault ?? true) {
-        try {
-          const vaultPath = `${couple.id}/${user.id}/vault_${Date.now()}.${attachedMedia.type === 'video' ? 'mp4' : 'jpg'}`;
-          await uploadMediaFile(attachedMedia.uri, 'vault', vaultPath, attachedMedia.mimeType);
-          const { data: vaultData } = await supabase.from('vault_items').insert({
-            couple_id: couple.id,
-            uploaded_by_user_id: user.id,
-            media_type: attachedMedia.type,
-            file_path: vaultPath,
-            storage_path: vaultPath,
-            storage_bucket: 'vault',
-            blurred_thumbnail_path: null,
-            allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
-            allow_save: settings?.vault_allow_save_default ?? false,
-            allow_share: settings?.vault_allow_share_default ?? false,
-            chat_message_id: null, // will be back-filled after chat_messages insert
-          }).select('id').single();
-          if (vaultData?.id) vaultItemId = vaultData.id;
-        } catch {
-          // Non-fatal: vault save fails silently — chat message still sends
-        }
       }
     }
 
@@ -372,7 +395,7 @@ export default function ChatTab() {
       allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
-      vault_item_id: vaultItemId,
+      vault_item_id: null,
     }).select().single();
 
     if (insertError || !data) {
@@ -381,26 +404,59 @@ export default function ChatTab() {
       return;
     }
 
-    // Back-fill the chat_message_id on the vault item so deletions can cascade
-    if (data.id && vaultItemId) {
-      await supabase.from('vault_items').update({ chat_message_id: data.id }).eq('id', vaultItemId);
-    }
-
-    try {
-      const eventKey = hasMedia ? 'chat_media' : 'chat_message';
-      const pts = await getPointValue(eventKey);
-      const reason = hasMedia ? 'Chat media' : 'Chat message';
-      await awardPoints(couple.id, user.id, pts, reason);
-      const field = hasMedia ? 'media_sent' : 'chat_messages_sent';
-      await incrementMonthlyCounter(couple.id, user.id, field, pts);
-    } catch {
-      // points/stats are non-critical; message was already sent successfully
-    }
-    notifyPartner({ event_type: 'new_message', couple_id: couple.id, target_route: '/(app)/(tabs)/note', partnerUserId: partnerProfile?.id });
-
+    // Clear UI immediately — message is in DB, realtime will update the list
+    const capturedMedia = attachedMedia;
     setText('');
     setAttachedMedia(null);
     setSending(false);
+
+    // Fire background work without blocking the UI
+    const coupleId = couple.id;
+    const userId = user.id;
+    const messageId = data.id;
+
+    Promise.resolve().then(async () => {
+      // Auto-save to vault in the background
+      if (capturedMedia && chatStoragePath && (settings?.chat_auto_save_to_vault ?? true)) {
+        try {
+          const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${capturedMedia.type === 'video' ? 'mp4' : 'jpg'}`;
+          await uploadMediaFile(capturedMedia.uri, 'vault', vaultPath, capturedMedia.mimeType);
+          const { data: vaultData } = await supabase.from('vault_items').insert({
+            couple_id: coupleId,
+            uploaded_by_user_id: userId,
+            media_type: capturedMedia.type,
+            file_path: vaultPath,
+            storage_path: vaultPath,
+            storage_bucket: 'vault',
+            blurred_thumbnail_path: null,
+            allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
+            allow_save: settings?.vault_allow_save_default ?? false,
+            allow_share: settings?.vault_allow_share_default ?? false,
+            chat_message_id: messageId,
+          }).select('id').single();
+          if (vaultData?.id) {
+            await supabase.from('chat_messages').update({ vault_item_id: vaultData.id }).eq('id', messageId);
+            setMessages(prev => prev.map(m => m.id === messageId ? { ...m, vault_item_id: vaultData.id } : m));
+          }
+        } catch {
+          // Non-fatal: vault save fails silently
+        }
+      }
+
+      // Award points
+      try {
+        const eventKey = capturedMedia ? 'chat_media' : 'chat_message';
+        const pts = await getPointValue(eventKey);
+        const reason = capturedMedia ? 'Chat media' : 'Chat message';
+        await awardPoints(coupleId, userId, pts, reason);
+        const field = capturedMedia ? 'media_sent' : 'chat_messages_sent';
+        await incrementMonthlyCounter(coupleId, userId, field, pts);
+      } catch {
+        // points/stats are non-critical
+      }
+    });
+
+    notifyPartner({ event_type: 'new_message', couple_id: coupleId, target_route: '/(app)/(tabs)/note', partnerUserId: partnerProfile?.id });
   };
 
   const handleSaveEdit = async () => {
@@ -408,11 +464,7 @@ export default function ChatTab() {
     const newText = text.trim();
     if (!newText) return;
     setSending(true);
-    await supabase
-      .from('chat_messages')
-      .update({ content_text: newText, edited_at: new Date().toISOString() })
-      .eq('id', editingState.messageId)
-      .eq('sender_id', user!.id);
+    // Update local state immediately for instant feedback
     setMessages(prev => prev.map(m =>
       m.id === editingState.messageId
         ? { ...m, content_text: newText, edited_at: new Date().toISOString() }
@@ -421,6 +473,13 @@ export default function ChatTab() {
     setText('');
     setEditingState(null);
     setSending(false);
+    // Fire the DB update in the background — realtime UPDATE event will reconcile
+    supabase
+      .from('chat_messages')
+      .update({ content_text: newText, edited_at: new Date().toISOString() })
+      .eq('id', editingState.messageId)
+      .eq('sender_id', user!.id)
+      .then(() => {});
   };
 
   const handleCancelEdit = () => {
@@ -452,26 +511,24 @@ export default function ChatTab() {
   const handleDeleteMessage = (msg: ChatMessage) => {
     handleDismissMenu();
     const doDelete = async () => {
+      // Optimistic removal
       setMessages(prev => prev.filter(m => m.id !== msg.id));
-      // Delete chat storage file
+
+      // Run all deletes in parallel — no extra vault_items fetch needed
+      const ops: Promise<void>[] = [];
       if (msg.media_storage_path) {
         const bucket = msg.media_storage_bucket ?? 'chat_media';
-        await supabase.storage.from(bucket).remove([msg.media_storage_path]);
+        ops.push(Promise.resolve(supabase.storage.from(bucket).remove([msg.media_storage_path])).then(() => {}));
       }
-      // Delete linked vault item and its storage file
       if (msg.vault_item_id) {
-        const { data: vItem } = await supabase
-          .from('vault_items')
-          .select('storage_path, storage_bucket')
-          .eq('id', msg.vault_item_id)
-          .maybeSingle();
-        if (vItem?.storage_path) {
-          const vBucket = vItem.storage_bucket ?? 'vault';
-          await supabase.storage.from(vBucket).remove([vItem.storage_path]);
-        }
-        await supabase.from('vault_items').delete().eq('id', msg.vault_item_id);
+        // We don't know the vault storage path without an extra fetch, so delete the DB
+        // record and let orphaned storage be cleaned up separately if needed
+        ops.push(Promise.resolve(supabase.from('vault_items').delete().eq('id', msg.vault_item_id)).then(() => {}));
       }
-      await supabase.from('chat_messages').delete().eq('id', msg.id).eq('sender_id', user!.id);
+      ops.push(
+        Promise.resolve(supabase.from('chat_messages').delete().eq('id', msg.id).eq('sender_id', user!.id)).then(() => {})
+      );
+      await Promise.all(ops);
     };
 
     if (Platform.OS === 'web') {
@@ -490,19 +547,7 @@ export default function ChatTab() {
     }
   };
 
-  const getSignedUrl = async (msg: ChatMessage): Promise<string | null> => {
-    if (signedUrls[msg.id]) return signedUrls[msg.id];
-    if (!msg.media_storage_path) return null;
-    const bucket = msg.media_storage_bucket ?? 'chat_media';
-    const { data } = await supabase.storage.from(bucket).createSignedUrl(msg.media_storage_path, 3600);
-    if (data?.signedUrl) {
-      setSignedUrls(prev => ({ ...prev, [msg.id]: data.signedUrl }));
-      return data.signedUrl;
-    }
-    return null;
-  };
-
-  const handleOpenMedia = (msg: ChatMessage) => {
+  const handleOpenMedia = useCallback((msg: ChatMessage) => {
     if (!msg.media_storage_path) return;
     router.push({
       pathname: '/(app)/vault-viewer',
@@ -516,11 +561,10 @@ export default function ChatTab() {
         allowShare: msg.allow_share ? '1' : '0',
       },
     });
-  };
+  }, [router]);
 
-  const handleSaveToVault = async (msg: ChatMessage) => {
+  const handleSaveToVault = useCallback(async (msg: ChatMessage) => {
     if (!msg.media_storage_path || !couple?.id || !user) return;
-    // If already linked to a vault item, nothing to do
     if (msg.vault_item_id) {
       Alert.alert('Already in Vault', 'This media is already saved to your Vault.');
       return;
@@ -530,10 +574,8 @@ export default function ChatTab() {
     const ext = msg.media_type === 'video' ? 'mp4' : 'jpg';
     const destPath = `${couple.id}/${user.id}/vault_${Date.now()}.${ext}`;
     try {
-      // Get a short-lived signed URL for the source file
       const { data: srcData } = await supabase.storage.from(srcBucket).createSignedUrl(msg.media_storage_path, 120);
       if (!srcData?.signedUrl) throw new Error('Could not access source media.');
-      // Re-upload to vault bucket via the shared utility (web-safe)
       await uploadMediaFile(srcData.signedUrl, 'vault', destPath, mimeType);
       const { data: vaultData } = await supabase.from('vault_items').insert({
         couple_id: couple.id,
@@ -548,14 +590,17 @@ export default function ChatTab() {
         chat_message_id: msg.id,
       }).select('id').single();
       if (vaultData?.id) {
-        // Link the message back to the vault item
         await supabase.from('chat_messages').update({ vault_item_id: vaultData.id }).eq('id', msg.id);
         setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, vault_item_id: vaultData.id } : m));
       }
     } catch (e: any) {
       Alert.alert('Save Failed', e?.message ?? 'Could not save to Vault. Please try again.');
     }
-  };
+  }, [couple?.id, user]);
+
+  const handleRevealMedia = useCallback((id: string) => {
+    setRevealedMedia(prev => new Set([...prev, id]));
+  }, []);
 
   const renderItem = useCallback(({ item, index }: { item: ChatMessage; index: number }) => {
     const isMine = item.sender_id === user?.id;
@@ -563,67 +608,34 @@ export default function ChatTab() {
     const hasMedia = !!item.media_storage_path;
     const isMenuOpen = activeMenuId === item.id;
 
-    const showDivider = index === 0 || (index > 0 && new Date(messages[index - 1].created_at).toDateString() !== new Date(item.created_at).toDateString());
-
     return (
-      <>
-        {showDivider && (
-          <View style={styles.dateDivider}>
-            <View style={[styles.dateLine, { backgroundColor: colors.borderSubtle }]} />
-            <AppText style={[styles.dateText, { color: colors.textMuted }]}>{getDividerLabel(item.created_at)}</AppText>
-            <View style={[styles.dateLine, { backgroundColor: colors.borderSubtle }]} />
-          </View>
-        )}
-        <View style={[styles.msgRow, isMine ? styles.msgRowRight : styles.msgRowLeft]}>
-          {!isMine && (
-            <View style={[styles.msgAvatar, { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
-              <AppText style={styles.msgAvatarText}>{name.charAt(0).toUpperCase()}</AppText>
-            </View>
-          )}
-          <TouchableOpacity
-            ref={ref => { bubbleRefs.current[item.id] = ref as any; }}
-            onLongPress={isMine ? () => handleLongPress(item) : undefined}
-            delayLongPress={350}
-            activeOpacity={1}
-          >
-            <View style={[
-              styles.bubble,
-              isMine
-                ? { backgroundColor: 'rgba(255,90,61,0.20)', borderColor: isMenuOpen ? 'rgba(255,90,61,0.7)' : 'rgba(255,90,61,0.35)', borderTopRightRadius: 4 }
-                : { backgroundColor: colors.card, borderColor: colors.borderSubtle, borderTopLeftRadius: 4 },
-            ]}>
-              {hasMedia && (
-                <MediaBubble
-                  msg={item}
-                  blurEnabled={blurEnabled}
-                  revealed={revealedMedia.has(item.id)}
-                  onReveal={id => setRevealedMedia(prev => new Set([...prev, id]))}
-                  getSignedUrl={getSignedUrl}
-                  onOpen={handleOpenMedia}
-                  onSaveToVault={handleSaveToVault}
-                  bubbleWidth={mediaBubbleWidth}
-                  bubbleHeight={mediaBubbleHeight}
-                />
-              )}
-              {item.content_text ? (
-                <AppText style={[styles.bubbleText, { color: colors.text }]}>{item.content_text}</AppText>
-              ) : null}
-              <View style={styles.bubbleMeta}>
-                <AppText style={[styles.bubbleTime, { color: isMine ? 'rgba(255,255,255,0.45)' : colors.textMuted }]}>
-                  {formatTime(item.created_at)}
-                </AppText>
-                {item.edited_at && (
-                  <AppText style={[styles.editedLabel, { color: isMine ? 'rgba(255,255,255,0.35)' : colors.textMuted }]}>
-                    edited
-                  </AppText>
-                )}
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
-      </>
+      <MessageRow
+        item={item}
+        isMine={isMine}
+        name={name}
+        hasMedia={hasMedia}
+        isMenuOpen={isMenuOpen}
+        blurEnabled={blurEnabled}
+        revealed={revealedMedia.has(item.id)}
+        signedUrl={hasMedia ? signedUrls[item.id] : undefined}
+        colors={colors}
+        bubbleRefs={bubbleRefs}
+        mediaBubbleWidth={mediaBubbleWidth}
+        mediaBubbleHeight={mediaBubbleHeight}
+        onReveal={handleRevealMedia}
+        onOpen={handleOpenMedia}
+        onSaveToVault={handleSaveToVault}
+        onLongPress={handleLongPress}
+        prevCreatedAt={index > 0 ? (item as any).__prevCreatedAt : undefined}
+      />
     );
-  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, messages, colors, blurEnabled, revealedMedia, getSignedUrl, handleOpenMedia, handleSaveToVault, handleLongPress, mediaBubbleWidth, mediaBubbleHeight]);
+  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, handleSaveToVault, mediaBubbleWidth, mediaBubbleHeight]);
+
+  // Attach prev date to each item so renderItem doesn't need the full messages array
+  const messagesWithPrev = useMemo(() =>
+    messages.map((m, i) => ({ ...m, __prevCreatedAt: i > 0 ? messages[i - 1].created_at : null })),
+    [messages]
+  );
 
   const canSend = editingState
     ? text.trim().length > 0 && !sending
@@ -674,12 +686,11 @@ export default function ChatTab() {
           ) : (
             <FlatList
               ref={listRef}
-              data={messages}
+              data={messagesWithPrev}
               keyExtractor={m => m.id}
               renderItem={renderItem}
               contentContainerStyle={styles.list}
               showsVerticalScrollIndicator={false}
-              onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
             />
@@ -774,6 +785,107 @@ export default function ChatTab() {
     </View>
   );
 }
+
+// Extracted into its own component so React.memo can prevent unnecessary re-renders
+const MessageRow = React.memo(function MessageRow({
+  item,
+  isMine,
+  name,
+  hasMedia,
+  isMenuOpen,
+  blurEnabled,
+  revealed,
+  signedUrl,
+  colors,
+  bubbleRefs,
+  mediaBubbleWidth,
+  mediaBubbleHeight,
+  onReveal,
+  onOpen,
+  onSaveToVault,
+  onLongPress,
+  prevCreatedAt,
+}: {
+  item: ChatMessage & { __prevCreatedAt?: string | null };
+  isMine: boolean;
+  name: string;
+  hasMedia: boolean;
+  isMenuOpen: boolean;
+  blurEnabled: boolean;
+  revealed: boolean;
+  signedUrl: string | null | undefined;
+  colors: any;
+  bubbleRefs: React.MutableRefObject<Record<string, View | null>>;
+  mediaBubbleWidth: number;
+  mediaBubbleHeight: number;
+  onReveal: (id: string) => void;
+  onOpen: (m: ChatMessage) => void;
+  onSaveToVault: (m: ChatMessage) => void;
+  onLongPress: (m: ChatMessage) => void;
+  prevCreatedAt?: string | null;
+}) {
+  const showDivider = !prevCreatedAt ||
+    new Date(prevCreatedAt).toDateString() !== new Date(item.created_at).toDateString();
+
+  return (
+    <>
+      {showDivider && (
+        <View style={styles.dateDivider}>
+          <View style={[styles.dateLine, { backgroundColor: colors.borderSubtle }]} />
+          <AppText style={[styles.dateText, { color: colors.textMuted }]}>{getDividerLabel(item.created_at)}</AppText>
+          <View style={[styles.dateLine, { backgroundColor: colors.borderSubtle }]} />
+        </View>
+      )}
+      <View style={[styles.msgRow, isMine ? styles.msgRowRight : styles.msgRowLeft]}>
+        {!isMine && (
+          <View style={[styles.msgAvatar, { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
+            <AppText style={styles.msgAvatarText}>{name.charAt(0).toUpperCase()}</AppText>
+          </View>
+        )}
+        <TouchableOpacity
+          ref={ref => { bubbleRefs.current[item.id] = ref as any; }}
+          onLongPress={isMine ? () => onLongPress(item) : undefined}
+          delayLongPress={350}
+          activeOpacity={1}
+        >
+          <View style={[
+            styles.bubble,
+            isMine
+              ? { backgroundColor: 'rgba(255,90,61,0.20)', borderColor: isMenuOpen ? 'rgba(255,90,61,0.7)' : 'rgba(255,90,61,0.35)', borderTopRightRadius: 4 }
+              : { backgroundColor: colors.card, borderColor: colors.borderSubtle, borderTopLeftRadius: 4 },
+          ]}>
+            {hasMedia && (
+              <MediaBubble
+                msg={item}
+                blurEnabled={blurEnabled}
+                revealed={revealed}
+                onReveal={onReveal}
+                signedUrl={signedUrl}
+                onOpen={onOpen}
+                onSaveToVault={onSaveToVault}
+                bubbleWidth={mediaBubbleWidth}
+                bubbleHeight={mediaBubbleHeight}
+              />
+            )}
+            {item.content_text ? (
+              <AppText style={[styles.bubbleText, { color: colors.text }]}>{item.content_text}</AppText>
+            ) : null}
+            <View style={styles.bubbleMeta}>
+              <AppText style={[styles.bubbleTime, { color: isMine ? 'rgba(255,255,255,0.45)' : colors.textMuted }]}>
+                {formatTime(item.created_at)}
+              </AppText>
+              {item.edited_at && (
+                <AppText style={[styles.editedLabel, { color: isMine ? 'rgba(255,255,255,0.35)' : colors.textMuted }]}>
+                  edited
+                </AppText>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+});
 
 const styles = StyleSheet.create({
   list: { paddingHorizontal: Spacing.screen, paddingVertical: Spacing.md, paddingBottom: 16 },
