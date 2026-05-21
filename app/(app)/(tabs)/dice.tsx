@@ -5,7 +5,8 @@ import {
 import AppText from '@/components/AppText';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CircleCheck as CheckCircle, Timer } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, Timer, UserPlus } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -68,6 +69,7 @@ type RolledFor = 'self' | 'partner';
 export default function DiceTab() {
   const { user, couple, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
+  const router = useRouter();
   const hasPartner = !!couple?.user_b_id;
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
@@ -510,6 +512,20 @@ export default function DiceTab() {
             )}
           </Animated.View>
 
+          {!hasPartner && (
+            <TouchableOpacity
+              style={styles.soloNotice}
+              onPress={() => router.push('/(app)/account')}
+              activeOpacity={0.75}
+            >
+              <UserPlus color={colors.textMuted} size={13} strokeWidth={2} />
+              <AppText style={[styles.soloNoticeText, { color: colors.textMuted }]}>
+                Rolling for a partner requires{' '}
+                <AppText style={[styles.soloNoticeLink, { color: '#FFB347' }]}>pairing up first</AppText>
+              </AppText>
+            </TouchableOpacity>
+          )}
+
           {error ? (
             <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
               <AppText style={{ color: colors.danger, fontSize: FontSize.sm, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</AppText>
@@ -563,4 +579,7 @@ const styles = StyleSheet.create({
   expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   expiryText: { fontSize: 11, fontFamily: 'Inter-Regular' },
   errorBanner: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, width: '100%' },
+  soloNotice: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: Spacing.xs },
+  soloNoticeText: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular', letterSpacing: 0.2 },
+  soloNoticeLink: { fontFamily: 'Inter-Medium' },
 });
