@@ -104,19 +104,20 @@ export const PICKER_OPTIONS = {
  * iOS-specific types to what the Supabase storage buckets allow.
  *
  * Normalisations applied:
- *   image/heic, image/heif, image/heif-sequence → image/jpeg
- *     (expo-image-picker transcodes to JPEG at quality < 1, but some devices skip it)
- *   video/hevc, video/x-m4v, video/mpeg → video/mp4
- *     (iOS HEVC recordings can report these types; the bucket only allows video/mp4 and video/quicktime)
+ *   video/hevc, video/x-m4v, video/mpeg → video/quicktime
+ *     (iOS camera records MOV/QuickTime; map non-standard variants to the
+ *     canonical type the bucket accepts instead of video/mp4 which won't match
+ *     the actual bytes)
+ *
+ * HEIC/HEIF images are passed through unchanged — the vault bucket explicitly
+ * allows image/heic, image/heif, and image/heif-sequence, so remapping them to
+ * image/jpeg causes a MIME mismatch that Supabase rejects.
  */
 export function resolveAssetMimeType(asset: { mimeType?: string | null; type?: string | null }): string {
   const raw = asset.mimeType?.toLowerCase() ?? '';
-  if (raw === 'image/heic' || raw === 'image/heif' || raw === 'image/heif-sequence') {
-    return 'image/jpeg';
-  }
   if (raw === 'video/hevc' || raw === 'video/x-m4v' || raw === 'video/mpeg') {
-    return 'video/mp4';
+    return 'video/quicktime';
   }
   if (raw) return raw;
-  return asset.type === 'video' ? 'video/mp4' : 'image/jpeg';
+  return asset.type === 'video' ? 'video/quicktime' : 'image/jpeg';
 }

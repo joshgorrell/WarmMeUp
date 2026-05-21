@@ -1,6 +1,17 @@
 import React from 'react';
 import { TextInput, TextInputProps } from 'react-native';
 
-export default function AppTextInput({ allowFontScaling = true, maxFontSizeMultiplier = 1.5, ...props }: TextInputProps) {
-  return <TextInput allowFontScaling={allowFontScaling} maxFontSizeMultiplier={maxFontSizeMultiplier} {...props} />;
-}
+const AppTextInput = React.forwardRef<TextInput, TextInputProps>(
+  ({ allowFontScaling = true, maxFontSizeMultiplier = 1.5, ...props }, ref) => (
+    <TextInput
+      ref={ref}
+      allowFontScaling={allowFontScaling}
+      maxFontSizeMultiplier={maxFontSizeMultiplier}
+      {...props}
+    />
+  )
+);
+
+AppTextInput.displayName = 'AppTextInput';
+
+export default AppTextInput;

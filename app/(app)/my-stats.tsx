@@ -96,6 +96,7 @@ export default function MyStatsScreen() {
       dares_accepted: 0, dares_completed: 0, dares_skipped: 0,
       dice_accepted: 0, dice_completed: 0, dice_skipped: 0,
       asks_sent: 0, asks_replied: 0,
+      wishes_sent: 0, wishes_fulfilled: 0,
       chat_messages_sent: 0, media_sent: 0, vault_uploads: 0,
       created_at: '',
     };

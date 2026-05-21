@@ -76,7 +76,7 @@ export default function AuthShell({
 
   return (
     <View style={[styles.root, style]}>
-      <LinearGradient colors={gradientColors} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={gradientColors as [string, string, ...string[]]} style={StyleSheet.absoluteFill} />
       {body}
     </View>
   );

@@ -505,7 +505,7 @@ export default function ChatTab() {
   const handleOpenMedia = (msg: ChatMessage) => {
     if (!msg.media_storage_path) return;
     router.push({
-      pathname: '/vault-viewer',
+      pathname: '/(app)/vault-viewer',
       params: {
         storagePath: msg.media_storage_path,
         storageBucket: msg.media_storage_bucket ?? 'chat_media',
