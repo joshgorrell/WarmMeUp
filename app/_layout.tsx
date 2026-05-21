@@ -9,9 +9,18 @@ import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, TouchableOpacity, AppState, AppStateStatus, Platform } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, AppState, AppStateStatus, Platform, Image } from 'react-native';
 import AppText from '@/components/AppText';
 import type { NotificationData } from '@/lib/notifications';
+
+// Warm the image decode cache as early as possible — before the transition/unlock screens mount.
+// resolveAssetSource works on both native (file URI) and web (network URL).
+const PREFETCH_LOGO = require('@/assets/images/image_(3).png');
+const PREFETCH_SLOGAN = require('@/assets/images/image_(2).png');
+if (Platform.OS !== 'web') {
+  Image.prefetch(Image.resolveAssetSource(PREFETCH_LOGO).uri);
+  Image.prefetch(Image.resolveAssetSource(PREFETCH_SLOGAN).uri);
+}
 
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {

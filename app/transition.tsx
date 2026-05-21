@@ -1,14 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Animated, Image, useWindowDimensions } from 'react-native';
+import { StyleSheet, Animated, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import WarmupLogo from '@/components/WarmupLogo';
+import WarmupWordmark from '@/components/WarmupWordmark';
 import { pendingNotificationRoute } from './_layout';
 import type { NotificationData } from '@/lib/notifications';
-
-const SLOGAN = require('@/assets/images/WMU_Stay_Playful_copy.PNG');
-// Image natural dimensions: ~774 × 228 px → aspect ratio ≈ 0.2948
-const SLOGAN_ASPECT = 228 / 774;
 
 function resolveNotificationRoute(data: NotificationData): string | null {
   switch (data.event_type) {
@@ -40,11 +38,10 @@ export default function TransitionScreen() {
   const router = useRouter();
   const { couple, partnerProfile, settings, user, isAdmin, loading } = useAuth();
   const { width } = useWindowDimensions();
-  const sloganW = Math.min(width * 0.72, 320);
-  const sloganH = Math.round(sloganW * SLOGAN_ASPECT);
+  const logoW = Math.min(width * 0.5, 200);
   const bgOpacity = useRef(new Animated.Value(0)).current;
-  const sloganScale = useRef(new Animated.Value(0.94)).current;
-  const sloganOpacity = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.94)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
   const routed = useRef(false);
   const animDone = useRef(false);
   const authReady = useRef(false);
@@ -55,8 +52,11 @@ export default function TransitionScreen() {
     routed.current = true;
     Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
       if (couple?.active || isAdmin) {
+        // Show the celebration screen once for user A (who shared the code) when
+        // the couple first becomes active and they haven't seen it yet.
         const needsCelebration = couple?.active && !!couple?.user_b_id && !isAdmin && settings && !settings.celebration_seen;
         if (needsCelebration && user) {
+          // Mark as seen before navigating so a reload doesn't re-show it.
           await supabase
             .from('user_settings')
             .update({ celebration_seen: true, updated_at: new Date().toISOString() })
@@ -67,6 +67,9 @@ export default function TransitionScreen() {
           });
           return;
         }
+        // After gates are cleared, honour any pending notification deep-link.
+        // Pass the destination as a param rather than calling router.push() 100ms
+        // later — that setTimeout races the replace and can crash the navigator.
         const intent = pendingNotificationRoute.current;
         const notifDest = intent ? resolveNotificationRoute(intent) : null;
         if (intent) pendingNotificationRoute.current = null;
@@ -83,8 +86,8 @@ export default function TransitionScreen() {
   useEffect(() => {
     Animated.parallel([
       Animated.timing(bgOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.timing(sloganOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
-      Animated.spring(sloganScale, { toValue: 1.0, friction: 8, tension: 80, useNativeDriver: true }),
+      Animated.timing(logoOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
+      Animated.spring(logoScale, { toValue: 1.0, friction: 8, tension: 80, useNativeDriver: true }),
     ]).start(() => {
       animDone.current = true;
       tryNavigate();
@@ -100,12 +103,9 @@ export default function TransitionScreen() {
 
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
-      <Animated.View style={{ transform: [{ scale: sloganScale }], opacity: sloganOpacity }}>
-        <Image
-          source={SLOGAN}
-          style={{ width: sloganW, height: sloganH }}
-          resizeMode="contain"
-        />
+      <Animated.View style={{ transform: [{ scale: logoScale }], opacity: logoOpacity, alignItems: 'center', gap: 8 }}>
+        <WarmupLogo size={logoW} />
+        <WarmupWordmark size={18} />
       </Animated.View>
     </Animated.View>
   );
@@ -117,5 +117,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#050507',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
   },
 });
