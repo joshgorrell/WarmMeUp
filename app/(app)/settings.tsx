@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, StyleSheet, ScrollView, TouchableOpacity,
+  View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
@@ -296,8 +296,18 @@ export default function SettingsScreen() {
       if (token) {
         await savePushToken(user.id, token);
         await update({ push_notifications_enabled: true });
+      } else if (Platform.OS !== 'web') {
+        // Token is null — check if permission was denied so we can guide the user
+        const Notifications = await import('expo-notifications');
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status === 'denied') {
+          Alert.alert(
+            'Notifications Blocked',
+            'You previously denied notification permissions. To enable them, go to your device Settings and allow notifications for this app.',
+            [{ text: 'OK' }]
+          );
+        }
       }
-      // If permission was denied, don't toggle on
     } else {
       await clearPushToken(user.id);
       await update({ push_notifications_enabled: false });

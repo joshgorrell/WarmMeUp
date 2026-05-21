@@ -5,6 +5,8 @@ export interface Profile {
   push_token: string | null;
   is_admin: boolean;
   is_super_admin: boolean;
+  tos_accepted_at: string | null;
+  oauth_provider: string | null;
   created_at: string;
 }
 
@@ -34,7 +36,7 @@ export interface UserSettings {
   blur_on_background: boolean;
   blur_media: boolean;
   discreet_notifications: boolean;
-  notification_copy: string;
+  notification_copy: string | null;
   vault_allow_screenshot_default: boolean;
   vault_allow_save_default: boolean;
   vault_allow_share_default: boolean;

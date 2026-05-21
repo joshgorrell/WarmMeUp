@@ -833,6 +833,31 @@ export default function AccountScreen() {
   };
 
   // ── Delete History ───────────────────────────────────────────────
+
+  // Deletes all files under a couple folder by listing user sub-folders then
+  // paginating through each sub-folder's files in batches of 100.
+  const deleteStorageFolder = async (bucket: string, coupleId: string) => {
+    try {
+      const { data: userFolders } = await supabase.storage.from(bucket).list(coupleId);
+      if (!userFolders?.length) return;
+      for (const folder of userFolders) {
+        let offset = 0;
+        const PAGE = 100;
+        while (true) {
+          const { data: files } = await supabase.storage
+            .from(bucket)
+            .list(`${coupleId}/${folder.name}`, { limit: PAGE, offset });
+          if (!files?.length) break;
+          await supabase.storage
+            .from(bucket)
+            .remove(files.map(f => `${coupleId}/${folder.name}/${f.name}`));
+          if (files.length < PAGE) break;
+          offset += PAGE;
+        }
+      }
+    } catch {}
+  };
+
   const handleDeleteHistory = async (includeVault: boolean) => {
     if (!couple?.id) return;
     setDeleting(true);
@@ -843,20 +868,10 @@ export default function AccountScreen() {
       await supabase.from('point_events').delete().eq('couple_id', couple.id);
       await supabase.from('monthly_scores').delete().eq('couple_id', couple.id);
       await supabase.from('scores').update({ points: 0 }).eq('couple_id', couple.id);
-      try {
-        const { data: chatFiles } = await supabase.storage.from('chat_media').list(couple.id, { limit: 1000 });
-        if (chatFiles && chatFiles.length > 0) {
-          await supabase.storage.from('chat_media').remove(chatFiles.map(f => `${couple.id}/${f.name}`));
-        }
-      } catch {}
+      await deleteStorageFolder('chat_media', couple.id);
       if (includeVault) {
         await supabase.from('vault_items').delete().eq('couple_id', couple.id);
-        try {
-          const { data: vaultFiles } = await supabase.storage.from('vault').list(couple.id, { limit: 1000 });
-          if (vaultFiles && vaultFiles.length > 0) {
-            await supabase.storage.from('vault').remove(vaultFiles.map(f => `${couple.id}/${f.name}`));
-          }
-        } catch {}
+        await deleteStorageFolder('vault', couple.id);
       }
       setDeleteDone(true);
       setTimeout(() => { setDeleteStep(null); setDeleteDone(false); loadStats(); }, 1800);
