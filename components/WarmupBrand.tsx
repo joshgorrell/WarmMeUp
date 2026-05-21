@@ -12,7 +12,7 @@ interface WarmupBrandProps {
 }
 
 // WMU_Stay_Playful_ copy.PNG: natural dimensions ~774×228 → aspect ratio ≈ 0.2948
-const SLOGAN_SOURCE = require('@/assets/images/WMU_Stay_Playful_ copy.PNG');
+const SLOGAN_SOURCE = require('@/assets/images/WMU_Stay_Playful_copy.PNG');
 const SLOGAN_ASPECT = 228 / 774;
 
 export default function WarmupBrand({ logoSize = 100, sloganScale = 1, sloganWidth: sloganWidthProp, showTagline = true }: WarmupBrandProps) {

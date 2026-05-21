@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { pendingNotificationRoute } from './_layout';
 import type { NotificationData } from '@/lib/notifications';
 
-const SLOGAN = require('@/assets/images/WMU_Stay_Playful_ copy.PNG');
+const SLOGAN = require('@/assets/images/WMU_Stay_Playful_copy.PNG');
 // Image natural dimensions: ~774 × 228 px → aspect ratio ≈ 0.2948
 const SLOGAN_ASPECT = 228 / 774;
 
