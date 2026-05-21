@@ -510,7 +510,7 @@ export default function AccountScreen() {
   };
 
   const handleRefreshCode = async () => {
-    if (!couple?.id || codeRefreshing || couple.active) return;
+    if (!couple?.id || codeRefreshing || couple.user_b_id) return;
     setCodeRefreshing(true);
     const newCode = generateInviteCode();
     const { error } = await supabase
@@ -518,6 +518,7 @@ export default function AccountScreen() {
       .update({ invite_code: newCode, invite_code_expires_at: codeExpiresAt() })
       .eq('id', couple.id);
     if (error) {
+      Alert.alert('Error', 'Could not refresh code. Please try again.');
       setCodeRefreshing(false);
       return;
     }
@@ -526,13 +527,13 @@ export default function AccountScreen() {
   };
 
   const handleCancelInvite = async () => {
-    if (!couple?.id || couple.active || cancellingInvite) return;
+    if (!couple?.id || couple.user_b_id || cancellingInvite) return;
     setCancellingInvite(true);
     const { error } = await supabase
       .from('couples')
       .delete()
       .eq('id', couple.id)
-      .eq('active', false);
+      .is('user_b_id', null);
     if (!error) {
       await refreshCouple();
     }
@@ -545,7 +546,7 @@ export default function AccountScreen() {
     if (couple?.invite_code) { handleShareCode(); return; }
     setCreatingCouple(true);
     try {
-      const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+      const code = generateInviteCode();
       const { error } = await supabase.from('couples').insert({ user_a_id: user.id, invite_code: code, active: false });
       if (error) throw error;
       await refreshCouple();
@@ -977,7 +978,7 @@ export default function AccountScreen() {
       </View>
 
       {/* Partner card */}
-      {couple?.active && partnerProfile ? (
+      {couple?.user_b_id && partnerProfile ? (
         <View style={[styles.connectedCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.22)' }]}>
           <View style={styles.connectedTop}>
             <View style={styles.connectedAvatarWrap}>
@@ -1014,7 +1015,7 @@ export default function AccountScreen() {
             <ChevronRight color={colors.textMuted} size={13} strokeWidth={2} />
           </TouchableOpacity>
         </View>
-      ) : !couple?.active && couple?.invite_code ? (
+      ) : !couple?.user_b_id && couple?.invite_code ? (
         <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)' }]}>
           <View style={styles.inviteHeader}>
             <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,46,138,0.12)' }]}>
