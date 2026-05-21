@@ -37,6 +37,9 @@ async function uploadNative(
 
   // Supabase Storage REST API requires PUT for object uploads.
   // POST is only for multipart uploads and returns 4xx on standard requests.
+  // x-upsert is intentionally omitted: every vault/chat upload uses a unique
+  // timestamp filename so collisions never occur, and upsert triggers an internal
+  // UPDATE on storage.objects which requires a separate UPDATE RLS policy.
   const result = await FileSystem.uploadAsync(uploadUrl, localUri, {
     httpMethod: 'PUT',
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
@@ -44,7 +47,6 @@ async function uploadNative(
       'Authorization': `Bearer ${session.access_token}`,
       'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
       'Content-Type': mimeType,
-      'x-upsert': 'true',
     },
     sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
   });
@@ -102,14 +104,22 @@ export const PICKER_OPTIONS = {
 };
 
 /**
- * Resolve the correct MIME type from an expo-image-picker asset.
- * iOS often reports image/heic but transcodes to JPEG when quality < 1,
- * so we normalise HEIC/HEIF → image/jpeg to match the bucket allow-list.
+ * Resolve the correct MIME type from an expo-image-picker asset, normalising
+ * iOS-specific types to what the Supabase storage buckets allow.
+ *
+ * Normalisations applied:
+ *   image/heic, image/heif, image/heif-sequence → image/jpeg
+ *     (expo-image-picker transcodes to JPEG at quality < 1, but some devices skip it)
+ *   video/hevc, video/x-m4v, video/mpeg → video/mp4
+ *     (iOS HEVC recordings can report these types; the bucket only allows video/mp4 and video/quicktime)
  */
 export function resolveAssetMimeType(asset: { mimeType?: string | null; type?: string | null }): string {
   const raw = asset.mimeType?.toLowerCase() ?? '';
   if (raw === 'image/heic' || raw === 'image/heif' || raw === 'image/heif-sequence') {
     return 'image/jpeg';
+  }
+  if (raw === 'video/hevc' || raw === 'video/x-m4v' || raw === 'video/mpeg') {
+    return 'video/mp4';
   }
   if (raw) return raw;
   return asset.type === 'video' ? 'video/mp4' : 'image/jpeg';
