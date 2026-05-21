@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Image, StyleSheet, Animated, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Animated, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -34,19 +34,14 @@ function resolveNotificationRoute(data: NotificationData): string | null {
   }
 }
 
-const SLOGAN_SOURCE = require('@/assets/images/image_(2).png');
-
 export default function TransitionScreen() {
   const router = useRouter();
   const { couple, partnerProfile, settings, user, isAdmin, loading } = useAuth();
   const { width } = useWindowDimensions();
   const logoW = Math.min(width * 0.5, 200);
-  const sloganW = Math.min(width * 0.78, 320);
-  const sloganH = sloganW * 0.5;
   const bgOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.94)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
-  const sloganOpacity = useRef(new Animated.Value(0)).current;
   const routed = useRef(false);
   const animDone = useRef(false);
   const authReady = useRef(false);
@@ -89,13 +84,10 @@ export default function TransitionScreen() {
   };
 
   useEffect(() => {
-    Animated.sequence([
-      Animated.parallel([
-        Animated.timing(bgOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-        Animated.timing(logoOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
-        Animated.spring(logoScale, { toValue: 1.0, friction: 8, tension: 80, useNativeDriver: true }),
-      ]),
-      Animated.timing(sloganOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+    Animated.parallel([
+      Animated.timing(bgOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(logoOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
+      Animated.spring(logoScale, { toValue: 1.0, friction: 8, tension: 80, useNativeDriver: true }),
     ]).start(() => {
       animDone.current = true;
       tryNavigate();
@@ -115,11 +107,6 @@ export default function TransitionScreen() {
         <WarmupLogo size={logoW} />
         <WarmupWordmark size={18} />
       </Animated.View>
-      <Animated.Image
-        source={SLOGAN_SOURCE}
-        style={[{ width: sloganW, height: sloganH }, { opacity: sloganOpacity }]}
-        resizeMode="contain"
-      />
     </Animated.View>
   );
 }
