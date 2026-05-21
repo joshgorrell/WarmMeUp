@@ -467,36 +467,36 @@ export default function SettingsScreen() {
         <Section
           title="POINTS & SCORE"
           note={
-            couple?.active
+            couple?.user_b_id
               ? "This setting affects both you and your partner. Points are always tallied in the background — turning this off just hides the scores."
               : "Connect with a partner to enable the points system."
           }
         >
           <SettingsRow
             label="Points System"
-            sub={couple?.active ? "Show scores, leaderboard, and Cash In features" : "Requires an active partner connection"}
+            sub={couple?.user_b_id ? "Show scores, leaderboard, and Cash In features" : "Requires an active partner connection"}
             toggle
-            value={couple?.active ? (couple?.points_enabled ?? true) : false}
+            value={couple?.user_b_id ? (couple?.points_enabled ?? true) : false}
             onChange={handleTogglePoints}
-            disabled={!couple?.active}
+            disabled={!couple?.user_b_id}
           />
         </Section>
 
         <Section
           title="STREAKS"
           note={
-            couple?.active
+            couple?.user_b_id
               ? "This setting affects both you and your partner. Your streak is always tracked in the background — turning this off just hides it."
               : "Connect with a partner to enable streaks."
           }
         >
           <SettingsRow
             label="Day Streak"
-            sub={couple?.active ? "Show your current consecutive-day activity streak" : "Requires an active partner connection"}
+            sub={couple?.user_b_id ? "Show your current consecutive-day activity streak" : "Requires an active partner connection"}
             toggle
-            value={couple?.active ? (couple?.streaks_enabled ?? true) : false}
+            value={couple?.user_b_id ? (couple?.streaks_enabled ?? true) : false}
             onChange={handleToggleStreaks}
-            disabled={!couple?.active}
+            disabled={!couple?.user_b_id}
           />
         </Section>
 

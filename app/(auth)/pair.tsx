@@ -103,43 +103,45 @@ export default function PairScreen() {
   }, [couple?.id]);
 
   useEffect(() => {
-    if (couple?.active) {
+    if (couple?.user_b_id) {
       router.replace('/(app)/(tabs)');
     }
-  }, [couple?.active]);
+  }, [couple?.user_b_id]);
 
   const loadOrCreateCouple = async () => {
     if (!user) return;
 
-    // If user is already in an active couple, skip straight to the app
-    const { data: active } = await supabase
+    // If user already has a partner, skip straight to the app
+    const { data: paired } = await supabase
       .from('couples')
       .select('id')
       .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-      .eq('active', true)
+      .not('user_b_id', 'is', null)
       .maybeSingle();
-    if (active) {
+    if (paired) {
       router.replace('/(app)/(tabs)');
       return;
     }
 
+    // Use the solo couple already created by the signup trigger
     const { data: existing } = await supabase
       .from('couples')
       .select('*')
       .eq('user_a_id', user.id)
-      .eq('active', false)
+      .is('user_b_id', null)
       .maybeSingle();
 
     if (existing) {
       setMyCode(existing.invite_code);
     } else {
+      // Fallback: no solo couple exists yet — create one
       const code = generateInviteCode();
       const { data: newCouple, error: insertError } = await supabase
         .from('couples')
         .insert({
           user_a_id: user.id,
           invite_code: code,
-          active: false,
+          active: true,
           invite_code_expires_at: codeExpiresAt(),
         })
         .select()
@@ -166,7 +168,7 @@ export default function PairScreen() {
   };
 
   const handleRefreshCode = async () => {
-    if (!couple?.id || refreshing || couple.active) return;
+    if (!couple?.id || refreshing || couple.user_b_id) return;
     setRefreshing(true);
     const newCode = generateInviteCode();
     const { error: updateError } = await supabase
@@ -192,13 +194,13 @@ export default function PairScreen() {
     setLoading(true);
     try {
       // Prevent double-connecting
-      const { data: existingActive } = await supabase
+      const { data: existingPaired } = await supabase
         .from('couples')
         .select('id')
         .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-        .eq('active', true)
+        .not('user_b_id', 'is', null)
         .maybeSingle();
-      if (existingActive) {
+      if (existingPaired) {
         setError("You're already connected to a partner.");
         return;
       }
@@ -262,7 +264,7 @@ export default function PairScreen() {
         .from('couples')
         .delete()
         .eq('user_a_id', user.id)
-        .eq('active', false)
+        .is('user_b_id', null)
         .neq('id', targetCouple.id);
 
       await supabase.from('scores').upsert([

@@ -27,8 +27,8 @@ export default function InviteDeepLink() {
       return;
     }
     // Authenticated user — check connection state
-    if (couple?.active) {
-      // Already connected; deep link has nothing to do here
+    if (couple?.user_b_id) {
+      // Already paired; deep link has nothing to do here
       router.replace('/(app)/(tabs)');
       return;
     }
