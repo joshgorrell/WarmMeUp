@@ -9,7 +9,7 @@ import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, AppState, AppStateStatus, Platform, Image } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, AppState, AppStateStatus, Platform, Image } from 'react-native';
 import AppText from '@/components/AppText';
 import type { NotificationData } from '@/lib/notifications';
 
@@ -30,13 +30,23 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
   static getDerivedStateFromError() {
     return { hasError: true };
   }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[ErrorBoundary]', error, info.componentStack);
+  }
   render() {
     if (this.state.hasError) {
       return (
-        <View style={{ flex: 1, backgroundColor: '#07070A', alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ flex: 1, backgroundColor: '#07070A', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
           <AppText style={{ color: '#fff', fontSize: 16, textAlign: 'center', paddingHorizontal: 32 }}>
-            Something went wrong. Please restart the app.
+            Something went wrong.
           </AppText>
+          <TouchableOpacity
+            onPress={() => this.setState({ hasError: false })}
+            style={{ backgroundColor: '#FF2E8A', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24 }}
+            activeOpacity={0.8}
+          >
+            <AppText style={{ color: '#fff', fontSize: 15, fontFamily: 'Inter-SemiBold' }}>Try Again</AppText>
+          </TouchableOpacity>
         </View>
       );
     }

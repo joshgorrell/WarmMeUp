@@ -59,7 +59,7 @@ export default function TransitionScreen() {
       if (couple?.active || isAdmin) {
         // Show the celebration screen once for user A (who shared the code) when
         // the couple first becomes active and they haven't seen it yet.
-        const needsCelebration = couple?.active && !isAdmin && settings && !settings.celebration_seen;
+        const needsCelebration = couple?.active && !!couple?.user_b_id && !isAdmin && settings && !settings.celebration_seen;
         if (needsCelebration && user) {
           // Mark as seen before navigating so a reload doesn't re-show it.
           await supabase

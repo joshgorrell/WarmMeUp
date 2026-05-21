@@ -3,6 +3,7 @@ import {
   View, StyleSheet, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Flame, CircleCheck as CheckCircle, RotateCcw, Timer } from 'lucide-react-native';
@@ -56,8 +57,10 @@ const FALLBACK_DARES = [
 ];
 
 export default function DareTab() {
+  const router = useRouter();
   const { user, couple, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
+  const hasPartner = !!couple?.user_b_id;
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
   const [quickDares, setQuickDares] = useState<string[]>(FALLBACK_DARES);
@@ -331,7 +334,22 @@ export default function DareTab() {
             </View>
           )}
 
-          {!sent && (
+          {!hasPartner ? (
+            <View style={[styles.soloPlaceholder, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+              <Flame color="#FF2E8A" size={36} fill="rgba(255,46,138,0.12)" strokeWidth={1.5} />
+              <AppText style={[styles.soloTitle, { color: colors.text }]}>Dares are more fun with two</AppText>
+              <AppText style={[styles.soloSub, { color: colors.textSecondary }]}>
+                Invite your partner and start sending dares back and forth.
+              </AppText>
+              <TouchableOpacity
+                onPress={() => router.push('/(app)/account')}
+                style={styles.soloBtn}
+                activeOpacity={0.8}
+              >
+                <AppText style={styles.soloBtnText}>Invite Partner</AppText>
+              </TouchableOpacity>
+            </View>
+          ) : !sent && (
             <>
               {error ? (
                 <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
@@ -387,6 +405,24 @@ export default function DareTab() {
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 60 },
   iconWrap: { alignItems: 'center', marginBottom: Spacing.md },
+  soloPlaceholder: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  soloTitle: { fontSize: FontSize.md, fontFamily: 'Inter-SemiBold', textAlign: 'center' },
+  soloSub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20 },
+  soloBtn: {
+    marginTop: Spacing.sm,
+    backgroundColor: '#FF2E8A',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  soloBtnText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   incomingSection: { gap: Spacing.sm, marginBottom: Spacing.md },
   pointsHint: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.sm, alignItems: 'center' },
   pointsHintText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },

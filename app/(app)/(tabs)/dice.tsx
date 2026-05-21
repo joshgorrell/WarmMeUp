@@ -68,6 +68,7 @@ type RolledFor = 'self' | 'partner';
 export default function DiceTab() {
   const { user, couple, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
+  const hasPartner = !!couple?.user_b_id;
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
   const [prompts, setPrompts] = useState<string[]>(FALLBACK_PROMPTS);
@@ -221,7 +222,7 @@ export default function DiceTab() {
     const idx = Math.floor(Math.random() * prompts.length);
     const prompt = prompts[idx];
     const landFace = Math.ceil(Math.random() * 6);
-    const forPartner = rolledFor === 'partner';
+    const forPartner = rolledFor === 'partner' && hasPartner;
 
     diceRef.current?.roll(
       (f) => setFace(f),
@@ -424,26 +425,28 @@ export default function DiceTab() {
           </View>
         )}
 
-        {/* Roll For toggle */}
-        <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-          {(['self', 'partner'] as RolledFor[]).map((option) => {
-            const active = rolledFor === option;
-            return (
-              <TouchableOpacity
-                key={option}
-                style={[styles.toggleOption, active && styles.toggleOptionActive]}
-                onPress={() => { if (!rolling) setRolledFor(option); }}
-                activeOpacity={0.8}
-                disabled={rolling}
-              >
-                {active && <View style={[StyleSheet.absoluteFill, styles.toggleActiveBg]} />}
-                <AppText style={[styles.toggleText, { color: active ? '#FFB347' : colors.textMuted }]}>
-                  {option === 'self' ? 'For Me' : 'For My Partner'}
-                </AppText>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {/* Roll For toggle — only shown when a partner has joined */}
+        {hasPartner && (
+          <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+            {(['self', 'partner'] as RolledFor[]).map((option) => {
+              const active = rolledFor === option;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  style={[styles.toggleOption, active && styles.toggleOptionActive]}
+                  onPress={() => { if (!rolling) setRolledFor(option); }}
+                  activeOpacity={0.8}
+                  disabled={rolling}
+                >
+                  {active && <View style={[StyleSheet.absoluteFill, styles.toggleActiveBg]} />}
+                  <AppText style={[styles.toggleText, { color: active ? '#FFB347' : colors.textMuted }]}>
+                    {option === 'self' ? 'For Me' : 'For My Partner'}
+                  </AppText>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Dice area */}
         <View style={styles.diceArea}>

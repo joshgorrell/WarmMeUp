@@ -194,6 +194,7 @@ export default function ChatTab() {
   const router = useRouter();
   const { user, couple, profile, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
+  const hasPartner = !!couple?.user_b_id;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(true);
   const [text, setText] = useState('');
@@ -643,6 +644,23 @@ export default function ChatTab() {
             <View style={styles.emptyState}>
               <ActivityIndicator color={colors.textMuted} />
             </View>
+          ) : !hasPartner ? (
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.emptyState}>
+                <AppText style={styles.emptyEmoji}>💬</AppText>
+                <AppText style={[styles.emptyTitle, { color: colors.text }]}>Your private chat</AppText>
+                <AppText style={[styles.emptySub, { color: colors.textSecondary }]}>
+                  Messages will appear here once your partner joins.{'\n'}Only the two of you will ever see this.
+                </AppText>
+                <TouchableOpacity
+                  onPress={() => router.push('/(app)/account')}
+                  style={styles.inviteBtn}
+                  activeOpacity={0.8}
+                >
+                  <AppText style={styles.inviteBtnText}>Invite Partner</AppText>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
           ) : messages.length === 0 ? (
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View style={styles.emptyState}>
@@ -678,8 +696,8 @@ export default function ChatTab() {
             </View>
           )}
 
-          {/* Compose bar */}
-          <View style={[styles.compose, { backgroundColor: colors.card, borderTopColor: colors.borderSubtle }]}>
+          {/* Compose bar — hidden for solo users (no partner yet) */}
+          <View style={[styles.compose, { backgroundColor: colors.card, borderTopColor: colors.borderSubtle }, !hasPartner && styles.composeHidden]}>
             {attachedMedia && !editingState && (
               <View style={styles.previewRow}>
                 <Image source={{ uri: attachedMedia.uri }} style={styles.previewThumb} />
@@ -827,4 +845,13 @@ const styles = StyleSheet.create({
   attachIcon: { paddingHorizontal: 4, paddingBottom: 10 },
   input: { flex: 1, borderRadius: Radius.xl, paddingHorizontal: 14, paddingVertical: 10, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', maxHeight: 120, minHeight: 40 },
   sendBtn: { paddingHorizontal: 4, paddingBottom: 10 },
+  composeHidden: { display: 'none' },
+  inviteBtn: {
+    marginTop: Spacing.md,
+    backgroundColor: '#FF2E8A',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  inviteBtnText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
 });

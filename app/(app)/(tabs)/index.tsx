@@ -31,8 +31,17 @@ const GREETING_SUBS = [
   "Something fun is about to happen.",
 ];
 
-function getSessionSub() {
-  return GREETING_SUBS[Math.floor(Math.random() * GREETING_SUBS.length)];
+const SOLO_GREETING_SUBS = [
+  "Explore what's waiting for you.",
+  "Your private playground is ready.",
+  "Set the stage before your partner arrives.",
+  "Get familiar before the fun begins.",
+  "Everything is set up and waiting.",
+];
+
+function getSessionSub(hasParter: boolean) {
+  const pool = hasParter ? GREETING_SUBS : SOLO_GREETING_SUBS;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function getGreeting() {
@@ -71,7 +80,8 @@ export default function HomeScreen() {
   const [activeInteraction, setActiveInteraction] = useState<Interaction | null>(null);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [greetingSub] = useState(getSessionSub);
+  const hasPartner = !!couple?.user_b_id;
+  const [greetingSub] = useState(() => getSessionSub(hasPartner));
 
   // Honour pending notification deep-link passed from transition.tsx.
   // We navigate here instead of in transition to avoid push-on-top-of-replace races.
@@ -221,7 +231,7 @@ export default function HomeScreen() {
   const partnerName = partnerProfile?.display_name ?? 'Partner';
   const total = myScore + partnerScore;
   const myPct = total > 0 ? myScore / total : 0.5;
-  const pointsEnabled = couple?.points_enabled ?? true;
+  const pointsEnabled = (couple?.points_enabled ?? true) && hasPartner;
 
   return (
     <AppShell scrollable={false}>
