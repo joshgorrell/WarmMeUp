@@ -35,11 +35,6 @@ async function uploadNative(
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${storagePath}`;
 
-  // Supabase Storage REST API requires PUT for object uploads.
-  // POST is only for multipart uploads and returns 4xx on standard requests.
-  // x-upsert is intentionally omitted: every vault/chat upload uses a unique
-  // timestamp filename so collisions never occur, and upsert triggers an internal
-  // UPDATE on storage.objects which requires a separate UPDATE RLS policy.
   const result = await FileSystem.uploadAsync(uploadUrl, localUri, {
     httpMethod: 'PUT',
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
@@ -47,6 +42,7 @@ async function uploadNative(
       'Authorization': `Bearer ${session.access_token}`,
       'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
       'Content-Type': mimeType,
+      'x-upsert': 'true',
     },
     sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
   });
