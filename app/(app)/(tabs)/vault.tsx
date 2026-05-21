@@ -116,17 +116,29 @@ export default function VaultScreen() {
     const { data } = await supabase.from('vault_items').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false });
     if (data) {
       setItems(data);
-      // Pre-fetch signed URLs for all items so thumbnails render immediately
-      data.forEach(item => {
+      // Batch-fetch signed URLs grouped by bucket (one API call per bucket)
+      const byBucket: Record<string, typeof data> = {};
+      for (const item of data) {
         const bucket = item.storage_bucket ?? 'vault';
         const path = item.storage_path ?? item.file_path;
-        if (!path) return;
-        supabase.storage.from(bucket).createSignedUrl(path, 60 * 60).then(({ data: urlData }) => {
-          if (urlData?.signedUrl) {
-            setSignedUrls(prev => ({ ...prev, [item.id]: urlData.signedUrl }));
+        if (!path) continue;
+        if (!byBucket[bucket]) byBucket[bucket] = [];
+        byBucket[bucket].push(item);
+      }
+      await Promise.all(
+        Object.entries(byBucket).map(async ([bucket, bucketItems]) => {
+          const paths = bucketItems.map(i => (i.storage_path ?? i.file_path)!);
+          const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 60 * 60);
+          if (!urlData) return;
+          const urlMap: Record<string, string> = {};
+          for (const item of bucketItems) {
+            const path = item.storage_path ?? item.file_path;
+            const entry = urlData.find(d => d.path === path);
+            if (entry?.signedUrl) urlMap[item.id] = entry.signedUrl;
           }
-        });
-      });
+          setSignedUrls(prev => ({ ...prev, ...urlMap }));
+        })
+      );
     }
   };
 
@@ -226,7 +238,8 @@ export default function VaultScreen() {
     setShowAdd(false);
     startSpin();
     try {
-      const ext = mediaType === 'video' ? 'mp4' : 'jpg';
+      const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
+      const ext = mediaType === 'video' ? videoExt : 'jpg';
       const storagePath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
       await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct));
 

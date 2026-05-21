@@ -252,6 +252,11 @@ export default function ChatTab() {
     setSignedUrls(prev => ({ ...prev, ...results }));
   }, []);
 
+  const PAGE_SIZE = 30;
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const oldestCreatedAtRef = useRef<string | null>(null);
+
   const loadMessages = useCallback(async () => {
     if (!couple?.id) return;
     try {
@@ -259,16 +264,44 @@ export default function ChatTab() {
         .from('chat_messages')
         .select('*')
         .eq('couple_id', couple.id)
-        .order('created_at', { ascending: true })
-        .limit(100);
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE);
       if (data) {
-        setMessages(data);
-        fetchSignedUrls(data);
+        const sorted = [...data].reverse();
+        setMessages(sorted);
+        fetchSignedUrls(sorted);
+        oldestCreatedAtRef.current = sorted[0]?.created_at ?? null;
+        setHasMore(data.length === PAGE_SIZE);
       }
     } finally {
       setChatLoading(false);
     }
   }, [couple?.id, fetchSignedUrls]);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!couple?.id || loadingOlder || !hasMore || !oldestCreatedAtRef.current) return;
+    setLoadingOlder(true);
+    try {
+      const { data } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('couple_id', couple.id)
+        .lt('created_at', oldestCreatedAtRef.current)
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE);
+      if (data && data.length > 0) {
+        const sorted = [...data].reverse();
+        setMessages(prev => [...sorted, ...prev]);
+        fetchSignedUrls(sorted);
+        oldestCreatedAtRef.current = sorted[0].created_at;
+        setHasMore(data.length === PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [couple?.id, loadingOlder, hasMore, fetchSignedUrls]);
 
   useEffect(() => {
     if (!couple?.id) { setChatLoading(false); return; }
@@ -303,9 +336,14 @@ export default function ChatTab() {
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id]);
 
-  // Scroll to end only when new messages arrive (not on every re-render)
+  // Scroll to end only when new messages are appended (not when older messages are prepended)
+  const isLoadingOlderRef = useRef(false);
   useEffect(() => {
-    if (messages.length > prevMsgCountRef.current) {
+    isLoadingOlderRef.current = loadingOlder;
+  }, [loadingOlder]);
+
+  useEffect(() => {
+    if (messages.length > prevMsgCountRef.current && !isLoadingOlderRef.current) {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: prevMsgCountRef.current > 0 }), 80);
     }
     prevMsgCountRef.current = messages.length;
@@ -333,11 +371,12 @@ export default function ChatTab() {
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
+      const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
       setAttachedMedia({
         uri: asset.uri,
         type: isVideo ? 'video' : 'photo',
         mimeType: resolveAssetMimeType(asset),
-        fileName: `chat_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`,
+        fileName: `chat_${Date.now()}.${isVideo ? videoExt : 'jpg'}`,
       });
     } catch (e: any) {
       Alert.alert('Media Error', e?.message ?? 'Could not open media picker.');
@@ -372,7 +411,7 @@ export default function ChatTab() {
     const hasText = text.trim().length > 0;
     const hasMedia = attachedMedia !== null;
     if (!hasText && !hasMedia) return;
-    if (!couple?.id || !user) return;
+    if (!couple?.id || !user || !hasPartner) return;
     setSending(true);
 
     let chatStoragePath: string | null = null;
@@ -419,7 +458,8 @@ export default function ChatTab() {
       // Auto-save to vault in the background
       if (capturedMedia && chatStoragePath && (settings?.chat_auto_save_to_vault ?? true)) {
         try {
-          const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${capturedMedia.type === 'video' ? 'mp4' : 'jpg'}`;
+          const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
+          const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${capturedMedia.type === 'video' ? videoExt : 'jpg'}`;
           await uploadMediaFile(capturedMedia.uri, 'vault', vaultPath, capturedMedia.mimeType);
           const { data: vaultData } = await supabase.from('vault_items').insert({
             couple_id: coupleId,
@@ -438,8 +478,8 @@ export default function ChatTab() {
             await supabase.from('chat_messages').update({ vault_item_id: vaultData.id }).eq('id', messageId);
             setMessages(prev => prev.map(m => m.id === messageId ? { ...m, vault_item_id: vaultData.id } : m));
           }
-        } catch {
-          // Non-fatal: vault save fails silently
+        } catch (e: any) {
+          Alert.alert('Vault Save Failed', 'The media was sent but could not be saved to your Vault. You can save it manually from the chat bubble.');
         }
       }
 
@@ -514,17 +554,34 @@ export default function ChatTab() {
       // Optimistic removal
       setMessages(prev => prev.filter(m => m.id !== msg.id));
 
-      // Run all deletes in parallel — no extra vault_items fetch needed
       const ops: Promise<void>[] = [];
+
+      // Delete chat media storage file
       if (msg.media_storage_path) {
         const bucket = msg.media_storage_bucket ?? 'chat_media';
         ops.push(Promise.resolve(supabase.storage.from(bucket).remove([msg.media_storage_path])).then(() => {}));
       }
+
+      // Fetch vault item storage path then delete storage + DB record
       if (msg.vault_item_id) {
-        // We don't know the vault storage path without an extra fetch, so delete the DB
-        // record and let orphaned storage be cleaned up separately if needed
-        ops.push(Promise.resolve(supabase.from('vault_items').delete().eq('id', msg.vault_item_id)).then(() => {}));
+        const vaultItemId = msg.vault_item_id;
+        ops.push(
+          (async () => {
+            const { data: vi } = await supabase
+              .from('vault_items')
+              .select('storage_path, storage_bucket')
+              .eq('id', vaultItemId)
+              .maybeSingle();
+            await Promise.all([
+              Promise.resolve(supabase.from('vault_items').delete().eq('id', vaultItemId)),
+              vi?.storage_path
+                ? Promise.resolve(supabase.storage.from(vi.storage_bucket ?? 'vault').remove([vi.storage_path]))
+                : Promise.resolve(null),
+            ]);
+          })()
+        );
       }
+
       ops.push(
         Promise.resolve(supabase.from('chat_messages').delete().eq('id', msg.id).eq('sender_id', user!.id)).then(() => {})
       );
@@ -570,8 +627,9 @@ export default function ChatTab() {
       return;
     }
     const srcBucket = msg.media_storage_bucket ?? 'chat_media';
-    const mimeType = msg.media_type === 'video' ? 'video/mp4' : 'image/jpeg';
-    const ext = msg.media_type === 'video' ? 'mp4' : 'jpg';
+    const mimeType = msg.media_type === 'video' ? 'video/quicktime' : 'image/jpeg';
+    const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
+    const ext = msg.media_type === 'video' ? videoExt : 'jpg';
     const destPath = `${couple.id}/${user.id}/vault_${Date.now()}.${ext}`;
     try {
       const { data: srcData } = await supabase.storage.from(srcBucket).createSignedUrl(msg.media_storage_path, 120);
@@ -693,6 +751,17 @@ export default function ChatTab() {
               showsVerticalScrollIndicator={false}
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
+              onScroll={(e) => {
+                if (e.nativeEvent.contentOffset.y < 80) {
+                  loadOlderMessages();
+                }
+              }}
+              scrollEventThrottle={200}
+              ListHeaderComponent={loadingOlder ? (
+                <View style={styles.loadingOlderWrap}>
+                  <ActivityIndicator color="rgba(255,255,255,0.3)" size="small" />
+                </View>
+              ) : null}
             />
           )}
 
@@ -889,6 +958,7 @@ const MessageRow = React.memo(function MessageRow({
 
 const styles = StyleSheet.create({
   list: { paddingHorizontal: Spacing.screen, paddingVertical: Spacing.md, paddingBottom: 16 },
+  loadingOlderWrap: { alignItems: 'center', paddingVertical: Spacing.sm },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl, gap: Spacing.sm },
   emptyEmoji: { fontSize: 52, marginBottom: Spacing.sm },
   emptyTitle: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold', textAlign: 'center' },
