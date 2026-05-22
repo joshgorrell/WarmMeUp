@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from './supabase';
 
 export type UploadResult = {
@@ -13,79 +11,47 @@ export async function uploadMediaFile(
   mimeType: string,
   onProgress?: (pct: number) => void,
 ): Promise<UploadResult> {
-  if (Platform.OS === 'web') {
-    return uploadWeb(localUri, bucket, storagePath, mimeType, onProgress);
-  }
-  return uploadNative(localUri, bucket, storagePath, mimeType, onProgress);
-}
-
-async function uploadNative(
-  localUri: string,
-  bucket: string,
-  storagePath: string,
-  mimeType: string,
-  onProgress?: (pct: number) => void,
-): Promise<UploadResult> {
   // getUser() validates the token server-side and triggers a refresh if expired,
   // then we re-read the session to get the freshened access_token.
   await supabase.auth.getUser();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
 
+  onProgress?.(0);
+
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${storagePath}`;
 
-  const result = await FileSystem.uploadAsync(uploadUrl, localUri, {
-    httpMethod: 'PUT',
-    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+  // Fetch the local file as a blob — works on both native and web without
+  // requiring expo-file-system's native module (uploadAsync).
+  const fileResponse = await fetch(localUri);
+  const blob = await fileResponse.blob();
+
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
     headers: {
       'Authorization': `Bearer ${session.access_token}`,
       'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
       'Content-Type': mimeType,
       'x-upsert': 'true',
     },
-    sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
+    body: blob,
   });
 
-  if (result.status < 200 || result.status >= 300) {
+  if (!response.ok) {
     let msg = 'Upload failed. Please check your connection and try again.';
     try {
-      const body = JSON.parse(result.body);
-      // Surface storage-specific errors in dev; keep user message friendly
-      if (body?.statusCode === '403' || body?.error === 'Unauthorized') {
+      const body = await response.json();
+      if (response.status === 403 || body?.error === 'Unauthorized') {
         msg = 'Upload not allowed. Please try again.';
-      } else if (body?.error === 'EntityTooLarge' || result.status === 413) {
+      } else if (body?.error === 'EntityTooLarge' || response.status === 413) {
         msg = 'File is too large. Please choose a smaller file.';
       }
-      console.warn('[uploadNative] storage error:', result.status, body);
+      console.warn('[uploadMediaFile] storage error:', response.status, body);
     } catch {}
     throw new Error(msg);
   }
 
-  onProgress?.(100);
-  return { storagePath };
-}
-
-async function uploadWeb(
-  localUri: string,
-  bucket: string,
-  storagePath: string,
-  mimeType: string,
-  onProgress?: (pct: number) => void,
-): Promise<UploadResult> {
-  const response = await fetch(localUri);
-  const blob = await response.blob();
-  const { error } = await supabase.storage
-    .from(bucket)
-    .upload(storagePath, blob, { contentType: mimeType, upsert: true });
-  if (error) {
-    let msg = 'Upload failed. Please check your connection and try again.';
-    if (error.message?.includes('exceeded') || error.message?.includes('large')) {
-      msg = 'File is too large. Please choose a smaller file.';
-    }
-    console.warn('[uploadWeb] storage error:', error.message);
-    throw new Error(msg);
-  }
   onProgress?.(100);
   return { storagePath };
 }
