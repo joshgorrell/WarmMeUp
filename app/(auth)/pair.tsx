@@ -85,6 +85,7 @@ export default function PairScreen() {
     : {};
 
   const [myCode, setMyCode] = useState('');
+  const displayCode = couple?.invite_code || myCode;
   const [joinCode, setJoinCode] = useState(prefilledCode ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -137,6 +138,7 @@ export default function PairScreen() {
 
     if (existing) {
       setMyCode(existing.invite_code);
+      await refreshCouple();
     } else {
       // Fallback: no solo couple exists yet — create one
       const code = generateInviteCode();
@@ -158,13 +160,13 @@ export default function PairScreen() {
   };
 
   const handleCopy = async () => {
-    const deepLink = `${DEEP_LINK_SCHEME}://invite/${myCode}`;
-    const shareText = `Join me on Warm Me Up!\n\nTap to connect: ${deepLink}\n\nOr enter code: ${myCode}`;
+    const deepLink = `${DEEP_LINK_SCHEME}://invite/${displayCode}`;
+    const shareText = `Join me on Warm Me Up!\n\nTap to connect: ${deepLink}\n\nOr enter code: ${displayCode}`;
     if (Platform.OS !== 'web') {
       await Share.share({ message: shareText, url: deepLink });
     } else {
       try {
-        await navigator.clipboard.writeText(myCode);
+        await navigator.clipboard.writeText(displayCode);
       } catch {}
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -181,6 +183,7 @@ export default function PairScreen() {
       .eq('id', couple.id);
     if (!updateError) {
       setMyCode(newCode);
+      await refreshCouple();
     }
     setRefreshing(false);
   };
@@ -581,7 +584,7 @@ export default function PairScreen() {
             <AppText style={styles.modalSub}>Share this with your partner to connect.</AppText>
 
             <View style={styles.codeBox}>
-              <AppText style={[styles.codeDisplayText, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}>{myCode || '------'}</AppText>
+              <AppText style={[styles.codeDisplayText, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}>{displayCode || '------'}</AppText>
               <TouchableOpacity
                 style={styles.refreshBtn}
                 onPress={handleRefreshCode}
