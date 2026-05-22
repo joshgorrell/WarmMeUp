@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, Share, Alert, Platform,
   ActivityIndicator, Modal, Image, Linking,
@@ -447,6 +448,10 @@ export default function AccountScreen() {
     if (!couple?.id || !user) return;
     loadStats();
   }, [couple?.id, user]);
+
+  useFocusEffect(useCallback(() => {
+    refreshCouple();
+  }, [refreshCouple]));
 
   const loadStats = async () => {
     if (!couple?.id || !user) return;
