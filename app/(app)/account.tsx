@@ -1330,12 +1330,6 @@ export default function AccountScreen() {
         />
       </Section>
 
-      <Section title="SECURITY">
-        <SettingsRow label="Terms of Service" sub="The rules for using Warm Me Up" onPress={() => setShowTerms(true)} />
-        <SettingsRow label="Privacy Policy" sub="How we handle your data" onPress={() => setShowPrivacyPolicy(true)} />
-        <SettingsRow label="Delete My Account" danger onPress={() => { setDeleteAccountError(null); setDeleteAccountStep(1); setDeleteAccountOpen(true); }} last />
-      </Section>
-
       <Section title="SUPPORT">
         <SettingsRow
           label="Contact Support"
@@ -1383,6 +1377,12 @@ export default function AccountScreen() {
           onPress={restorePurchases}
           last
         />
+      </Section>
+
+      <Section title="SECURITY">
+        <SettingsRow label="Terms of Service" sub="The rules for using Warm Me Up" onPress={() => setShowTerms(true)} />
+        <SettingsRow label="Privacy Policy" sub="How we handle your data" onPress={() => setShowPrivacyPolicy(true)} />
+        <SettingsRow label="Delete My Account" danger onPress={() => { setDeleteAccountError(null); setDeleteAccountStep(1); setDeleteAccountOpen(true); }} last />
       </Section>
     </>
   );
