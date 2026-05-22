@@ -99,7 +99,7 @@ export default function TransitionScreen() {
       authReady.current = true;
       tryNavigate();
     }
-  }, [loading, couple, isAdmin]);
+  }, [loading, couple?.id, couple?.active, isAdmin]);
 
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
