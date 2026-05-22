@@ -31,6 +31,7 @@ interface AuthContextType {
    */
   lockIfNeeded: () => boolean;
   refreshCouple: () => Promise<void>;
+  patchCouple: (patch: Partial<Couple>) => void;
   refreshSettings: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -63,6 +64,7 @@ const AuthContext = createContext<AuthContextType>({
   lockApp: () => {},
   lockIfNeeded: () => true,
   refreshCouple: async () => {},
+  patchCouple: () => {},
   refreshSettings: async () => {},
   refreshProfile: async () => {},
   signOut: async () => {},
@@ -246,6 +248,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user) await fetchCouple(user.id);
   }, [user]);
 
+  const patchCouple = useCallback((patch: Partial<Couple>) => {
+    setCouple(prev => prev ? { ...prev, ...patch } : prev);
+  }, []);
+
   const refreshSettings = useCallback(async () => {
     if (user) await fetchSettings(user.id);
   }, [user]);
@@ -311,7 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked }}
     >
       {children}
     </AuthContext.Provider>

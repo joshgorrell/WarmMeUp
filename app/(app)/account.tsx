@@ -345,7 +345,7 @@ const rua = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────
 export default function AccountScreen() {
   const router = useRouter();
-  const { profile, partnerProfile, couple, signOut, isAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple } = useAuth();
+  const { profile, partnerProfile, couple, signOut, isAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple, patchCouple } = useAuth();
   const { colors } = useTheme();
   const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
   const { plan, status: subStatus, isOnTrial, renewalDate, loading: subLoading, restorePurchases, openManageSubscription } = useSubscription();
@@ -513,16 +513,18 @@ export default function AccountScreen() {
     if (!couple?.id || codeRefreshing || couple.user_b_id) return;
     setCodeRefreshing(true);
     const newCode = generateInviteCode();
+    const newExpiry = codeExpiresAt();
     const { error } = await supabase
       .from('couples')
-      .update({ invite_code: newCode, invite_code_expires_at: codeExpiresAt() })
+      .update({ invite_code: newCode, invite_code_expires_at: newExpiry })
       .eq('id', couple.id);
     if (error) {
       Alert.alert('Error', 'Could not refresh code. Please try again.');
       setCodeRefreshing(false);
       return;
     }
-    await refreshCouple();
+    patchCouple({ invite_code: newCode, invite_code_expires_at: newExpiry });
+    refreshCouple().catch(() => {});
     setCodeRefreshing(false);
   };
 
