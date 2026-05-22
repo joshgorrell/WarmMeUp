@@ -1,5 +1,19 @@
 import { supabase } from './supabase';
 
+function readAsBlob(uri: string): Promise<Blob> {
+  if (!uri.startsWith('file://') && !uri.startsWith('ph://') && !uri.startsWith('content://')) {
+    return fetch(uri).then(r => r.blob());
+  }
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.responseType = 'blob';
+    xhr.onload = () => resolve(xhr.response as Blob);
+    xhr.onerror = () => reject(new Error('Could not read local media file.'));
+    xhr.open('GET', uri);
+    xhr.send();
+  });
+}
+
 export type UploadResult = {
   storagePath: string;
 };
@@ -22,10 +36,10 @@ export async function uploadMediaFile(
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${storagePath}`;
 
-  // Fetch the local file as a blob — works on both native and web without
-  // requiring expo-file-system's native module (uploadAsync).
-  const fileResponse = await fetch(localUri);
-  const blob = await fileResponse.blob();
+  // React Native's fetch() cannot open local file:// or ph:// URIs — only HTTP/HTTPS.
+  // Use XMLHttpRequest with responseType='blob' for local paths (camera/library picks);
+  // keep fetch for HTTP/HTTPS (e.g. signed URLs used in the auto-save flow).
+  const blob = await readAsBlob(localUri);
 
   const response = await fetch(uploadUrl, {
     method: 'PUT',

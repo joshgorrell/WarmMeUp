@@ -524,7 +524,11 @@ export default function AccountScreen() {
       return;
     }
     patchCouple({ invite_code: newCode, invite_code_expires_at: newExpiry });
-    refreshCouple().catch(() => {});
+    try {
+      await refreshCouple();
+    } catch {
+      // Best-effort — local state already patched with new code
+    }
     setCodeRefreshing(false);
   };
 
