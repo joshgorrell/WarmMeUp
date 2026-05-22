@@ -186,11 +186,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
     } catch {
-      // Network or DB error — clear stale state so the app doesn't show partial data.
-      setProfile(null);
-      setCouple(null);
-      setPartnerProfile(null);
-      setSettings(null);
+      // Network or unexpected error — don't wipe already-loaded state. The individual
+      // fetch functions set their own state on success; leaving existing values in place
+      // is safer than blanking the screen. Only unblock loading.
     } finally {
       setLoading(false);
     }
@@ -207,12 +205,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function fetchCouple(userId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('couples')
       .select('*')
       .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
       .maybeSingle();
-    setCouple(data);
+    // Only update state if the query succeeded. A network error or unexpected
+    // PostgREST error (e.g. multiple rows from a bad RLS policy) returns error!=null
+    // and data=null — in that case keep whatever is already in state rather than
+    // blanking the couple and sending the user to the /pair screen.
+    if (!error) {
+      setCouple(data);
+    }
+
+    if (error) return null;
 
     if (data) {
       const partnerId = data.user_a_id === userId ? data.user_b_id : data.user_a_id;

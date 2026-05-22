@@ -49,6 +49,10 @@ export default function TransitionScreen() {
   const tryNavigate = () => {
     if (routed.current) return;
     if (!animDone.current || !authReady.current) return;
+    // Don't navigate while couple is still loading — it arrives slightly after
+    // loading=false due to React batching. Wait for couple to be non-null
+    // (or for user to be confirmed null, meaning logged out).
+    if (user && !couple) return;
     routed.current = true;
     Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
       if (couple?.active || isAdmin) {
@@ -99,7 +103,7 @@ export default function TransitionScreen() {
       authReady.current = true;
       tryNavigate();
     }
-  }, [loading, couple?.id, couple?.active, isAdmin]);
+  }, [loading, couple?.id, couple?.active, user?.id, isAdmin]);
 
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
