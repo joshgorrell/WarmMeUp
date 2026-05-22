@@ -87,18 +87,22 @@ async function completePendingJoin(userId: string, code: string): Promise<JoinRe
     .maybeSingle();
   const subscriptionOwnerId = subA ? targetCouple.user_a_id : subB ? userId : null;
   if (subscriptionOwnerId) {
-    await supabase
+    const { error: subUpdateError } = await supabase
       .from('couples')
       .update({ subscription_owner_id: subscriptionOwnerId })
       .eq('id', targetCouple.id);
+    // Non-fatal — pairing succeeded; subscription owner can be corrected later
+    if (subUpdateError) {
+      console.warn('[completePendingJoin] subscription_owner_id update failed:', subUpdateError.message);
+    }
   }
 
-  // Clean up User B's own inactive placeholder
+  // Clean up User B's own solo placeholder couple (active or inactive)
   await supabase
     .from('couples')
     .delete()
     .eq('user_a_id', userId)
-    .eq('active', false)
+    .is('user_b_id', null)
     .neq('id', targetCouple.id);
 
   await supabase.from('scores').upsert([

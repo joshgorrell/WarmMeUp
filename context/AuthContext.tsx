@@ -40,6 +40,12 @@ interface AuthContextType {
    * so it never interrupts an already-open Face ID / Touch ID prompt.
    */
   isAuthenticatingRef: React.MutableRefObject<boolean>;
+  /**
+   * Whether the vault biometric gate has been passed this session.
+   * Stored here so it survives tab navigation without re-locking.
+   */
+  vaultUnlocked: boolean;
+  setVaultUnlocked: (unlocked: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -61,6 +67,8 @@ const AuthContext = createContext<AuthContextType>({
   refreshProfile: async () => {},
   signOut: async () => {},
   isAuthenticatingRef: { current: false },
+  vaultUnlocked: false,
+  setVaultUnlocked: () => {},
 });
 
 function unlockedAtKey(userId: string) {
@@ -112,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [appLocked, setAppLocked] = useState(false);
+  const [vaultUnlocked, setVaultUnlocked] = useState(false);
   // Timestamp (ms) of the last successful unlock. Persisted across restarts.
   const unlockedAtRef = useRef<number | null>(null);
   // Prevents double-loading when getSession() and onAuthStateChange both fire on mount.
@@ -247,6 +256,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     setAppLocked(false);
+    setVaultUnlocked(false);
     if (user) {
       clearPushToken(user.id).catch(() => {});
       // Clear the persisted unlock timestamp so next login always prompts for PIN.
@@ -301,7 +311,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked }}
     >
       {children}
     </AuthContext.Provider>

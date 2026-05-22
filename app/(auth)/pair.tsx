@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -27,6 +27,9 @@ import {
   validateCodeFormat,
   savePendingCode,
 } from '@/lib/inviteCode';
+
+const DEEP_LINK_SCHEME = process.env.EXPO_PUBLIC_DEEP_LINK_SCHEME ?? 'warmup';
+const JOIN_COOLDOWN_MS = 3000;
 
 type ActiveModal = 'invite' | 'join' | null;
 
@@ -88,6 +91,7 @@ export default function PairScreen() {
   const [copied, setCopied] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activeModal, setActiveModal] = useState<ActiveModal>(prefilledCode ? 'join' : null);
+  const lastJoinAttemptRef = useRef(0);
 
   useEffect(() => {
     if (!user) return;
@@ -154,7 +158,7 @@ export default function PairScreen() {
   };
 
   const handleCopy = async () => {
-    const deepLink = `warmup://invite/${myCode}`;
+    const deepLink = `${DEEP_LINK_SCHEME}://invite/${myCode}`;
     const shareText = `Join me on Warm Me Up!\n\nTap to connect: ${deepLink}\n\nOr enter code: ${myCode}`;
     if (Platform.OS !== 'web') {
       await Share.share({ message: shareText, url: deepLink });
@@ -189,6 +193,13 @@ export default function PairScreen() {
       setError('Codes are 6 characters (letters and numbers). Double-check and try again.');
       return;
     }
+
+    const now = Date.now();
+    if (now - lastJoinAttemptRef.current < JOIN_COOLDOWN_MS) {
+      setError('Please wait a moment before trying again.');
+      return;
+    }
+    lastJoinAttemptRef.current = now;
 
     setError('');
     setLoading(true);
@@ -260,6 +271,7 @@ export default function PairScreen() {
         await supabase.from('couples').update({ subscription_owner_id: subOwnerId }).eq('id', targetCouple.id);
       }
 
+      // Clean up User B's own solo placeholder (active or inactive)
       await supabase
         .from('couples')
         .delete()
@@ -315,6 +327,14 @@ export default function PairScreen() {
       setError('Codes are 6 characters (letters and numbers). Double-check and try again.');
       return;
     }
+
+    const now = Date.now();
+    if (now - lastJoinAttemptRef.current < JOIN_COOLDOWN_MS) {
+      setError('Please wait a moment before trying again.');
+      return;
+    }
+    lastJoinAttemptRef.current = now;
+
     setError('');
     setLoading(true);
     try {

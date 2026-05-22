@@ -455,12 +455,17 @@ export default function ChatTab() {
     const messageId = data.id;
 
     Promise.resolve().then(async () => {
-      // Auto-save to vault in the background
+      // Auto-save to vault in the background — copy from already-uploaded chat_media
+      // rather than re-uploading from the local URI to avoid storing the file twice.
       if (capturedMedia && chatStoragePath && (settings?.chat_auto_save_to_vault ?? true)) {
         try {
           const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
-          const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${capturedMedia.type === 'video' ? videoExt : 'jpg'}`;
-          await uploadMediaFile(capturedMedia.uri, 'vault', vaultPath, capturedMedia.mimeType);
+          const ext = capturedMedia.type === 'video' ? videoExt : 'jpg';
+          const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${ext}`;
+          // Fetch a short-lived signed URL for the chat file we just uploaded
+          const { data: srcData } = await supabase.storage.from('chat_media').createSignedUrl(chatStoragePath, 120);
+          if (!srcData?.signedUrl) throw new Error('Could not access uploaded media for vault save.');
+          await uploadMediaFile(srcData.signedUrl, 'vault', vaultPath, capturedMedia.mimeType);
           const { data: vaultData } = await supabase.from('vault_items').insert({
             couple_id: coupleId,
             uploaded_by_user_id: userId,
@@ -468,7 +473,6 @@ export default function ChatTab() {
             file_path: vaultPath,
             storage_path: vaultPath,
             storage_bucket: 'vault',
-            blurred_thumbnail_path: null,
             allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
             allow_save: settings?.vault_allow_save_default ?? false,
             allow_share: settings?.vault_allow_share_default ?? false,
@@ -639,7 +643,6 @@ export default function ChatTab() {
         couple_id: couple.id,
         uploaded_by_user_id: user.id,
         media_type: msg.media_type ?? 'photo',
-        file_path: destPath,
         storage_path: destPath,
         storage_bucket: 'vault',
         allow_screenshot: msg.allow_screenshot,

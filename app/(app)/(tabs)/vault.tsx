@@ -26,7 +26,7 @@ import { FontSize, Spacing, Radius, NavHeight } from '@/constants/theme';
 
 export default function VaultScreen() {
   const router = useRouter();
-  const { user, couple, partnerProfile, settings, isAuthenticatingRef } = useAuth();
+  const { user, couple, partnerProfile, settings, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked } = useAuth();
   const { colors } = useTheme();
   const { width, cols } = useLayout();
   const insets = useSafeAreaInsets();
@@ -40,10 +40,12 @@ export default function VaultScreen() {
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const spinAnim = useRef(new Animated.Value(0)).current;
-  // Cache of item.id -> short-lived signed URL (1 hour)
+  // Cache of item.id -> short-lived signed URL (1 hour TTL)
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  // Timestamp (ms) when each URL was fetched — used to detect near-expiry
+  const urlFetchedAtRef = useRef<Record<string, number>>({});
+  const URL_TTL_MS = 55 * 60 * 1000; // refresh 5 min before Supabase's 1-hour expiry
   // Vault biometric gate
-  const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [vaultAuthError, setVaultAuthError] = useState('');
   // Use a ref instead of state so changes don't cause useCallback/useEffect identity churn,
   // which was causing the AppState listener to re-register mid-auth and fire stale closures.
@@ -65,7 +67,7 @@ export default function VaultScreen() {
       try {
         const result = await bioAuthenticate('Unlock Vault');
         if (result.success) {
-          setVaultUnlocked(true);
+          setVaultUnlocked(true); // persists in AuthContext across navigation
         } else {
           setVaultAuthError('Authentication failed. Try again.');
         }
@@ -116,39 +118,53 @@ export default function VaultScreen() {
     const { data } = await supabase.from('vault_items').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false });
     if (data) {
       setItems(data);
-      // Batch-fetch signed URLs grouped by bucket (one API call per bucket)
+      // Batch-fetch signed URLs grouped by bucket (one API call per bucket).
+      // Skip items whose cached URL is still fresh (< 55 min old).
+      const now = Date.now();
       const byBucket: Record<string, typeof data> = {};
       for (const item of data) {
         const bucket = item.storage_bucket ?? 'vault';
         const path = item.storage_path ?? item.file_path;
         if (!path) continue;
+        const fetchedAt = urlFetchedAtRef.current[item.id] ?? 0;
+        if (now - fetchedAt < URL_TTL_MS) continue; // still fresh
         if (!byBucket[bucket]) byBucket[bucket] = [];
         byBucket[bucket].push(item);
       }
-      await Promise.all(
-        Object.entries(byBucket).map(async ([bucket, bucketItems]) => {
-          const paths = bucketItems.map(i => (i.storage_path ?? i.file_path)!);
-          const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 60 * 60);
-          if (!urlData) return;
-          const urlMap: Record<string, string> = {};
-          for (const item of bucketItems) {
-            const path = item.storage_path ?? item.file_path;
-            const entry = urlData.find(d => d.path === path);
-            if (entry?.signedUrl) urlMap[item.id] = entry.signedUrl;
-          }
-          setSignedUrls(prev => ({ ...prev, ...urlMap }));
-        })
-      );
+      if (Object.keys(byBucket).length > 0) {
+        await Promise.all(
+          Object.entries(byBucket).map(async ([bucket, bucketItems]) => {
+            const paths = bucketItems.map(i => (i.storage_path ?? i.file_path)!);
+            const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 60 * 60);
+            if (!urlData) return;
+            const urlMap: Record<string, string> = {};
+            const fetchTs: Record<string, number> = {};
+            for (const item of bucketItems) {
+              const path = item.storage_path ?? item.file_path;
+              const entry = urlData.find(d => d.path === path);
+              if (entry?.signedUrl) {
+                urlMap[item.id] = entry.signedUrl;
+                fetchTs[item.id] = Date.now();
+              }
+            }
+            urlFetchedAtRef.current = { ...urlFetchedAtRef.current, ...fetchTs };
+            setSignedUrls(prev => ({ ...prev, ...urlMap }));
+          })
+        );
+      }
     }
   };
 
   const resolveSignedUrl = async (item: VaultItem): Promise<string | null> => {
-    if (signedUrls[item.id]) return signedUrls[item.id];
+    const fetchedAt = urlFetchedAtRef.current[item.id] ?? 0;
+    const isFresh = Date.now() - fetchedAt < URL_TTL_MS;
+    if (signedUrls[item.id] && isFresh) return signedUrls[item.id];
     const bucket = item.storage_bucket ?? 'vault';
     const path = item.storage_path ?? item.file_path;
     if (!path) return null;
-    const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60); // 1 hour
+    const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60);
     if (data?.signedUrl) {
+      urlFetchedAtRef.current[item.id] = Date.now();
       setSignedUrls(prev => ({ ...prev, [item.id]: data.signedUrl }));
       return data.signedUrl;
     }
@@ -247,10 +263,8 @@ export default function VaultScreen() {
         couple_id: couple.id,
         uploaded_by_user_id: user.id,
         media_type: mediaType,
-        file_path: storagePath,
         storage_path: storagePath,
         storage_bucket: 'vault',
-        blurred_thumbnail_path: null,
         allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
         allow_save: settings?.vault_allow_save_default ?? false,
         allow_share: settings?.vault_allow_share_default ?? false,

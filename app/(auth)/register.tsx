@@ -6,7 +6,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -20,6 +19,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import TermsModal from '@/components/TermsModal';
+import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import { useLayout } from '@/hooks/useLayout';
 import { savePendingCode } from '@/lib/inviteCode';
 
@@ -64,6 +64,7 @@ export default function RegisterScreen() {
   const [error, setError] = useState('');
   const [tosAccepted, setTosAccepted] = useState(false);
   const [termsVisible, setTermsVisible] = useState(false);
+  const [privacyVisible, setPrivacyVisible] = useState(false);
   const [dob, setDob] = useState('');
   const [dobError, setDobError] = useState('');
 
@@ -137,7 +138,12 @@ export default function RegisterScreen() {
         }
       }
     } catch (e: any) {
-      setError(e.message || 'Something went wrong.');
+      const msg: string = e.message ?? '';
+      if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('user already exists')) {
+        setError('An account with this email already exists. Try signing in instead.');
+      } else {
+        setError(msg || 'Something went wrong. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -191,11 +197,7 @@ export default function RegisterScreen() {
   };
 
   const handlePrivacyPolicy = () => {
-    Alert.alert(
-      'Privacy Policy',
-      'Our full Privacy Policy will be available at our website. By creating an account you acknowledge that Warm Me Up collects and processes only the data necessary to operate the service, stores it securely, and never sells your personal information.',
-      [{ text: 'OK' }]
-    );
+    setPrivacyVisible(true);
   };
 
   const showGoogle = isOAuthSupported('google');
@@ -212,6 +214,7 @@ export default function RegisterScreen() {
       />
 
       <TermsModal visible={termsVisible} onClose={() => setTermsVisible(false)} />
+      <PrivacyPolicyModal visible={privacyVisible} onClose={() => setPrivacyVisible(false)} />
 
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: vMd + insets.top, paddingBottom: Math.max(insets.bottom, vMd) + vMd }]}
