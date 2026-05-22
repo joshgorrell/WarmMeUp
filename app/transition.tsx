@@ -47,8 +47,8 @@ export default function TransitionScreen() {
   const authReady = useRef(false);
 
   const tryNavigate = () => {
-    if (!animDone.current || !authReady.current) return;
     if (routed.current) return;
+    if (!animDone.current || !authReady.current) return;
     routed.current = true;
     Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
       if (couple?.active || isAdmin) {
