@@ -32,10 +32,7 @@ async function completePendingJoin(userId: string, code: string): Promise<JoinRe
   if (existingCouple) return { ok: false, reason: 'already_connected' };
 
   const { data: targetCouple, error: fetchError } = await supabase
-    .from('couples')
-    .select('*')
-    .eq('invite_code', code.toUpperCase().trim())
-    .maybeSingle();
+    .rpc('get_couple_by_invite_code', { code: code.toUpperCase().trim() });
 
   if (fetchError || !targetCouple) return { ok: false, reason: 'not_found' };
 

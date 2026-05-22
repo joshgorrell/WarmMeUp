@@ -14,7 +14,7 @@ import { secureKey } from '@/lib/secureKey';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { generateInviteCode, codeExpiresAt } from '@/lib/inviteCode';
+import { generateInviteCode, codeExpiresAt, isCodeExpired } from '@/lib/inviteCode';
 import { FontSize, Spacing, Radius, Gradient } from '@/constants/theme';
 import Toggle from '@/components/Toggle';
 import AppShell from '@/components/AppShell';
@@ -457,10 +457,15 @@ export default function AccountScreen() {
     if (!couple?.id || !user) return;
     const start = new Date();
     start.setHours(0, 0, 0, 0);
+    // Fetch streak data: only dates from the past 366 days (enough for a full year streak).
+    // Fetching by a date window instead of a row limit avoids truncating couples with
+    // many interactions spread across many calendar days.
+    const streakWindowStart = new Date();
+    streakWindowStart.setDate(streakWindowStart.getDate() - 366);
     const [scoresRes, momentsTodayRes, streakRes] = await Promise.all([
       supabase.from('scores').select('points').eq('couple_id', couple.id),
       supabase.from('interactions').select('*', { count: 'exact', head: true }).eq('couple_id', couple.id).gte('created_at', start.toISOString()),
-      supabase.from('interactions').select('created_at').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(200),
+      supabase.from('interactions').select('created_at').eq('couple_id', couple.id).gte('created_at', streakWindowStart.toISOString()).order('created_at', { ascending: false }),
     ]);
     if (scoresRes.data) setTotalPoints(scoresRes.data.reduce((sum, s) => sum + (s.points ?? 0), 0));
     setMomentsToday(momentsTodayRes.count ?? 0);
@@ -1052,8 +1057,21 @@ export default function AccountScreen() {
               <AppText style={[styles.inviteHint, { color: colors.textSecondary }]}>Share your code to connect</AppText>
             </View>
           </View>
-          <View style={[styles.codeBox, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: 'rgba(255,46,138,0.20)' }]}>
-            <AppText style={[styles.codeText, { color: colors.text }]}>{couple.invite_code}</AppText>
+          {isCodeExpired(couple.invite_code_expires_at) && (
+            <TouchableOpacity
+              style={styles.codeExpiredBanner}
+              onPress={handleRefreshCode}
+              activeOpacity={0.75}
+              disabled={codeRefreshing}
+            >
+              <AlertTriangle color="#FF5A5F" size={13} strokeWidth={2.2} />
+              <AppText style={styles.codeExpiredText}>
+                Code expired — tap to refresh
+              </AppText>
+            </TouchableOpacity>
+          )}
+          <View style={[styles.codeBox, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: isCodeExpired(couple.invite_code_expires_at) ? 'rgba(255,90,90,0.40)' : 'rgba(255,46,138,0.20)' }]}>
+            <AppText style={[styles.codeText, { color: isCodeExpired(couple.invite_code_expires_at) ? 'rgba(255,255,255,0.45)' : colors.text }]}>{couple.invite_code}</AppText>
             <TouchableOpacity
               style={styles.codeRefreshBtn}
               onPress={handleRefreshCode}
@@ -2120,6 +2138,24 @@ const styles = StyleSheet.create({
     color: 'rgba(255,90,90,0.70)',
     textDecorationLine: 'underline',
     textDecorationColor: 'rgba(255,90,90,0.40)',
+  },
+  codeExpiredBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,90,90,0.10)',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,90,90,0.25)',
+    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    marginBottom: 4,
+  },
+  codeExpiredText: {
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FF5A5F',
   },
   cancelInviteSheet: {
     alignItems: 'center',

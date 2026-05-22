@@ -220,10 +220,7 @@ export default function PairScreen() {
       }
 
       const { data: targetCouple } = await supabase
-        .from('couples')
-        .select('*')
-        .eq('invite_code', normalized)
-        .maybeSingle();
+        .rpc('get_couple_by_invite_code', { code: normalized });
 
       if (!targetCouple) {
         setError('Invalid code. Check with your partner.');
@@ -342,10 +339,7 @@ export default function PairScreen() {
     setLoading(true);
     try {
       const { data: targetCouple } = await supabase
-        .from('couples')
-        .select('id, invite_code_expires_at, user_b_id')
-        .eq('invite_code', normalized)
-        .maybeSingle();
+        .rpc('get_couple_by_invite_code', { code: normalized });
 
       if (!targetCouple) {
         setError('Invalid code. Check with your partner.');

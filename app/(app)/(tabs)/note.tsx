@@ -508,22 +508,26 @@ export default function ChatTab() {
     const newText = text.trim();
     if (!newText) return;
     setSending(true);
-    // Update local state immediately for instant feedback
+    const editedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('chat_messages')
+      .update({ content_text: newText, edited_at: editedAt })
+      .eq('id', editingState.messageId)
+      .eq('sender_id', user!.id);
+    if (error) {
+      setSending(false);
+      Alert.alert('Edit Failed', 'Your edit could not be saved. Please try again.');
+      return;
+    }
+    // Update local state only after DB confirms success
     setMessages(prev => prev.map(m =>
       m.id === editingState.messageId
-        ? { ...m, content_text: newText, edited_at: new Date().toISOString() }
+        ? { ...m, content_text: newText, edited_at: editedAt }
         : m
     ));
     setText('');
     setEditingState(null);
     setSending(false);
-    // Fire the DB update in the background — realtime UPDATE event will reconcile
-    supabase
-      .from('chat_messages')
-      .update({ content_text: newText, edited_at: new Date().toISOString() })
-      .eq('id', editingState.messageId)
-      .eq('sender_id', user!.id)
-      .then(() => {});
   };
 
   const handleCancelEdit = () => {

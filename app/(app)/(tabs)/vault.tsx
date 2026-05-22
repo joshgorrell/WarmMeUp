@@ -211,12 +211,25 @@ export default function VaultScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            // DB deletes first — if storage cleanup fails the file is orphaned
+            // but the user won't see a broken tile. Reverse order risks a dangling
+            // DB row pointing to a deleted file on every future load.
+            const { error: dbError } = await supabase
+              .from('vault_items')
+              .delete()
+              .eq('id', item.id);
+            if (dbError) {
+              Alert.alert('Delete Failed', 'Could not delete this item. Please try again.');
+              return;
+            }
+            // Remove from local state only after DB confirms deletion
             setItems(prev => prev.filter(i => i.id !== item.id));
             setSignedUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
             setRevealed(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+            // Best-effort storage cleanup (fire-and-forget)
             const bucket = item.storage_bucket ?? 'vault';
             const path = item.storage_path ?? item.file_path;
-            if (path) await supabase.storage.from(bucket).remove([path]);
+            if (path) supabase.storage.from(bucket).remove([path]).catch(() => {});
             // Delete linked chat message + its storage file
             if (item.chat_message_id) {
               const { data: chatMsg } = await supabase
@@ -224,13 +237,12 @@ export default function VaultScreen() {
                 .select('media_storage_path, media_storage_bucket')
                 .eq('id', item.chat_message_id)
                 .maybeSingle();
+              await supabase.from('chat_messages').delete().eq('id', item.chat_message_id);
               if (chatMsg?.media_storage_path) {
                 const chatBucket = chatMsg.media_storage_bucket ?? 'chat_media';
-                await supabase.storage.from(chatBucket).remove([chatMsg.media_storage_path]);
+                supabase.storage.from(chatBucket).remove([chatMsg.media_storage_path]).catch(() => {});
               }
-              await supabase.from('chat_messages').delete().eq('id', item.chat_message_id);
             }
-            await supabase.from('vault_items').delete().eq('id', item.id);
           },
         },
       ]
@@ -270,7 +282,11 @@ export default function VaultScreen() {
         allow_share: settings?.vault_allow_share_default ?? false,
         chat_message_id: null,
       });
-      if (dbError) throw dbError;
+      if (dbError) {
+        // Clean up the already-uploaded storage file so it doesn't become an orphan
+        supabase.storage.from('vault').remove([storagePath]).catch(() => {});
+        throw dbError;
+      }
       awardPoints(couple.id, user.id, 5, 'Vault media added');
       notifyPartner({ event_type: 'new_vault_item', couple_id: couple.id, target_route: '/(app)/(tabs)/vault', partnerUserId: partnerProfile?.id });
       await load();

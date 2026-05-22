@@ -195,13 +195,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function fetchProfile(userId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .maybeSingle();
-    setProfile(data);
-    return data;
+    if (!error) setProfile(data);
+    return error ? null : data;
   }
 
   async function fetchCouple(userId: string) {
@@ -223,12 +223,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data) {
       const partnerId = data.user_a_id === userId ? data.user_b_id : data.user_a_id;
       if (partnerId) {
-        const { data: partnerData } = await supabase
+        const { data: partnerData, error: partnerError } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', partnerId)
           .maybeSingle();
-        setPartnerProfile(partnerData);
+        if (!partnerError) setPartnerProfile(partnerData);
       } else {
         setPartnerProfile(null);
       }
@@ -241,13 +241,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function fetchSettings(userId: string): Promise<UserSettings | null> {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_settings')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
-    setSettings(data);
-    return data;
+    if (!error) setSettings(data);
+    return error ? null : data;
   }
 
   const refreshCouple = useCallback(async () => {
