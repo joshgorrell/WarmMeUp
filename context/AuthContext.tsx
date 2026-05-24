@@ -211,11 +211,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function fetchCouple(userId: string) {
-    const { data, error } = await supabase
+    // Primary fetch: user_a_id direct match (covers the common solo/owner case without .or())
+    let { data, error } = await supabase
       .from('couples')
       .select('*')
-      .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+      .eq('user_a_id', userId)
+      .is('user_b_id', null)
       .maybeSingle();
+
+    // Fallback: paired couple where user is user_b, or user_a with a partner
+    if (!error && !data) {
+      ({ data, error } = await supabase
+        .from('couples')
+        .select('*')
+        .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+        .not('user_b_id', 'is', null)
+        .maybeSingle());
+    }
+
+    // Final fallback: catch any remaining case (e.g. user_a with partner)
+    if (!error && !data) {
+      ({ data, error } = await supabase
+        .from('couples')
+        .select('*')
+        .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+        .maybeSingle());
+    }
+
+    console.log('[fetchCouple] uid:', userId, 'data:', JSON.stringify(data), 'error:', JSON.stringify(error));
+
     // Only update state if the query succeeded. A network error or unexpected
     // PostgREST error (e.g. multiple rows from a bad RLS policy) returns error!=null
     // and data=null — in that case keep whatever is already in state rather than

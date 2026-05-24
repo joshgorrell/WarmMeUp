@@ -458,6 +458,29 @@ export default function AccountScreen() {
     refreshCoupleRef.current();
   }, []));
 
+  // Direct DB read on every focus — bypasses AuthContext fetch path entirely.
+  // Fixes a case where fetchCouple's .or() query returns a stale/error result
+  // while the direct user_a_id query always succeeds, ensuring the invite code
+  // displayed is always the live DB value.
+  useFocusEffect(useCallback(() => {
+    if (!user?.id) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from('couples')
+        .select('invite_code, invite_code_expires_at, id, user_b_id, user_a_id, active, points_enabled, streaks_enabled, subscription_owner_id, disconnected_at, admin_notes, invite_code_used_at')
+        .eq('user_a_id', user.id)
+        .is('user_b_id', null)
+        .maybeSingle();
+      if (!error && data && data.invite_code !== couple?.invite_code) {
+        console.log('[account] direct fetch corrected invite_code from', couple?.invite_code, 'to', data.invite_code);
+        patchCouple(data);
+      } else if (!error && !data) {
+        // User may be user_b in a paired couple — refresh via context
+        refreshCoupleRef.current();
+      }
+    })();
+  }, [user?.id, couple?.invite_code]));
+
   const loadStats = async () => {
     if (!couple?.id || !user) return;
     const start = new Date();
@@ -526,23 +549,42 @@ export default function AccountScreen() {
 
   const handleRefreshCode = async () => {
     if (codeRefreshing) return;
-    // If couple is missing or stale, force a fresh fetch before attempting the update.
-    if (!couple?.id) {
-      await refreshCoupleRef.current();
+    if (couple?.user_b_id) return;
+    setCodeRefreshing(true);
+
+    // Always re-fetch the live couple row by user_a_id before updating so we
+    // use the correct DB row id, even if context has a stale couple object.
+    let targetId = couple?.id;
+    if (user?.id) {
+      const { data: live } = await supabase
+        .from('couples')
+        .select('id, invite_code, user_b_id')
+        .eq('user_a_id', user.id)
+        .is('user_b_id', null)
+        .maybeSingle();
+      if (live?.id) {
+        targetId = live.id;
+        if (live.invite_code !== couple?.invite_code) {
+          patchCouple({ invite_code: live.invite_code });
+        }
+      }
+    }
+
+    if (!targetId) {
+      setCodeRefreshing(false);
       return;
     }
-    if (couple.user_b_id) return;
-    setCodeRefreshing(true);
+
     const newCode = generateInviteCode();
     const newExpiry = codeExpiresAt();
     const { data: updated, error } = await supabase
       .from('couples')
       .update({ invite_code: newCode, invite_code_expires_at: newExpiry })
-      .eq('id', couple.id)
+      .eq('id', targetId)
       .select()
       .single();
     if (error || !updated) {
-      console.error('[handleRefreshCode] supabase update failed:', JSON.stringify(error));
+      console.error('[handleRefreshCode] supabase update failed:', JSON.stringify(error), 'targetId:', targetId);
       Alert.alert('Error', 'Could not refresh code. Please try again.');
       setCodeRefreshing(false);
       return;
