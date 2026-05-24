@@ -22,6 +22,7 @@ export default function AppLayout() {
       <Stack.Screen name="dare" />
 <Stack.Screen name="vault-viewer" />
       <Stack.Screen name="customize-prompts" />
+      <Stack.Screen name="my-stats" />
     </Stack>
   );
 }
