@@ -177,12 +177,14 @@ export default function PairScreen() {
     if (!couple?.id || refreshing || couple.user_b_id) return;
     setRefreshing(true);
     const newCode = generateInviteCode();
-    const { error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from('couples')
       .update({ invite_code: newCode, invite_code_expires_at: codeExpiresAt() })
-      .eq('id', couple.id);
-    if (!updateError) {
-      setMyCode(newCode);
+      .eq('id', couple.id)
+      .select()
+      .single();
+    if (!updateError && updated) {
+      setMyCode(updated.invite_code);
       await refreshCouple();
     }
     setRefreshing(false);

@@ -524,20 +524,22 @@ export default function AccountScreen() {
     setCodeRefreshing(true);
     const newCode = generateInviteCode();
     const newExpiry = codeExpiresAt();
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from('couples')
       .update({ invite_code: newCode, invite_code_expires_at: newExpiry })
-      .eq('id', couple.id);
-    if (error) {
+      .eq('id', couple.id)
+      .select()
+      .single();
+    if (error || !updated) {
       Alert.alert('Error', 'Could not refresh code. Please try again.');
       setCodeRefreshing(false);
       return;
     }
-    patchCouple({ invite_code: newCode, invite_code_expires_at: newExpiry });
+    patchCouple({ invite_code: updated.invite_code, invite_code_expires_at: updated.invite_code_expires_at });
     try {
       await refreshCouple();
     } catch {
-      // Best-effort — local state already patched with new code
+      // Best-effort — local state already patched with confirmed code
     }
     setCodeRefreshing(false);
   };
