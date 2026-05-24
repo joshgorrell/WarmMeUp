@@ -436,6 +436,11 @@ export default function AccountScreen() {
   const nameWrapRef = useRef<View | null>(null);
   const saveNameRef = useRef<() => void>(() => {});
   const profileRetriedRef = useRef(false);
+  // Stable ref so useFocusEffect always calls the latest refreshCouple without
+  // depending on its identity — avoids the stale-closure trap where the callback
+  // only fires once because refreshCouple never changes reference.
+  const refreshCoupleRef = useRef(refreshCouple);
+  useEffect(() => { refreshCoupleRef.current = refreshCouple; }, [refreshCouple]);
 
   React.useEffect(() => {
     if (!loading && user && !profile && !profileRetriedRef.current) {
@@ -450,8 +455,8 @@ export default function AccountScreen() {
   }, [couple?.id, user]);
 
   useFocusEffect(useCallback(() => {
-    refreshCouple();
-  }, [refreshCouple]));
+    refreshCoupleRef.current();
+  }, []));
 
   const loadStats = async () => {
     if (!couple?.id || !user) return;
@@ -520,7 +525,13 @@ export default function AccountScreen() {
   };
 
   const handleRefreshCode = async () => {
-    if (!couple?.id || codeRefreshing || couple.user_b_id) return;
+    if (codeRefreshing) return;
+    // If couple is missing or stale, force a fresh fetch before attempting the update.
+    if (!couple?.id) {
+      await refreshCoupleRef.current();
+      return;
+    }
+    if (couple.user_b_id) return;
     setCodeRefreshing(true);
     const newCode = generateInviteCode();
     const newExpiry = codeExpiresAt();

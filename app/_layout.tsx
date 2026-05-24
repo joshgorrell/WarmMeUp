@@ -173,7 +173,7 @@ function SessionGuard() {
 }
 
 function BackgroundLockManager() {
-  const { session, settings, lockIfNeeded, isAuthenticatingRef } = useAuth();
+  const { session, settings, lockIfNeeded, isAuthenticatingRef, refreshCouple } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -189,6 +189,10 @@ function BackgroundLockManager() {
         wasBackgroundedRef.current = true;
       } else if (next === 'active' && wasBackgroundedRef.current) {
         wasBackgroundedRef.current = false;
+
+        // Refresh couple data on every foreground trip so invite codes and
+        // partner status are never stale after background/OTA transitions.
+        refreshCouple();
 
         const method = settings?.login_method ?? 'pin';
         if (!session || method === 'password') return;
@@ -214,7 +218,7 @@ function BackgroundLockManager() {
     });
 
     return () => sub.remove();
-  }, [session, settings?.login_method, lockIfNeeded, isAuthenticatingRef]);
+  }, [session, settings?.login_method, lockIfNeeded, isAuthenticatingRef, refreshCouple]);
 
   return null;
 }
