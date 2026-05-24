@@ -32,7 +32,7 @@ jobs:
           eas-cache: false
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Publish update
         run: eas update --branch production --message "Production OTA update" --non-interactive
