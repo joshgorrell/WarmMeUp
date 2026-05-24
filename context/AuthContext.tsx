@@ -140,8 +140,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        // Skip reload on token refreshes — only load on first seen user or a new sign-in.
-        if (loadedUserIdRef.current !== session.user.id || event === 'SIGNED_IN') {
+        // Always reload on INITIAL_SESSION (cold start / restored keychain session) and
+        // SIGNED_IN. Skip only on TOKEN_REFRESHED / USER_UPDATED so we don't thrash
+        // the DB on routine token refreshes.
+        const shouldLoad =
+          event === 'INITIAL_SESSION' ||
+          event === 'SIGNED_IN' ||
+          loadedUserIdRef.current !== session.user.id;
+        if (shouldLoad) {
           loadedUserIdRef.current = session.user.id;
           (async () => {
             await loadUserData(session.user.id);
