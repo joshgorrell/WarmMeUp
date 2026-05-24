@@ -22,6 +22,7 @@ import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import { useLayout } from '@/hooks/useLayout';
 import { savePendingCode } from '@/lib/inviteCode';
+import { friendlyAuthError } from '@/lib/authError';
 
 function getAge(dob: Date): number {
   const today = new Date();
@@ -137,13 +138,8 @@ export default function RegisterScreen() {
           router.replace('/(auth)/setup-pin');
         }
       }
-    } catch (e: any) {
-      const msg: string = e.message ?? '';
-      if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('user already exists')) {
-        setError('An account with this email already exists. Try signing in instead.');
-      } else {
-        setError(msg || 'Something went wrong. Please try again.');
-      }
+    } catch (e: unknown) {
+      setError(friendlyAuthError(e));
     } finally {
       setLoading(false);
     }
@@ -189,8 +185,8 @@ export default function RegisterScreen() {
           router.replace('/transition');
         }
       }
-    } catch (e: any) {
-      setError(e.message || `${provider === 'apple' ? 'Apple' : 'Google'} sign-in failed.`);
+    } catch (e: unknown) {
+      setError(friendlyAuthError(e));
     } finally {
       setOauthLoading(null);
     }

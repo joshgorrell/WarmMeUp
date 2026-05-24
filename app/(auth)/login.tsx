@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { signInWithProvider, isOAuthSupported } from '@/lib/oauth';
 import { savePendingCode } from '@/lib/inviteCode';
+import { friendlyAuthError } from '@/lib/authError';
 import WarmupBrand from '@/components/WarmupBrand';
 import PrimaryButton from '@/components/PrimaryButton';
 import AppleIcon from '@/components/icons/AppleIcon';
@@ -50,8 +51,8 @@ export default function LoginScreen() {
       } else {
         router.replace('/transition');
       }
-    } catch (e: any) {
-      setError(e.message || 'Sign in failed.');
+    } catch (e: unknown) {
+      setError(friendlyAuthError(e));
     } finally {
       setLoading(false);
     }
@@ -85,8 +86,8 @@ export default function LoginScreen() {
           );
         }
       }
-    } catch (e: any) {
-      setError(e.message || `${provider === 'apple' ? 'Apple' : 'Google'} sign-in failed.`);
+    } catch (e: unknown) {
+      setError(friendlyAuthError(e));
     } finally {
       setOauthLoading(null);
     }
