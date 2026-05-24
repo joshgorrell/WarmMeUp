@@ -531,6 +531,7 @@ export default function AccountScreen() {
       .select()
       .single();
     if (error || !updated) {
+      console.error('[handleRefreshCode] supabase update failed:', JSON.stringify(error));
       Alert.alert('Error', 'Could not refresh code. Please try again.');
       setCodeRefreshing(false);
       return;

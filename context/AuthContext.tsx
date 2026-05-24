@@ -260,6 +260,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user) await fetchCouple(user.id);
   }, [user]);
 
+  // Live-sync: whenever the couple row changes in the DB (e.g. invite_code refreshed,
+  // partner joined), re-fetch so the UI always reflects current data without needing
+  // a manual pull-to-refresh or screen focus event.
+  useEffect(() => {
+    if (!couple?.id) return;
+    const channel = supabase
+      .channel(`couple:${couple.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'couples', filter: `id=eq.${couple.id}` },
+        () => {
+          if (user) fetchCouple(user.id);
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [couple?.id, user?.id]);
+
   const patchCouple = useCallback((patch: Partial<Couple>) => {
     setCouple(prev => prev ? { ...prev, ...patch } : prev);
   }, []);
