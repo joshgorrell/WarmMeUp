@@ -55,6 +55,19 @@ export default function TransitionScreen() {
 
   const navigate = () => {
     if (routed.current) return;
+
+    // If subscription info hasn't resolved yet, don't route — wait for it.
+    // This prevents routing with the default isPremium:false while still loading.
+    if (subscriptionInfo.loading) {
+      if (!subTimeoutRef.current) {
+        subTimeoutRef.current = setTimeout(() => {
+          subTimeoutRef.current = null;
+          navigate();
+        }, SUB_WAIT_MS);
+      }
+      return;
+    }
+
     if (coupleTimeoutRef.current) {
       clearTimeout(coupleTimeoutRef.current);
       coupleTimeoutRef.current = null;
@@ -119,18 +132,7 @@ export default function TransitionScreen() {
       return;
     }
 
-    // Subscription info loads asynchronously — wait briefly, then proceed anyway
-    // (fail-open: a slow edge function shouldn't block the splash indefinitely).
-    if (subscriptionInfo.loading) {
-      if (!subTimeoutRef.current) {
-        subTimeoutRef.current = setTimeout(() => {
-          subTimeoutRef.current = null;
-          navigate();
-        }, SUB_WAIT_MS);
-      }
-      return;
-    }
-
+    // navigate() itself will wait for subscriptionInfo to resolve.
     navigate();
   };
 
