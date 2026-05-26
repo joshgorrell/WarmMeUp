@@ -72,7 +72,17 @@ export default function WeatherScreen() {
   const [permissionDenied, setPermissionDenied] = useState(false);
 
   useEffect(() => {
+    // Don't run until settings have loaded — avoids a premature GPS attempt
+    // that can consume the effect run we need once cached coords are available.
+    if (settings === null) return;
+
     let cancelled = false;
+
+    // Hard timeout: if weather is still null after 6 s (edge function unreachable
+    // or GPS hung), show the fallback so the screen is never permanently stuck.
+    const fallbackTimer = setTimeout(() => {
+      if (!cancelled) setWeather(prev => prev ?? FALLBACK);
+    }, 6000);
 
     (async () => {
       // Step 1: If cached coords exist, fetch immediately so the user sees
@@ -83,7 +93,10 @@ export default function WeatherScreen() {
         try {
           const data = await fetchWeatherForCoords(cachedLat, cachedLon);
           if (!cancelled) setWeather(data);
-        } catch { /* will be overwritten by live GPS or fall through to FALLBACK */ }
+        } catch {
+          // Edge function unreachable — show fallback now rather than waiting
+          if (!cancelled) setWeather(FALLBACK);
+        }
       }
 
       // Step 2: Get a fresh live GPS fix and update display + cache.
@@ -92,7 +105,7 @@ export default function WeatherScreen() {
 
         if (Platform.OS === 'web') {
           if (!navigator?.geolocation) {
-            if (!cancelled && !cachedLat) setWeather(FALLBACK);
+            if (!cancelled) setWeather(prev => prev ?? FALLBACK);
             return;
           }
           const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
@@ -106,8 +119,7 @@ export default function WeatherScreen() {
           if (status !== 'granted') {
             if (!cancelled) {
               setPermissionDenied(true);
-              // Only show fallback if we have nothing to show yet
-              if (!cachedLat) setWeather(FALLBACK);
+              setWeather(prev => prev ?? FALLBACK);
             }
             return;
           }
@@ -119,20 +131,27 @@ export default function WeatherScreen() {
         }
 
         if (cancelled) return;
-        const data = await fetchWeatherForCoords(lat, lon);
-        if (!cancelled) setWeather(data);
+        try {
+          const data = await fetchWeatherForCoords(lat, lon);
+          if (!cancelled) setWeather(data);
+        } catch {
+          if (!cancelled) setWeather(prev => prev ?? FALLBACK);
+        }
 
         // Persist coords for instant display next open
         if (user?.id) {
           cacheCoords(user.id, lat, lon);
         }
       } catch {
-        if (!cancelled && !cachedLat) setWeather(FALLBACK);
+        if (!cancelled) setWeather(prev => prev ?? FALLBACK);
       }
     })();
 
-    return () => { cancelled = true; };
-  }, [settings?.weather_lat, settings?.weather_lon]);
+    return () => {
+      cancelled = true;
+      clearTimeout(fallbackTimer);
+    };
+  }, [settings]);
 
   const handleCoastIsClear = async () => {
     // Signal BackgroundLockManager to stand down — it must not race a router.replace
@@ -154,9 +173,9 @@ export default function WeatherScreen() {
           .select('login_method')
           .eq('user_id', userId)
           .maybeSingle();
-        loginMethod = data?.login_method ?? 'pin';
+        loginMethod = data?.login_method ?? 'password';
       }
-      loginMethod = loginMethod ?? 'pin';
+      loginMethod = loginMethod ?? 'password';
 
       if (loginMethod === 'password') {
         // Password method has no lock gate — stamp unlock and go straight in.
