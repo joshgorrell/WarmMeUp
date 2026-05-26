@@ -120,12 +120,16 @@ export default function TransitionScreen() {
       clearTimeout(subTimeoutRef.current);
       subTimeoutRef.current = null;
     }
-    if (hardDeadlineRef.current) {
-      clearTimeout(hardDeadlineRef.current);
-      hardDeadlineRef.current = null;
-    }
     routed.current = true;
     Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
+      // Clear the hard deadline only after we are inside the animation callback
+      // and about to route. This ensures the deadline stays armed as a fallback
+      // if the animation callback is silently dropped by the JS thread.
+      if (hardDeadlineRef.current) {
+        clearTimeout(hardDeadlineRef.current);
+        hardDeadlineRef.current = null;
+      }
+
       // Admins bypass all subscription checks
       if (isAdmin) {
         console.log('[transition] → /(app)/(tabs) [admin]');
