@@ -163,7 +163,13 @@ function SessionGuard() {
   useEffect(() => {
     if (loading) return;
     if (session) return;
-    const inAuthenticatedRoute = segments[0] === '(app)' || segments[0] === '(admin)';
+    // Protect authenticated app/admin routes AND the weather/unlock screens —
+    // those must only be reachable by a confirmed logged-in user.
+    const inAuthenticatedRoute =
+      segments[0] === '(app)' ||
+      segments[0] === '(admin)' ||
+      segments[0] === 'weather' ||
+      segments[0] === 'unlock';
     if (inAuthenticatedRoute) {
       router.replace('/(auth)/welcome');
     }

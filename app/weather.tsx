@@ -63,8 +63,18 @@ async function cacheCoords(userId: string, lat: number, lon: number) {
 
 export default function WeatherScreen() {
   const router = useRouter();
-  const { user, settings, refreshSettings, unlockApp, lockIfNeeded, isAuthenticatingRef } = useAuth();
+  const { session, loading, user, settings, refreshSettings, unlockApp, lockIfNeeded, isAuthenticatingRef } = useAuth();
   const insets = useSafeAreaInsets();
+
+  // Hard session guard — this screen is exclusively for confirmed logged-in users.
+  // SessionGuard in _layout.tsx handles the global case, but guard here too so
+  // a stale navigation state or direct push can never strand a guest on this screen.
+  useEffect(() => {
+    if (!loading && !session) {
+      router.replace('/(auth)/welcome');
+    }
+  }, [loading, session]);
+
   const { width } = useWindowDimensions();
   const tempFontSize = Math.min(Math.round(width * 0.24), 100);
   const forecastDayWidth = width >= 600 ? 110 : 90;

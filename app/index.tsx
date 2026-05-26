@@ -1,12 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { hasPinStored } from '@/lib/secureKey';
 
+// If settings haven't arrived this many ms after loading=false, fall through to
+// /transition rather than hanging on the black index screen indefinitely.
+const SETTINGS_WAIT_MS = 4000;
+
 export default function IndexScreen() {
   const router = useRouter();
   const { session, loading, settings, lockIfNeeded, unlockApp } = useAuth();
+  const settingsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const routedRef = useRef(false);
 
   useEffect(() => {
     if (loading) return;
@@ -21,9 +27,33 @@ export default function IndexScreen() {
     // arrive within a render or two. Routing before they're ready causes
     // unlock.tsx to see null settings and default to PIN even when the user
     // has biometric configured.
-    if (!settings) return;
+    if (!settings) {
+      // Start a fallback timer the first time we land here without settings.
+      if (!settingsTimeoutRef.current) {
+        settingsTimeoutRef.current = setTimeout(() => {
+          settingsTimeoutRef.current = null;
+          if (!routedRef.current) {
+            console.warn('[index] settings timeout — falling through to /transition');
+            routedRef.current = true;
+            unlockApp();
+            router.replace('/transition');
+          }
+        }, SETTINGS_WAIT_MS);
+      }
+      return;
+    }
+
+    // Settings arrived — cancel any pending timeout.
+    if (settingsTimeoutRef.current) {
+      clearTimeout(settingsTimeoutRef.current);
+      settingsTimeoutRef.current = null;
+    }
+
+    if (routedRef.current) return;
 
     const goNext = async () => {
+      if (routedRef.current) return;
+      routedRef.current = true;
       const userId = session.user?.id;
       const loginMethod = settings.login_method ?? 'password';
 
@@ -52,9 +82,10 @@ export default function IndexScreen() {
       }
     };
 
-    // Check stealth bypass
-    const bypass = settings?.stealth_bypass_until;
-    const stealthEnabled = settings?.stealth_mode_enabled ?? true;
+    // Check stealth mode. Default is false — missing settings must not mean fake weather.
+    // Only show the weather cover screen when the authenticated user has explicitly enabled it.
+    const bypass = settings.stealth_bypass_until;
+    const stealthEnabled = settings.stealth_mode_enabled ?? false;
 
     if (!stealthEnabled) {
       goNext();
@@ -66,9 +97,17 @@ export default function IndexScreen() {
       return;
     }
 
-    // Stealth mode — show weather screen; its button routes to /unlock or /transition
+    // Stealth mode active — show weather cover screen.
+    // weather.tsx handles the lock/PIN gate when the user taps "Coast is Clear".
+    routedRef.current = true;
     router.replace('/weather');
   }, [loading, session, settings]);
+
+  useEffect(() => {
+    return () => {
+      if (settingsTimeoutRef.current) clearTimeout(settingsTimeoutRef.current);
+    };
+  }, []);
 
   return <View style={styles.bg} />;
 }
