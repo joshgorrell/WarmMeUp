@@ -218,15 +218,9 @@ export default function UnlockScreen() {
       <LinearGradient colors={['#07070A', '#0D0D12', '#151018']} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
-        {/* Long-press 5s = emergency debug access */}
-        <TouchableOpacity
-          style={[{ marginBottom: vMd }, centerStyle]}
-          onLongPress={() => router.push('/debug')}
-          delayLongPress={5000}
-          activeOpacity={1}
-        >
+        <View style={[{ marginBottom: vMd }, centerStyle]}>
           <WarmupBrand logoSize={logoSize} showTagline={false} />
-        </TouchableOpacity>
+        </View>
 
         <View style={centerStyle}>
           {pinMissing ? (
@@ -303,16 +297,6 @@ export default function UnlockScreen() {
         </View>
       </View>
 
-      {/* DEV-only debug shortcut */}
-      {__DEV__ && (
-        <TouchableOpacity
-          style={[styles.devDebugBtn, { bottom: insets.bottom + 8 }]}
-          onPress={() => router.push('/debug')}
-          activeOpacity={0.7}
-        >
-          <AppText style={styles.devDebugText}>Debug</AppText>
-        </TouchableOpacity>
-      )}
     </View>
   );
 }
@@ -399,14 +383,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',
-  },
-  devDebugBtn: {
-    position: 'absolute', left: Spacing.md, padding: 6,
-    backgroundColor: 'rgba(255,100,0,0.15)', borderRadius: 4,
-    borderWidth: 1, borderColor: 'rgba(255,100,0,0.3)',
-  },
-  devDebugText: {
-    fontSize: 10, fontFamily: 'Inter-SemiBold',
-    color: 'rgba(255,130,0,0.7)', letterSpacing: 0.4,
   },
 });

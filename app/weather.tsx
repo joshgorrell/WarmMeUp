@@ -314,11 +314,9 @@ export default function WeatherScreen() {
       >
         {weather ? (
           <>
-            {/* Main temp — 5-tap (debug mode) or 5s long-press (emergency) opens debug */}
+            {/* Main temp — 5-tap opens debug when admin has enabled debug mode */}
             <TouchableOpacity
               onPress={handleDebugTap}
-              onLongPress={() => router.push('/debug')}
-              delayLongPress={5000}
               activeOpacity={1}
               style={styles.topSection}
             >
@@ -430,17 +428,6 @@ export default function WeatherScreen() {
         <EyeOff color="rgba(255,255,255,0.18)" size={17} />
       </TouchableOpacity>
 
-      {/* DEV-only debug shortcut */}
-      {__DEV__ && (
-        <TouchableOpacity
-          style={[styles.devDebugBtn, { bottom: insets.bottom + 8 }]}
-          onPress={() => router.push('/debug')}
-          activeOpacity={0.7}
-        >
-          <AppText style={styles.devDebugText}>Debug</AppText>
-        </TouchableOpacity>
-      )}
-
       <StealthBypassSheet
         visible={showStealthSheet}
         onClose={() => setShowStealthSheet(false)}
@@ -526,15 +513,6 @@ const styles = StyleSheet.create({
   waveEmoji: { color: 'rgba(255,255,255,0.7)', fontSize: 18 },
   clearBtnText: { color: '#fff', fontSize: FontSize.md, fontFamily: 'Inter-SemiBold', letterSpacing: 0.2 },
   stealthIcon: { position: 'absolute', right: Spacing.xl, padding: 6 },
-  devDebugBtn: {
-    position: 'absolute', left: Spacing.md, padding: 6,
-    backgroundColor: 'rgba(255,100,0,0.15)', borderRadius: 4,
-    borderWidth: 1, borderColor: 'rgba(255,100,0,0.3)',
-  },
-  devDebugText: {
-    fontSize: 10, fontFamily: 'Inter-SemiBold',
-    color: 'rgba(255,130,0,0.7)', letterSpacing: 0.4,
-  },
   permissionHint: {
     color: 'rgba(255,200,100,0.75)', fontSize: FontSize.xs,
     fontFamily: 'Inter-Regular', marginTop: 10, textDecorationLine: 'underline',

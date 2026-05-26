@@ -26,7 +26,7 @@ export default function TabHeader({ rightSlot }: TabHeaderProps) {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/')} activeOpacity={0.7} style={styles.brand}>
+      <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/')} onLongPress={() => router.push('/debug')} delayLongPress={5000} activeOpacity={0.7} style={styles.brand}>
         <WarmupLogo size={28} />
         <WarmupWordmark size={13} />
       </TouchableOpacity>

@@ -364,12 +364,6 @@ export default function DebugScreen() {
         </View>
       </ScrollView>
 
-      {/* DEV-only badge */}
-      {__DEV__ && (
-        <View style={[styles.devBadge, { bottom: insets.bottom + 8 }]}>
-          <AppText style={styles.devBadgeText}>DEV BUILD</AppText>
-        </View>
-      )}
     </View>
   );
 }
@@ -482,21 +476,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 16,
     paddingHorizontal: Spacing.sm,
-  },
-  devBadge: {
-    position: 'absolute',
-    right: 12,
-    backgroundColor: 'rgba(255,100,0,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,100,0,0.3)',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  devBadgeText: {
-    fontSize: 9,
-    fontFamily: 'Inter-SemiBold',
-    color: 'rgba(255,130,0,0.7)',
-    letterSpacing: 0.5,
   },
 });

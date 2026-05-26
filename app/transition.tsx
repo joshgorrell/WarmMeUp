@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import WarmupLogo from '@/components/WarmupLogo';
 import WarmupWordmark from '@/components/WarmupWordmark';
-import AppText from '@/components/AppText';
+
 import { pendingNotificationRoute } from './_layout';
 import type { NotificationData } from '@/lib/notifications';
 
@@ -234,44 +234,14 @@ export default function TransitionScreen() {
     }
   }, [loading, couple?.id, couple?.active, user?.id, isAdmin, subscriptionInfo.loading, subscriptionInfo.isPremium]);
 
-  const goToDebug = () => {
-    routed.current = true;
-    router.replace('/debug');
-  };
-
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
-      {/* Logo — 5-tap (debug mode) or 5s long-press (emergency) */}
-      <TouchableOpacity
-        onPress={handleDebugTap}
-        onLongPress={goToDebug}
-        delayLongPress={5000}
-        activeOpacity={1}
-      >
+      <TouchableOpacity onPress={handleDebugTap} activeOpacity={1}>
         <Animated.View style={{ transform: [{ scale: logoScale }], opacity: logoOpacity, alignItems: 'center', gap: 8 }}>
           <WarmupLogo size={logoW} />
           <WarmupWordmark size={18} />
         </Animated.View>
       </TouchableOpacity>
-
-      {/* Invisible bottom-right tap area — emergency debug */}
-      <TouchableOpacity
-        style={styles.cornerTap}
-        onLongPress={goToDebug}
-        delayLongPress={5000}
-        activeOpacity={1}
-      />
-
-      {/* DEV-only debug shortcut */}
-      {__DEV__ && (
-        <TouchableOpacity
-          style={styles.devDebugBtn}
-          onPress={goToDebug}
-          activeOpacity={0.7}
-        >
-          <AppText style={styles.devDebugText}>Debug</AppText>
-        </TouchableOpacity>
-      )}
     </Animated.View>
   );
 }
@@ -283,28 +253,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-  },
-  cornerTap: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 60,
-    height: 60,
-  },
-  devDebugBtn: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    padding: 6,
-    backgroundColor: 'rgba(255,100,0,0.15)',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255,100,0,0.3)',
-  },
-  devDebugText: {
-    fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-    color: 'rgba(255,130,0,0.7)',
-    letterSpacing: 0.4,
   },
 });
