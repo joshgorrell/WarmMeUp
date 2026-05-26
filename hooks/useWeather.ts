@@ -32,23 +32,27 @@ export function useWeather(
 ): string {
   const [temp, setTemp] = useState<string>(sessionCachedTemp ?? '');
   const mounted = useRef(true);
+  const resolvedRef = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
 
+    // Already have a session-level temp — apply immediately and skip all fetches.
+    if (sessionCachedTemp) {
+      setTemp(sessionCachedTemp);
+      return;
+    }
+
     (async () => {
-      // Step 1: If session already resolved a temp this run, use it immediately.
-      if (sessionCachedTemp) {
-        setTemp(sessionCachedTemp);
-      } else if (cachedLat != null && cachedLon != null) {
-        // Step 2: Use DB-cached coords for instant display while GPS warms up.
+      // Step 1: Use DB-cached coords for instant display while GPS warms up.
+      if (cachedLat != null && cachedLon != null && !resolvedRef.current) {
         try {
           const t = await fetchTempForCoords(cachedLat, cachedLon);
-          if (mounted.current && !sessionCachedTemp) setTemp(t);
+          if (mounted.current && t) setTemp(t);
         } catch { /* fall through to live GPS */ }
       }
 
-      // Step 3: Get a fresh live GPS fix.
+      // Step 2: Get a fresh live GPS fix.
       try {
         let lat: number, lon: number;
 
@@ -72,15 +76,17 @@ export function useWeather(
 
         const t = await fetchTempForCoords(lat, lon);
         sessionCachedTemp = t;
-        if (mounted.current) setTemp(t);
+        resolvedRef.current = true;
+        if (mounted.current && t) setTemp(t);
 
         if (userId) cacheCoords(userId, lat, lon);
       } catch { /* silently keep whatever we have */ }
     })();
 
     return () => { mounted.current = false; };
+  // Re-run once cached coords arrive from settings (settings load async after mount)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cachedLat, cachedLon]);
 
   return temp;
 }
