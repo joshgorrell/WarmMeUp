@@ -132,11 +132,9 @@ export default function RegisterScreen() {
           .from('profiles')
           .update({ display_name: displayName.trim(), tos_accepted_at: tosAcceptedAt })
           .eq('id', data.user.id);
-        if (pendingCode) {
-          router.replace({ pathname: '/(auth)/setup-pin', params: { pendingCode } });
-        } else {
-          router.replace('/(auth)/setup-pin');
-        }
+        const params: Record<string, string> = { email };
+        if (pendingCode) params.pendingCode = pendingCode;
+        router.replace({ pathname: '/(auth)/verify-email', params });
       }
     } catch (e: unknown) {
       setError(friendlyAuthError(e));
@@ -176,10 +174,13 @@ export default function RegisterScreen() {
         // updatedProfile is non-null only when we actually wrote — meaning new user
         const isNewUser = !!updatedProfile;
         if (isNewUser) {
+          // OAuth providers verify email automatically — go straight to onboarding.
+          // If there's a pending invite code, it will be handled by verify-email
+          // or directly here since OAuth emails are pre-verified.
           if (pendingCode) {
-            router.replace({ pathname: '/(auth)/setup-pin', params: { pendingCode } });
+            router.replace({ pathname: '/(auth)/verify-email', params: { pendingCode } });
           } else {
-            router.replace('/(auth)/setup-pin');
+            router.replace('/(auth)/onboarding');
           }
         } else {
           router.replace('/transition');

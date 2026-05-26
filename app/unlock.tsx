@@ -33,7 +33,7 @@ export default function UnlockScreen() {
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
 
-  const loginMethod = settings?.login_method ?? 'pin';
+  const loginMethod = settings?.login_method ?? 'password';
 
   const [mode, setMode] = useState<'biometric' | 'pin' | null>(null);
   const modeInitialised = useRef(false);

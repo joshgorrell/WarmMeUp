@@ -4,6 +4,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
@@ -41,10 +42,10 @@ const PLANS: {
   {
     id: 'yearly',
     label: 'Yearly',
-    price: '$59.99',
+    price: '$99.99',
     period: 'per year',
     badge: 'Best Value',
-    sub: 'Save 50% — just $5/mo',
+    sub: 'Save 17% — just $8.33/mo',
   },
 ];
 
@@ -68,11 +69,17 @@ export default function SubscriptionScreen() {
 
   const handleSubscribe = async () => {
     if (loading) return;
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    if (__DEV__) {
+      // Dev-only shortcut: skip real purchase flow and go straight to the app.
       router.replace('/(app)/(tabs)');
-    }, 800);
+      return;
+    }
+    // Production: RevenueCat purchase flow (not yet implemented).
+    Alert.alert(
+      'Coming Soon',
+      'In-app purchases will be available in the next release.',
+      [{ text: 'OK' }]
+    );
   };
 
   const handleRestore = () => {

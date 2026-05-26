@@ -344,7 +344,7 @@ export default function SettingsScreen() {
             value={s?.stealth_mode_enabled ?? true}
             onChange={v => update({ stealth_mode_enabled: v })}
           />
-          {(s?.login_method ?? 'pin') !== 'password' && (
+          {(s?.login_method ?? 'password') !== 'password' && (
             <RequireUnlockAfterRow
               current={s?.lock_after_seconds ?? null}
               colors={colors}
@@ -353,7 +353,7 @@ export default function SettingsScreen() {
           )}
           {(s?.lock_after_seconds ?? null) !== -1 && (
           <SettingsLoginMethodRow
-            current={s?.login_method ?? 'pin'}
+            current={s?.login_method ?? 'password'}
             bioAvailable={bioAvailable}
             biometricLabel={biometricLabel}
             colors={colors}

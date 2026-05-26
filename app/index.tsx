@@ -25,7 +25,7 @@ export default function IndexScreen() {
 
     const goNext = async () => {
       const userId = session.user?.id;
-      const loginMethod = settings.login_method ?? 'pin';
+      const loginMethod = settings.login_method ?? 'password';
 
       const needsGate = loginMethod !== 'password';
 

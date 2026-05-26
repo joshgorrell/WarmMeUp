@@ -3,11 +3,11 @@ import {
   View, StyleSheet, TouchableOpacity, Platform, ScrollView,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
-import { ScanFace, FingerprintPattern as Fingerprint, KeyRound, Lock, LogIn } from 'lucide-react-native';
+import { ScanFace, FingerprintPattern as Fingerprint, KeyRound, Lock } from 'lucide-react-native';
 import WarmupBrand from '@/components/WarmupBrand';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -15,106 +15,6 @@ import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { supabase } from '@/lib/supabase';
 import { secureKey } from '@/lib/secureKey';
 import { useLayout } from '@/hooks/useLayout';
-import { isCodeExpired, loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
-
-type JoinResult =
-  | { ok: true; partnerName: string | null; coupleId: string }
-  | { ok: false; reason: 'not_found' | 'expired' | 'already_full' | 'self' | 'already_connected' | 'error' };
-
-async function completePendingJoin(userId: string, code: string): Promise<JoinResult> {
-  // Check if User B already has an active couple — prevent double-connecting
-  const { data: existingCouple } = await supabase
-    .from('couples')
-    .select('id, active')
-    .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
-    .eq('active', true)
-    .maybeSingle();
-  if (existingCouple) return { ok: false, reason: 'already_connected' };
-
-  const { data: targetCouple, error: fetchError } = await supabase
-    .rpc('get_couple_by_invite_code', { code: code.toUpperCase().trim() });
-
-  if (fetchError || !targetCouple) return { ok: false, reason: 'not_found' };
-
-  // Self-invite guard
-  if (targetCouple.user_a_id === userId) return { ok: false, reason: 'self' };
-
-  // Expiry check (null = legacy row with no expiry, treat as valid)
-  if (isCodeExpired(targetCouple.invite_code_expires_at)) return { ok: false, reason: 'expired' };
-
-  // Already used / full check
-  if (targetCouple.user_b_id && targetCouple.user_b_id !== userId) {
-    return { ok: false, reason: 'already_full' };
-  }
-
-  const now = new Date().toISOString();
-
-  // Conditional update — atomic: only succeeds if user_b_id is still null
-  const { error: updateError } = await supabase
-    .from('couples')
-    .update({ user_b_id: userId, active: true, invite_code_used_at: now })
-    .eq('id', targetCouple.id)
-    .is('user_b_id', null);
-
-  if (updateError) {
-    // Re-fetch to give accurate reason (race: another user just claimed it)
-    const { data: refetched } = await supabase
-      .from('couples')
-      .select('user_b_id')
-      .eq('id', targetCouple.id)
-      .maybeSingle();
-    if (refetched?.user_b_id && refetched.user_b_id !== userId) {
-      return { ok: false, reason: 'already_full' };
-    }
-    return { ok: false, reason: 'error' };
-  }
-
-  // Stamp subscription_owner_id with whichever user has an active subscription
-  const { data: subA } = await supabase
-    .from('subscriptions')
-    .select('id')
-    .eq('user_id', targetCouple.user_a_id)
-    .eq('status', 'active')
-    .maybeSingle();
-  const { data: subB } = await supabase
-    .from('subscriptions')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .maybeSingle();
-  const subscriptionOwnerId = subA ? targetCouple.user_a_id : subB ? userId : null;
-  if (subscriptionOwnerId) {
-    const { error: subUpdateError } = await supabase
-      .from('couples')
-      .update({ subscription_owner_id: subscriptionOwnerId })
-      .eq('id', targetCouple.id);
-    // Non-fatal — pairing succeeded; subscription owner can be corrected later
-    if (subUpdateError) {
-      console.warn('[completePendingJoin] subscription_owner_id update failed:', subUpdateError.message);
-    }
-  }
-
-  // Clean up User B's own solo placeholder couple (active or inactive)
-  await supabase
-    .from('couples')
-    .delete()
-    .eq('user_a_id', userId)
-    .is('user_b_id', null)
-    .neq('id', targetCouple.id);
-
-  await supabase.from('scores').upsert([
-    { couple_id: targetCouple.id, user_id: targetCouple.user_a_id, points: 0 },
-    { couple_id: targetCouple.id, user_id: userId, points: 0 },
-  ]);
-
-  const { data: partnerProfile } = await supabase
-    .from('profiles')
-    .select('display_name')
-    .eq('id', targetCouple.user_a_id)
-    .maybeSingle();
-
-  return { ok: true, partnerName: partnerProfile?.display_name ?? null, coupleId: targetCouple.id };
-}
 
 const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 
@@ -124,7 +24,6 @@ type LoginMethod = 'pin' | 'biometric' | 'password';
 export default function SetupPinScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { pendingCode } = useLocalSearchParams<{ pendingCode?: string }>();
   const { available: bioAvailable, biometricLabel } = useBiometricAuth();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
@@ -185,49 +84,12 @@ export default function SetupPinScreen() {
         .from('user_settings')
         .update({ login_method: method, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
-
-      // Use route param first, fall back to persisted storage (survives OAuth redirects)
-      const code = pendingCode || (await loadPendingCode()) || '';
-
-      if (code) {
-        const result = await completePendingJoin(user.id, code);
-        if (result.ok) {
-          await clearPendingCode();
-          // Notify User A (fire-and-forget)
-          const { data: sessionData } = await supabase.auth.getSession();
-          const token = sessionData?.session?.access_token;
-          if (token) {
-            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-              body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
-            }).catch(() => {});
-          }
-          router.replace({
-            pathname: '/(auth)/paired-celebration',
-            params: { partnerName: result.partnerName || '' },
-          });
-        } else {
-          await clearPendingCode();
-          const msg =
-            result.reason === 'expired' ? "This invite code has expired. Ask your partner to generate a new one." :
-            result.reason === 'self' ? "You can't use your own invite code." :
-            result.reason === 'already_connected' ? "You're already connected to a partner." :
-            result.reason === 'not_found' ? "That invite code couldn't be found. You can pair from the app later." :
-            result.reason === 'already_full' ? 'That code has already been used. You can pair with a different partner from the app.' :
-            'Something went wrong connecting you. You can pair from the app later.';
-          setError(msg);
-          setSaving(false);
-          setTimeout(() => router.replace('/(auth)/onboarding'), 3500);
-        }
-        return;
-      }
     } catch {
-      // Non-fatal — still proceed to onboarding
+      // Non-fatal — still proceed
     } finally {
       setSaving(false);
     }
-    router.replace('/(auth)/onboarding');
+    router.back();
   };
 
   const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
@@ -312,15 +174,6 @@ export default function SetupPinScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-
-            <TouchableOpacity
-              style={[styles.altLink, { marginTop: vMd }]}
-              onPress={() => router.replace('/(auth)/login')}
-              activeOpacity={0.7}
-            >
-              <LogIn color="rgba(255,255,255,0.4)" size={14} />
-              <AppText style={styles.altLinkText}>Sign in with password instead</AppText>
-            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -450,16 +303,5 @@ const styles = StyleSheet.create({
     color: '#FF2E8A',
     fontSize: 10,
     fontFamily: 'Inter-SemiBold',
-  },
-  altLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-  },
-  altLinkText: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
   },
 });

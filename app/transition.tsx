@@ -34,6 +34,10 @@ function resolveNotificationRoute(data: NotificationData): string | null {
   }
 }
 
+// Maximum time to wait for couple data to arrive after auth is ready.
+// If couple is still null after this, we proceed to /(auth)/pair.
+const COUPLE_WAIT_MS = 2500;
+
 export default function TransitionScreen() {
   const router = useRouter();
   const { couple, partnerProfile, settings, user, isAdmin, loading } = useAuth();
@@ -45,22 +49,19 @@ export default function TransitionScreen() {
   const routed = useRef(false);
   const animDone = useRef(false);
   const authReady = useRef(false);
+  const coupleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const tryNavigate = () => {
+  const navigate = () => {
     if (routed.current) return;
-    if (!animDone.current || !authReady.current) return;
-    // Don't navigate while couple is still loading — it arrives slightly after
-    // loading=false due to React batching. Wait for couple to be non-null
-    // (or for user to be confirmed null, meaning logged out).
-    if (user && !couple) return;
+    if (coupleTimeoutRef.current) {
+      clearTimeout(coupleTimeoutRef.current);
+      coupleTimeoutRef.current = null;
+    }
     routed.current = true;
     Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
       if (couple?.active || isAdmin) {
-        // Show the celebration screen once for user A (who shared the code) when
-        // the couple first becomes active and they haven't seen it yet.
         const needsCelebration = couple?.active && !!couple?.user_b_id && !isAdmin && settings && !settings.celebration_seen;
         if (needsCelebration && user) {
-          // Mark as seen before navigating so a reload doesn't re-show it.
           await supabase
             .from('user_settings')
             .update({ celebration_seen: true, updated_at: new Date().toISOString() })
@@ -71,9 +72,6 @@ export default function TransitionScreen() {
           });
           return;
         }
-        // After gates are cleared, honour any pending notification deep-link.
-        // Pass the destination as a param rather than calling router.push() 100ms
-        // later — that setTimeout races the replace and can crash the navigator.
         const intent = pendingNotificationRoute.current;
         const notifDest = intent ? resolveNotificationRoute(intent) : null;
         if (intent) pendingNotificationRoute.current = null;
@@ -87,6 +85,25 @@ export default function TransitionScreen() {
     });
   };
 
+  const tryNavigate = () => {
+    if (routed.current) return;
+    if (!animDone.current || !authReady.current) return;
+
+    // Couple arrives slightly after loading=false due to React batching.
+    // Wait up to COUPLE_WAIT_MS; if still null after that, proceed anyway.
+    if (user && !couple) {
+      if (!coupleTimeoutRef.current) {
+        coupleTimeoutRef.current = setTimeout(() => {
+          coupleTimeoutRef.current = null;
+          navigate();
+        }, COUPLE_WAIT_MS);
+      }
+      return;
+    }
+
+    navigate();
+  };
+
   useEffect(() => {
     Animated.parallel([
       Animated.timing(bgOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
@@ -96,6 +113,10 @@ export default function TransitionScreen() {
       animDone.current = true;
       tryNavigate();
     });
+
+    return () => {
+      if (coupleTimeoutRef.current) clearTimeout(coupleTimeoutRef.current);
+    };
   }, []);
 
   useEffect(() => {
