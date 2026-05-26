@@ -1343,7 +1343,7 @@ export default function AccountScreen() {
           onSelect={(seconds) => update({ lock_after_seconds: seconds })}
         />
         <LoginMethodSelector
-          current={s?.login_method ?? 'pin'}
+          current={s?.login_method ?? 'password'}
           bioAvailable={bioAvailable}
           biometricLabel={biometricLabel}
           colors={colors}

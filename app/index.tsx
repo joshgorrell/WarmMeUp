@@ -17,6 +17,15 @@ export default function IndexScreen() {
   useEffect(() => {
     if (loading) return;
 
+    console.log('[LAUNCH DEBUG]', {
+      hasSession: !!session,
+      userId: session?.user?.id,
+      settingsLoaded: !!settings,
+      loginMethod: settings?.login_method,
+      stealthMode: settings?.stealth_mode_enabled,
+      lockAfter: settings?.lock_after_seconds,
+    });
+
     if (!session) {
       router.replace('/(auth)/welcome');
       return;

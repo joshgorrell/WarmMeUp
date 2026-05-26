@@ -172,15 +172,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // It fires immediately with INITIAL_SESSION on mount, so we don't need
     // a separate getSession() call, which was causing a double-load race.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-
       if (session?.user) {
-        // Always reload on INITIAL_SESSION (cold start / restored keychain session) and
-        // SIGNED_IN. Skip only on TOKEN_REFRESHED / USER_UPDATED so we don't thrash
-        // the DB on routine token refreshes.
+        // On INITIAL_SESSION (cold start / restored keychain / iOS reinstall), validate
+        // the token is still recognised by the backend before trusting it.
+        // iOS Keychain survives app deletion, so a stale session may be restored even
+        // after a fresh install. getUser() hits the network; an error means the token
+        // is dead — clear all local state and treat as signed-out.
+        if (event === 'INITIAL_SESSION') {
+          (async () => {
+            const { error } = await supabase.auth.getUser();
+            if (error) {
+              console.warn('[Auth] INITIAL_SESSION token invalid — clearing stale keychain session:', error.message);
+              await clearUnlockedAt(session.user.id);
+              // signOut flushes the stale token from Keychain/SecureStore and fires
+              // a SIGNED_OUT event which clears React state via the else branch below.
+              await supabase.auth.signOut();
+              return;
+            }
+            // Token is valid — proceed with normal startup load.
+            setSession(session);
+            setUser(session.user);
+            if (loadedUserIdRef.current !== session.user.id) {
+              loadedUserIdRef.current = session.user.id;
+              await loadUserData(session.user.id);
+            }
+          })();
+          return;
+        }
+
+        // For SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED etc — trust the session directly.
+        setSession(session);
+        setUser(session.user);
+
+        // Reload on SIGNED_IN or user switch. Skip TOKEN_REFRESHED / USER_UPDATED
+        // to avoid thrashing the DB on routine token refreshes.
         const shouldLoad =
-          event === 'INITIAL_SESSION' ||
           event === 'SIGNED_IN' ||
           loadedUserIdRef.current !== session.user.id;
         if (shouldLoad) {
@@ -190,6 +216,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })();
         }
       } else {
+        setSession(null);
+        setUser(null);
         loadedUserIdRef.current = null;
         setProfile(null);
         setCouple(null);
