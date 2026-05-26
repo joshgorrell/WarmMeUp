@@ -261,7 +261,15 @@ export default function VaultScreen() {
   const stopSpin = () => spinAnim.stopAnimation();
 
   const uploadToVault = async (localUri: string, mediaType: 'photo' | 'video', mimeType: string) => {
-    if (!couple?.id || !user) return;
+    if (!couple?.id || !user) {
+      logDebugEvent('VAULT UPLOAD ERROR', {
+        reason: 'missing_user_or_couple',
+        userId: user?.id ?? null,
+        coupleId: couple?.id ?? null,
+      });
+      Alert.alert('Vault Unavailable', 'Vault unavailable — account or connection state is missing.');
+      return;
+    }
     setUploading(true);
     setUploadPct(0);
     setShowAdd(false);
