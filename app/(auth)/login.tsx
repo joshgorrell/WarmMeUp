@@ -75,9 +75,11 @@ export default function LoginScreen() {
           .eq('id', userId)
           .maybeSingle();
         if (!existing) {
+          // New OAuth user — route through the same post-auth funnel as email signup.
+          // With a pending invite code, verify-email handles code redemption before onboarding.
           router.replace(codeToPreserve
-            ? { pathname: '/(auth)/setup-pin', params: { pendingCode: codeToPreserve } }
-            : '/(auth)/setup-pin'
+            ? { pathname: '/(auth)/verify-email', params: { pendingCode: codeToPreserve } }
+            : '/(auth)/onboarding'
           );
         } else {
           router.replace(codeToPreserve

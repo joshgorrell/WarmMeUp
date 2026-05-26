@@ -55,6 +55,11 @@ export default function TransitionScreen() {
   const coupleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hardDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Kept current so the hard-deadline callback (empty-deps effect) reads latest values.
+  const coupleRef = useRef(couple);
+  const isAdminRef = useRef(isAdmin);
+  coupleRef.current = couple;
+  isAdminRef.current = isAdmin;
 
   const navigate = () => {
     if (routed.current) return;
@@ -168,9 +173,12 @@ export default function TransitionScreen() {
     hardDeadlineRef.current = setTimeout(() => {
       hardDeadlineRef.current = null;
       if (!routed.current) {
-        console.warn('[transition] HARD DEADLINE reached — forcing /(app)/(tabs) fallback');
         routed.current = true;
-        router.replace('/(app)/(tabs)');
+        // Prefer a safe route: paired users go to app, everyone else to pair screen.
+        const hasActiveCouple = coupleRef.current?.active === true;
+        const dest = isAdminRef.current || hasActiveCouple ? '/(app)/(tabs)' : '/(auth)/pair';
+        console.warn('[transition] HARD DEADLINE reached — forcing fallback to', dest);
+        router.replace(dest);
       }
     }, HARD_DEADLINE_MS);
 

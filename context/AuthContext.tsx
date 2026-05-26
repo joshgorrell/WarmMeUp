@@ -37,7 +37,7 @@ interface AuthContextType {
   patchCouple: (patch: Partial<Couple>) => void;
   refreshSettings: () => Promise<void>;
   refreshProfile: () => Promise<void>;
-  signOut: () => Promise<void>;
+  signOut: () => void;
   /**
    * Shared ref that any biometric prompt must set to true while in-flight and
    * false when done. BackgroundLockManager checks this before navigating to /unlock
@@ -369,17 +369,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user) await fetchProfile(user.id);
   }, [user]);
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(() => {
+    // Clear all local state immediately so the UI responds without waiting on network.
+    // onAuthStateChange will fire SIGNED_OUT and confirm once Supabase responds.
+    const userId = user?.id ?? null;
+    setSession(null);
+    setUser(null);
+    setProfile(null);
+    setCouple(null);
+    setPartnerProfile(null);
+    setSettings(null);
     setAppLocked(false);
     setVaultUnlocked(false);
-    clearWeatherSessionCache();
-    if (user) {
-      clearPushToken(user.id).catch(() => {});
-      // Clear the persisted unlock timestamp so next login always prompts for PIN.
-      await clearUnlockedAt(user.id);
-    }
+    setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
     unlockedAtRef.current = null;
-    await supabase.auth.signOut();
+    clearWeatherSessionCache();
+
+    // Fire side-effects and the Supabase signOut without blocking the caller.
+    if (userId) {
+      clearPushToken(userId).catch(() => {});
+      clearUnlockedAt(userId).catch(() => {});
+    }
+    supabase.auth.signOut().catch(() => {});
   }, [user]);
 
   const unlockApp = useCallback(() => {
@@ -400,9 +411,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Startup flows (index.tsx, weather.tsx) call this instead of lockApp() directly.
    */
   const lockIfNeeded = useCallback((): boolean => {
+    // Only lock for pin/biometric users — never for password users regardless of caller.
+    const method = settings?.login_method ?? 'password';
+    if (method === 'password') return false;
+
     const lockAfter = settings?.lock_after_seconds ?? null;
     // null (never explicitly set) and -1 (explicitly "never") both mean never lock.
-    // Only lock when the user has set a positive timeout that has elapsed.
+    // Only lock when the user has set a non-negative timeout that has elapsed.
     if (lockAfter === null || lockAfter === -1) return false;
     // If user hasn't unlocked yet this session, don't force a lock — let them in.
     if (unlockedAtRef.current === null) return false;
@@ -412,7 +427,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true;
     }
     return false;
-  }, [settings?.lock_after_seconds]);
+  }, [settings?.login_method, settings?.lock_after_seconds]);
 
   const refreshSubscription = useCallback(async () => {
     const { data: { session: currentSession } } = await supabase.auth.getSession();
