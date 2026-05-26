@@ -50,6 +50,8 @@ interface AuthContextType {
    */
   vaultUnlocked: boolean;
   setVaultUnlocked: (unlocked: boolean) => void;
+  /** True when the admin has enabled the hidden 5-tap emergency debug entry points. */
+  debugModeEnabled: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -76,6 +78,7 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticatingRef: { current: false },
   vaultUnlocked: false,
   setVaultUnlocked: () => {},
+  debugModeEnabled: false,
 });
 
 function unlockedAtKey(userId: string) {
@@ -158,6 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [appLocked, setAppLocked] = useState(false);
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
+  const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo>(DEFAULT_SUBSCRIPTION_INFO);
   // Timestamp (ms) of the last successful unlock. Persisted across restarts.
   const unlockedAtRef = useRef<number | null>(null);
@@ -250,6 +254,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetchCouple(userId),
         fetchSettings(userId),
       ]);
+
+      // Load global config flag — non-blocking, safe to fail
+      (async () => {
+        try {
+          const { data } = await supabase
+            .from('app_config')
+            .select('value')
+            .eq('key', 'debug_mode_enabled')
+            .maybeSingle();
+          setDebugModeEnabled(data?.value === true);
+        } catch {}
+      })();
       console.log('[Auth] loadUserData Promise.all done. login_method:', fetchedSettings?.login_method, 'lock_after_seconds:', fetchedSettings?.lock_after_seconds);
 
       // Restore persisted unlock timestamp so lockIfNeeded() respects the grace period
@@ -412,6 +428,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAppLocked(false);
     setVaultUnlocked(false);
     setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
+    setDebugModeEnabled(false);
     unlockedAtRef.current = null;
     clearWeatherSessionCache();
 
@@ -473,7 +490,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled }}
     >
       {children}
     </AuthContext.Provider>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Animated, useWindowDimensions } from 'react-native';
+import { StyleSheet, Animated, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -41,9 +41,12 @@ const SUB_WAIT_MS = 3500;
 // Absolute hard deadline — transition MUST resolve within this time no matter what.
 const HARD_DEADLINE_MS = 5000;
 
+const DEBUG_TAP_TARGET = 5;
+const DEBUG_TAP_WINDOW_MS = 10000;
+
 export default function TransitionScreen() {
   const router = useRouter();
-  const { couple, partnerProfile, settings, user, isAdmin, loading, subscriptionInfo } = useAuth();
+  const { couple, partnerProfile, settings, user, isAdmin, loading, subscriptionInfo, debugModeEnabled } = useAuth();
   const { width } = useWindowDimensions();
   const logoW = Math.min(width * 0.5, 200);
   const bgOpacity = useRef(new Animated.Value(0)).current;
@@ -60,6 +63,25 @@ export default function TransitionScreen() {
   const isAdminRef = useRef(isAdmin);
   coupleRef.current = couple;
   isAdminRef.current = isAdmin;
+  const debugTapCount = useRef(0);
+  const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debugModeRef = useRef(debugModeEnabled);
+  debugModeRef.current = debugModeEnabled;
+
+  const handleDebugTap = () => {
+    if (!debugModeRef.current) return;
+    debugTapCount.current += 1;
+    if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
+    if (debugTapCount.current >= DEBUG_TAP_TARGET) {
+      debugTapCount.current = 0;
+      routed.current = true;
+      router.replace('/debug');
+      return;
+    }
+    debugTapTimer.current = setTimeout(() => {
+      debugTapCount.current = 0;
+    }, DEBUG_TAP_WINDOW_MS);
+  };
 
   const navigate = () => {
     if (routed.current) return;
@@ -209,10 +231,12 @@ export default function TransitionScreen() {
 
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
-      <Animated.View style={{ transform: [{ scale: logoScale }], opacity: logoOpacity, alignItems: 'center', gap: 8 }}>
-        <WarmupLogo size={logoW} />
-        <WarmupWordmark size={18} />
-      </Animated.View>
+      <TouchableOpacity onPress={handleDebugTap} activeOpacity={1}>
+        <Animated.View style={{ transform: [{ scale: logoScale }], opacity: logoOpacity, alignItems: 'center', gap: 8 }}>
+          <WarmupLogo size={logoW} />
+          <WarmupWordmark size={18} />
+        </Animated.View>
+      </TouchableOpacity>
     </Animated.View>
   );
 }

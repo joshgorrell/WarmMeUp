@@ -61,9 +61,14 @@ async function cacheCoords(userId: string, lat: number, lon: number) {
     .eq('user_id', userId);
 }
 
+const DEBUG_TAP_TARGET = 5;
+const DEBUG_TAP_WINDOW_MS = 10000;
+
 export default function WeatherScreen() {
   const router = useRouter();
-  const { session, loading, user, settings, refreshSettings, unlockApp, lockIfNeeded, isAuthenticatingRef } = useAuth();
+  const { session, loading, user, settings, refreshSettings, unlockApp, lockIfNeeded, isAuthenticatingRef, debugModeEnabled } = useAuth();
+  const debugTapCount = useRef(0);
+  const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
 
   // Hard session guard — this screen is exclusively for confirmed logged-in users.
@@ -94,6 +99,20 @@ export default function WeatherScreen() {
   const gpsCoords = useRef<{ lat: number; lon: number } | null>(null);
   const gpsDone = useRef(false);
   const cancelled = useRef(false);
+
+  const handleDebugTap = () => {
+    if (!debugModeEnabled) return;
+    debugTapCount.current += 1;
+    if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
+    if (debugTapCount.current >= DEBUG_TAP_TARGET) {
+      debugTapCount.current = 0;
+      router.push('/debug');
+      return;
+    }
+    debugTapTimer.current = setTimeout(() => {
+      debugTapCount.current = 0;
+    }, DEBUG_TAP_WINDOW_MS);
+  };
 
   // Hard timeout: ensures the screen never stays permanently blank.
   // Starts on mount and is cleared when any weather data arrives.
@@ -295,8 +314,12 @@ export default function WeatherScreen() {
       >
         {weather ? (
           <>
-            {/* Main temp */}
-            <View style={styles.topSection}>
+            {/* Main temp — 5-tap opens debug screen when admin has enabled debug mode */}
+            <TouchableOpacity
+              onPress={handleDebugTap}
+              activeOpacity={1}
+              style={styles.topSection}
+            >
               <AppText style={[styles.temp, { fontSize: tempFontSize, lineHeight: tempFontSize * 1.08 }]}>
                 {weather.currentTemp}
               </AppText>
@@ -309,7 +332,7 @@ export default function WeatherScreen() {
                   </AppText>
                 </TouchableOpacity>
               )}
-            </View>
+            </TouchableOpacity>
 
             {/* Hourly */}
             <View style={styles.card}>

@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
-import { FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity, CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2, Star, UserCog } from 'lucide-react-native';
+import { FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity, CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2, Star, UserCog, Bug } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
+import Toggle from '@/components/Toggle';
 
 interface Stats {
   coupleCount: number;
@@ -34,10 +35,33 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [diag, setDiag] = useState<{ name: string; status: 'pending' | 'pass' | 'fail'; detail?: string }[]>([]);
   const [diagRunning, setDiagRunning] = useState(false);
+  const [debugModeEnabled, setDebugModeEnabled] = useState(false);
+  const [debugToggleLoading, setDebugToggleLoading] = useState(false);
 
   useEffect(() => {
     fetchStats();
+    fetchDebugMode();
   }, []);
+
+  const fetchDebugMode = async () => {
+    const { data } = await supabase
+      .from('app_config')
+      .select('value')
+      .eq('key', 'debug_mode_enabled')
+      .maybeSingle();
+    if (data) setDebugModeEnabled(data.value === true);
+  };
+
+  const toggleDebugMode = async (next: boolean) => {
+    setDebugToggleLoading(true);
+    setDebugModeEnabled(next);
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase
+      .from('app_config')
+      .update({ value: next, updated_at: new Date().toISOString(), updated_by: user?.id ?? null })
+      .eq('key', 'debug_mode_enabled');
+    setDebugToggleLoading(false);
+  };
 
   const runDiagnostics = async () => {
     setDiagRunning(true);
@@ -255,6 +279,25 @@ export default function AdminDashboard() {
           </TouchableOpacity>
         ))}
 
+        {/* Developer */}
+        <AppText style={[styles.sectionLabel, { color: colors.textMuted, marginTop: Spacing.lg, marginBottom: Spacing.sm }]}>DEVELOPER</AppText>
+        <View style={[styles.breakdownCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle, gap: 0 }]}>
+          <View style={styles.devRow}>
+            <View style={[styles.devIconWrap, { backgroundColor: 'rgba(96,200,255,0.10)' }]}>
+              <Bug color="#60C8FF" size={20} strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText style={[styles.devLabel, { color: colors.text }]}>Emergency Debug Access</AppText>
+              <AppText style={[styles.devSub, { color: colors.textMuted }]}>5-tap on weather temp or splash logo opens diagnostics screen</AppText>
+            </View>
+            <Toggle
+              value={debugModeEnabled}
+              onChange={toggleDebugMode}
+              disabled={debugToggleLoading}
+            />
+          </View>
+        </View>
+
         {/* Diagnostics */}
         <AppText style={[styles.sectionLabel, { color: colors.textMuted, marginTop: Spacing.lg, marginBottom: Spacing.sm }]}>DIAGNOSTICS</AppText>
         <View style={[styles.breakdownCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle, gap: Spacing.sm }]}>
@@ -343,4 +386,20 @@ const styles = StyleSheet.create({
   diagRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingTop: 4 },
   diagName: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
   diagDetail: { fontSize: 11, fontFamily: 'Inter-Regular', marginTop: 1 },
+  devRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.card,
+  },
+  devIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  devLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', marginBottom: 2 },
+  devSub: { fontSize: 11, fontFamily: 'Inter-Regular', lineHeight: 16 },
 });

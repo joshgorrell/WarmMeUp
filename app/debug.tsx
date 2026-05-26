@@ -108,10 +108,17 @@ export default function DebugScreen() {
   let updateId: string | null = null;
   let runtimeVersion: string | null = null;
   let channel: string | null = null;
+  let isEmbeddedLaunch: boolean | null = null;
+  let isEmergencyLaunch: boolean | null = null;
+  let createdAt: string | null = null;
   try {
     updateId = Updates.updateId ?? null;
     runtimeVersion = Updates.runtimeVersion ?? null;
     channel = (Updates as any).channel ?? null;
+    isEmbeddedLaunch = (Updates as any).isEmbeddedLaunch ?? null;
+    isEmergencyLaunch = (Updates as any).isEmergencyLaunch ?? null;
+    const raw = (Updates as any).createdAt ?? (Updates as any).manifest?.createdAt ?? null;
+    createdAt = raw ? new Date(raw).toISOString() : null;
   } catch {}
 
   const appVersion = Constants.default?.expoConfig?.version ?? null;
@@ -122,7 +129,7 @@ export default function DebugScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.back} hitSlop={12}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/transition')} style={styles.back} hitSlop={12}>
           <ChevronLeft size={22} color="#aaa" />
         </TouchableOpacity>
         <AppText style={styles.title}>Debug Diagnostics</AppText>
@@ -134,6 +141,9 @@ export default function DebugScreen() {
         <Row label="updateId" value={updateId} />
         <Row label="runtimeVersion" value={runtimeVersion} />
         <Row label="channel" value={channel} />
+        <Row label="isEmbeddedLaunch" value={isEmbeddedLaunch} />
+        <Row label="isEmergencyLaunch" value={isEmergencyLaunch} />
+        <Row label="createdAt" value={createdAt} />
         <Row label="appVersion (app.json)" value={appVersion} />
         <Row label="nativeAppVersion" value={nativeVersion} />
         <Row label="nativeBuildVersion" value={buildVersion} />
