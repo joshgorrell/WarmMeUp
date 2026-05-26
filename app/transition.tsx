@@ -56,9 +56,10 @@ export default function TransitionScreen() {
   const navigate = () => {
     if (routed.current) return;
 
-    // If subscription info hasn't resolved yet, don't route — wait for it.
-    // This prevents routing with the default isPremium:false while still loading.
-    if (subscriptionInfo.loading) {
+    // Admins bypass subscription checks entirely — never wait on sub loading.
+    // If subscription info hasn't resolved yet for non-admins, defer to avoid
+    // routing with the default isPremium:false while still loading.
+    if (!isAdmin && subscriptionInfo.loading) {
       if (!subTimeoutRef.current) {
         subTimeoutRef.current = setTimeout(() => {
           subTimeoutRef.current = null;
