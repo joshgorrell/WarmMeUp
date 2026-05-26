@@ -70,6 +70,35 @@ export async function uploadMediaFile(
   return { storagePath };
 }
 
+/** Infer MIME type from a file extension (lower-case, no dot). */
+export function extensionToMime(ext: string): string {
+  switch (ext) {
+    case 'heic':
+    case 'heif': return 'image/heic';
+    case 'png':  return 'image/png';
+    case 'webp': return 'image/webp';
+    case 'gif':  return 'image/gif';
+    case 'mov':  return 'video/quicktime';
+    case 'mp4':  return 'video/mp4';
+    default:     return 'image/jpeg';
+  }
+}
+
+/** Derive the correct file extension from a resolved MIME type. */
+export function mimeToExtension(mimeType: string): string {
+  switch (mimeType) {
+    case 'image/heic':
+    case 'image/heif':
+    case 'image/heif-sequence': return 'heic';
+    case 'image/png':           return 'png';
+    case 'image/webp':          return 'webp';
+    case 'image/gif':           return 'gif';
+    case 'video/quicktime':     return 'mov';
+    case 'video/mp4':           return 'mp4';
+    default:                    return mimeType.startsWith('video/') ? 'mov' : 'jpg';
+  }
+}
+
 /** Picker options shared between Vault and Chat to keep quality/size consistent */
 export const PICKER_OPTIONS = {
   mediaTypes: ['images', 'videos'] as any,

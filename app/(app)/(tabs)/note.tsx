@@ -13,7 +13,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { awardPoints, getPointValue, incrementMonthlyCounter } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
-import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType } from '@/lib/uploadMedia';
+import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension, extensionToMime } from '@/lib/uploadMedia';
 import { ChatMessage } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
@@ -371,12 +371,12 @@ export default function ChatTab() {
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
-      const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
+      const resolvedMime = resolveAssetMimeType(asset);
       setAttachedMedia({
         uri: asset.uri,
         type: isVideo ? 'video' : 'photo',
-        mimeType: resolveAssetMimeType(asset),
-        fileName: `chat_${Date.now()}.${isVideo ? videoExt : 'jpg'}`,
+        mimeType: resolvedMime,
+        fileName: `chat_${Date.now()}.${mimeToExtension(resolvedMime)}`,
       });
     } catch (e: any) {
       Alert.alert('Media Error', e?.message ?? 'Could not open media picker.');
@@ -635,10 +635,9 @@ export default function ChatTab() {
       return;
     }
     const srcBucket = msg.media_storage_bucket ?? 'chat_media';
-    const mimeType = msg.media_type === 'video' ? 'video/quicktime' : 'image/jpeg';
-    const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
-    const ext = msg.media_type === 'video' ? videoExt : 'jpg';
-    const destPath = `${couple.id}/${user.id}/vault_${Date.now()}.${ext}`;
+    const srcExt = (msg.media_storage_path?.split('.').pop() ?? '').toLowerCase();
+    const mimeType = extensionToMime(srcExt);
+    const destPath = `${couple.id}/${user.id}/vault_${Date.now()}.${srcExt || mimeToExtension(mimeType)}`;
     try {
       const { data: srcData } = await supabase.storage.from(srcBucket).createSignedUrl(msg.media_storage_path, 120);
       if (!srcData?.signedUrl) throw new Error('Could not access source media.');

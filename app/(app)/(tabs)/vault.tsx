@@ -13,7 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { VaultItem } from '@/lib/types';
 import { awardPoints } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
-import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType } from '@/lib/uploadMedia';
+import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension } from '@/lib/uploadMedia';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLayout } from '@/hooks/useLayout';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
@@ -266,8 +266,7 @@ export default function VaultScreen() {
     setShowAdd(false);
     startSpin();
     try {
-      const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
-      const ext = mediaType === 'video' ? videoExt : 'jpg';
+      const ext = mimeToExtension(mimeType);
       const storagePath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
       await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct));
 
