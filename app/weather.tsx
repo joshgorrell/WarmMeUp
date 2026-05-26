@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Cloud, Wind, EyeOff, MapPin, MoveHorizontal as MoreHorizontal } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, computeIsUnlockRequired } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Spacing, FontSize, Radius } from '@/constants/theme';
 import StealthBypassSheet from '@/components/StealthBypassSheet';
@@ -66,7 +66,7 @@ const DEBUG_TAP_WINDOW_MS = 10000;
 
 export default function WeatherScreen() {
   const router = useRouter();
-  const { session, loading, user, profile, settings, refreshSettings, unlockApp, lockIfNeeded, isAuthenticatingRef, debugModeEnabled } = useAuth();
+  const { session, loading, user, profile, settings, unlockedAtMs, refreshSettings, unlockApp, isAuthenticatingRef, debugModeEnabled } = useAuth();
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debugLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -263,20 +263,13 @@ export default function WeatherScreen() {
       }
       loginMethod = loginMethod ?? 'password';
 
-      if (loginMethod === 'password') {
-        // Password method has no lock gate — stamp unlock and go straight in.
-        unlockApp();
-        router.replace('/transition');
-        return;
-      }
-
-      // Check the timer BEFORE stamping — use the persisted unlock timestamp.
-      const mustLock = lockIfNeeded();
+      // Use the shared computeIsUnlockRequired so lock_after_seconds=-1 NEVER
+      // routes to /unlock, even if login_method was left as 'pin' in the DB.
+      const liveSettings = settings ?? { login_method: loginMethod } as any;
+      const mustLock = computeIsUnlockRequired(liveSettings, unlockedAtMs);
       if (mustLock) {
-        // Lock timer has expired — require PIN/biometric unlock.
         router.replace('/unlock');
       } else {
-        // Still within grace period — stamp a fresh unlock time and go in.
         unlockApp();
         router.replace('/transition');
       }

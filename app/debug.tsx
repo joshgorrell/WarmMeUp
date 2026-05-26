@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname } from 'expo-router';
 import { ChevronLeft, Trash2, LogOut, Shield, Share2, RefreshCw } from 'lucide-react-native';
 import AppText from '@/components/AppText';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, computeIsUnlockRequired, computeShouldShowPrivacyCover } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { secureKey, hasPinStored } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
@@ -80,18 +80,42 @@ export default function DebugScreen() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { session, user, profile, settings, couple, subscriptionInfo, signOut, refreshSettings } = useAuth();
+  const { session, user, profile, settings, couple, subscriptionInfo, unlockedAtMs, signOut, refreshSettings } = useAuth();
   const [clearing, setClearing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [hasPin, setHasPin] = useState<boolean | null>(null);
+  const [inactiveCoupleCount, setInactiveCoupleCount] = useState<number | null>(null);
   const [events, setEvents] = useState<DebugEvent[]>(() => getDebugEvents());
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
+  // Derived diagnostics
+  const isUnlockRequired = computeIsUnlockRequired(settings, unlockedAtMs);
+  const shouldShowPrivacyCover = computeShouldShowPrivacyCover(session, settings);
+  const activeCoupleFound = couple?.active === true;
+  const canRefreshInviteCode = (subscriptionInfo as any).canInvite === true && !couple?.user_b_id && !couple?.active;
+  const refreshBlockReason = couple?.user_b_id
+    ? 'already_paired'
+    : !(subscriptionInfo as any).canInvite
+    ? 'no_subscription'
+    : !couple?.id
+    ? 'no_couple'
+    : null;
+
   useEffect(() => {
     if (userId) {
       hasPinStored(userId).then(setHasPin).catch(() => setHasPin(null));
+      // Count inactive couple rows for this user
+      supabase
+        .from('couples')
+        .select('id', { count: 'exact', head: true })
+        .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+        .eq('active', false)
+        .then(({ count, error }) => {
+          if (error) setInactiveCoupleCount(null);
+          else setInactiveCoupleCount(count ?? 0);
+        });
     }
   }, [userId]);
 
@@ -251,10 +275,14 @@ export default function DebugScreen() {
       userId,
       email: user?.email ?? session?.user?.email ?? null,
       is_admin: profile?.is_admin ?? null,
+      is_super_admin: profile?.is_super_admin ?? null,
       login_method: settings?.login_method ?? null,
       stealth_mode_enabled: settings?.stealth_mode_enabled ?? null,
       lock_after_seconds: settings?.lock_after_seconds ?? null,
+      unlockedAtMs,
       hasStoredPIN: hasPin,
+      isUnlockRequired,
+      shouldShowPrivacyCover,
       blur_on_background: settings?.blur_on_background ?? null,
       push_notifications_enabled: settings?.push_notifications_enabled ?? null,
       tokenPresent, sessionExpiry, tokenExpiryCountdown,
@@ -268,11 +296,15 @@ export default function DebugScreen() {
       sub_canInvite: (subscriptionInfo as any).canInvite ?? null,
       couple_id: couple?.id ?? null,
       couple_active: couple?.active ?? null,
+      activeCoupleFound,
+      inactiveCoupleCount,
       couple_user_a_id: couple?.user_a_id ?? null,
       couple_user_b_id: couple?.user_b_id ?? null,
       couple_points_enabled: couple?.points_enabled ?? null,
       couple_streaks_enabled: couple?.streaks_enabled ?? null,
       couple_subscription_owner_id: couple?.subscription_owner_id ?? null,
+      canRefreshInviteCode,
+      refreshBlockReason,
       vault_bucket: 'vault',
       vault_uploadPathTemplate: uploadPathTemplate,
       vault_lastPickAt: lastVaultPick?.timestamp ?? null,
@@ -322,10 +354,14 @@ export default function DebugScreen() {
         <Row label="userId" value={userId} />
         <Row label="email" value={user?.email ?? session?.user?.email ?? null} />
         <Row label="is_admin" value={profile?.is_admin ?? null} />
+        <Row label="is_super_admin" value={profile?.is_super_admin ?? null} />
         <Row label="login_method" value={settings?.login_method ?? null} />
         <Row label="stealth_mode_enabled" value={settings?.stealth_mode_enabled ?? null} />
         <Row label="lock_after_seconds" value={settings?.lock_after_seconds ?? null} />
+        <Row label="unlockedAtMs" value={unlockedAtMs} />
         <Row label="hasStoredPIN" value={hasPin} />
+        <Row label="isUnlockRequired" value={isUnlockRequired} />
+        <Row label="shouldShowPrivacyCover" value={shouldShowPrivacyCover} />
         <Row label="blur_on_background" value={settings?.blur_on_background ?? null} />
         <Row label="push_notifications_enabled" value={settings?.push_notifications_enabled ?? null} />
 
@@ -341,10 +377,14 @@ export default function DebugScreen() {
         <Row label="sub.canInvite" value={(subscriptionInfo as any).canInvite ?? null} />
         <Row label="couple.id" value={couple?.id ?? null} />
         <Row label="couple.active" value={couple?.active ?? null} />
+        <Row label="activeCoupleFound" value={activeCoupleFound} />
+        <Row label="inactiveCoupleCount" value={inactiveCoupleCount} />
         <Row label="couple.user_a_id" value={couple?.user_a_id ?? null} />
         <Row label="couple.user_b_id" value={couple?.user_b_id ?? null} />
         <Row label="couple.points_enabled" value={couple?.points_enabled ?? null} />
         <Row label="couple.streaks_enabled" value={couple?.streaks_enabled ?? null} />
+        <Row label="canRefreshInviteCode" value={canRefreshInviteCode} />
+        <Row label="refreshBlockReason" value={refreshBlockReason} />
         <Row label="couple.subscription_owner_id" value={couple?.subscription_owner_id ?? null} />
 
         {/* ── 3. Vault Upload Diagnostics ── */}

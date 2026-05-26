@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, computeIsUnlockRequired, computeShouldShowPrivacyCover } from '@/context/AuthContext';
 import { hasPinStored } from '@/lib/secureKey';
 
 // If settings haven't arrived this many ms after loading=false, fall through to
@@ -10,7 +10,7 @@ const SETTINGS_WAIT_MS = 4000;
 
 export default function IndexScreen() {
   const router = useRouter();
-  const { session, loading, settings, lockIfNeeded, unlockApp } = useAuth();
+  const { session, loading, settings, unlockedAtMs, unlockApp } = useAuth();
   const settingsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routedRef = useRef(false);
 
@@ -24,6 +24,7 @@ export default function IndexScreen() {
       loginMethod: settings?.login_method,
       stealthMode: settings?.stealth_mode_enabled,
       lockAfter: settings?.lock_after_seconds,
+      unlockedAtMs,
     });
 
     if (!session) {
@@ -61,10 +62,10 @@ export default function IndexScreen() {
     if (routedRef.current) return;
 
     const bypass = settings.stealth_bypass_until;
-    const stealthEnabled = settings.stealth_mode_enabled ?? false;
+    const shouldShowPrivacyCover = computeShouldShowPrivacyCover(session, settings);
 
     console.log('[INDEX ROUTE DECISION]', {
-      stealthEnabled,
+      shouldShowPrivacyCover,
       bypass,
       bypassActive: bypass ? new Date(bypass) > new Date() : false,
       loginMethod: settings.login_method ?? 'password',
@@ -74,32 +75,27 @@ export default function IndexScreen() {
       if (routedRef.current) return;
       routedRef.current = true;
       const userId = session.user?.id;
+      const mustLock = computeIsUnlockRequired(settings, unlockedAtMs);
       const loginMethod = settings.login_method ?? 'password';
-      const needsGate = loginMethod !== 'password';
 
-      if (needsGate) {
-        const mustLock = lockIfNeeded();
+      console.log('[INDEX ROUTE DECISION] gate', {
+        loginMethod,
+        mustLock,
+        destination: mustLock
+          ? (loginMethod === 'pin' ? '/unlock or setup-pin' : '/unlock')
+          : '/transition',
+      });
+
+      if (mustLock) {
         const pinExists = loginMethod === 'pin' ? await hasPinStored(userId!) : true;
-        console.log('[INDEX ROUTE DECISION] gate', {
-          loginMethod,
-          mustLock,
-          pinExists,
-          destination: mustLock ? (pinExists ? '/unlock' : '/(auth)/setup-pin') : '/transition',
-        });
-        if (mustLock) {
-          router.replace(pinExists ? '/unlock' : '/(auth)/setup-pin');
-        } else {
-          unlockApp();
-          router.replace('/transition');
-        }
+        router.replace(pinExists ? '/unlock' : '/(auth)/setup-pin');
       } else {
-        console.log('[INDEX ROUTE DECISION] no gate → /transition');
         unlockApp();
         router.replace('/transition');
       }
     };
 
-    if (!stealthEnabled) {
+    if (!shouldShowPrivacyCover) {
       goNext();
       return;
     }
@@ -114,7 +110,7 @@ export default function IndexScreen() {
     console.log('[INDEX ROUTE DECISION] → /weather (stealth active, no bypass)');
     routedRef.current = true;
     router.replace('/weather');
-  }, [loading, session, settings]);
+  }, [loading, session, settings, unlockedAtMs]);
 
   useEffect(() => {
     return () => {

@@ -21,7 +21,8 @@
       "channel": "production",
       "node": "20.18.0",
       "env": {
-        "NODE_ENV": "production"
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_DEBUG_ALWAYS_ON": "1"
       },
       "cache": {
         "disabled": true

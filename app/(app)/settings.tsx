@@ -348,7 +348,15 @@ export default function SettingsScreen() {
             <RequireUnlockAfterRow
               current={s?.lock_after_seconds ?? null}
               colors={colors}
-              onSelect={(seconds) => update({ lock_after_seconds: seconds })}
+              onSelect={(seconds) => {
+                if (seconds === -1) {
+                  // "Never" — reset login_method to password so there is no
+                  // contradictory state where lock=never but method=pin/biometric.
+                  update({ lock_after_seconds: -1, login_method: 'password' });
+                } else {
+                  update({ lock_after_seconds: seconds });
+                }
+              }}
             />
           )}
           {(s?.lock_after_seconds ?? null) !== -1 && (

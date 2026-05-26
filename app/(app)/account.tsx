@@ -547,7 +547,19 @@ export default function AccountScreen() {
 
   const handleRefreshCode = async () => {
     if (codeRefreshing) return;
+
+    // Must be solo (no partner) to refresh
     if (couple?.user_b_id) return;
+
+    // Subscription gate — clear message instead of generic error
+    if (!subscriptionInfo.canInvite) {
+      Alert.alert(
+        'Subscription Required',
+        'You need an active subscription before creating a new connection code.',
+      );
+      return;
+    }
+
     setCodeRefreshing(true);
 
     // Always re-fetch the live couple row by user_a_id before updating so we
@@ -569,6 +581,10 @@ export default function AccountScreen() {
     }
 
     if (!targetId) {
+      Alert.alert(
+        'No Connection Found',
+        'Could not find your invite record. Please try again or contact support.',
+      );
       setCodeRefreshing(false);
       return;
     }
@@ -1100,7 +1116,7 @@ export default function AccountScreen() {
             <ChevronRight color={colors.textMuted} size={13} strokeWidth={2} />
           </TouchableOpacity>
         </View>
-      ) : !couple?.user_b_id && couple?.invite_code ? (
+      ) : !couple?.user_b_id && couple?.invite_code && subscriptionInfo.canInvite ? (
         <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)' }]}>
           <View style={styles.inviteHeader}>
             <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,46,138,0.12)' }]}>
@@ -1163,6 +1179,18 @@ export default function AccountScreen() {
             <X color="rgba(255,90,90,0.70)" size={13} strokeWidth={2.2} />
             <AppText style={styles.cancelInviteText}>Cancel invite</AppText>
           </TouchableOpacity>
+        </View>
+      ) : !couple?.user_b_id && !subscriptionInfo.canInvite && !subscriptionInfo.loading ? (
+        <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+          <View style={styles.inviteHeader}>
+            <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
+              <UserPlus color="#FFB347" size={18} strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>INVITE YOUR PARTNER</AppText>
+              <AppText style={[styles.inviteHint, { color: colors.textSecondary }]}>Subscribe to invite someone</AppText>
+            </View>
+          </View>
         </View>
       ) : null}
 

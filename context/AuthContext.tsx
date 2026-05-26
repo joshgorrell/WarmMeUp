@@ -9,6 +9,40 @@ import { registerForPushNotifications, savePushToken, clearPushToken } from '@/l
 import { secureKey } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
 
+/**
+ * Single source of truth for whether the unlock gate must be shown.
+ * Returns true only when ALL of these hold:
+ *   - login_method is not 'password'
+ *   - lock_after_seconds is a non-negative number (not null, not -1)
+ *   - elapsed time since last unlock >= lock_after_seconds
+ *
+ * If lock_after_seconds === -1 or null, ALWAYS returns false.
+ */
+export function computeIsUnlockRequired(
+  settings: UserSettings | null,
+  unlockedAtMs: number | null,
+): boolean {
+  const method = settings?.login_method ?? 'password';
+  if (method === 'password') return false;
+  const lockAfter = settings?.lock_after_seconds ?? null;
+  if (lockAfter === null || lockAfter < 0) return false;
+  // Never force a lock on first launch (no recorded unlock yet).
+  if (unlockedAtMs === null) return false;
+  return (Date.now() - unlockedAtMs) / 1000 >= lockAfter;
+}
+
+/**
+ * True when a valid session exists AND stealth_mode_enabled is on.
+ * Privacy mode is a cover screen, NOT authentication.
+ * Never returns true for guests or when session state is unknown.
+ */
+export function computeShouldShowPrivacyCover(
+  session: Session | null,
+  settings: UserSettings | null,
+): boolean {
+  return !!session && settings?.stealth_mode_enabled === true;
+}
+
 interface AuthContextType {
   session: Session | null;
   user: User | null;
@@ -33,6 +67,8 @@ interface AuthContextType {
    * so a short background trip doesn't force a re-lock within the grace period.
    */
   lockIfNeeded: () => boolean;
+  /** The ms timestamp when the user last unlocked. Exposed for diagnostics. */
+  unlockedAtMs: number | null;
   refreshCouple: () => Promise<void>;
   patchCouple: (patch: Partial<Couple>) => void;
   refreshSettings: () => Promise<void>;
@@ -70,6 +106,7 @@ const AuthContext = createContext<AuthContextType>({
   unlockApp: () => {},
   lockApp: () => {},
   lockIfNeeded: () => true,
+  unlockedAtMs: null,
   refreshCouple: async () => {},
   patchCouple: () => {},
   refreshSettings: async () => {},
@@ -272,6 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // across full app restarts, not just background/foreground transitions.
       const persistedTs = await readUnlockedAt(userId);
       unlockedAtRef.current = persistedTs;
+      setUnlockedAtMs(persistedTs);
       console.log('[Auth] unlockedAt restored:', persistedTs);
 
       // Register / refresh push token if the user has notifications enabled
@@ -312,7 +350,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function fetchCouple(userId: string) {
-    // Primary fetch: user_a_id direct match (covers the common solo/owner case without .or())
+    // Primary fetch: solo/invite-pending row — user_a owns it, no partner yet.
+    // These rows have active=false until a partner joins, so we do NOT filter by active here.
     let { data, error } = await supabase
       .from('couples')
       .select('*')
@@ -320,22 +359,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .is('user_b_id', null)
       .maybeSingle();
 
-    // Fallback: paired couple where user is user_b, or user_a with a partner
+    // Fallback: active paired couple (user_b has joined).
+    // Always require active=true so inactive/historical couple rows never become current state.
     if (!error && !data) {
       ({ data, error } = await supabase
         .from('couples')
         .select('*')
         .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
         .not('user_b_id', 'is', null)
+        .eq('active', true)
         .maybeSingle());
     }
 
-    // Final fallback: catch any remaining case (e.g. user_a with partner)
+    // Final fallback: active couple in any configuration (catches edge cases).
     if (!error && !data) {
       ({ data, error } = await supabase
         .from('couples')
         .select('*')
         .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+        .eq('active', true)
         .maybeSingle());
     }
 
@@ -440,9 +482,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.signOut().catch(() => {});
   }, [user]);
 
+  const [unlockedAtMs, setUnlockedAtMs] = useState<number | null>(null);
+
   const unlockApp = useCallback(() => {
     const now = Date.now();
     unlockedAtRef.current = now;
+    setUnlockedAtMs(now);
     setAppLocked(false);
     // Persist so the grace period survives a full app restart.
     if (user) {
@@ -452,29 +497,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const lockApp = useCallback(() => setAppLocked(true), []);
 
-  /**
-   * Locks the app only if the lock_after_seconds timer says we should.
-   * Returns true if the lock was engaged, false if still within the grace period.
-   * Startup flows (index.tsx, weather.tsx) call this instead of lockApp() directly.
-   */
   const lockIfNeeded = useCallback((): boolean => {
-    // Only lock for pin/biometric users — never for password users regardless of caller.
-    const method = settings?.login_method ?? 'password';
-    if (method === 'password') return false;
-
-    const lockAfter = settings?.lock_after_seconds ?? null;
-    // null (never explicitly set) and -1 (explicitly "never") both mean never lock.
-    // Only lock when the user has set a non-negative timeout that has elapsed.
-    if (lockAfter === null || lockAfter === -1) return false;
-    // If user hasn't unlocked yet this session, don't force a lock — let them in.
-    if (unlockedAtRef.current === null) return false;
-    const elapsedSeconds = (Date.now() - unlockedAtRef.current) / 1000;
-    if (elapsedSeconds >= lockAfter) {
-      setAppLocked(true);
-      return true;
-    }
-    return false;
-  }, [settings?.login_method, settings?.lock_after_seconds]);
+    const shouldLock = computeIsUnlockRequired(settings, unlockedAtRef.current);
+    if (shouldLock) setAppLocked(true);
+    return shouldLock;
+  }, [settings]);
 
   const refreshSubscription = useCallback(async () => {
     const { data: { session: currentSession } } = await supabase.auth.getSession();
@@ -490,7 +517,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled }}
     >
       {children}
     </AuthContext.Provider>
