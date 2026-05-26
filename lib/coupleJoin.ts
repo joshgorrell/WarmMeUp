@@ -5,7 +5,11 @@ export type JoinResult =
   | { ok: true; partnerName: string | null; coupleId: string }
   | { ok: false; reason: 'not_found' | 'expired' | 'already_full' | 'self' | 'already_connected' | 'error' };
 
-export async function completePendingJoin(userId: string, code: string): Promise<JoinResult> {
+export async function completePendingJoin(
+  userId: string,
+  code: string,
+  onJoined?: () => Promise<void>,
+): Promise<JoinResult> {
   const { data: existingCouple } = await supabase
     .from('couples')
     .select('id, active')
@@ -87,6 +91,11 @@ export async function completePendingJoin(userId: string, code: string): Promise
     .select('display_name')
     .eq('id', targetCouple.user_a_id)
     .maybeSingle();
+
+  // Notify caller (typically refreshSubscription) so User B immediately inherits partner's sub
+  if (onJoined) {
+    onJoined().catch(() => {});
+  }
 
   return { ok: true, partnerName: partnerProfile?.display_name ?? null, coupleId: targetCouple.id };
 }

@@ -1,21 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
   Alert,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, Flame, Gift, Heart, Lock, MessageCircle, Star, Zap } from 'lucide-react-native';
+import { Flame, Gift, Lock, MessageCircle, Star, Zap, CircleAlert as AlertCircle, Heart } from 'lucide-react-native';
 import WarmupBrand from '@/components/WarmupBrand';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 
-type Plan = 'trial' | 'monthly' | 'yearly';
+type Plan = 'monthly' | 'yearly';
+type Reason = 'expired_trial' | 'post_unpairing' | undefined;
 
 const PLANS: {
   id: Plan;
@@ -25,13 +30,6 @@ const PLANS: {
   badge?: string;
   sub: string;
 }[] = [
-  {
-    id: 'trial',
-    label: 'Free Trial',
-    price: '$0',
-    period: '7 days',
-    sub: 'Full access, no credit card required',
-  },
   {
     id: 'monthly',
     label: 'Monthly',
@@ -62,28 +60,133 @@ export default function SubscriptionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
+  const { reason: reasonParam } = useLocalSearchParams<{ reason?: string }>();
+  const reason = reasonParam as Reason;
+  const { refreshSubscription } = useAuth();
+
   const [selected, setSelected] = useState<Plan>('yearly');
   const [loading, setLoading] = useState(false);
+  const [packages, setPackages] = useState<Record<string, any>>({});
+  const [offeringsLoaded, setOfferingsLoaded] = useState(false);
 
   const logoSize = Math.min(Math.round(width * 0.12), 48);
 
-  const handleSubscribe = async () => {
-    if (loading) return;
-    if (__DEV__) {
-      // Dev-only shortcut: skip real purchase flow and go straight to the app.
-      router.replace('/(app)/(tabs)');
+  // Load RevenueCat offerings on mount (native only)
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      setOfferingsLoaded(true);
       return;
     }
-    // Production: RevenueCat purchase flow (not yet implemented).
-    Alert.alert(
-      'Coming Soon',
-      'In-app purchases will be available in the next release.',
-      [{ text: 'OK' }]
-    );
+    (async () => {
+      try {
+        const Purchases = (await import('react-native-purchases')).default;
+        const iosKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
+        const androidKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
+        const apiKey = Platform.OS === 'ios' ? iosKey : androidKey;
+        if (!apiKey) { setOfferingsLoaded(true); return; }
+        Purchases.configure({ apiKey });
+        const offerings = await Purchases.getOfferings();
+        const current = offerings.current;
+        if (current) {
+          const pkgMap: Record<string, any> = {};
+          for (const pkg of current.availablePackages) {
+            const id = pkg.product.identifier.toLowerCase();
+            if (id.includes('annual') || id.includes('yearly') || id.includes('year')) {
+              pkgMap['yearly'] = pkg;
+            } else if (id.includes('monthly') || id.includes('month')) {
+              pkgMap['monthly'] = pkg;
+            }
+          }
+          setPackages(pkgMap);
+        }
+      } catch {
+        // Offerings unavailable — will show store prices from PLANS constants
+      } finally {
+        setOfferingsLoaded(true);
+      }
+    })();
+  }, []);
+
+  const confirmWithServer = async (entitlements: any, planFallback: Plan, expiresAtFallback: string | null) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+    const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+    await fetch(`${baseUrl}/functions/v1/confirm-subscription`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        Apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ entitlements, plan: planFallback, expiresAt: expiresAtFallback }),
+    });
   };
 
-  const handleRestore = () => {
-    // TODO: RevenueCat restorePurchases()
+  const handleSubscribe = async () => {
+    if (loading) return;
+
+    if (__DEV__) {
+      setLoading(true);
+      try {
+        const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+        await confirmWithServer({ active: {} }, selected, expiresAt);
+        await refreshSubscription();
+        router.replace('/(app)/(tabs)');
+      } catch {
+        router.replace('/(app)/(tabs)');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      Alert.alert('Mobile Only', 'Subscriptions are available in the iOS and Android apps.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const Purchases = (await import('react-native-purchases')).default;
+      const pkg = packages[selected];
+      if (!pkg) {
+        Alert.alert('Unavailable', 'This plan is currently unavailable. Please try again later.');
+        return;
+      }
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
+      await confirmWithServer(customerInfo.entitlements, selected, null);
+      await refreshSubscription();
+      router.replace('/(app)/(tabs)');
+    } catch (e: any) {
+      if (e?.code === '1') return; // user cancelled
+      Alert.alert('Purchase Failed', e?.message ?? 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (Platform.OS === 'web') {
+      Alert.alert('Not Available', 'Purchase restoration is only available on iOS and Android.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const Purchases = (await import('react-native-purchases')).default;
+      const info = await Purchases.restorePurchases();
+      const entitlement = info.entitlements.active['premium'];
+      if (entitlement) {
+        await confirmWithServer(info.entitlements, selected, entitlement.expirationDate ?? null);
+        await refreshSubscription();
+        router.replace('/(app)/(tabs)');
+      } else {
+        Alert.alert('No Purchases Found', 'No active subscription found for your account.');
+      }
+    } catch (e: any) {
+      Alert.alert('Restore Failed', e?.message ?? 'Could not restore purchases. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const selectedPlan = PLANS.find((p) => p.id === selected)!;
@@ -91,6 +194,13 @@ export default function SubscriptionScreen() {
   const centerStyle = isTablet
     ? { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const }
     : {};
+
+  const reasonBanner =
+    reason === 'post_unpairing'
+      ? { Icon: Heart, text: "Your partner's subscription no longer covers you. Subscribe to continue." }
+      : reason === 'expired_trial'
+      ? { Icon: AlertCircle, text: 'Your 7-day free trial has ended. Subscribe to keep access.' }
+      : null;
 
   return (
     <View style={styles.root}>
@@ -112,12 +222,18 @@ export default function SubscriptionScreen() {
             <WarmupBrand logoSize={logoSize} showTagline={false} />
           </View>
 
+          {reasonBanner && (
+            <View style={styles.reasonBanner}>
+              <reasonBanner.Icon color="#FF9A3D" size={18} strokeWidth={2} />
+              <AppText style={styles.reasonBannerText}>{reasonBanner.text}</AppText>
+            </View>
+          )}
+
           <AppText style={styles.heading}>Unlock everything</AppText>
           <AppText style={styles.sub}>
-            One subscription covers you both. Your partner joins free.
+            One subscription covers both of you. Your partner joins free.
           </AppText>
 
-          {/* Feature list */}
           <View style={[styles.featureList, { marginBottom: height < 700 ? 20 : 28 }]}>
             {FEATURES.map(({ Icon, text }) => (
               <View key={text} style={styles.featureRow}>
@@ -129,7 +245,6 @@ export default function SubscriptionScreen() {
             ))}
           </View>
 
-          {/* Plan cards */}
           <View style={styles.planList}>
             {PLANS.map((plan) => {
               const active = selected === plan.id;
@@ -176,12 +291,11 @@ export default function SubscriptionScreen() {
             })}
           </View>
 
-          {/* CTA */}
           <TouchableOpacity
             style={styles.ctaBtn}
             onPress={handleSubscribe}
             activeOpacity={0.85}
-            disabled={loading}
+            disabled={loading || (!offeringsLoaded && Platform.OS !== 'web')}
           >
             <LinearGradient
               colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
@@ -189,23 +303,25 @@ export default function SubscriptionScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.ctaGrad}
             >
-              <AppText style={styles.ctaLabel}>
-                {loading
-                  ? 'Starting…'
-                  : selected === 'trial'
-                  ? 'Start Free Trial'
-                  : `Subscribe — ${selectedPlan.price}/${selected === 'monthly' ? 'mo' : 'yr'}`}
-              </AppText>
+              {loading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <AppText style={styles.ctaLabel}>
+                  {`Subscribe — ${selectedPlan.price}/${selected === 'monthly' ? 'mo' : 'yr'}`}
+                </AppText>
+              )}
             </LinearGradient>
           </TouchableOpacity>
 
           <AppText style={styles.legal}>
-            {selected === 'trial'
-              ? 'No credit card required. Cancel before 7 days to avoid charges.'
-              : 'Subscription auto-renews. Cancel anytime in your account settings.'}
+            Subscription auto-renews. Cancel anytime in your account settings.
           </AppText>
 
-          <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} style={styles.restoreBtn}>
+          <AppText style={styles.partnerNote}>
+            Subscribe to invite your partner. They join at no extra cost.
+          </AppText>
+
+          <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} style={styles.restoreBtn} disabled={loading}>
             <AppText style={styles.restoreText}>Restore Purchase</AppText>
           </TouchableOpacity>
         </View>
@@ -233,6 +349,26 @@ const styles = StyleSheet.create({
   brandRow: {
     marginBottom: 24,
     alignItems: 'center',
+  },
+  reasonBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: 'rgba(255,154,61,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,154,61,0.25)',
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+    marginBottom: 20,
+    width: '100%',
+  },
+  reasonBannerText: {
+    color: 'rgba(255,220,180,0.90)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 20,
+    flex: 1,
   },
   heading: {
     color: '#fff',
@@ -388,6 +524,8 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
     alignItems: 'center',
     borderRadius: Radius.pill,
+    minHeight: 54,
+    justifyContent: 'center',
   },
   ctaLabel: {
     color: '#fff',
@@ -397,6 +535,15 @@ const styles = StyleSheet.create({
   },
   legal: {
     color: 'rgba(255,255,255,0.28)',
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 8,
+    paddingHorizontal: Spacing.md,
+  },
+  partnerNote: {
+    color: 'rgba(255,255,255,0.35)',
     fontSize: FontSize.xs,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',

@@ -224,6 +224,34 @@ export type WishCategory =
   | 'Intimate'
   | 'Someday';
 
+export type SubscriptionSource = 'self' | 'partner' | 'none';
+
+export interface SubscriptionInfo {
+  isPremium: boolean;
+  source: SubscriptionSource;
+  plan: string | null;
+  expiresAt: string | null;
+  isOnTrial: boolean;
+  trialExpiresAt: string | null;
+  /** True when the user's own trial row exists but has expired */
+  trialExpired: boolean;
+  /** True when this user can generate an invite code (own active sub or active trial) */
+  canInvite: boolean;
+  loading: boolean;
+}
+
+export const DEFAULT_SUBSCRIPTION_INFO: SubscriptionInfo = {
+  isPremium: false,
+  source: 'none',
+  plan: null,
+  expiresAt: null,
+  isOnTrial: false,
+  trialExpiresAt: null,
+  trialExpired: false,
+  canInvite: false,
+  loading: true,
+};
+
 export type WishStatus = 'draft' | 'shared' | 'fulfilled' | 'archived';
 
 export interface Wish {

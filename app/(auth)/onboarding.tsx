@@ -1,14 +1,12 @@
 import React from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import OnboardingCarousel, { OnboardingFinishAction } from '@/components/OnboardingCarousel';
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { paired } = useLocalSearchParams<{ paired?: string }>();
-  const isPaired = paired === '1';
-  const { user } = useAuth();
+  const { user, subscriptionInfo } = useAuth();
 
   const handleComplete = async (_action?: OnboardingFinishAction) => {
     if (user) {
@@ -17,7 +15,8 @@ export default function OnboardingScreen() {
         .update({ onboarding_seen: true, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
     }
-    if (isPaired) {
+    // Skip subscription screen if already premium (active trial, paid sub, or partner's paid sub)
+    if (subscriptionInfo.isPremium) {
       router.replace('/(app)/(tabs)');
     } else {
       router.replace('/(auth)/subscription');

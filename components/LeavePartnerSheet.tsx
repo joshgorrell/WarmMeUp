@@ -6,6 +6,7 @@ import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, TriangleAlert as AlertTriangle, ArrowLeft } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -20,9 +21,10 @@ interface LeavePartnerSheetProps {
 
 export default function LeavePartnerSheet({ visible, onClose, partnerName }: LeavePartnerSheetProps) {
   const { colors, isDark } = useTheme();
-  const { user, couple, refreshCouple, signOut } = useAuth();
+  const { user, couple, refreshCouple, signOut, refreshSubscription, subscriptionInfo } = useAuth();
   const insets = useSafeAreaInsets();
 
+  const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [confirmInput, setConfirmInput] = useState('');
   const [leaving, setLeaving] = useState(false);
@@ -70,7 +72,31 @@ export default function LeavePartnerSheet({ visible, onClose, partnerName }: Lea
       }
 
       await refreshCouple();
+      // Refresh subscription: a former User B riding on partner's sub
+      // will now have isPremium=false — route them to the paywall with context.
+      await refreshSubscription();
       resetAndClose();
+
+      // Re-check subscription status to decide whether to show paywall or sign out
+      try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+        const res = await fetch(`${baseUrl}/functions/v1/get-effective-subscription`, {
+          headers: {
+            Authorization: `Bearer ${currentSession?.access_token ?? ''}`,
+            Apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+          },
+        });
+        if (res.ok) {
+          const subData = await res.json();
+          if (!subData.isPremium) {
+            router.replace({ pathname: '/(auth)/subscription', params: { reason: 'post_unpairing' } });
+            return;
+          }
+        }
+      } catch {
+        // If check fails, fall through to sign-out
+      }
       signOut();
     } catch (e: any) {
       setError(e?.message ?? 'Something went wrong. Please try again.');

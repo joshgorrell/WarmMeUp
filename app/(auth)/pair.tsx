@@ -8,6 +8,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   ScrollView,
+  Alert,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -66,7 +67,7 @@ function HeartOutline({
 export default function PairScreen() {
   const router = useRouter();
   const { prefilledCode } = useLocalSearchParams<{ prefilledCode?: string }>();
-  const { user, couple, refreshCouple, settings } = useAuth();
+  const { user, couple, refreshCouple, settings, subscriptionInfo } = useAuth();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
   const headingSize = Math.min(Math.round(width * 0.086), 36);
@@ -175,6 +176,10 @@ export default function PairScreen() {
 
   const handleRefreshCode = async () => {
     if (!couple?.id || refreshing || couple.user_b_id) return;
+    if (!subscriptionInfo.canInvite) {
+      Alert.alert('Subscription Required', 'Subscribe to invite your partner. Your partner joins at no extra cost.');
+      return;
+    }
     setRefreshing(true);
     const newCode = generateInviteCode();
     const { data: updated, error: updateError } = await supabase
@@ -577,37 +582,70 @@ export default function PairScreen() {
               <X color="rgba(255,255,255,0.80)" size={20} />
             </TouchableOpacity>
             <AppText style={styles.modalTitle}>Your invite code</AppText>
-            <AppText style={styles.modalSub}>Share this with your partner to connect.</AppText>
 
-            <View style={styles.codeBox}>
-              <AppText style={[styles.codeDisplayText, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}>{displayCode || '------'}</AppText>
-              <TouchableOpacity
-                style={styles.refreshBtn}
-                onPress={handleRefreshCode}
-                activeOpacity={0.7}
-                disabled={refreshing}
-              >
-                <RefreshCw
-                  color={refreshing ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.45)'}
-                  size={15}
-                  strokeWidth={2}
-                />
-              </TouchableOpacity>
-            </View>
+            {subscriptionInfo.canInvite ? (
+              <>
+                <AppText style={styles.modalSub}>
+                  Share this with your partner to connect.{'\n'}One subscription covers both of you.
+                </AppText>
 
-            <TouchableOpacity style={styles.actionBtn} onPress={handleCopy} activeOpacity={0.85}>
-              <LinearGradient
-                colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.actionGrad}
-              >
-                <Copy color="#fff" size={16} />
-                <AppText style={styles.actionLabel}>{copied ? 'Copied!' : 'Copy & Share Code'}</AppText>
-              </LinearGradient>
-            </TouchableOpacity>
+                <View style={styles.codeBox}>
+                  <AppText style={[styles.codeDisplayText, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}>{displayCode || '------'}</AppText>
+                  <TouchableOpacity
+                    style={styles.refreshBtn}
+                    onPress={handleRefreshCode}
+                    activeOpacity={0.7}
+                    disabled={refreshing}
+                  >
+                    <RefreshCw
+                      color={refreshing ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.45)'}
+                      size={15}
+                      strokeWidth={2}
+                    />
+                  </TouchableOpacity>
+                </View>
 
-            <AppText style={styles.waitingText}>Waiting for your partner to join...</AppText>
+                <TouchableOpacity style={styles.actionBtn} onPress={handleCopy} activeOpacity={0.85}>
+                  <LinearGradient
+                    colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.actionGrad}
+                  >
+                    <Copy color="#fff" size={16} />
+                    <AppText style={styles.actionLabel}>{copied ? 'Copied!' : 'Copy & Share Code'}</AppText>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <AppText style={styles.waitingText}>Waiting for your partner to join...</AppText>
+              </>
+            ) : (
+              <>
+                <AppText style={styles.modalSub}>
+                  Subscribe to invite your partner.{'\n'}They join at no extra cost.
+                </AppText>
+
+                <View style={styles.lockedCodeBox}>
+                  <Lock color="rgba(255,255,255,0.25)" size={28} strokeWidth={1.5} />
+                  <AppText style={styles.lockedCodeText}>Subscribe to unlock</AppText>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => { setActiveModal(null); router.push('/(auth)/subscription'); }}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.actionGrad}
+                  >
+                    <AppText style={styles.actionLabel}>Subscribe to Invite</AppText>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -904,6 +942,20 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
+  },
+  lockedCodeBox: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    paddingVertical: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  lockedCodeText: {
+    color: 'rgba(255,255,255,0.28)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
   },
   codeInput: {
     backgroundColor: 'rgba(255,255,255,0.06)',

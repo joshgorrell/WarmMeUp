@@ -17,12 +17,14 @@ import WarmupBrand from '@/components/WarmupBrand';
 import { useLayout } from '@/hooks/useLayout';
 import { completePendingJoin } from '@/lib/coupleJoin';
 import { loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
+import { useAuth } from '@/context/AuthContext';
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
   const { pendingCode, email } = useLocalSearchParams<{ pendingCode?: string; email?: string }>();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
+  const { refreshSubscription } = useAuth();
 
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
@@ -50,7 +52,7 @@ export default function VerifyEmailScreen() {
       // Email is confirmed — handle pending invite code before routing
       const code = pendingCode || (await loadPendingCode()) || '';
       if (code) {
-        const result = await completePendingJoin(user.id, code);
+        const result = await completePendingJoin(user.id, code, refreshSubscription);
         if (result.ok) {
           await clearPendingCode();
           const { data: sessionData } = await supabase.auth.getSession();

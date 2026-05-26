@@ -12,6 +12,7 @@ interface SubscriptionRow {
   plan: string;
   status: string;
   expires_at: string | null;
+  trial_started_at: string | null;
 }
 
 function isActive(row: SubscriptionRow | null): boolean {
@@ -19,6 +20,10 @@ function isActive(row: SubscriptionRow | null): boolean {
   if (row.status !== "active") return false;
   if (row.expires_at && new Date(row.expires_at) < new Date()) return false;
   return true;
+}
+
+function isPaidPlan(plan: string): boolean {
+  return plan === "monthly" || plan === "yearly";
 }
 
 Deno.serve(async (req: Request) => {
@@ -55,7 +60,7 @@ Deno.serve(async (req: Request) => {
     // Check own subscription first
     const { data: ownSub } = await adminClient
       .from("subscriptions")
-      .select("user_id, plan, status, expires_at")
+      .select("user_id, plan, status, expires_at, trial_started_at")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -66,6 +71,10 @@ Deno.serve(async (req: Request) => {
           source: "self",
           plan: ownSub!.plan,
           expiresAt: ownSub!.expires_at,
+          isOnTrial: ownSub!.plan === "trial",
+          trialExpiresAt: ownSub!.plan === "trial" ? ownSub!.expires_at : null,
+          // Trial users can still invite — they have full access during the trial period
+          canInvite: true,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -84,17 +93,22 @@ Deno.serve(async (req: Request) => {
       if (partnerId) {
         const { data: partnerSub } = await adminClient
           .from("subscriptions")
-          .select("user_id, plan, status, expires_at")
+          .select("user_id, plan, status, expires_at, trial_started_at")
           .eq("user_id", partnerId)
           .maybeSingle();
 
-        if (isActive(partnerSub)) {
+        if (isActive(partnerSub) && isPaidPlan(partnerSub!.plan)) {
+          // Partner has a paid subscription — user inherits premium access.
+          // canInvite is false: to generate a new code they need their own paid sub.
           return new Response(
             JSON.stringify({
               isPremium: true,
               source: "partner",
               plan: partnerSub!.plan,
               expiresAt: partnerSub!.expires_at,
+              isOnTrial: false,
+              trialExpiresAt: null,
+              canInvite: false,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -102,8 +116,20 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // No active subscription from any source
+    const trialExpired = ownSub !== null && !isActive(ownSub);
+
     return new Response(
-      JSON.stringify({ isPremium: false, source: "none", plan: null, expiresAt: null }),
+      JSON.stringify({
+        isPremium: false,
+        source: "none",
+        plan: null,
+        expiresAt: null,
+        isOnTrial: false,
+        trialExpiresAt: ownSub?.expires_at ?? null,
+        canInvite: false,
+        trialExpired,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (_err) {

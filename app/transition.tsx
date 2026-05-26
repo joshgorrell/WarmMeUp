@@ -35,12 +35,13 @@ function resolveNotificationRoute(data: NotificationData): string | null {
 }
 
 // Maximum time to wait for couple data to arrive after auth is ready.
-// If couple is still null after this, we proceed to /(auth)/pair.
 const COUPLE_WAIT_MS = 2500;
+// Maximum time to wait for subscription info — it's a separate async fetch.
+const SUB_WAIT_MS = 3500;
 
 export default function TransitionScreen() {
   const router = useRouter();
-  const { couple, partnerProfile, settings, user, isAdmin, loading } = useAuth();
+  const { couple, partnerProfile, settings, user, isAdmin, loading, subscriptionInfo } = useAuth();
   const { width } = useWindowDimensions();
   const logoW = Math.min(width * 0.5, 200);
   const bgOpacity = useRef(new Animated.Value(0)).current;
@@ -50,6 +51,7 @@ export default function TransitionScreen() {
   const animDone = useRef(false);
   const authReady = useRef(false);
   const coupleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const subTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const navigate = () => {
     if (routed.current) return;
@@ -57,10 +59,27 @@ export default function TransitionScreen() {
       clearTimeout(coupleTimeoutRef.current);
       coupleTimeoutRef.current = null;
     }
+    if (subTimeoutRef.current) {
+      clearTimeout(subTimeoutRef.current);
+      subTimeoutRef.current = null;
+    }
     routed.current = true;
     Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
-      if (couple?.active || isAdmin) {
-        const needsCelebration = couple?.active && !!couple?.user_b_id && !isAdmin && settings && !settings.celebration_seen;
+      // Admins bypass all subscription checks
+      if (isAdmin) {
+        router.replace('/(app)/(tabs)');
+        return;
+      }
+
+      if (couple?.active) {
+        // Check subscription access: isPremium covers active trial AND paid AND partner-paid
+        if (!subscriptionInfo.isPremium) {
+          const reason = subscriptionInfo.trialExpired ? 'expired_trial' : undefined;
+          router.replace({ pathname: '/(auth)/subscription', params: reason ? { reason } : {} });
+          return;
+        }
+
+        const needsCelebration = !!couple.user_b_id && settings && !settings.celebration_seen;
         if (needsCelebration && user) {
           await supabase
             .from('user_settings')
@@ -90,13 +109,24 @@ export default function TransitionScreen() {
     if (!animDone.current || !authReady.current) return;
 
     // Couple arrives slightly after loading=false due to React batching.
-    // Wait up to COUPLE_WAIT_MS; if still null after that, proceed anyway.
     if (user && !couple) {
       if (!coupleTimeoutRef.current) {
         coupleTimeoutRef.current = setTimeout(() => {
           coupleTimeoutRef.current = null;
           navigate();
         }, COUPLE_WAIT_MS);
+      }
+      return;
+    }
+
+    // Subscription info loads asynchronously — wait briefly, then proceed anyway
+    // (fail-open: a slow edge function shouldn't block the splash indefinitely).
+    if (subscriptionInfo.loading) {
+      if (!subTimeoutRef.current) {
+        subTimeoutRef.current = setTimeout(() => {
+          subTimeoutRef.current = null;
+          navigate();
+        }, SUB_WAIT_MS);
       }
       return;
     }
@@ -116,6 +146,7 @@ export default function TransitionScreen() {
 
     return () => {
       if (coupleTimeoutRef.current) clearTimeout(coupleTimeoutRef.current);
+      if (subTimeoutRef.current) clearTimeout(subTimeoutRef.current);
     };
   }, []);
 
@@ -124,7 +155,7 @@ export default function TransitionScreen() {
       authReady.current = true;
       tryNavigate();
     }
-  }, [loading, couple?.id, couple?.active, user?.id, isAdmin]);
+  }, [loading, couple?.id, couple?.active, user?.id, isAdmin, subscriptionInfo.loading, subscriptionInfo.isPremium]);
 
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>

@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { supabase } from '@/lib/supabase';
-import { Couple, Profile, UserSettings } from '@/lib/types';
+import { Couple, Profile, UserSettings, SubscriptionInfo, DEFAULT_SUBSCRIPTION_INFO } from '@/lib/types';
 import { maybeArchiveAndResetScores } from '@/lib/points';
 import { registerForPushNotifications, savePushToken, clearPushToken } from '@/lib/notifications';
 import { secureKey } from '@/lib/secureKey';
@@ -19,6 +19,8 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  subscriptionInfo: SubscriptionInfo;
+  refreshSubscription: () => Promise<void>;
   /** True when the app requires the user to pass the unlock gate before continuing. */
   appLocked: boolean;
   /** Call after a successful PIN/biometric unlock to clear the lock flag. */
@@ -60,6 +62,8 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isAdmin: false,
   isSuperAdmin: false,
+  subscriptionInfo: DEFAULT_SUBSCRIPTION_INFO,
+  refreshSubscription: async () => {},
   appLocked: false,
   unlockApp: () => {},
   lockApp: () => {},
@@ -114,6 +118,36 @@ async function clearUnlockedAt(userId: string): Promise<void> {
   } catch {}
 }
 
+async function fetchEffectiveSubscription(accessToken: string): Promise<SubscriptionInfo> {
+  try {
+    const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+    if (!baseUrl.startsWith('https://')) return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
+    const res = await fetch(`${baseUrl}/functions/v1/get-effective-subscription`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!res.ok) return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
+    const data = await res.json();
+    return {
+      isPremium: data.isPremium ?? false,
+      source: data.source ?? 'none',
+      plan: data.plan ?? null,
+      expiresAt: data.expiresAt ?? null,
+      isOnTrial: data.isOnTrial ?? false,
+      trialExpiresAt: data.trialExpiresAt ?? null,
+      trialExpired: data.trialExpired ?? false,
+      canInvite: data.canInvite ?? false,
+      loading: false,
+    };
+  } catch {
+    return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -124,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [appLocked, setAppLocked] = useState(false);
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
+  const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo>(DEFAULT_SUBSCRIPTION_INFO);
   // Timestamp (ms) of the last successful unlock. Persisted across restarts.
   const unlockedAtRef = useRef<number | null>(null);
   // Prevents double-loading when getSession() and onAuthStateChange both fire on mount.
@@ -160,6 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCouple(null);
         setPartnerProfile(null);
         setSettings(null);
+        setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
         setLoading(false);
       }
     });
@@ -175,6 +211,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function loadUserData(userId: string) {
     try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const accessToken = currentSession?.access_token ?? '';
+
       const [, , fetchedSettings] = await Promise.all([
         fetchProfile(userId),
         fetchCouple(userId),
@@ -192,10 +231,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (token) savePushToken(userId, token);
         });
       }
+
+      // Load subscription info — fire after other data so we don't block the UI gate
+      if (accessToken) {
+        fetchEffectiveSubscription(accessToken).then(info => setSubscriptionInfo(info));
+      } else {
+        setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
+      }
     } catch {
-      // Network or unexpected error — don't wipe already-loaded state. The individual
-      // fetch functions set their own state on success; leaving existing values in place
-      // is safer than blanking the screen. Only unblock loading.
+      // Network or unexpected error — don't wipe already-loaded state.
+      setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
     } finally {
       setLoading(false);
     }
@@ -368,12 +413,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return false;
   }, [settings?.lock_after_seconds]);
 
+  const refreshSubscription = useCallback(async () => {
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    const accessToken = currentSession?.access_token ?? '';
+    if (!accessToken) return;
+    setSubscriptionInfo(prev => ({ ...prev, loading: true }));
+    const info = await fetchEffectiveSubscription(accessToken);
+    setSubscriptionInfo(info);
+  }, []);
+
   const isAdmin = profile?.is_admin === true;
   const isSuperAdmin = profile?.is_super_admin === true;
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked }}
     >
       {children}
     </AuthContext.Provider>
