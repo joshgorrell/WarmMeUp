@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Spacing, FontSize, Radius } from '@/constants/theme';
 import StealthBypassSheet from '@/components/StealthBypassSheet';
+import { setWeatherSessionCache } from '@/hooks/useWeather';
 
 // Shown only when permission is denied and no cached coords exist
 const FALLBACK = {
@@ -129,7 +130,10 @@ export default function WeatherScreen() {
 
         try {
           const data = await fetchWeatherForCoords(lat, lon);
-          if (!cancelled.current) setWeather(data);
+          if (!cancelled.current) {
+            setWeather(data);
+            setWeatherSessionCache(data.currentTemp);
+          }
         } catch (e) {
           console.warn('[weather] GPS fetch failed:', e);
           if (!cancelled.current) setWeather(prev => prev ?? FALLBACK);
@@ -155,14 +159,20 @@ export default function WeatherScreen() {
     const cachedLat = settings.weather_lat;
     const cachedLon = settings.weather_lon;
     if (cachedLat == null || cachedLon == null) return;
-    // If GPS already produced a result, skip — GPS data is fresher.
-    if (gpsDone.current && weather !== null) return;
+    // Skip only if GPS actually resolved real coords — gpsCoords.current is set
+    // only on a successful fix. If GPS was denied, we still want cached coords.
+    if (gpsCoords.current !== null) return;
 
     (async () => {
       try {
         const data = await fetchWeatherForCoords(cachedLat, cachedLon);
-        // Only apply if GPS hasn't produced something already.
-        if (!cancelled.current) setWeather(prev => prev ?? data);
+        if (!cancelled.current) {
+          // Don't overwrite a live GPS result that may have arrived while fetching.
+          if (gpsCoords.current === null) {
+            setWeather(prev => prev ?? data);
+            setWeatherSessionCache(data.currentTemp);
+          }
+        }
       } catch (e) {
         console.warn('[weather] cached coords fetch failed:', e);
       }

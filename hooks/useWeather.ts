@@ -12,6 +12,10 @@ export function clearWeatherSessionCache() {
   sessionCachedTemp = null;
 }
 
+export function setWeatherSessionCache(temp: string) {
+  sessionCachedTemp = temp;
+}
+
 async function fetchTempForCoords(lat: number, lon: number): Promise<string> {
   const res = await fetch(
     `${SUPABASE_URL}/functions/v1/weather?lat=${lat}&lon=${lon}`,
