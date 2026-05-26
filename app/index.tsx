@@ -62,14 +62,10 @@ export default function IndexScreen() {
       if (needsGate) {
         const mustLock = lockIfNeeded();
         if (mustLock) {
-          if (loginMethod === 'pin' || loginMethod === 'biometric') {
-            // If there's no PIN stored on this device (e.g. Expo Go reload, new device),
-            // send the user to setup-pin rather than showing a broken unlock screen.
-            const pinExists = loginMethod === 'pin' ? await hasPinStored(userId!) : true;
-            router.replace(pinExists ? '/unlock' : '/(auth)/setup-pin');
-          } else {
-            router.replace('/(auth)/setup-pin');
-          }
+          // If there's no PIN stored on this device (e.g. Expo Go reload, new device),
+          // send the user to setup-pin rather than showing a broken unlock screen.
+          const pinExists = loginMethod === 'pin' ? await hasPinStored(userId!) : true;
+          router.replace(pinExists ? '/unlock' : '/(auth)/setup-pin');
         } else {
           // Still within grace period — refresh the unlock timestamp and go in.
           unlockApp();

@@ -225,8 +225,8 @@ export default function WeatherScreen() {
       // Check the timer BEFORE stamping — use the persisted unlock timestamp.
       const mustLock = lockIfNeeded();
       if (mustLock) {
-        // Lock timer has expired (or never set) — require PIN/biometric.
-        router.replace(loginMethod === 'pin' || loginMethod === 'biometric' ? '/unlock' : '/(auth)/setup-pin');
+        // Lock timer has expired — require PIN/biometric unlock.
+        router.replace('/unlock');
       } else {
         // Still within grace period — stamp a fresh unlock time and go in.
         unlockApp();
