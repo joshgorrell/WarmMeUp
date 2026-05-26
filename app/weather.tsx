@@ -94,8 +94,8 @@ export default function WeatherScreen() {
           const data = await fetchWeatherForCoords(cachedLat, cachedLon);
           if (!cancelled) setWeather(data);
         } catch {
-          // Edge function unreachable — show fallback now rather than waiting
-          if (!cancelled) setWeather(FALLBACK);
+          // Don't show FALLBACK here — GPS step may still succeed.
+          // The hard fallbackTimer will show FALLBACK if nothing else resolves.
         }
       }
 
@@ -119,6 +119,7 @@ export default function WeatherScreen() {
           if (status !== 'granted') {
             if (!cancelled) {
               setPermissionDenied(true);
+              // Only fall back to FALLBACK if cached coords didn't already populate weather
               setWeather(prev => prev ?? FALLBACK);
             }
             return;

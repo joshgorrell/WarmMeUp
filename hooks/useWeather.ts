@@ -8,6 +8,10 @@ const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 // Module-level runtime cache shared across all hook instances in a session
 let sessionCachedTemp: string | null = null;
 
+export function clearWeatherSessionCache() {
+  sessionCachedTemp = null;
+}
+
 async function fetchTempForCoords(lat: number, lon: number): Promise<string> {
   const res = await fetch(
     `${SUPABASE_URL}/functions/v1/weather?lat=${lat}&lon=${lon}`,
@@ -55,31 +59,56 @@ export function useWeather(
       // Step 2: Get a fresh live GPS fix.
       try {
         let lat: number, lon: number;
+        let gpsDenied = false;
 
         if (Platform.OS === 'web') {
-          if (!navigator?.geolocation) return;
-          const pos = await new Promise<GeolocationPosition>((res, rej) =>
-            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 6000 })
-          );
-          lat = pos.coords.latitude;
-          lon = pos.coords.longitude;
+          if (!navigator?.geolocation) {
+            gpsDenied = true;
+          } else {
+            try {
+              const pos = await new Promise<GeolocationPosition>((res, rej) =>
+                navigator.geolocation.getCurrentPosition(res, rej, { timeout: 6000 })
+              );
+              lat = pos.coords.latitude;
+              lon = pos.coords.longitude;
+            } catch {
+              gpsDenied = true;
+            }
+          }
         } else {
           const Location = await import('expo-location');
           const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status !== 'granted') return;
-          const pos = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          lat = pos.coords.latitude;
-          lon = pos.coords.longitude;
+          if (status !== 'granted') {
+            gpsDenied = true;
+          } else {
+            const pos = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+            lat = pos.coords.latitude;
+            lon = pos.coords.longitude;
+          }
         }
 
-        const t = await fetchTempForCoords(lat, lon);
+        if (gpsDenied) {
+          // GPS unavailable — use cached coords to populate temperature so the
+          // header isn't permanently empty just because GPS permission was denied.
+          if (cachedLat != null && cachedLon != null && !resolvedRef.current) {
+            try {
+              const t = await fetchTempForCoords(cachedLat, cachedLon);
+              sessionCachedTemp = t;
+              resolvedRef.current = true;
+              if (mounted.current && t) setTemp(t);
+            } catch { /* nothing more we can do */ }
+          }
+          return;
+        }
+
+        const t = await fetchTempForCoords(lat!, lon!);
         sessionCachedTemp = t;
         resolvedRef.current = true;
         if (mounted.current && t) setTemp(t);
 
-        if (userId) cacheCoords(userId, lat, lon);
+        if (userId) cacheCoords(userId, lat!, lon!);
       } catch { /* silently keep whatever we have */ }
     })();
 

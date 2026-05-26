@@ -7,6 +7,7 @@ import { Couple, Profile, UserSettings } from '@/lib/types';
 import { maybeArchiveAndResetScores } from '@/lib/points';
 import { registerForPushNotifications, savePushToken, clearPushToken } from '@/lib/notifications';
 import { secureKey } from '@/lib/secureKey';
+import { clearWeatherSessionCache } from '@/hooks/useWeather';
 
 interface AuthContextType {
   session: Session | null;
@@ -317,6 +318,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     setAppLocked(false);
     setVaultUnlocked(false);
+    clearWeatherSessionCache();
     if (user) {
       clearPushToken(user.id).catch(() => {});
       // Clear the persisted unlock timestamp so next login always prompts for PIN.
