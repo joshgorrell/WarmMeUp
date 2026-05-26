@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { logDebugEvent } from './debugLog';
 
 function readAsBlob(uri: string): Promise<Blob> {
   if (!uri.startsWith('file://') && !uri.startsWith('ph://') && !uri.startsWith('content://')) {
@@ -18,18 +19,44 @@ export type UploadResult = {
   storagePath: string;
 };
 
+function mapStorageError(
+  status: number,
+  body: { error?: string; message?: string; statusCode?: string } | null,
+): string {
+  if (status === 401) return 'Session expired — please log out and back in.';
+  if (status === 403 || body?.error === 'Unauthorized') return 'Upload permission denied. Check that your account is active and paired.';
+  if (status === 413 || body?.error === 'EntityTooLarge') return 'File too large (max 100 MB).';
+  if (status === 415 || body?.error === 'invalid_mime_type') return 'Unsupported file format.';
+  if (status >= 500) return 'Storage temporarily unavailable — please try again.';
+  if (body?.message) return `Upload failed: ${body.message}`;
+  if (body?.error) return `Upload failed: ${body.error}`;
+  return `Upload failed (HTTP ${status}).`;
+}
+
 export async function uploadMediaFile(
   localUri: string,
   bucket: string,
   storagePath: string,
   mimeType: string,
   onProgress?: (pct: number) => void,
+  userId?: string,
+  coupleId?: string,
 ): Promise<UploadResult> {
   // getUser() validates the token server-side and triggers a refresh if expired,
   // then we re-read the session to get the freshened access_token.
   await supabase.auth.getUser();
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
+
+  const sessionValid = !!session;
+  const tokenPresent = !!session?.access_token;
+
+  if (!session) {
+    logDebugEvent('VAULT UPLOAD ERROR', {
+      reason: 'No active session',
+      bucket, storagePath, mimeType, userId: userId ?? null, coupleId: coupleId ?? null,
+    });
+    throw new Error('Session expired — please log out and back in.');
+  }
 
   onProgress?.(0);
 
@@ -39,32 +66,82 @@ export async function uploadMediaFile(
   // React Native's fetch() cannot open local file:// or ph:// URIs — only HTTP/HTTPS.
   // Use XMLHttpRequest with responseType='blob' for local paths (camera/library picks);
   // keep fetch for HTTP/HTTPS (e.g. signed URLs used in the auto-save flow).
-  const blob = await readAsBlob(localUri);
+  let blob: Blob;
+  try {
+    blob = await readAsBlob(localUri);
+  } catch (readErr: any) {
+    logDebugEvent('VAULT UPLOAD ERROR', {
+      reason: 'Failed to read local file',
+      error: readErr?.message ?? String(readErr),
+      bucket, storagePath, mimeType, userId: userId ?? null, coupleId: coupleId ?? null,
+    });
+    throw new Error('Could not read media file — please try again.');
+  }
 
-  const response = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-      'Content-Type': mimeType,
-      'x-upsert': 'true',
-    },
-    body: blob,
+  const blobSize = blob.size;
+
+  logDebugEvent('VAULT UPLOAD START', {
+    bucket,
+    storagePath,
+    mimeType,
+    blobSize,
+    userId: userId ?? null,
+    coupleId: coupleId ?? null,
+    sessionValid,
+    tokenPresent,
   });
 
-  if (!response.ok) {
-    let msg = 'Upload failed. Please check your connection and try again.';
-    try {
-      const body = await response.json();
-      if (response.status === 403 || body?.error === 'Unauthorized') {
-        msg = 'Upload not allowed. Please try again.';
-      } else if (body?.error === 'EntityTooLarge' || response.status === 413) {
-        msg = 'File is too large. Please choose a smaller file.';
-      }
-      console.warn('[uploadMediaFile] storage error:', response.status, body);
-    } catch {}
-    throw new Error(msg);
+  let response: Response;
+  try {
+    response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+        'Content-Type': mimeType,
+        'x-upsert': 'true',
+      },
+      body: blob,
+    });
+  } catch (networkErr: any) {
+    logDebugEvent('VAULT UPLOAD ERROR', {
+      reason: 'Network error',
+      error: networkErr?.message ?? String(networkErr),
+      bucket, storagePath, mimeType, blobSize, userId: userId ?? null, coupleId: coupleId ?? null,
+    });
+    throw new Error('Network error — check your connection and try again.');
   }
+
+  if (!response.ok) {
+    let body: { error?: string; message?: string; statusCode?: string } | null = null;
+    try { body = await response.json(); } catch {}
+
+    logDebugEvent('VAULT UPLOAD ERROR', {
+      httpStatus: response.status,
+      supabaseError: body?.error ?? null,
+      supabaseMessage: body?.message ?? null,
+      supabaseStatusCode: body?.statusCode ?? null,
+      bucket,
+      storagePath,
+      mimeType,
+      blobSize,
+      userId: userId ?? null,
+      coupleId: coupleId ?? null,
+      sessionValid,
+      tokenPresent,
+    });
+
+    throw new Error(mapStorageError(response.status, body));
+  }
+
+  logDebugEvent('VAULT UPLOAD SUCCESS', {
+    bucket,
+    storagePath,
+    mimeType,
+    blobSize,
+    userId: userId ?? null,
+    coupleId: coupleId ?? null,
+  });
 
   onProgress?.(100);
   return { storagePath };

@@ -7,12 +7,13 @@ import * as Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname } from 'expo-router';
-import { ChevronLeft, Trash2, LogOut, Shield, Share2 } from 'lucide-react-native';
+import { ChevronLeft, Trash2, LogOut, Shield, Share2, RefreshCw } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { secureKey, hasPinStored } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
+import { getDebugEvents, clearDebugEvents, subscribeDebugEvents, DebugEvent } from '@/lib/debugLog';
 import { Spacing, Radius, FontSize } from '@/constants/theme';
 
 function Row({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
@@ -54,6 +55,27 @@ function Section({ title }: { title: string }) {
   );
 }
 
+function EventRow({ event }: { event: DebugEvent }) {
+  const time = event.timestamp.substring(11, 19);
+  const isError = event.tag.includes('ERROR');
+  const isSuccess = event.tag.includes('SUCCESS');
+  const tagColor = isError ? '#FF6B6B' : isSuccess ? '#4CAF50' : '#FFA040';
+  const pairs = Object.entries(event.data)
+    .map(([k, v]) => `${k}=${v === null ? 'null' : String(v)}`)
+    .join('  ');
+  return (
+    <View style={styles.eventRow}>
+      <AppText style={styles.eventTime}>{time}</AppText>
+      <View style={styles.eventBody}>
+        <AppText style={[styles.eventTag, { color: tagColor }]}>[{event.tag}]</AppText>
+        {!!pairs && (
+          <AppText style={styles.eventPairs} selectable numberOfLines={4}>{pairs}</AppText>
+        )}
+      </View>
+    </View>
+  );
+}
+
 export default function DebugScreen() {
   const router = useRouter();
   const pathname = usePathname();
@@ -63,6 +85,7 @@ export default function DebugScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [hasPin, setHasPin] = useState<boolean | null>(null);
+  const [events, setEvents] = useState<DebugEvent[]>(() => getDebugEvents());
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -71,6 +94,10 @@ export default function DebugScreen() {
       hasPinStored(userId).then(setHasPin).catch(() => setHasPin(null));
     }
   }, [userId]);
+
+  useEffect(() => {
+    return subscribeDebugEvents(() => setEvents(getDebugEvents()));
+  }, []);
 
   // expo-updates values are only available in a real build, not Expo Go / dev client
   let updateId: string | null = null;
@@ -92,6 +119,30 @@ export default function DebugScreen() {
   const appVersion = Constants.default?.expoConfig?.version ?? null;
   const nativeVersion = Constants.default?.nativeAppVersion ?? null;
   const buildVersion = Constants.default?.nativeBuildVersion ?? null;
+
+  // Session / token derived values
+  const tokenPresent = !!session?.access_token;
+  const sessionExpiry = session?.expires_at
+    ? new Date(session.expires_at * 1000).toISOString()
+    : null;
+  const tokenExpiryCountdown = session?.expires_at
+    ? Math.max(0, Math.round(session.expires_at - Date.now() / 1000))
+    : null;
+  const supabaseHost = process.env.EXPO_PUBLIC_SUPABASE_URL
+    ? (() => { try { return new URL(process.env.EXPO_PUBLIC_SUPABASE_URL!).hostname; } catch { return null; } })()
+    : null;
+
+  // Vault upload diagnostics from event log
+  const lastVaultPick = events.find(e => e.tag === 'VAULT PICK');
+  const lastVaultUploadStart = events.find(e => e.tag === 'VAULT UPLOAD START');
+  const lastVaultUploadSuccess = events.find(e => e.tag === 'VAULT UPLOAD SUCCESS');
+  const lastVaultUploadError = events.find(e => e.tag === 'VAULT UPLOAD ERROR');
+
+  const uploadPathTemplate = couple?.id && userId
+    ? `${couple.id}/${userId}/{ts}.ext`
+    : couple?.id
+    ? `${couple.id}/{user_id}/{ts}.ext`
+    : '{couple_id}/{user_id}/{ts}.ext';
 
   // --- Action: Clear Local Device State ---
   const handleClearLocalState = () => {
@@ -193,16 +244,10 @@ export default function DebugScreen() {
 
   // --- Action: Copy Debug Info via native Share sheet ---
   const handleShareDebugInfo = async () => {
-    const info: Record<string, string | number | boolean | null> = {
-      updateId,
-      runtimeVersion,
-      channel,
-      isEmbeddedLaunch,
-      isEmergencyLaunch,
-      createdAt,
-      appVersion,
-      nativeAppVersion: nativeVersion,
-      nativeBuildVersion: buildVersion,
+    const lastErr = lastVaultUploadError?.data ?? null;
+    const info: Record<string, unknown> = {
+      updateId, runtimeVersion, channel, isEmbeddedLaunch, isEmergencyLaunch, createdAt,
+      appVersion, nativeAppVersion: nativeVersion, nativeBuildVersion: buildVersion,
       userId,
       email: user?.email ?? session?.user?.email ?? null,
       is_admin: profile?.is_admin ?? null,
@@ -212,6 +257,7 @@ export default function DebugScreen() {
       hasStoredPIN: hasPin,
       blur_on_background: settings?.blur_on_background ?? null,
       push_notifications_enabled: settings?.push_notifications_enabled ?? null,
+      tokenPresent, sessionExpiry, tokenExpiryCountdown,
       sub_loading: subscriptionInfo.loading,
       sub_isPremium: subscriptionInfo.isPremium,
       sub_isOnTrial: subscriptionInfo.isOnTrial,
@@ -227,8 +273,22 @@ export default function DebugScreen() {
       couple_points_enabled: couple?.points_enabled ?? null,
       couple_streaks_enabled: couple?.streaks_enabled ?? null,
       couple_subscription_owner_id: couple?.subscription_owner_id ?? null,
+      vault_bucket: 'vault',
+      vault_uploadPathTemplate: uploadPathTemplate,
+      vault_lastPickAt: lastVaultPick?.timestamp ?? null,
+      vault_lastPickMime: lastVaultPick?.data?.mimeType ?? null,
+      vault_lastUploadStartAt: lastVaultUploadStart?.timestamp ?? null,
+      vault_lastUploadStartBlobSize: lastVaultUploadStart?.data?.blobSize ?? null,
+      vault_lastUploadSuccessAt: lastVaultUploadSuccess?.timestamp ?? null,
+      vault_lastUploadSuccessPath: lastVaultUploadSuccess?.data?.storagePath ?? null,
+      vault_lastErrorAt: lastVaultUploadError?.timestamp ?? null,
+      vault_lastErrorReason: lastErr?.reason ?? lastErr?.supabaseError ?? lastErr?.error ?? null,
+      vault_lastErrorHttpStatus: lastErr?.httpStatus ?? null,
+      vault_lastErrorSupabaseMessage: lastErr?.supabaseMessage ?? null,
+      vault_lastErrorFullBody: lastErr ? JSON.stringify(lastErr) : null,
       currentRoute: pathname,
       capturedAt: new Date().toISOString(),
+      recentEvents: events.slice(0, 20).map(e => ({ tag: e.tag, ts: e.timestamp, ...e.data })),
     };
 
     try {
@@ -257,7 +317,71 @@ export default function DebugScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Section title="OTA / Build" />
+        {/* ── 1. Launch / Auth State ── */}
+        <Section title="Launch / Auth State" />
+        <Row label="userId" value={userId} />
+        <Row label="email" value={user?.email ?? session?.user?.email ?? null} />
+        <Row label="is_admin" value={profile?.is_admin ?? null} />
+        <Row label="login_method" value={settings?.login_method ?? null} />
+        <Row label="stealth_mode_enabled" value={settings?.stealth_mode_enabled ?? null} />
+        <Row label="lock_after_seconds" value={settings?.lock_after_seconds ?? null} />
+        <Row label="hasStoredPIN" value={hasPin} />
+        <Row label="blur_on_background" value={settings?.blur_on_background ?? null} />
+        <Row label="push_notifications_enabled" value={settings?.push_notifications_enabled ?? null} />
+
+        {/* ── 2. Subscription / Pairing State ── */}
+        <Section title="Subscription / Pairing State" />
+        <Row label="sub.loading" value={subscriptionInfo.loading} />
+        <Row label="sub.isPremium" value={subscriptionInfo.isPremium} />
+        <Row label="sub.isOnTrial" value={subscriptionInfo.isOnTrial} />
+        <Row label="sub.source" value={subscriptionInfo.source} />
+        <Row label="sub.plan" value={(subscriptionInfo as any).plan ?? null} />
+        <Row label="sub.expiresAt" value={(subscriptionInfo as any).expiresAt ?? null} />
+        <Row label="sub.trialExpired" value={subscriptionInfo.trialExpired} />
+        <Row label="sub.canInvite" value={(subscriptionInfo as any).canInvite ?? null} />
+        <Row label="couple.id" value={couple?.id ?? null} />
+        <Row label="couple.active" value={couple?.active ?? null} />
+        <Row label="couple.user_a_id" value={couple?.user_a_id ?? null} />
+        <Row label="couple.user_b_id" value={couple?.user_b_id ?? null} />
+        <Row label="couple.points_enabled" value={couple?.points_enabled ?? null} />
+        <Row label="couple.streaks_enabled" value={couple?.streaks_enabled ?? null} />
+        <Row label="couple.subscription_owner_id" value={couple?.subscription_owner_id ?? null} />
+
+        {/* ── 3. Vault Upload Diagnostics ── */}
+        <Section title="Vault Upload Diagnostics" />
+        <Row label="bucket" value="vault" />
+        <Row label="uploadPathTemplate" value={uploadPathTemplate} />
+        <Row label="lastPick.at" value={lastVaultPick?.timestamp ?? null} />
+        <Row label="lastPick.mimeType" value={(lastVaultPick?.data?.mimeType as string) ?? null} />
+        <Row label="lastPick.source" value={(lastVaultPick?.data?.source as string) ?? null} />
+        <Row label="lastUploadStart.at" value={lastVaultUploadStart?.timestamp ?? null} />
+        <Row label="lastUploadStart.blobSize" value={(lastVaultUploadStart?.data?.blobSize as number) ?? null} />
+        <Row label="lastUploadSuccess.at" value={lastVaultUploadSuccess?.timestamp ?? null} />
+        <Row label="lastUploadSuccess.path" value={(lastVaultUploadSuccess?.data?.storagePath as string) ?? null} />
+        <Row label="lastError.at" value={lastVaultUploadError?.timestamp ?? null} />
+        <Row
+          label="lastError.reason"
+          value={
+            (lastVaultUploadError?.data?.reason as string) ??
+            (lastVaultUploadError?.data?.supabaseError as string) ??
+            (lastVaultUploadError?.data?.error as string) ??
+            null
+          }
+        />
+        <Row label="lastError.httpStatus" value={(lastVaultUploadError?.data?.httpStatus as number) ?? null} />
+        <Row label="lastError.supabaseMessage" value={(lastVaultUploadError?.data?.supabaseMessage as string) ?? null} />
+        <Row label="lastError.supabaseStatusCode" value={(lastVaultUploadError?.data?.supabaseStatusCode as string) ?? null} />
+
+        {/* ── 4. Storage / Auth Token State ── */}
+        <Section title="Storage / Auth Token State" />
+        <Row label="tokenPresent" value={tokenPresent} />
+        <Row label="sessionExpiry (ISO)" value={sessionExpiry} />
+        <Row label="tokenExpiryCountdown (s)" value={tokenExpiryCountdown} />
+        <Row label="supabaseHost" value={supabaseHost} />
+        <Row label="vaultBucket" value="vault" />
+
+        {/* ── 5. EAS / OTA Runtime Info ── */}
+        <Section title="EAS / OTA Runtime Info" />
         <Row label="updateId" value={updateId} />
         <Row label="runtimeVersion" value={runtimeVersion} />
         <Row label="channel" value={channel} />
@@ -267,43 +391,31 @@ export default function DebugScreen() {
         <Row label="appVersion (app.json)" value={appVersion} />
         <Row label="nativeAppVersion" value={nativeVersion} />
         <Row label="nativeBuildVersion" value={buildVersion} />
-
-        <Section title="Auth" />
-        <Row label="userId" value={userId} />
-        <Row label="email" value={user?.email ?? session?.user?.email ?? null} />
-        <Row label="is_admin" value={profile?.is_admin ?? null} />
-
-        <Section title="Settings" />
-        <Row label="login_method" value={settings?.login_method ?? null} />
-        <Row label="stealth_mode_enabled" value={settings?.stealth_mode_enabled ?? null} />
-        <Row label="lock_after_seconds" value={settings?.lock_after_seconds ?? null} />
-        <Row label="hasStoredPIN" value={hasPin} />
-        <Row label="blur_on_background" value={settings?.blur_on_background ?? null} />
-        <Row label="push_notifications_enabled" value={settings?.push_notifications_enabled ?? null} />
-
-        <Section title="Subscription" />
-        <Row label="loading" value={subscriptionInfo.loading} />
-        <Row label="isPremium" value={subscriptionInfo.isPremium} />
-        <Row label="isOnTrial" value={subscriptionInfo.isOnTrial} />
-        <Row label="source" value={subscriptionInfo.source} />
-        <Row label="plan" value={(subscriptionInfo as any).plan ?? null} />
-        <Row label="expiresAt" value={(subscriptionInfo as any).expiresAt ?? null} />
-        <Row label="trialExpired" value={subscriptionInfo.trialExpired} />
-        <Row label="canInvite" value={(subscriptionInfo as any).canInvite ?? null} />
-
-        <Section title="Couple" />
-        <Row label="id" value={couple?.id ?? null} />
-        <Row label="active" value={couple?.active ?? null} />
-        <Row label="user_a_id" value={couple?.user_a_id ?? null} />
-        <Row label="user_b_id" value={couple?.user_b_id ?? null} />
-        <Row label="points_enabled" value={couple?.points_enabled ?? null} />
-        <Row label="streaks_enabled" value={couple?.streaks_enabled ?? null} />
-        <Row label="subscription_owner_id" value={couple?.subscription_owner_id ?? null} />
-
-        <Section title="Navigation" />
         <Row label="currentRoute" value={pathname} />
 
-        {/* Action buttons */}
+        {/* ── 6. Recent Debug Events ── */}
+        <Section title="Recent Debug Events" />
+        <View style={styles.eventsHeader}>
+          <AppText style={styles.eventsCount}>{events.length} event{events.length !== 1 ? 's' : ''}</AppText>
+          <TouchableOpacity
+            onPress={() => { clearDebugEvents(); setEvents([]); }}
+            style={styles.clearEventsBtn}
+            activeOpacity={0.7}
+            hitSlop={8}
+          >
+            <RefreshCw size={12} color="#555" />
+            <AppText style={styles.clearEventsBtnText}>Clear</AppText>
+          </TouchableOpacity>
+        </View>
+        {events.length === 0 ? (
+          <View style={styles.emptyEvents}>
+            <AppText style={styles.emptyEventsText}>No events yet — trigger a vault upload to see logs here.</AppText>
+          </View>
+        ) : (
+          events.slice(0, 30).map((ev, i) => <EventRow key={i} event={ev} />)
+        )}
+
+        {/* ── Action Buttons ── */}
         <View style={styles.buttonArea}>
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnDanger, clearing && styles.btnDisabled]}
@@ -359,11 +471,10 @@ export default function DebugScreen() {
             <AppText style={styles.actionBtnLabel}>Copy Debug Info</AppText>
           </TouchableOpacity>
           <AppText style={styles.btnNote}>
-            Opens share sheet with all debug values as JSON.
+            Opens share sheet with all debug values and recent events as JSON.
           </AppText>
         </View>
       </ScrollView>
-
     </View>
   );
 }
@@ -476,5 +587,69 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 16,
     paddingHorizontal: Spacing.sm,
+  },
+  eventsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  eventsCount: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#555',
+  },
+  clearEventsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    padding: 4,
+  },
+  clearEventsBtnText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    color: '#555',
+  },
+  emptyEvents: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  emptyEventsText: {
+    fontSize: 12,
+    color: '#444',
+    fontStyle: 'italic',
+  },
+  eventRow: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#111115',
+    gap: Spacing.sm,
+    alignItems: 'flex-start',
+  },
+  eventTime: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    color: '#444',
+    width: 60,
+    flexShrink: 0,
+    paddingTop: 2,
+  },
+  eventBody: {
+    flex: 1,
+    gap: 2,
+  },
+  eventTag: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    letterSpacing: 0.3,
+  },
+  eventPairs: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    color: '#666',
+    lineHeight: 14,
   },
 });

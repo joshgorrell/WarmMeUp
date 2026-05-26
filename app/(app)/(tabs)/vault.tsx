@@ -14,6 +14,7 @@ import { VaultItem } from '@/lib/types';
 import { awardPoints } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension } from '@/lib/uploadMedia';
+import { logDebugEvent } from '@/lib/debugLog';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLayout } from '@/hooks/useLayout';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
@@ -268,7 +269,7 @@ export default function VaultScreen() {
     try {
       const ext = mimeToExtension(mimeType);
       const storagePath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
-      await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct));
+      await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct), user.id, couple.id);
 
       const { error: dbError } = await supabase.from('vault_items').insert({
         couple_id: couple.id,
@@ -284,7 +285,15 @@ export default function VaultScreen() {
       if (dbError) {
         // Clean up the already-uploaded storage file so it doesn't become an orphan
         supabase.storage.from('vault').remove([storagePath]).catch(() => {});
-        throw dbError;
+        logDebugEvent('VAULT UPLOAD ERROR', {
+          reason: 'DB insert failed after storage upload',
+          dbError: dbError.message,
+          dbCode: dbError.code,
+          storagePath,
+          userId: user.id,
+          coupleId: couple.id,
+        });
+        throw new Error(`Media uploaded but failed to save — ${dbError.message}`);
       }
       awardPoints(couple.id, user.id, 5, 'Vault media added');
       notifyPartner({ event_type: 'new_vault_item', couple_id: couple.id, target_route: '/(app)/(tabs)/vault', partnerUserId: partnerProfile?.id });
@@ -311,7 +320,16 @@ export default function VaultScreen() {
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
-      await uploadToVault(asset.uri, isVideo ? 'video' : 'photo', resolveAssetMimeType(asset));
+      const mimeType = resolveAssetMimeType(asset);
+      logDebugEvent('VAULT PICK', {
+        source: 'library',
+        mediaType: isVideo ? 'video' : 'photo',
+        mimeType,
+        uriPrefix: asset.uri.substring(0, 12),
+        userId: user?.id ?? null,
+        coupleId: couple?.id ?? null,
+      });
+      await uploadToVault(asset.uri, isVideo ? 'video' : 'photo', mimeType);
     } catch (e: any) {
       setUploading(false);
       Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
@@ -338,7 +356,16 @@ export default function VaultScreen() {
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
-      await uploadToVault(asset.uri, isVideo ? 'video' : 'photo', resolveAssetMimeType(asset));
+      const mimeType = resolveAssetMimeType(asset);
+      logDebugEvent('VAULT PICK', {
+        source: 'camera',
+        mediaType: isVideo ? 'video' : 'photo',
+        mimeType,
+        uriPrefix: asset.uri.substring(0, 12),
+        userId: user?.id ?? null,
+        coupleId: couple?.id ?? null,
+      });
+      await uploadToVault(asset.uri, isVideo ? 'video' : 'photo', mimeType);
     } catch (e: any) {
       setUploading(false);
       Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
