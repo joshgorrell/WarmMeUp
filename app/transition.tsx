@@ -70,7 +70,8 @@ export default function TransitionScreen() {
   debugModeRef.current = debugModeEnabled;
 
   const handleDebugTap = () => {
-    if (!debugModeRef.current) return;
+    const canDebug = __DEV__ || isAdminRef.current || debugModeRef.current || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
+    if (!canDebug) return;
     debugTapCount.current += 1;
     if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
     if (debugTapCount.current >= DEBUG_TAP_TARGET) {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View, StyleSheet, TouchableOpacity,
   Platform, Animated,
@@ -28,7 +28,7 @@ let biometricAlreadyPrompted = false;
 
 export default function UnlockScreen() {
   const router = useRouter();
-  const { user, settings, unlockApp, isAuthenticatingRef } = useAuth();
+  const { user, profile, settings, unlockApp, isAuthenticatingRef, debugModeEnabled } = useAuth();
   const { available: bioAvailable, biometricLabel, authenticate } = useBiometricAuth();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
@@ -207,6 +207,24 @@ export default function UnlockScreen() {
     router.replace('/(auth)/login');
   };
 
+  const debugTapCount = useRef(0);
+  const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canAccessDebug = useMemo(
+    () => __DEV__ || profile?.is_admin === true || debugModeEnabled || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1',
+    [profile?.is_admin, debugModeEnabled],
+  );
+  const handleDebugTap = useCallback(() => {
+    if (!canAccessDebug) return;
+    debugTapCount.current += 1;
+    if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
+    if (debugTapCount.current >= 5) {
+      debugTapCount.current = 0;
+      router.replace('/debug');
+      return;
+    }
+    debugTapTimer.current = setTimeout(() => { debugTapCount.current = 0; }, 10000);
+  }, [canAccessDebug, router]);
+
   const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
 
   const centerStyle = isTablet
@@ -218,9 +236,9 @@ export default function UnlockScreen() {
       <LinearGradient colors={['#07070A', '#0D0D12', '#151018']} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
-        <View style={[{ marginBottom: vMd }, centerStyle]}>
+        <TouchableOpacity onPress={handleDebugTap} activeOpacity={1} style={[{ marginBottom: vMd }, centerStyle]}>
           <WarmupBrand logoSize={logoSize} showTagline={false} />
-        </View>
+        </TouchableOpacity>
 
         <View style={centerStyle}>
           {pinMissing ? (

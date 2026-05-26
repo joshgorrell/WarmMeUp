@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Platform, Linking,
 } from 'react-native';
@@ -66,9 +66,10 @@ const DEBUG_TAP_WINDOW_MS = 10000;
 
 export default function WeatherScreen() {
   const router = useRouter();
-  const { session, loading, user, settings, refreshSettings, unlockApp, lockIfNeeded, isAuthenticatingRef, debugModeEnabled } = useAuth();
+  const { session, loading, user, profile, settings, refreshSettings, unlockApp, lockIfNeeded, isAuthenticatingRef, debugModeEnabled } = useAuth();
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debugLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
 
   // Hard session guard — this screen is exclusively for confirmed logged-in users.
@@ -100,19 +101,40 @@ export default function WeatherScreen() {
   const gpsDone = useRef(false);
   const cancelled = useRef(false);
 
+  const canAccessDebug =
+    __DEV__ ||
+    profile?.is_admin === true ||
+    debugModeEnabled ||
+    process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
+
   const handleDebugTap = () => {
-    if (!debugModeEnabled) return;
+    if (!canAccessDebug) return;
     debugTapCount.current += 1;
     if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
     if (debugTapCount.current >= DEBUG_TAP_TARGET) {
       debugTapCount.current = 0;
-      router.push('/debug');
+      router.replace('/debug');
       return;
     }
     debugTapTimer.current = setTimeout(() => {
       debugTapCount.current = 0;
     }, DEBUG_TAP_WINDOW_MS);
   };
+
+  const handleDebugLongPressIn = useCallback(() => {
+    if (!canAccessDebug) return;
+    debugLongPressTimer.current = setTimeout(() => {
+      debugLongPressTimer.current = null;
+      router.replace('/debug');
+    }, 5000);
+  }, [canAccessDebug, router]);
+
+  const handleDebugLongPressOut = useCallback(() => {
+    if (debugLongPressTimer.current) {
+      clearTimeout(debugLongPressTimer.current);
+      debugLongPressTimer.current = null;
+    }
+  }, []);
 
   // Hard timeout: ensures the screen never stays permanently blank.
   // Starts on mount and is cleared when any weather data arrives.
@@ -402,13 +424,13 @@ export default function WeatherScreen() {
         <View style={{ height: insets.bottom + 120 }} />
       </ScrollView>
 
-      {/* Coast is Clear button — long-press 5s = emergency debug access */}
+      {/* Coast is Clear button — hold 5s for emergency debug access */}
       <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 24 }]}>
         <TouchableOpacity
           style={styles.clearBtn}
           onPress={handleCoastIsClear}
-          onLongPress={() => router.push('/debug')}
-          delayLongPress={5000}
+          onPressIn={handleDebugLongPressIn}
+          onPressOut={handleDebugLongPressOut}
           activeOpacity={0.88}
         >
           <View style={styles.clearBtnInner}>

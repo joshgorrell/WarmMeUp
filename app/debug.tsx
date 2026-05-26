@@ -209,7 +209,7 @@ export default function DebugScreen() {
   const handleResetSecurity = () => {
     Alert.alert(
       'Reset Security Settings',
-      'Sets login_method=password, disables stealth mode, and clears the lock timer in Supabase. PIN on this device is not deleted.',
+      'Sets login_method=password, disables stealth mode, and sets lock_after_seconds=-1 (Never Lock) in Supabase. PIN on this device is not deleted.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -223,7 +223,7 @@ export default function DebugScreen() {
                 .from('user_settings')
                 .update({
                   login_method: 'password',
-                  lock_after_seconds: 0,
+                  lock_after_seconds: -1,
                   stealth_mode_enabled: false,
                 })
                 .eq('user_id', userId);
