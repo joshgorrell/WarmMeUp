@@ -85,9 +85,13 @@ export default function UnlockScreen() {
   }, [shakeAnim]);
 
   const proceed = useCallback(() => {
+    console.log('[unlock] proceed called at', Date.now());
+    // Block BackgroundLockManager from racing the navigation to /transition.
+    isAuthenticatingRef.current = true;
     unlockApp();
     router.replace('/transition');
-  }, [unlockApp, router]);
+    setTimeout(() => { isAuthenticatingRef.current = false; }, 800);
+  }, [unlockApp, router, isAuthenticatingRef]);
 
   const tryBiometric = useCallback(async () => {
     if (!bioAvailable) {
@@ -100,20 +104,28 @@ export default function UnlockScreen() {
       const result = await authenticate(`Unlock Warm Me Up`);
       if (result.success) {
         biometricAlreadyPrompted = false;
-        proceed();
+        proceed(); // proceed() manages isAuthenticatingRef itself
       } else {
+        isAuthenticatingRef.current = false;
         setMode('pin');
       }
-    } finally {
+    } catch {
       isAuthenticatingRef.current = false;
+      setMode('pin');
     }
   }, [bioAvailable, authenticate, proceed, isAuthenticatingRef]);
 
   useEffect(() => {
     if (modeInitialised.current || !settings) return;
     modeInitialised.current = true;
-    const initial = settings.login_method === 'biometric' ? 'biometric' : 'pin';
-    setMode(initial);
+    const method = settings.login_method ?? 'password';
+    console.log('[unlock] settings loaded, login_method:', method, 'lock_after_seconds:', settings.lock_after_seconds);
+    if (method === 'password') {
+      // Should never land here for password users, but if we do, proceed immediately.
+      proceed();
+      return;
+    }
+    setMode(method === 'biometric' ? 'biometric' : 'pin');
   }, [settings]);
 
   useEffect(() => {

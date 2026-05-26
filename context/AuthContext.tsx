@@ -210,6 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function loadUserData(userId: string) {
+    console.log('[Auth] loadUserData start uid:', userId);
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       const accessToken = currentSession?.access_token ?? '';
@@ -219,11 +220,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetchCouple(userId),
         fetchSettings(userId),
       ]);
+      console.log('[Auth] loadUserData Promise.all done. login_method:', fetchedSettings?.login_method, 'lock_after_seconds:', fetchedSettings?.lock_after_seconds);
 
       // Restore persisted unlock timestamp so lockIfNeeded() respects the grace period
       // across full app restarts, not just background/foreground transitions.
       const persistedTs = await readUnlockedAt(userId);
       unlockedAtRef.current = persistedTs;
+      console.log('[Auth] unlockedAt restored:', persistedTs);
 
       // Register / refresh push token if the user has notifications enabled
       if (fetchedSettings?.push_notifications_enabled) {
@@ -234,14 +237,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Load subscription info — fire after other data so we don't block the UI gate
       if (accessToken) {
-        fetchEffectiveSubscription(accessToken).then(info => setSubscriptionInfo(info));
+        fetchEffectiveSubscription(accessToken).then(info => {
+          console.log('[Auth] subscriptionInfo resolved:', JSON.stringify(info));
+          setSubscriptionInfo(info);
+        });
       } else {
+        console.log('[Auth] no accessToken — subscription set to default (not loading)');
         setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
       }
-    } catch {
+    } catch (err) {
+      console.warn('[Auth] loadUserData error:', err);
       // Network or unexpected error — don't wipe already-loaded state.
       setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
     } finally {
+      console.log('[Auth] loadUserData done — setLoading(false)');
       setLoading(false);
     }
   }
@@ -392,24 +401,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    */
   const lockIfNeeded = useCallback((): boolean => {
     const lockAfter = settings?.lock_after_seconds ?? null;
-    // -1 means "never lock"
-    if (lockAfter === -1) return false;
-    // null means "always lock"
-    if (lockAfter === null) {
-      setAppLocked(true);
-      return true;
-    }
-    // If the user has never unlocked this session, we must lock
-    if (unlockedAtRef.current === null) {
-      setAppLocked(true);
-      return true;
-    }
+    // null (never explicitly set) and -1 (explicitly "never") both mean never lock.
+    // Only lock when the user has set a positive timeout that has elapsed.
+    if (lockAfter === null || lockAfter === -1) return false;
+    // If user hasn't unlocked yet this session, don't force a lock — let them in.
+    if (unlockedAtRef.current === null) return false;
     const elapsedSeconds = (Date.now() - unlockedAtRef.current) / 1000;
     if (elapsedSeconds >= lockAfter) {
       setAppLocked(true);
       return true;
     }
-    // Still within grace period — don't lock
     return false;
   }, [settings?.lock_after_seconds]);
 
