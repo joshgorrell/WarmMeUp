@@ -48,15 +48,23 @@ export function useWeather(
     }
 
     (async () => {
-      // Step 1: Use DB-cached coords for instant display while GPS warms up.
+      // Step 1: Use DB-cached coords for instant display.
+      // Cache the result in sessionCachedTemp right away so all other hook
+      // instances (BrandHeader, TabHeader) get it immediately on their next render.
       if (cachedLat != null && cachedLon != null && !resolvedRef.current) {
         try {
           const t = await fetchTempForCoords(cachedLat, cachedLon);
-          if (mounted.current && t) setTemp(t);
-        } catch { /* fall through to live GPS */ }
+          if (t) {
+            sessionCachedTemp = t;
+            resolvedRef.current = true;
+            if (mounted.current) setTemp(t);
+          }
+        } catch (e) {
+          console.warn('[useWeather] cached coords fetch failed:', e);
+        }
       }
 
-      // Step 2: Get a fresh live GPS fix.
+      // Step 2: Get a fresh live GPS fix to update with current location.
       try {
         let lat: number, lon: number;
         let gpsDenied = false;
@@ -89,27 +97,19 @@ export function useWeather(
           }
         }
 
-        if (gpsDenied) {
-          // GPS unavailable — use cached coords to populate temperature so the
-          // header isn't permanently empty just because GPS permission was denied.
-          if (cachedLat != null && cachedLon != null && !resolvedRef.current) {
-            try {
-              const t = await fetchTempForCoords(cachedLat, cachedLon);
-              sessionCachedTemp = t;
-              resolvedRef.current = true;
-              if (mounted.current && t) setTemp(t);
-            } catch { /* nothing more we can do */ }
-          }
-          return;
-        }
+        if (gpsDenied) return;
 
         const t = await fetchTempForCoords(lat!, lon!);
-        sessionCachedTemp = t;
-        resolvedRef.current = true;
-        if (mounted.current && t) setTemp(t);
+        if (t) {
+          sessionCachedTemp = t;
+          resolvedRef.current = true;
+          if (mounted.current) setTemp(t);
+        }
 
         if (userId) cacheCoords(userId, lat!, lon!);
-      } catch { /* silently keep whatever we have */ }
+      } catch (e) {
+        console.warn('[useWeather] GPS fetch failed:', e);
+      }
     })();
 
     return () => { mounted.current = false; };

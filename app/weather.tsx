@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Platform, Linking,
 } from 'react-native';
@@ -71,41 +71,33 @@ export default function WeatherScreen() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
 
+  // Refs so the GPS effect and the settings effect can coordinate without
+  // re-triggering each other.
+  const gpsCoords = useRef<{ lat: number; lon: number } | null>(null);
+  const gpsDone = useRef(false);
+  const cancelled = useRef(false);
+
+  // Hard timeout: ensures the screen never stays permanently blank.
+  // Starts on mount and is cleared when any weather data arrives.
   useEffect(() => {
-    // Don't run until settings have loaded — avoids a premature GPS attempt
-    // that can consume the effect run we need once cached coords are available.
-    if (settings === null) return;
+    const t = setTimeout(() => {
+      if (!cancelled.current) setWeather(prev => prev ?? FALLBACK);
+    }, 10000);
+    return () => {
+      cancelled.current = true;
+      clearTimeout(t);
+    };
+  }, []);
 
-    let cancelled = false;
-
-    // Hard timeout: if weather is still null after 6 s (edge function unreachable
-    // or GPS hung), show the fallback so the screen is never permanently stuck.
-    const fallbackTimer = setTimeout(() => {
-      if (!cancelled) setWeather(prev => prev ?? FALLBACK);
-    }, 6000);
-
+  // Effect 1: Start GPS warm-up immediately on mount — don't wait for settings.
+  useEffect(() => {
     (async () => {
-      // Step 1: If cached coords exist, fetch immediately so the user sees
-      // their real location with no delay while the live GPS warms up.
-      const cachedLat = settings?.weather_lat;
-      const cachedLon = settings?.weather_lon;
-      if (cachedLat != null && cachedLon != null) {
-        try {
-          const data = await fetchWeatherForCoords(cachedLat, cachedLon);
-          if (!cancelled) setWeather(data);
-        } catch {
-          // Don't show FALLBACK here — GPS step may still succeed.
-          // The hard fallbackTimer will show FALLBACK if nothing else resolves.
-        }
-      }
-
-      // Step 2: Get a fresh live GPS fix and update display + cache.
       try {
         let lat: number, lon: number;
 
         if (Platform.OS === 'web') {
           if (!navigator?.geolocation) {
-            if (!cancelled) setWeather(prev => prev ?? FALLBACK);
+            if (!cancelled.current) setWeather(prev => prev ?? FALLBACK);
             return;
           }
           const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
@@ -117,11 +109,11 @@ export default function WeatherScreen() {
           const Location = await import('expo-location');
           const { status } = await Location.requestForegroundPermissionsAsync();
           if (status !== 'granted') {
-            if (!cancelled) {
+            if (!cancelled.current) {
               setPermissionDenied(true);
-              // Only fall back to FALLBACK if cached coords didn't already populate weather
               setWeather(prev => prev ?? FALLBACK);
             }
+            gpsDone.current = true;
             return;
           }
           const pos = await Location.getCurrentPositionAsync({
@@ -131,27 +123,52 @@ export default function WeatherScreen() {
           lon = pos.coords.longitude;
         }
 
-        if (cancelled) return;
+        if (cancelled.current) return;
+        gpsCoords.current = { lat, lon };
+        gpsDone.current = true;
+
         try {
           const data = await fetchWeatherForCoords(lat, lon);
-          if (!cancelled) setWeather(data);
-        } catch {
-          if (!cancelled) setWeather(prev => prev ?? FALLBACK);
+          if (!cancelled.current) setWeather(data);
+        } catch (e) {
+          console.warn('[weather] GPS fetch failed:', e);
+          if (!cancelled.current) setWeather(prev => prev ?? FALLBACK);
         }
 
         // Persist coords for instant display next open
         if (user?.id) {
           cacheCoords(user.id, lat, lon);
         }
-      } catch {
-        if (!cancelled) setWeather(prev => prev ?? FALLBACK);
+      } catch (e) {
+        console.warn('[weather] GPS error:', e);
+        if (!cancelled.current) setWeather(prev => prev ?? FALLBACK);
+        gpsDone.current = true;
       }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    return () => {
-      cancelled = true;
-      clearTimeout(fallbackTimer);
-    };
+  // Effect 2: When settings load, use cached coords to show weather immediately —
+  // but only if GPS hasn't already resolved (to avoid overwriting a fresher result).
+  useEffect(() => {
+    if (settings === null) return;
+    const cachedLat = settings.weather_lat;
+    const cachedLon = settings.weather_lon;
+    if (cachedLat == null || cachedLon == null) return;
+    // If GPS already produced a result, skip — GPS data is fresher.
+    if (gpsDone.current && weather !== null) return;
+
+    (async () => {
+      try {
+        const data = await fetchWeatherForCoords(cachedLat, cachedLon);
+        // Only apply if GPS hasn't produced something already.
+        if (!cancelled.current) setWeather(prev => prev ?? data);
+      } catch (e) {
+        console.warn('[weather] cached coords fetch failed:', e);
+      }
+    })();
+  // weather is intentionally excluded — we only want to run this when settings loads.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
   const handleCoastIsClear = async () => {
