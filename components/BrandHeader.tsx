@@ -25,7 +25,12 @@ export default function BrandHeader({
   const router = useRouter();
   const segments = useSegments();
   const { profile, settings } = useAuth();
-  const temp = useWeather(settings?.weather_lat, settings?.weather_lon, profile?.id);
+  const privacyMode = settings?.stealth_mode_enabled ?? false;
+  const temp = useWeather(
+    privacyMode ? settings?.weather_lat : null,
+    privacyMode ? settings?.weather_lon : null,
+    privacyMode ? profile?.id : undefined,
+  );
 
   const handleLogoPress = () => {
     const insideTabs = segments.includes('(tabs)' as never);
@@ -44,11 +49,13 @@ export default function BrandHeader({
         <WarmupWordmark size={13} style={styles.wordmark} />
       </TouchableOpacity>
 
-      {/* Right: temp + avatar or custom slot */}
+      {/* Right: temp (Privacy Mode only) + avatar or custom slot */}
       <View style={styles.right}>
-        <TouchableOpacity onPress={() => router.replace('/weather')} activeOpacity={0.7} style={styles.tempBtn} disabled={!temp}>
-          <AppText style={styles.tempText}>{temp}</AppText>
-        </TouchableOpacity>
+        {privacyMode && (
+          <TouchableOpacity onPress={() => router.replace('/weather')} activeOpacity={0.7} style={styles.tempBtn}>
+            <AppText style={styles.tempText}>{temp}</AppText>
+          </TouchableOpacity>
+        )}
         {rightSlot ?? (
           avatarName && onAvatarPress ? (
             <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.85}>

@@ -17,7 +17,12 @@ interface TabHeaderProps {
 export default function TabHeader({ rightSlot }: TabHeaderProps) {
   const router = useRouter();
   const { profile, settings } = useAuth();
-  const temp = useWeather(settings?.weather_lat, settings?.weather_lon, profile?.id);
+  const privacyMode = settings?.stealth_mode_enabled ?? false;
+  const temp = useWeather(
+    privacyMode ? settings?.weather_lat : null,
+    privacyMode ? settings?.weather_lon : null,
+    privacyMode ? profile?.id : undefined,
+  );
 
   return (
     <View style={styles.container}>
@@ -26,9 +31,11 @@ export default function TabHeader({ rightSlot }: TabHeaderProps) {
         <WarmupWordmark size={13} />
       </TouchableOpacity>
       <View style={styles.right}>
-        <TouchableOpacity onPress={() => router.replace('/weather')} activeOpacity={0.7} style={styles.tempBtn} disabled={!temp}>
-          <AppText style={styles.tempText}>{temp}</AppText>
-        </TouchableOpacity>
+        {privacyMode && (
+          <TouchableOpacity onPress={() => router.replace('/weather')} activeOpacity={0.7} style={styles.tempBtn}>
+            <AppText style={styles.tempText}>{temp}</AppText>
+          </TouchableOpacity>
+        )}
         {rightSlot}
         <TouchableOpacity onPress={() => router.push('/(app)/account')} activeOpacity={0.85}>
           <Avatar name={profile?.display_name} uri={profile?.avatar_url} size="sm" bgColor="rgba(255,46,138,0.20)" />

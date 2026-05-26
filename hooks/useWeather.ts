@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 
@@ -35,11 +35,9 @@ export function useWeather(
   userId?: string,
 ): string {
   const [temp, setTemp] = useState<string>(sessionCachedTemp ?? '');
-  const mounted = useRef(true);
-  const resolvedRef = useRef(false);
 
   useEffect(() => {
-    mounted.current = true;
+    let cancelled = false;
 
     // Already have a session-level temp — apply immediately and skip all fetches.
     if (sessionCachedTemp) {
@@ -49,15 +47,14 @@ export function useWeather(
 
     (async () => {
       // Step 1: Use DB-cached coords for instant display.
-      // Cache the result in sessionCachedTemp right away so all other hook
-      // instances (BrandHeader, TabHeader) get it immediately on their next render.
-      if (cachedLat != null && cachedLon != null && !resolvedRef.current) {
+      // Write sessionCachedTemp immediately so every other hook instance picks
+      // it up on next render without waiting for GPS.
+      if (cachedLat != null && cachedLon != null) {
         try {
           const t = await fetchTempForCoords(cachedLat, cachedLon);
-          if (t) {
+          if (t && !cancelled) {
             sessionCachedTemp = t;
-            resolvedRef.current = true;
-            if (mounted.current) setTemp(t);
+            setTemp(t);
           }
         } catch (e) {
           console.warn('[useWeather] cached coords fetch failed:', e);
@@ -97,13 +94,12 @@ export function useWeather(
           }
         }
 
-        if (gpsDenied) return;
+        if (gpsDenied || cancelled) return;
 
         const t = await fetchTempForCoords(lat!, lon!);
-        if (t) {
+        if (t && !cancelled) {
           sessionCachedTemp = t;
-          resolvedRef.current = true;
-          if (mounted.current) setTemp(t);
+          setTemp(t);
         }
 
         if (userId) cacheCoords(userId, lat!, lon!);
@@ -112,8 +108,8 @@ export function useWeather(
       }
     })();
 
-    return () => { mounted.current = false; };
-  // Re-run once cached coords arrive from settings (settings load async after mount)
+    return () => { cancelled = true; };
+  // Re-run when cached coords arrive from settings (settings load async after mount)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cachedLat, cachedLon]);
 
