@@ -64,15 +64,17 @@ export default function TransitionScreen() {
   const navigate = () => {
     if (routed.current) return;
 
-    console.log('[transition] navigate called — loading:', loading, 'isAdmin:', isAdmin,
-      'user:', user?.id ?? 'null',
-      'couple:', couple ? `id=${couple.id} active=${couple.active}` : 'null',
-      'sub.loading:', subscriptionInfo.loading,
-      'sub.isPremium:', subscriptionInfo.isPremium,
-      'sub.isOnTrial:', subscriptionInfo.isOnTrial,
-      'settings.login_method:', settings?.login_method ?? 'null',
-      'settings.lock_after_seconds:', settings?.lock_after_seconds ?? 'null',
-    );
+    console.log('[TRANSITION DEBUG]', {
+      userId: user?.id ?? null,
+      isAdmin,
+      coupleId: couple?.id ?? null,
+      coupleActive: couple?.active ?? null,
+      subLoading: subscriptionInfo.loading,
+      isPremium: subscriptionInfo.isPremium,
+      isOnTrial: subscriptionInfo.isOnTrial,
+      loginMethod: settings?.login_method ?? null,
+      lockAfter: settings?.lock_after_seconds ?? null,
+    });
 
     // Admins bypass subscription checks entirely — never wait on sub loading.
     // If subscription info hasn't resolved yet for non-admins, defer to avoid

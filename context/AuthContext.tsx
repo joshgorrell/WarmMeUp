@@ -180,15 +180,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // is dead — clear all local state and treat as signed-out.
         if (event === 'INITIAL_SESSION') {
           (async () => {
+            console.log('[AUTH INITIAL_SESSION]', { userId: session.user.id, validating: true });
             const { error } = await supabase.auth.getUser();
             if (error) {
-              console.warn('[Auth] INITIAL_SESSION token invalid — clearing stale keychain session:', error.message);
+              console.warn('[AUTH INITIAL_SESSION]', { valid: false, userId: session.user.id, error: error.message });
               await clearUnlockedAt(session.user.id);
               // signOut flushes the stale token from Keychain/SecureStore and fires
               // a SIGNED_OUT event which clears React state via the else branch below.
               await supabase.auth.signOut();
               return;
             }
+            console.log('[AUTH INITIAL_SESSION]', { valid: true, userId: session.user.id });
             // Token is valid — proceed with normal startup load.
             setSession(session);
             setUser(session.user);

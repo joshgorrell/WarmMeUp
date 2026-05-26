@@ -60,37 +60,44 @@ export default function IndexScreen() {
 
     if (routedRef.current) return;
 
+    const bypass = settings.stealth_bypass_until;
+    const stealthEnabled = settings.stealth_mode_enabled ?? false;
+
+    console.log('[INDEX ROUTE DECISION]', {
+      stealthEnabled,
+      bypass,
+      bypassActive: bypass ? new Date(bypass) > new Date() : false,
+      loginMethod: settings.login_method ?? 'password',
+    });
+
     const goNext = async () => {
       if (routedRef.current) return;
       routedRef.current = true;
       const userId = session.user?.id;
       const loginMethod = settings.login_method ?? 'password';
-
       const needsGate = loginMethod !== 'password';
 
       if (needsGate) {
         const mustLock = lockIfNeeded();
+        const pinExists = loginMethod === 'pin' ? await hasPinStored(userId!) : true;
+        console.log('[INDEX ROUTE DECISION] gate', {
+          loginMethod,
+          mustLock,
+          pinExists,
+          destination: mustLock ? (pinExists ? '/unlock' : '/(auth)/setup-pin') : '/transition',
+        });
         if (mustLock) {
-          // If there's no PIN stored on this device (e.g. Expo Go reload, new device),
-          // send the user to setup-pin rather than showing a broken unlock screen.
-          const pinExists = loginMethod === 'pin' ? await hasPinStored(userId!) : true;
           router.replace(pinExists ? '/unlock' : '/(auth)/setup-pin');
         } else {
-          // Still within grace period — refresh the unlock timestamp and go in.
           unlockApp();
           router.replace('/transition');
         }
       } else {
-        // Password method — no gate, stamp unlock and go in.
+        console.log('[INDEX ROUTE DECISION] no gate → /transition');
         unlockApp();
         router.replace('/transition');
       }
     };
-
-    // Check stealth mode. Default is false — missing settings must not mean fake weather.
-    // Only show the weather cover screen when the authenticated user has explicitly enabled it.
-    const bypass = settings.stealth_bypass_until;
-    const stealthEnabled = settings.stealth_mode_enabled ?? false;
 
     if (!stealthEnabled) {
       goNext();
@@ -104,6 +111,7 @@ export default function IndexScreen() {
 
     // Stealth mode active — show weather cover screen.
     // weather.tsx handles the lock/PIN gate when the user taps "Coast is Clear".
+    console.log('[INDEX ROUTE DECISION] → /weather (stealth active, no bypass)');
     routedRef.current = true;
     router.replace('/weather');
   }, [loading, session, settings]);

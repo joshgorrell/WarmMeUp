@@ -1229,6 +1229,16 @@ export default function AccountScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Debug diagnostics — temporary production diagnostic tool */}
+      <TouchableOpacity
+        style={styles.debugRow}
+        onPress={() => router.push('/debug')}
+        activeOpacity={0.7}
+      >
+        <AppText style={styles.debugRowText}>Debug Diagnostics</AppText>
+        <ChevronRight color="#333" size={14} />
+      </TouchableOpacity>
+
       {/* Footer logo */}
       <View style={styles.footerLogoWrap}>
         <Image
@@ -2343,5 +2353,22 @@ const styles = StyleSheet.create({
   cancelInviteKeepText: {
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
+  },
+  debugRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    marginTop: Spacing.xs,
+    alignSelf: 'center',
+  },
+  debugRowText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#2a2a2f',
+    textDecorationLine: 'underline',
+    textDecorationColor: '#2a2a2f',
   },
 });

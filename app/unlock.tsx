@@ -85,13 +85,17 @@ export default function UnlockScreen() {
   }, [shakeAnim]);
 
   const proceed = useCallback(() => {
-    console.log('[unlock] proceed called at', Date.now());
+    console.log('[UNLOCK SUCCESS]', {
+      userId: user?.id,
+      loginMethod: settings?.login_method,
+      timestamp: Date.now(),
+    });
     // Block BackgroundLockManager from racing the navigation to /transition.
     isAuthenticatingRef.current = true;
     unlockApp();
     router.replace('/transition');
     setTimeout(() => { isAuthenticatingRef.current = false; }, 800);
-  }, [unlockApp, router, isAuthenticatingRef]);
+  }, [unlockApp, router, isAuthenticatingRef, user, settings]);
 
   const tryBiometric = useCallback(async () => {
     if (!bioAvailable) {

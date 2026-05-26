@@ -70,6 +70,13 @@ export default function WeatherScreen() {
   // SessionGuard in _layout.tsx handles the global case, but guard here too so
   // a stale navigation state or direct push can never strand a guest on this screen.
   useEffect(() => {
+    console.log('[WEATHER ENTRY]', {
+      userId: user?.id ?? session?.user?.id,
+      loginMethod: settings?.login_method,
+      stealthEnabled: settings?.stealth_mode_enabled,
+      stealthBypassUntil: settings?.stealth_bypass_until,
+      hasSession: !!session,
+    });
     if (!loading && !session) {
       router.replace('/(auth)/welcome');
     }
