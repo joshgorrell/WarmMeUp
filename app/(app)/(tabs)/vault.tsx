@@ -273,14 +273,8 @@ export default function VaultScreen() {
 
       if (subscriptionInfo.canInvite) {
         // Try to create a solo couple inline so the upload can proceed
-        const { generateInviteCode, codeExpiresAt } = await import('@/lib/inviteCode');
-        const code = generateInviteCode();
-        const { data: newCouple, error: createError } = await supabase
-          .from('couples')
-          .insert({ user_a_id: user.id, invite_code: code, active: true, invite_code_expires_at: codeExpiresAt() })
-          .select()
-          .single();
-        if (createError || !newCouple) {
+        const { data: rpcResult, error: createError } = await supabase.rpc('generate_invite_code');
+        if (createError || !rpcResult) {
           logDebugEvent('VAULT COUPLE MISSING', {
             reason: 'auto_create_failed',
             userId: user.id,
@@ -293,19 +287,19 @@ export default function VaultScreen() {
           );
           return;
         }
-        logDebugEvent('VAULT COUPLE CREATED', { coupleId: newCouple.id, inviteCode: newCouple.invite_code });
+        logDebugEvent('VAULT COUPLE CREATED', { coupleId: rpcResult.couple_id, inviteCode: rpcResult.invite_code });
         await refreshCouple();
         // couple state will update async — proceed with newCouple.id directly
         const ext = mimeToExtension(mimeType);
-        const storagePath = `${newCouple.id}/${user.id}/${Date.now()}.${ext}`;
+        const storagePath = `${rpcResult.couple_id}/${user.id}/${Date.now()}.${ext}`;
         setUploading(true);
         setUploadPct(0);
         setShowAdd(false);
         startSpin();
         try {
-          await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct), user.id, newCouple.id);
+          await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct), user.id, rpcResult.couple_id);
           const { error: dbError } = await supabase.from('vault_items').insert({
-            couple_id: newCouple.id, uploaded_by_user_id: user.id, media_type: mediaType,
+            couple_id: rpcResult.couple_id, uploaded_by_user_id: user.id, media_type: mediaType,
             storage_path: storagePath, storage_bucket: 'vault',
             allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
             allow_save: settings?.vault_allow_save_default ?? false,
@@ -316,7 +310,7 @@ export default function VaultScreen() {
             supabase.storage.from('vault').remove([storagePath]).catch(() => {});
             throw new Error(`Media uploaded but failed to save — ${dbError.message}`);
           }
-          awardPoints(newCouple.id, user.id, 5, 'Vault media added');
+          awardPoints(rpcResult.couple_id, user.id, 5, 'Vault media added');
           await load();
         } catch (e: any) {
           Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
