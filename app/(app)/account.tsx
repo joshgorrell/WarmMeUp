@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { generateInviteCode, codeExpiresAt, isCodeExpired } from '@/lib/inviteCode';
+import { logDebugEvent } from '@/lib/debugLog';
 import { FontSize, Spacing, Radius, Gradient } from '@/constants/theme';
 import Toggle from '@/components/Toggle';
 import AppShell from '@/components/AppShell';
@@ -590,23 +591,40 @@ export default function AccountScreen() {
       // No solo couple row exists — create one since user has permission to invite
       const createdCode = generateInviteCode();
       const createdExpiry = codeExpiresAt();
+      const insertPayload = {
+        user_a_id: user.id,
+        user_b_id: null,
+        active: true,
+        invite_code: createdCode,
+        invite_code_expires_at: createdExpiry,
+        subscription_owner_id: user.id,
+        points_enabled: true,
+        streaks_enabled: true,
+      };
+      logDebugEvent('INVITE CREATE START', { source: 'handleRefreshCode', userId: user.id, payload: insertPayload });
       const { data: created, error: createError } = await supabase
         .from('couples')
-        .insert({
-          user_a_id: user.id,
-          active: true,
-          invite_code: createdCode,
-          invite_code_expires_at: createdExpiry,
-          subscription_owner_id: user.id,
-        })
+        .insert(insertPayload)
         .select()
         .single();
       if (createError || !created) {
-        console.error('[handleRefreshCode] couple insert failed:', JSON.stringify(createError));
-        Alert.alert('Error', 'Could not create invite record. Please try again.');
+        logDebugEvent('INVITE CREATE ERROR', {
+          source: 'handleRefreshCode',
+          userId: user.id,
+          code: createError?.code ?? null,
+          message: createError?.message ?? null,
+          details: createError?.details ?? null,
+          hint: createError?.hint ?? null,
+          status: (createError as any)?.status ?? null,
+        });
+        Alert.alert(
+          'Error',
+          `Could not create invite record.\nCode: ${createError?.code ?? 'n/a'}\n${createError?.message ?? 'Unknown error'}${createError?.details ? `\nDetails: ${createError.details}` : ''}${createError?.hint ? `\nHint: ${createError.hint}` : ''}`
+        );
         setCodeRefreshing(false);
         return;
       }
+      logDebugEvent('INVITE CREATE SUCCESS', { source: 'handleRefreshCode', coupleId: created.id, inviteCode: created.invite_code });
       patchCouple({ invite_code: created.invite_code, invite_code_expires_at: created.invite_code_expires_at });
       try { await refreshCouple(); } catch {}
       setCodeRefreshing(false);
@@ -695,16 +713,47 @@ export default function AccountScreen() {
     if (!user || creatingCouple) return;
     if (couple?.invite_code) { handleShareCode(); return; }
     setCreatingCouple(true);
+    const code = generateInviteCode();
+    const expiry = codeExpiresAt();
+    const insertPayload = {
+      user_a_id: user.id,
+      user_b_id: null,
+      active: true,
+      invite_code: code,
+      invite_code_expires_at: expiry,
+      subscription_owner_id: user.id,
+      points_enabled: true,
+      streaks_enabled: true,
+    };
+    logDebugEvent('INVITE CREATE START', { source: 'handleInvitePartner', userId: user.id, payload: insertPayload });
     try {
-      const code = generateInviteCode();
-      const { error } = await supabase.from('couples').insert({ user_a_id: user.id, invite_code: code, active: true });
-      if (error) throw error;
+      const { data: created, error } = await supabase
+        .from('couples')
+        .insert(insertPayload)
+        .select()
+        .single();
+      if (error) {
+        logDebugEvent('INVITE CREATE ERROR', {
+          source: 'handleInvitePartner',
+          userId: user.id,
+          code: error.code ?? null,
+          message: error.message ?? null,
+          details: error.details ?? null,
+          hint: error.hint ?? null,
+          status: (error as any)?.status ?? null,
+        });
+        Alert.alert(
+          'Error',
+          `Could not create invite code.\nCode: ${error.code ?? 'n/a'}\n${error.message ?? 'Unknown error'}${error.details ? `\nDetails: ${error.details}` : ''}${error.hint ? `\nHint: ${error.hint}` : ''}`
+        );
+        return;
+      }
+      logDebugEvent('INVITE CREATE SUCCESS', { source: 'handleInvitePartner', coupleId: created?.id, inviteCode: created?.invite_code });
       await refreshCouple();
       const msg = `Join me on Warm Me Up! Use this code to connect: ${code}`;
       if (Platform.OS === 'web') { navigator.clipboard?.writeText(code); Alert.alert('Code copied!', msg); }
       else await Share.share({ message: msg });
-    } catch { Alert.alert('Error', 'Could not create invite code. Please try again.'); }
-    finally { setCreatingCouple(false); }
+    } finally { setCreatingCouple(false); }
   };
 
   const handleTogglePoints = async (enabled: boolean) => {
