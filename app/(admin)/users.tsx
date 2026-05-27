@@ -32,10 +32,13 @@ export default function UsersAdmin() {
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('id, display_name, is_admin, is_super_admin, created_at')
       .order('created_at', { ascending: true });
+    if (error) {
+      console.error('[ADMIN USERS LOAD ERROR]', error.message);
+    }
     setUsers(data ?? []);
     setLoading(false);
   }, []);

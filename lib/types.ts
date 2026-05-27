@@ -224,7 +224,7 @@ export type WishCategory =
   | 'Intimate'
   | 'Someday';
 
-export type SubscriptionSource = 'self' | 'partner' | 'none';
+export type SubscriptionSource = 'self' | 'partner' | 'none' | 'admin_grant';
 
 export interface SubscriptionInfo {
   isPremium: boolean;

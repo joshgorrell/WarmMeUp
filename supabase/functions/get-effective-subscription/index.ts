@@ -15,6 +15,13 @@ interface SubscriptionRow {
   trial_started_at: string | null;
 }
 
+interface AdminGrantRow {
+  user_id: string;
+  entitlement_type: string;
+  expires_at: string | null;
+  active: boolean;
+}
+
 function isActive(row: SubscriptionRow | null): boolean {
   if (!row) return false;
   if (row.status !== "active") return false;
@@ -24,6 +31,13 @@ function isActive(row: SubscriptionRow | null): boolean {
 
 function isPaidPlan(plan: string): boolean {
   return plan === "monthly" || plan === "yearly";
+}
+
+function isGrantActive(grant: AdminGrantRow | null): boolean {
+  if (!grant) return false;
+  if (!grant.active) return false;
+  if (grant.expires_at && new Date(grant.expires_at) < new Date()) return false;
+  return true;
 }
 
 Deno.serve(async (req: Request) => {
@@ -73,7 +87,29 @@ Deno.serve(async (req: Request) => {
           expiresAt: ownSub!.expires_at,
           isOnTrial: ownSub!.plan === "trial",
           trialExpiresAt: ownSub!.plan === "trial" ? ownSub!.expires_at : null,
-          // Trial users can still invite — they have full access during the trial period
+          canInvite: true,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check for an active admin grant (manual/comped access)
+    const { data: adminGrant } = await adminClient
+      .from("admin_grants")
+      .select("user_id, entitlement_type, expires_at, active")
+      .eq("user_id", user.id)
+      .eq("active", true)
+      .maybeSingle();
+
+    if (isGrantActive(adminGrant)) {
+      return new Response(
+        JSON.stringify({
+          isPremium: true,
+          source: "admin_grant",
+          plan: adminGrant!.entitlement_type,
+          expiresAt: adminGrant!.expires_at,
+          isOnTrial: false,
+          trialExpiresAt: null,
           canInvite: true,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -98,8 +134,6 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         if (isActive(partnerSub) && isPaidPlan(partnerSub!.plan)) {
-          // Partner has a paid subscription — user inherits premium access.
-          // canInvite is false: to generate a new code they need their own paid sub.
           return new Response(
             JSON.stringify({
               isPremium: true,

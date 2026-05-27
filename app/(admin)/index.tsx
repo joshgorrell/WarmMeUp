@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
-import { FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity, CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2, Star, UserCog, Bug } from 'lucide-react-native';
+import { FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity, CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2, Star, UserCog, Bug, ShieldCheck } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -39,6 +39,7 @@ export default function AdminDashboard() {
   const [debugToggleLoading, setDebugToggleLoading] = useState(false);
 
   useEffect(() => {
+    console.log('[ADMIN LOAD START]');
     fetchStats();
     fetchDebugMode();
   }, []);
@@ -145,6 +146,10 @@ export default function AdminDashboard() {
       supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'tell_me'),
       supabase.from('wishes').select('id', { count: 'exact', head: true }),
     ]);
+    const hasError = [couples, profiles, interactions, dice, dares, tellMe, wishes].find(r => r.error);
+    if (hasError?.error) {
+      console.error('[ADMIN LOAD ERROR]', hasError.error.message);
+    }
     setStats({
       coupleCount: couples.count ?? 0,
       userCount: profiles.count ?? 0,
@@ -202,6 +207,15 @@ export default function AdminDashboard() {
       bg: 'rgba(96,200,255,0.10)',
       border: 'rgba(96,200,255,0.25)',
       route: '/(admin)/users',
+    },
+    {
+      label: 'Entitlements',
+      sub: 'Grant or revoke free premium access to users',
+      icon: <ShieldCheck color="#33D17A" size={22} strokeWidth={2} />,
+      color: '#33D17A',
+      bg: 'rgba(51,209,122,0.10)',
+      border: 'rgba(51,209,122,0.25)',
+      route: '/(admin)/entitlements',
     },
   ];
 

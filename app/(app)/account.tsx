@@ -345,7 +345,7 @@ const rua = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────
 export default function AccountScreen() {
   const router = useRouter();
-  const { profile, partnerProfile, couple, signOut, isAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple, patchCouple, subscriptionInfo, refreshSubscription } = useAuth();
+  const { profile, partnerProfile, couple, signOut, isAdmin, isSuperAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple, patchCouple, subscriptionInfo, refreshSubscription } = useAuth();
   const { colors } = useTheme();
   const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
 
@@ -578,6 +578,33 @@ export default function AccountScreen() {
           patchCouple({ invite_code: live.invite_code });
         }
       }
+    }
+
+    if (!targetId && user?.id) {
+      // No solo couple row exists — create one since user has permission to invite
+      const createdCode = generateInviteCode();
+      const createdExpiry = codeExpiresAt();
+      const { data: created, error: createError } = await supabase
+        .from('couples')
+        .insert({
+          user_a_id: user.id,
+          active: true,
+          invite_code: createdCode,
+          invite_code_expires_at: createdExpiry,
+          subscription_owner_id: user.id,
+        })
+        .select()
+        .single();
+      if (createError || !created) {
+        console.error('[handleRefreshCode] couple insert failed:', JSON.stringify(createError));
+        Alert.alert('Error', 'Could not create invite record. Please try again.');
+        setCodeRefreshing(false);
+        return;
+      }
+      patchCouple({ invite_code: created.invite_code, invite_code_expires_at: created.invite_code_expires_at });
+      try { await refreshCouple(); } catch {}
+      setCodeRefreshing(false);
+      return;
     }
 
     if (!targetId) {
@@ -1181,17 +1208,30 @@ export default function AccountScreen() {
           </TouchableOpacity>
         </View>
       ) : !couple?.user_b_id && !subscriptionInfo.canInvite && !subscriptionInfo.loading ? (
-        <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+        <TouchableOpacity
+          style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+          onPress={() => {
+            if (isAdmin || isSuperAdmin) {
+              router.push('/(admin)/entitlements' as any);
+            } else {
+              router.push('/(auth)/subscription');
+            }
+          }}
+          activeOpacity={0.8}
+        >
           <View style={styles.inviteHeader}>
             <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
               <UserPlus color="#FFB347" size={18} strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
               <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>INVITE YOUR PARTNER</AppText>
-              <AppText style={[styles.inviteHint, { color: colors.textSecondary }]}>Subscribe to invite someone</AppText>
+              <AppText style={[styles.inviteHint, { color: colors.textSecondary }]}>
+                {(isAdmin || isSuperAdmin) ? 'Manage Access' : 'Subscribe to Invite Someone'}
+              </AppText>
             </View>
+            <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
           </View>
-        </View>
+        </TouchableOpacity>
       ) : null}
 
       {/* Profile menu */}
