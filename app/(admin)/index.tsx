@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
@@ -47,12 +48,18 @@ export default function AdminDashboard() {
   const [diagRunning, setDiagRunning] = useState(false);
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [debugToggleLoading, setDebugToggleLoading] = useState(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useFocusEffect(useCallback(() => {
     console.log('[ADMIN LOAD START] user:', user?.id, 'is_admin:', profile?.is_admin, 'is_super_admin:', profile?.is_super_admin);
     fetchStats();
     fetchDebugMode();
-  }, []);
+  }, []));
 
   const fetchDebugMode = async () => {
     const { data } = await supabase
@@ -75,7 +82,11 @@ export default function AdminDashboard() {
   };
 
   const fetchStats = async () => {
+    if (!mountedRef.current) return;
     setStatsError(null);
+    // Only show full spinner on first load (all counts null). On re-focus keep existing numbers visible.
+    const isFirstLoad = stats.coupleCount === null && stats.userCount === null;
+    if (isFirstLoad) setLoading(true);
     try {
       const [couples, profiles, interactions, dice, dares, tellMe, wishes] = await Promise.all([
         supabase.from('couples').select('id', { count: 'exact', head: true }),
@@ -86,6 +97,8 @@ export default function AdminDashboard() {
         supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'tell_me'),
         supabase.from('wishes').select('id', { count: 'exact', head: true }),
       ]);
+
+      if (!mountedRef.current) return;
 
       const firstError = [couples, profiles, interactions, dice, dares, tellMe, wishes].find(r => r.error);
       if (firstError?.error) {
@@ -106,9 +119,9 @@ export default function AdminDashboard() {
       });
     } catch (err: any) {
       console.error('[ADMIN LOAD ERROR]', err?.message);
-      setStatsError(err?.message ?? 'Failed to load stats');
+      if (mountedRef.current) setStatsError(err?.message ?? 'Failed to load stats');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 

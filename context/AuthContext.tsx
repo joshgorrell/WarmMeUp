@@ -162,7 +162,9 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
   try {
     const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
     if (!baseUrl.startsWith('https://')) return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
-    const res = await fetch(`${baseUrl}/functions/v1/get-effective-subscription`, {
+    const url = `${baseUrl}/functions/v1/get-effective-subscription`;
+    console.log('[Subscription] fetching:', url);
+    const res = await fetch(url, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -170,8 +172,19 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
         'Content-Type': 'application/json',
       },
     });
-    if (!res.ok) return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
-    const data = await res.json();
+    console.log('[Subscription] response status:', res.status, res.statusText);
+    const rawText = await res.text();
+    console.log('[Subscription] response body:', rawText);
+    if (!res.ok) {
+      console.warn('[Subscription] non-OK response — returning default');
+      return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
+    }
+    let data: any;
+    try { data = JSON.parse(rawText); } catch {
+      console.warn('[Subscription] JSON parse failed');
+      return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
+    }
+    console.log('[Subscription] parsed — isPremium:', data.isPremium, 'source:', data.source, 'plan:', data.plan, 'canInvite:', data.canInvite);
     return {
       isPremium: data.isPremium ?? false,
       source: data.source ?? 'none',
@@ -183,7 +196,8 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
       canInvite: data.canInvite ?? false,
       loading: false,
     };
-  } catch {
+  } catch (err: any) {
+    console.error('[Subscription] fetch error:', err?.message);
     return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
   }
 }
