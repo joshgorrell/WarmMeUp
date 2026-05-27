@@ -233,8 +233,7 @@ export default function AdminDashboard() {
   };
 
   const statVal = (v: number | null) => {
-    if (loading) return '—';
-    if (v === null) return '!';
+    if (v === null) return loading ? '—' : '!';
     return String(v);
   };
 

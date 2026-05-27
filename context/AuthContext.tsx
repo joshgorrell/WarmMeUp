@@ -158,6 +158,35 @@ async function clearUnlockedAt(userId: string): Promise<void> {
   } catch {}
 }
 
+/**
+ * If the edge function returns canInvite=false for a known admin/super-admin,
+ * override the result client-side. This guards against stale Deno containers
+ * that haven't picked up the latest deployment.
+ * userId is checked against the profiles table separately — here we just
+ * re-read the profile from the Supabase client (uses the authenticated session).
+ */
+async function applyAdminOverrideAsync(info: SubscriptionInfo, userId: string): Promise<SubscriptionInfo> {
+  if (info.canInvite && info.isPremium) return info; // already correct, skip
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('is_admin, is_super_admin')
+      .eq('id', userId)
+      .maybeSingle();
+    if (data?.is_admin === true || data?.is_super_admin === true) {
+      return {
+        ...info,
+        isPremium: true,
+        canInvite: true,
+        source: data.is_super_admin ? 'super_admin' : 'admin',
+        plan: 'admin',
+        loading: false,
+      };
+    }
+  } catch {}
+  return info;
+}
+
 async function fetchEffectiveSubscription(accessToken: string): Promise<SubscriptionInfo> {
   try {
     const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
@@ -335,9 +364,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Load subscription info — fire after other data so we don't block the UI gate
       if (accessToken) {
-        fetchEffectiveSubscription(accessToken).then(info => {
+        fetchEffectiveSubscription(accessToken).then(async info => {
           console.log('[Auth] subscriptionInfo resolved:', JSON.stringify(info));
-          setSubscriptionInfo(info);
+          // Safety net: if the edge function still returns canInvite=false for an
+          // admin/super-admin user (e.g. stale Deno container), override client-side.
+          const adminOverride = await applyAdminOverrideAsync(info, userId);
+          if (adminOverride !== info) {
+            console.log('[Auth] admin override applied — canInvite forced true');
+          }
+          setSubscriptionInfo(adminOverride);
         });
       } else {
         console.log('[Auth] no accessToken — subscription set to default (not loading)');
@@ -521,9 +556,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { session: currentSession } } = await supabase.auth.getSession();
     const accessToken = currentSession?.access_token ?? '';
     if (!accessToken) return;
+    const userId = currentSession?.user?.id ?? '';
     setSubscriptionInfo(prev => ({ ...prev, loading: true }));
     const info = await fetchEffectiveSubscription(accessToken);
-    setSubscriptionInfo(info);
+    const overridden = await applyAdminOverrideAsync(info, userId);
+    setSubscriptionInfo(overridden);
   }, []);
 
   const isAdmin = profile?.is_admin === true;

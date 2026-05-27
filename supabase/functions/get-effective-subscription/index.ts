@@ -93,14 +93,14 @@ Deno.serve(async (req: Request) => {
           trialExpiresAt: null,
           canInvite: true,
           trialExpired: false,
-          // debug
           checkedSuperAdmin: true,
           checkedAdminGrant: false,
           adminGrantFound: false,
           finalSource: source,
           finalCanInvite: true,
           finalIsPremium: true,
-          _v: "2026-05-27b",
+          _v: "2026-05-27c",
+          _ts: new Date().toISOString(),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -231,12 +231,13 @@ Deno.serve(async (req: Request) => {
         finalSource: "none",
         finalCanInvite: false,
         finalIsPremium: false,
-        _v: "2026-05-27b",
+        _v: "2026-05-27c",
+        _ts: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (_err) {
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
+  } catch (err) {
+    return new Response(JSON.stringify({ error: "Internal server error", _detail: String(err), _v: "2026-05-27c", _ts: new Date().toISOString() }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
