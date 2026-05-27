@@ -125,6 +125,19 @@ export default function StatsAdmin() {
     const fromTs = range.from ? `${range.from}T00:00:00.000Z` : null;
     const toTs   = range.to   ? `${range.to}T23:59:59.999Z`   : null;
 
+    const TIMEOUT_MS = 15_000;
+
+    async function runQuery<T>(
+      name: string,
+      builder: PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>,
+    ): Promise<{ name: string; data: T | null; error: { code?: string; message: string } | null }> {
+      const timeout = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: `Timed out after ${TIMEOUT_MS / 1000}s` } }), TIMEOUT_MS),
+      );
+      const result = await Promise.race([builder, timeout]);
+      return { name, ...result };
+    }
+
     let intQ = supabase.from('interactions').select('couple_id, type, status');
     if (fromTs) intQ = intQ.gte('created_at', fromTs);
     if (toTs)   intQ = intQ.lte('created_at', toTs);
@@ -147,28 +160,23 @@ export default function StatsAdmin() {
       monthlyQ = monthlyQ.or(`year.lt.${t.year},and(year.eq.${t.year},month.lte.${t.month})`);
     }
 
-    const [couplesRes, interactionsRes, scoresRes, profilesRes, chatRes, monthlyRes, wishRes] = await Promise.all([
-      supabase.from('couples').select('id, user_a_id, user_b_id'),
-      intQ,
-      supabase.from('scores').select('user_id, points').order('points', { ascending: false }).limit(10),
-      supabase.from('profiles').select('id, display_name'),
-      chatQ,
-      monthlyQ,
-      wishQ,
+    const results = await Promise.all([
+      runQuery('couples',       supabase.from('couples').select('id, user_a_id, user_b_id')),
+      runQuery('interactions',  intQ),
+      runQuery('scores',        supabase.from('scores').select('user_id, points').order('points', { ascending: false }).limit(10)),
+      runQuery('profiles',      supabase.from('profiles').select('id, display_name')),
+      runQuery('chat_messages', chatQ),
+      runQuery('monthly_scores',monthlyQ),
+      runQuery('wishes',        wishQ),
     ]);
 
     const errs: { query: string; code?: string; message: string }[] = [];
-    const check = (name: string, err: { code?: string; message: string } | null) => {
-      if (err) errs.push({ query: name, code: err.code, message: err.message });
-    };
-    check('couples',      couplesRes.error);
-    check('interactions', interactionsRes.error);
-    check('scores',       scoresRes.error);
-    check('profiles',     profilesRes.error);
-    check('chat_messages',chatRes.error);
-    check('monthly_scores',monthlyRes.error);
-    check('wishes',       wishRes.error);
+    for (const r of results) {
+      if (r.error) errs.push({ query: r.name, code: (r.error as { code?: string }).code, message: r.error.message });
+    }
     setQueryErrors(errs);
+
+    const [couplesRes, interactionsRes, scoresRes, profilesRes, chatRes, monthlyRes, wishRes] = results;
 
     const couples      = couplesRes.data      ?? [];
     const interactions = interactionsRes.data  ?? [];
