@@ -568,6 +568,7 @@ export default function AccountScreen() {
         .select('id, invite_code, user_b_id')
         .eq('user_a_id', user.id)
         .is('user_b_id', null)
+        .eq('active', true)
         .maybeSingle();
       if (live?.id) {
         targetId = live.id;
@@ -657,7 +658,7 @@ export default function AccountScreen() {
     setCreatingCouple(true);
     try {
       const code = generateInviteCode();
-      const { error } = await supabase.from('couples').insert({ user_a_id: user.id, invite_code: code, active: false });
+      const { error } = await supabase.from('couples').insert({ user_a_id: user.id, invite_code: code, active: true });
       if (error) throw error;
       await refreshCouple();
       const msg = `Join me on Warm Me Up! Use this code to connect: ${code}`;

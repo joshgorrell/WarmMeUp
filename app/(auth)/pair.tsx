@@ -135,6 +135,7 @@ export default function PairScreen() {
       .select('*')
       .eq('user_a_id', user.id)
       .is('user_b_id', null)
+      .eq('active', true)
       .maybeSingle();
 
     if (existing) {
@@ -177,7 +178,7 @@ export default function PairScreen() {
   const handleRefreshCode = async () => {
     if (!couple?.id || refreshing || couple.user_b_id) return;
     if (!subscriptionInfo.canInvite) {
-      Alert.alert('Subscription Required', 'Subscribe to invite your partner. Your partner joins at no extra cost.');
+      router.push('/(auth)/subscription');
       return;
     }
     setRefreshing(true);
