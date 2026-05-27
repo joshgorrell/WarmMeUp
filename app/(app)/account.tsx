@@ -479,6 +479,13 @@ export default function AccountScreen() {
     })();
   }, [user?.id, couple?.invite_code]));
 
+  // Refresh subscription state every time this screen comes into focus so that
+  // returning from the entitlements or subscription screen immediately reflects
+  // any newly granted access.
+  useFocusEffect(useCallback(() => {
+    refreshSubscription();
+  }, []));
+
   const loadStats = async () => {
     if (!couple?.id || !user) return;
     const start = new Date();
@@ -1215,6 +1222,30 @@ export default function AccountScreen() {
           >
             <X color="rgba(255,90,90,0.70)" size={13} strokeWidth={2.2} />
             <AppText style={styles.cancelInviteText}>Cancel invite</AppText>
+          </TouchableOpacity>
+        </View>
+      ) : !couple?.user_b_id && subscriptionInfo.canInvite && !subscriptionInfo.loading ? (
+        // Authorized to invite but no code exists yet — let them generate one
+        <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)' }]}>
+          <View style={styles.inviteHeader}>
+            <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,46,138,0.12)' }]}>
+              <UserPlus color="#FF2E8A" size={18} strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>INVITE YOUR PARTNER</AppText>
+              <AppText style={[styles.inviteHint, { color: colors.textSecondary }]}>Generate a code to connect</AppText>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.inviteBtn, { borderColor: 'rgba(255,46,138,0.35)', backgroundColor: 'rgba(255,46,138,0.07)', alignSelf: 'stretch', justifyContent: 'center', gap: 8 }]}
+            onPress={handleRefreshCode}
+            activeOpacity={0.75}
+            disabled={codeRefreshing}
+          >
+            {codeRefreshing
+              ? <ActivityIndicator size="small" color="#FF2E8A" />
+              : <RefreshCw color="#FF2E8A" size={15} strokeWidth={2} />}
+            <AppText style={[styles.inviteBtnText, { color: '#FF2E8A' }]}>Generate Invite Code</AppText>
           </TouchableOpacity>
         </View>
       ) : !couple?.user_b_id && !subscriptionInfo.canInvite && !subscriptionInfo.loading ? (

@@ -17,6 +17,7 @@ import ScreenHeader from '@/components/ScreenHeader';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 
 interface AdminGrant {
   id: string;
@@ -48,6 +49,7 @@ const ENTITLEMENT_TYPES: { value: string; label: string }[] = [
 export default function EntitlementsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { user, refreshSubscription } = useAuth();
 
   const [searchEmail, setSearchEmail] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
@@ -226,6 +228,11 @@ export default function EntitlementsScreen() {
       }
 
       Alert.alert('Access Granted', `${searchResult.display_name} now has ${ENTITLEMENT_TYPES.find(t => t.value === grantType)?.label ?? grantType} access.`);
+      // If the admin granted themselves, refresh subscription state so the
+      // account screen immediately reflects canInvite = true on return.
+      if (searchResult.id === user?.id) {
+        await refreshSubscription();
+      }
       setSearchResult(null);
       setSearchEmail('');
       setGrantExpiry('');
