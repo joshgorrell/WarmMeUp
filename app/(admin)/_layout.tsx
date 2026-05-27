@@ -3,16 +3,19 @@ import { Stack, useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 
 export default function AdminLayout() {
-  const { profile, loading } = useAuth();
+  const { profile, isAdmin, isSuperAdmin, loading } = useAuth();
   const router = useRouter();
 
+  const hasAdminAccess = isAdmin || isSuperAdmin;
+
   useEffect(() => {
-    if (!loading && !profile?.is_admin) {
+    if (!loading && !hasAdminAccess) {
       router.replace('/(app)/(tabs)');
     }
-  }, [loading, profile]);
+  }, [loading, hasAdminAccess]);
 
-  if (loading || !profile?.is_admin) return null;
+  if (loading || !profile) return null;
+  if (!hasAdminAccess) return null;
 
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />

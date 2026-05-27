@@ -112,8 +112,8 @@ export default function EntitlementsScreen() {
   }, []);
 
   const handleSearch = async () => {
-    const email = searchEmail.trim().toLowerCase();
-    if (!email) return;
+    const query = searchEmail.trim();
+    if (!query) return;
     setSearchLoading(true);
     setSearchResult(null);
     setSearchError(null);
@@ -121,37 +121,51 @@ export default function EntitlementsScreen() {
     setGrantExpiry('');
 
     try {
-      // Search by display_name or pull via admin RPC — profiles don't have email in public schema.
-      // We match on auth.users via service role by searching profiles with admin privilege.
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, display_name')
-        .ilike('display_name', `%${email}%`)
-        .limit(5);
-
-      // Also try exact-ish match on ID if it looks like a UUID
       let matchedId: string | null = null;
       let matchedName = '';
 
-      if (profileError) {
-        setSearchError(profileError.message);
-        setSearchLoading(false);
-        return;
+      // Try exact email lookup via admin RPC first (searches auth.users)
+      const looksLikeEmail = query.includes('@');
+      if (looksLikeEmail) {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('admin_search_user_by_email', { p_email: query.toLowerCase() });
+        if (rpcError) {
+          console.error('[ADMIN ENTITLEMENTS ERROR] email RPC:', rpcError.message);
+          // Fall through to display name search
+        } else {
+          const found = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+          if (found?.user_id) {
+            matchedId = found.user_id;
+            matchedName = found.display_name ?? query;
+          }
+        }
       }
 
-      // If single result, use it. Otherwise try to find by checking subscriptions or grants matching email substring
-      if (profiles && profiles.length === 1) {
-        matchedId = profiles[0].id;
-        matchedName = profiles[0].display_name;
-      } else if (profiles && profiles.length > 1) {
-        // Return multiple results notice
-        setSearchError(`Found ${profiles.length} users matching "${email}". Try a more specific name.`);
-        setSearchLoading(false);
-        return;
-      } else {
-        setSearchError(`No user found matching "${email}".`);
-        setSearchLoading(false);
-        return;
+      // Fall back to display name search if email lookup found nothing
+      if (!matchedId) {
+        const { data: profiles, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, display_name')
+          .ilike('display_name', `%${query}%`)
+          .limit(5);
+
+        if (profileError) {
+          setSearchError(profileError.message);
+          setSearchLoading(false);
+          return;
+        }
+
+        if (profiles && profiles.length === 1) {
+          matchedId = profiles[0].id;
+          matchedName = profiles[0].display_name;
+        } else if (profiles && profiles.length > 1) {
+          setSearchError(`Found ${profiles.length} users matching "${query}". Try a more specific name or use their email.`);
+          setSearchLoading(false);
+          return;
+        } else {
+          setSearchError(`No user found matching "${query}". Try their email address for an exact lookup.`);
+          setSearchLoading(false);
+          return;
+        }
       }
 
       // Get current grant
@@ -293,7 +307,7 @@ export default function EntitlementsScreen() {
           <Search color={colors.textMuted} size={16} strokeWidth={2} />
           <TextInput
             style={[styles.searchInput, { color: colors.text }]}
-            placeholder="Search by display name..."
+            placeholder="Search by email or display name..."
             placeholderTextColor={colors.textMuted}
             value={searchEmail}
             onChangeText={setSearchEmail}
