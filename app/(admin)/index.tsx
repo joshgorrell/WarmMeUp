@@ -3,6 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
+import { logDebugEvent } from '@/lib/debugLog';
 import {
   FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity,
   CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2,
@@ -16,15 +17,32 @@ import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
 import Toggle from '@/components/Toggle';
 
-interface Stats {
-  coupleCount: number | null;
-  userCount: number | null;
-  interactionCount: number | null;
-  diceCount: number | null;
-  dareCount: number | null;
-  tellMeCount: number | null;
-  wishCount: number | null;
+interface StatEntry {
+  value: number | null;
+  error: string | null;
+  loading: boolean;
 }
+
+interface Stats {
+  coupleCount: StatEntry;
+  userCount: StatEntry;
+  interactionCount: StatEntry;
+  diceCount: StatEntry;
+  dareCount: StatEntry;
+  tellMeCount: StatEntry;
+  wishCount: StatEntry;
+}
+
+const LOADING_STAT: StatEntry = { value: null, error: null, loading: true };
+const initialStats = (): Stats => ({
+  coupleCount: { ...LOADING_STAT },
+  userCount: { ...LOADING_STAT },
+  interactionCount: { ...LOADING_STAT },
+  diceCount: { ...LOADING_STAT },
+  dareCount: { ...LOADING_STAT },
+  tellMeCount: { ...LOADING_STAT },
+  wishCount: { ...LOADING_STAT },
+});
 
 type DiagCheck = { name: string; status: 'pending' | 'pass' | 'fail'; detail?: string };
 
@@ -33,15 +51,7 @@ export default function AdminDashboard() {
   const { colors } = useTheme();
   const { profile, user } = useAuth();
 
-  const [stats, setStats] = useState<Stats>({
-    coupleCount: null,
-    userCount: null,
-    interactionCount: null,
-    diceCount: null,
-    dareCount: null,
-    tellMeCount: null,
-    wishCount: null,
-  });
+  const [stats, setStats] = useState<Stats>(initialStats());
   const [loading, setLoading] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [diag, setDiag] = useState<DiagCheck[]>([]);
@@ -81,47 +91,48 @@ export default function AdminDashboard() {
     setDebugToggleLoading(false);
   };
 
+  const fetchOneStat = async (
+    key: keyof Stats,
+    queryFn: () => PromiseLike<{ count: number | null; error: any }>,
+  ) => {
+    if (!mountedRef.current) return;
+    setStats(prev => ({ ...prev, [key]: { value: prev[key].value, error: null, loading: true } }));
+    try {
+      const { count, error } = await queryFn();
+      if (!mountedRef.current) return;
+      if (error) {
+        logDebugEvent('ADMIN STATS ERROR', { stat: key, code: error.code, message: error.message, details: error.details });
+        setStats(prev => ({ ...prev, [key]: { value: null, error: error.message, loading: false } }));
+      } else {
+        setStats(prev => ({ ...prev, [key]: { value: count ?? 0, error: null, loading: false } }));
+      }
+    } catch (err: any) {
+      if (!mountedRef.current) return;
+      logDebugEvent('ADMIN STATS ERROR', { stat: key, message: err?.message });
+      setStats(prev => ({ ...prev, [key]: { value: null, error: err?.message ?? 'Failed', loading: false } }));
+    }
+  };
+
   const fetchStats = async () => {
     if (!mountedRef.current) return;
     setStatsError(null);
-    // Only show full spinner on first load (all counts null). On re-focus keep existing numbers visible.
-    const isFirstLoad = stats.coupleCount === null && stats.userCount === null;
-    if (isFirstLoad) setLoading(true);
-    try {
-      const [couples, profiles, interactions, dice, dares, tellMe, wishes] = await Promise.all([
-        supabase.from('couples').select('id', { count: 'exact', head: true }),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }),
-        supabase.from('interactions').select('id', { count: 'exact', head: true }),
-        supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dice'),
-        supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dare'),
-        supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'tell_me'),
-        supabase.from('wishes').select('id', { count: 'exact', head: true }),
-      ]);
+    setLoading(true);
+    logDebugEvent('ADMIN STATS START', { userId: user?.id ?? null });
 
-      if (!mountedRef.current) return;
+    // Fire all 7 queries independently — a failure in one doesn't kill the rest
+    await Promise.allSettled([
+      fetchOneStat('coupleCount', () => supabase.from('couples').select('id', { count: 'exact', head: true })),
+      fetchOneStat('userCount', () => supabase.from('profiles').select('id', { count: 'exact', head: true })),
+      fetchOneStat('interactionCount', () => supabase.from('interactions').select('id', { count: 'exact', head: true })),
+      fetchOneStat('diceCount', () => supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dice')),
+      fetchOneStat('dareCount', () => supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dare')),
+      fetchOneStat('tellMeCount', () => supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'tell_me')),
+      fetchOneStat('wishCount', () => supabase.from('wishes').select('id', { count: 'exact', head: true })),
+    ]);
 
-      const firstError = [couples, profiles, interactions, dice, dares, tellMe, wishes].find(r => r.error);
-      if (firstError?.error) {
-        console.error('[ADMIN COUNTS ERROR]', firstError.error.message, firstError.error.code);
-        setStatsError(firstError.error.message);
-      } else {
-        console.log('[ADMIN LOAD SUCCESS] couples:', couples.count, 'users:', profiles.count);
-      }
-
-      setStats({
-        coupleCount: couples.error ? null : (couples.count ?? 0),
-        userCount: profiles.error ? null : (profiles.count ?? 0),
-        interactionCount: interactions.error ? null : (interactions.count ?? 0),
-        diceCount: dice.error ? null : (dice.count ?? 0),
-        dareCount: dares.error ? null : (dares.count ?? 0),
-        tellMeCount: tellMe.error ? null : (tellMe.count ?? 0),
-        wishCount: wishes.error ? null : (wishes.count ?? 0),
-      });
-    } catch (err: any) {
-      console.error('[ADMIN LOAD ERROR]', err?.message);
-      if (mountedRef.current) setStatsError(err?.message ?? 'Failed to load stats');
-    } finally {
-      if (mountedRef.current) setLoading(false);
+    if (mountedRef.current) {
+      setLoading(false);
+      console.log('[ADMIN LOAD COMPLETE]');
     }
   };
 
@@ -232,13 +243,14 @@ export default function AdminDashboard() {
     setDiagRunning(false);
   };
 
-  const statVal = (v: number | null) => {
-    if (v === null) return loading ? '—' : '!';
-    return String(v);
+  const statVal = (entry: StatEntry) => {
+    if (entry.loading) return '—';
+    if (entry.error) return '!';
+    return String(entry.value ?? 0);
   };
 
-  const statColor = (v: number | null, base: string) =>
-    v === null ? colors.danger : base;
+  const statColor = (entry: StatEntry, base: string) =>
+    entry.error ? colors.danger : base;
 
   const navItems = [
     {
@@ -334,53 +346,68 @@ export default function AdminDashboard() {
           </TouchableOpacity>
         ) : null}
 
-        {/* Stats row */}
+        {/* Stats row — each card is independently tappable to retry */}
         <View style={styles.statsRow}>
-          {loading ? (
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle, flex: 1 }]}>
-              <ActivityIndicator color={colors.textMuted} size="small" />
-            </View>
-          ) : (
-            <>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: stats.coupleCount === null ? 'rgba(255,90,90,0.35)' : colors.borderSubtle }]}>
-                <AppText style={[styles.statNum, { color: statColor(stats.coupleCount, colors.text) }]}>{statVal(stats.coupleCount)}</AppText>
-                <AppText style={[styles.statLabel, { color: colors.textMuted }]}>Couples</AppText>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: stats.userCount === null ? 'rgba(255,90,90,0.35)' : colors.borderSubtle }]}>
-                <AppText style={[styles.statNum, { color: statColor(stats.userCount, colors.text) }]}>{statVal(stats.userCount)}</AppText>
-                <AppText style={[styles.statLabel, { color: colors.textMuted }]}>Users</AppText>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: stats.interactionCount === null ? 'rgba(255,90,90,0.35)' : colors.borderSubtle }]}>
-                <AppText style={[styles.statNum, { color: statColor(stats.interactionCount, colors.text) }]}>{statVal(stats.interactionCount)}</AppText>
-                <AppText style={[styles.statLabel, { color: colors.textMuted }]}>Interactions</AppText>
-              </View>
-            </>
-          )}
+          {(['coupleCount', 'userCount', 'interactionCount'] as const).map((key, i) => {
+            const entry = stats[key];
+            const labels = ['Couples', 'Users', 'Interactions'];
+            const hasError = !!entry.error;
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[styles.statCard, { backgroundColor: colors.card, borderColor: hasError ? 'rgba(255,90,90,0.35)' : colors.borderSubtle }]}
+                onPress={() => fetchOneStat(key, () => {
+                  if (key === 'coupleCount') return supabase.from('couples').select('id', { count: 'exact', head: true });
+                  if (key === 'userCount') return supabase.from('profiles').select('id', { count: 'exact', head: true });
+                  return supabase.from('interactions').select('id', { count: 'exact', head: true });
+                })}
+                activeOpacity={hasError ? 0.7 : 1}
+              >
+                {entry.loading
+                  ? <ActivityIndicator color={colors.textMuted} size="small" />
+                  : <AppText style={[styles.statNum, { color: statColor(entry, colors.text) }]}>{statVal(entry)}</AppText>
+                }
+                <AppText style={[styles.statLabel, { color: hasError ? colors.danger : colors.textMuted }]}>{labels[i]}</AppText>
+                {hasError && (
+                  <AppText style={[styles.statError, { color: colors.danger }]} numberOfLines={2}>{entry.error}</AppText>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {/* Interaction breakdown */}
+        {/* Interaction breakdown — each item independently tappable to retry */}
         <View style={[styles.breakdownCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
           <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>INTERACTION BREAKDOWN</AppText>
           <View style={styles.breakdownRow}>
-            <View style={styles.breakdownItem}>
-              <AppText style={[styles.breakdownNum, { color: statColor(stats.diceCount, '#FFB347') }]}>{statVal(stats.diceCount)}</AppText>
-              <AppText style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Dice</AppText>
-            </View>
-            <View style={[styles.breakdownDivider, { backgroundColor: colors.borderSubtle }]} />
-            <View style={styles.breakdownItem}>
-              <AppText style={[styles.breakdownNum, { color: statColor(stats.dareCount, '#FF2E8A') }]}>{statVal(stats.dareCount)}</AppText>
-              <AppText style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Dares</AppText>
-            </View>
-            <View style={[styles.breakdownDivider, { backgroundColor: colors.borderSubtle }]} />
-            <View style={styles.breakdownItem}>
-              <AppText style={[styles.breakdownNum, { color: statColor(stats.tellMeCount, '#FF8A3D') }]}>{statVal(stats.tellMeCount)}</AppText>
-              <AppText style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Tell Me</AppText>
-            </View>
-            <View style={[styles.breakdownDivider, { backgroundColor: colors.borderSubtle }]} />
-            <View style={styles.breakdownItem}>
-              <AppText style={[styles.breakdownNum, { color: statColor(stats.wishCount, '#E8637A') }]}>{statVal(stats.wishCount)}</AppText>
-              <AppText style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Wishes</AppText>
-            </View>
+            {([
+              { key: 'diceCount', label: 'Dice', color: '#FFB347', type: 'dice' },
+              { key: 'dareCount', label: 'Dares', color: '#FF2E8A', type: 'dare' },
+              { key: 'tellMeCount', label: 'Tell Me', color: '#FF8A3D', type: 'tell_me' },
+              { key: 'wishCount', label: 'Wishes', color: '#E8637A', type: null },
+            ] as const).map(({ key, label, color, type }, i) => {
+              const entry = stats[key];
+              return (
+                <React.Fragment key={key}>
+                  {i > 0 && <View style={[styles.breakdownDivider, { backgroundColor: colors.borderSubtle }]} />}
+                  <TouchableOpacity
+                    style={styles.breakdownItem}
+                    onPress={() => fetchOneStat(key, () =>
+                      type
+                        ? supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', type)
+                        : supabase.from('wishes').select('id', { count: 'exact', head: true })
+                    )}
+                    activeOpacity={entry.error ? 0.7 : 1}
+                  >
+                    {entry.loading
+                      ? <ActivityIndicator color={color} size="small" />
+                      : <AppText style={[styles.breakdownNum, { color: entry.error ? colors.danger : color }]}>{statVal(entry)}</AppText>
+                    }
+                    <AppText style={[styles.breakdownLabel, { color: colors.textSecondary }]}>{label}</AppText>
+                  </TouchableOpacity>
+                </React.Fragment>
+              );
+            })}
           </View>
         </View>
 
@@ -491,6 +518,7 @@ const styles = StyleSheet.create({
   },
   statNum: { fontSize: 28, fontFamily: 'Inter-Bold' },
   statLabel: { fontSize: 11, fontFamily: 'Inter-Medium', letterSpacing: 0.5 },
+  statError: { fontSize: 9, fontFamily: 'Inter-Regular', textAlign: 'center', marginTop: 2 },
   breakdownCard: {
     borderRadius: Radius.lg,
     borderWidth: 1,

@@ -28,6 +28,7 @@ import {
   validateCodeFormat,
   savePendingCode,
 } from '@/lib/inviteCode';
+import { logDebugEvent } from '@/lib/debugLog';
 
 const DEEP_LINK_SCHEME = process.env.EXPO_PUBLIC_DEEP_LINK_SCHEME ?? 'warmup';
 const JOIN_COOLDOWN_MS = 3000;
@@ -117,6 +118,8 @@ export default function PairScreen() {
   const loadOrCreateCouple = async () => {
     if (!user) return;
 
+    logDebugEvent('INVITE CREATE START', { userId: user.id });
+
     // If user already has a partner, skip straight to the app
     const { data: paired } = await supabase
       .from('couples')
@@ -139,22 +142,45 @@ export default function PairScreen() {
       .maybeSingle();
 
     if (existing) {
+      logDebugEvent('INVITE CREATE SUCCESS', { source: 'existing', coupleId: existing.id, inviteCode: existing.invite_code });
       setMyCode(existing.invite_code);
       await refreshCouple();
     } else {
       // Fallback: no solo couple exists yet — create one
       const code = generateInviteCode();
+      const payload = {
+        user_a_id: user.id,
+        invite_code: code,
+        active: true,
+        invite_code_expires_at: codeExpiresAt(),
+      };
+      logDebugEvent('INVITE CREATE START', { source: 'insert', userId: user.id, payload });
       const { data: newCouple, error: insertError } = await supabase
         .from('couples')
-        .insert({
-          user_a_id: user.id,
-          invite_code: code,
-          active: true,
-          invite_code_expires_at: codeExpiresAt(),
-        })
+        .insert(payload)
         .select()
         .single();
-      if (!insertError && newCouple) {
+      if (insertError) {
+        logDebugEvent('INVITE CREATE ERROR', {
+          userId: user.id,
+          payload,
+          code: insertError.code,
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          status: (insertError as any).status ?? null,
+        });
+        setError(
+          `Could not create invite record.\n` +
+          `Code: ${insertError.code ?? 'n/a'}\n` +
+          `Message: ${insertError.message}\n` +
+          `Details: ${insertError.details ?? 'none'}\n` +
+          `Hint: ${insertError.hint ?? 'none'}`
+        );
+        return;
+      }
+      if (newCouple) {
+        logDebugEvent('INVITE CREATE SUCCESS', { source: 'insert', coupleId: newCouple.id, inviteCode: newCouple.invite_code });
         setMyCode(newCouple.invite_code);
         await refreshCouple();
       }

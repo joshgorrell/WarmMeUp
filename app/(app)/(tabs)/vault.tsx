@@ -27,7 +27,7 @@ import { FontSize, Spacing, Radius, NavHeight } from '@/constants/theme';
 
 export default function VaultScreen() {
   const router = useRouter();
-  const { user, couple, partnerProfile, settings, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked } = useAuth();
+  const { user, couple, partnerProfile, settings, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, subscriptionInfo, refreshCouple } = useAuth();
   const { colors } = useTheme();
   const { width, cols } = useLayout();
   const insets = useSafeAreaInsets();
@@ -261,13 +261,81 @@ export default function VaultScreen() {
   const stopSpin = () => spinAnim.stopAnimation();
 
   const uploadToVault = async (localUri: string, mediaType: 'photo' | 'video', mimeType: string) => {
-    if (!couple?.id || !user) {
-      logDebugEvent('VAULT UPLOAD ERROR', {
-        reason: 'missing_user_or_couple',
-        userId: user?.id ?? null,
-        coupleId: couple?.id ?? null,
-      });
-      Alert.alert('Vault Unavailable', 'Vault unavailable — account or connection state is missing.');
+    if (!user) {
+      logDebugEvent('VAULT COUPLE MISSING', { reason: 'no_user', userId: null, coupleId: couple?.id ?? null });
+      Alert.alert('Not signed in', 'Please sign in to use the Vault.');
+      return;
+    }
+
+    // If no active couple yet, try to auto-create a solo couple so vault works
+    if (!couple?.id) {
+      logDebugEvent('VAULT COUPLE MISSING', { reason: 'no_couple', userId: user.id, coupleId: null });
+
+      if (subscriptionInfo.canInvite) {
+        // Try to create a solo couple inline so the upload can proceed
+        const { generateInviteCode, codeExpiresAt } = await import('@/lib/inviteCode');
+        const code = generateInviteCode();
+        const { data: newCouple, error: createError } = await supabase
+          .from('couples')
+          .insert({ user_a_id: user.id, invite_code: code, active: true, invite_code_expires_at: codeExpiresAt() })
+          .select()
+          .single();
+        if (createError || !newCouple) {
+          logDebugEvent('VAULT COUPLE MISSING', {
+            reason: 'auto_create_failed',
+            userId: user.id,
+            error: createError?.message ?? 'unknown',
+            code: createError?.code ?? null,
+          });
+          Alert.alert(
+            'Vault Unavailable',
+            `Could not create your vault connection.\nCode: ${createError?.code ?? 'n/a'}\n${createError?.message ?? 'Unknown error'}`
+          );
+          return;
+        }
+        logDebugEvent('VAULT COUPLE CREATED', { coupleId: newCouple.id, inviteCode: newCouple.invite_code });
+        await refreshCouple();
+        // couple state will update async — proceed with newCouple.id directly
+        const ext = mimeToExtension(mimeType);
+        const storagePath = `${newCouple.id}/${user.id}/${Date.now()}.${ext}`;
+        setUploading(true);
+        setUploadPct(0);
+        setShowAdd(false);
+        startSpin();
+        try {
+          await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct), user.id, newCouple.id);
+          const { error: dbError } = await supabase.from('vault_items').insert({
+            couple_id: newCouple.id, uploaded_by_user_id: user.id, media_type: mediaType,
+            storage_path: storagePath, storage_bucket: 'vault',
+            allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
+            allow_save: settings?.vault_allow_save_default ?? false,
+            allow_share: settings?.vault_allow_share_default ?? false,
+            chat_message_id: null,
+          });
+          if (dbError) {
+            supabase.storage.from('vault').remove([storagePath]).catch(() => {});
+            throw new Error(`Media uploaded but failed to save — ${dbError.message}`);
+          }
+          awardPoints(newCouple.id, user.id, 5, 'Vault media added');
+          await load();
+        } catch (e: any) {
+          Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
+        } finally {
+          stopSpin();
+          setUploading(false);
+          setUploadPct(0);
+        }
+        return;
+      }
+
+      Alert.alert(
+        'Vault Unavailable',
+        'Set up your invite connection first to use the Vault.',
+        [
+          { text: 'Go to Connect', onPress: () => router.push('/(auth)/pair') },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
       return;
     }
     setUploading(true);
