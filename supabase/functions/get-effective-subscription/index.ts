@@ -100,6 +100,7 @@ Deno.serve(async (req: Request) => {
           finalSource: source,
           finalCanInvite: true,
           finalIsPremium: true,
+          _v: "2026-05-27b",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -230,6 +231,7 @@ Deno.serve(async (req: Request) => {
         finalSource: "none",
         finalCanInvite: false,
         finalIsPremium: false,
+        _v: "2026-05-27b",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

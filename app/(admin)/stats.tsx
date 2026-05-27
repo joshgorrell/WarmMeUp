@@ -109,6 +109,7 @@ export default function StatsAdmin() {
   const [topScores, setTopScores] = useState<UserScore[]>([]);
   const [totals, setTotals] = useState({ dice: 0, dare: 0, tell_me: 0, wish: 0, chat: 0, dare_skipped: 0, dice_skipped: 0 });
   const [loading, setLoading] = useState(true);
+  const [queryErrors, setQueryErrors] = useState<{ query: string; code?: string; message: string }[]>([]);
 
   const [activePreset, setActivePreset] = useState<PresetKey>('all');
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
@@ -155,6 +156,19 @@ export default function StatsAdmin() {
       monthlyQ,
       wishQ,
     ]);
+
+    const errs: { query: string; code?: string; message: string }[] = [];
+    const check = (name: string, err: { code?: string; message: string } | null) => {
+      if (err) errs.push({ query: name, code: err.code, message: err.message });
+    };
+    check('couples',      couplesRes.error);
+    check('interactions', interactionsRes.error);
+    check('scores',       scoresRes.error);
+    check('profiles',     profilesRes.error);
+    check('chat_messages',chatRes.error);
+    check('monthly_scores',monthlyRes.error);
+    check('wishes',       wishRes.error);
+    setQueryErrors(errs);
 
     const couples      = couplesRes.data      ?? [];
     const interactions = interactionsRes.data  ?? [];
@@ -320,6 +334,17 @@ export default function StatsAdmin() {
 
       {/* Sub-label */}
       <AppText style={[styles.sublabel, { color: colors.textMuted }]}>{sublabel}</AppText>
+
+      {queryErrors.length > 0 && (
+        <View style={styles.errorBanner}>
+          <AppText style={styles.errorBannerTitle}>RLS / Query Errors ({queryErrors.length})</AppText>
+          {queryErrors.map((e, i) => (
+            <AppText key={i} style={styles.errorBannerRow}>
+              [{e.query}] {e.code ? `${e.code}: ` : ''}{e.message}
+            </AppText>
+          ))}
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -513,6 +538,13 @@ export default function StatsAdmin() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  errorBanner: {
+    marginHorizontal: Spacing.screen, marginTop: Spacing.sm, marginBottom: 2,
+    backgroundColor: 'rgba(255,90,95,0.12)', borderRadius: Radius.md,
+    borderWidth: 1, borderColor: 'rgba(255,90,95,0.4)', padding: Spacing.md, gap: 4,
+  },
+  errorBannerTitle: { fontSize: 12, fontFamily: 'Inter-Bold', color: '#FF5A5F' },
+  errorBannerRow: { fontSize: 11, fontFamily: 'Inter-Regular', color: '#FF5A5F' },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 60 },
 
