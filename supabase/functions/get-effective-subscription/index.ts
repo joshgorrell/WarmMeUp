@@ -71,7 +71,41 @@ Deno.serve(async (req: Request) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Check own subscription first
+    // --- Check admin flags first (super_admin / admin get unconditional access) ---
+    const { data: profileRow } = await adminClient
+      .from("profiles")
+      .select("is_admin, is_super_admin")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const isSuperAdmin = profileRow?.is_super_admin === true;
+    const isAdmin = profileRow?.is_admin === true;
+
+    if (isSuperAdmin || isAdmin) {
+      const source = isSuperAdmin ? "super_admin" : "admin";
+      return new Response(
+        JSON.stringify({
+          isPremium: true,
+          source,
+          plan: "admin",
+          expiresAt: null,
+          isOnTrial: false,
+          trialExpiresAt: null,
+          canInvite: true,
+          trialExpired: false,
+          // debug
+          checkedSuperAdmin: true,
+          checkedAdminGrant: false,
+          adminGrantFound: false,
+          finalSource: source,
+          finalCanInvite: true,
+          finalIsPremium: true,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- Check own subscription ---
     const { data: ownSub } = await adminClient
       .from("subscriptions")
       .select("user_id, plan, status, expires_at, trial_started_at")
@@ -88,12 +122,20 @@ Deno.serve(async (req: Request) => {
           isOnTrial: ownSub!.plan === "trial",
           trialExpiresAt: ownSub!.plan === "trial" ? ownSub!.expires_at : null,
           canInvite: true,
+          trialExpired: false,
+          // debug
+          checkedSuperAdmin: true,
+          checkedAdminGrant: false,
+          adminGrantFound: false,
+          finalSource: "self",
+          finalCanInvite: true,
+          finalIsPremium: true,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Check for an active admin grant (manual/comped access)
+    // --- Check for an active admin grant (manual/comped access) ---
     const { data: adminGrant } = await adminClient
       .from("admin_grants")
       .select("user_id, entitlement_type, expires_at, active")
@@ -101,7 +143,9 @@ Deno.serve(async (req: Request) => {
       .eq("active", true)
       .maybeSingle();
 
-    if (isGrantActive(adminGrant)) {
+    const grantActive = isGrantActive(adminGrant);
+
+    if (grantActive) {
       return new Response(
         JSON.stringify({
           isPremium: true,
@@ -111,12 +155,20 @@ Deno.serve(async (req: Request) => {
           isOnTrial: false,
           trialExpiresAt: null,
           canInvite: true,
+          trialExpired: false,
+          // debug
+          checkedSuperAdmin: true,
+          checkedAdminGrant: true,
+          adminGrantFound: true,
+          finalSource: "admin_grant",
+          finalCanInvite: true,
+          finalIsPremium: true,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Check partner's subscription via active couple
+    // --- Check partner's subscription via active couple ---
     const { data: couple } = await adminClient
       .from("couples")
       .select("user_a_id, user_b_id")
@@ -143,6 +195,14 @@ Deno.serve(async (req: Request) => {
               isOnTrial: false,
               trialExpiresAt: null,
               canInvite: false,
+              trialExpired: false,
+              // debug
+              checkedSuperAdmin: true,
+              checkedAdminGrant: true,
+              adminGrantFound: false,
+              finalSource: "partner",
+              finalCanInvite: false,
+              finalIsPremium: true,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -150,7 +210,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // No active subscription from any source
+    // --- No active subscription from any source ---
     const trialExpired = ownSub !== null && !isActive(ownSub);
 
     return new Response(
@@ -163,6 +223,13 @@ Deno.serve(async (req: Request) => {
         trialExpiresAt: ownSub?.expires_at ?? null,
         canInvite: false,
         trialExpired,
+        // debug
+        checkedSuperAdmin: true,
+        checkedAdminGrant: true,
+        adminGrantFound: grantActive,
+        finalSource: "none",
+        finalCanInvite: false,
+        finalIsPremium: false,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
