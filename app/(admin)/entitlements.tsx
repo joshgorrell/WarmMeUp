@@ -39,7 +39,11 @@ interface UserSearchResult {
   subscriptionStatus: string | null;
 }
 
-const ENTITLEMENT_TYPES = ['premium', 'lifetime', 'beta'];
+const ENTITLEMENT_TYPES: { value: string; label: string }[] = [
+  { value: 'free_access', label: 'Free Access' },
+  { value: 'extended_trial', label: 'Extended Trial' },
+  { value: 'comped_subscription', label: 'Comped Subscription' },
+];
 
 export default function EntitlementsScreen() {
   const router = useRouter();
@@ -54,7 +58,7 @@ export default function EntitlementsScreen() {
   const [grantsLoading, setGrantsLoading] = useState(true);
   const [grantsError, setGrantsError] = useState<string | null>(null);
 
-  const [grantType, setGrantType] = useState('premium');
+  const [grantType, setGrantType] = useState('free_access');
   const [grantExpiry, setGrantExpiry] = useState('');
   const [grantNotes, setGrantNotes] = useState('');
   const [grantLoading, setGrantLoading] = useState(false);
@@ -221,7 +225,7 @@ export default function EntitlementsScreen() {
         return;
       }
 
-      Alert.alert('Access Granted', `${searchResult.display_name} now has ${grantType} access.`);
+      Alert.alert('Access Granted', `${searchResult.display_name} now has ${ENTITLEMENT_TYPES.find(t => t.value === grantType)?.label ?? grantType} access.`);
       setSearchResult(null);
       setSearchEmail('');
       setGrantExpiry('');
@@ -237,7 +241,7 @@ export default function EntitlementsScreen() {
   const handleRevoke = async (grant: AdminGrant) => {
     Alert.alert(
       'Revoke Access',
-      `Remove ${grantType} access for ${grant.profile?.display_name ?? grant.user_id}?`,
+      `Remove ${ENTITLEMENT_TYPES.find(t => t.value === grant.entitlement_type)?.label ?? grant.entitlement_type} access for ${grant.profile?.display_name ?? grant.user_id}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -349,19 +353,21 @@ export default function EntitlementsScreen() {
               onPress={() => setShowTypeMenu(v => !v)}
               activeOpacity={0.8}
             >
-              <AppText style={[styles.pickerValue, { color: colors.text }]}>{grantType}</AppText>
+              <AppText style={[styles.pickerValue, { color: colors.text }]}>
+                {ENTITLEMENT_TYPES.find(t => t.value === grantType)?.label ?? grantType}
+              </AppText>
               {showTypeMenu ? <ChevronUp color={colors.textMuted} size={16} /> : <ChevronDown color={colors.textMuted} size={16} />}
             </TouchableOpacity>
             {showTypeMenu && (
               <View style={[styles.typeMenu, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                 {ENTITLEMENT_TYPES.map(t => (
                   <TouchableOpacity
-                    key={t}
+                    key={t.value}
                     style={styles.typeOption}
-                    onPress={() => { setGrantType(t); setShowTypeMenu(false); }}
+                    onPress={() => { setGrantType(t.value); setShowTypeMenu(false); }}
                     activeOpacity={0.8}
                   >
-                    <AppText style={[styles.typeOptionText, { color: grantType === t ? '#69A7FF' : colors.text }]}>{t}</AppText>
+                    <AppText style={[styles.typeOptionText, { color: grantType === t.value ? '#69A7FF' : colors.text }]}>{t.label}</AppText>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -434,7 +440,7 @@ export default function EntitlementsScreen() {
                     {grant.profile?.display_name ?? grant.user_id.slice(0, 16) + '…'}
                   </AppText>
                   <AppText style={[styles.grantMeta, { color: colors.textMuted }]}>
-                    {grant.entitlement_type} · expires {formatExpiry(grant.expires_at)}
+                    {ENTITLEMENT_TYPES.find(t => t.value === grant.entitlement_type)?.label ?? grant.entitlement_type} · expires {formatExpiry(grant.expires_at)}
                   </AppText>
                   {grant.notes ? (
                     <AppText style={[styles.grantNotes, { color: colors.textSecondary }]}>{grant.notes}</AppText>

@@ -137,29 +137,34 @@ export default function AdminDashboard() {
   };
 
   const fetchStats = async () => {
-    const [couples, profiles, interactions, dice, dares, tellMe, wishes] = await Promise.all([
-      supabase.from('couples').select('id', { count: 'exact', head: true }),
-      supabase.from('profiles').select('id', { count: 'exact', head: true }),
-      supabase.from('interactions').select('id', { count: 'exact', head: true }),
-      supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dice'),
-      supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dare'),
-      supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'tell_me'),
-      supabase.from('wishes').select('id', { count: 'exact', head: true }),
-    ]);
-    const hasError = [couples, profiles, interactions, dice, dares, tellMe, wishes].find(r => r.error);
-    if (hasError?.error) {
-      console.error('[ADMIN LOAD ERROR]', hasError.error.message);
+    try {
+      const [couples, profiles, interactions, dice, dares, tellMe, wishes] = await Promise.all([
+        supabase.from('couples').select('id', { count: 'exact', head: true }),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+        supabase.from('interactions').select('id', { count: 'exact', head: true }),
+        supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dice'),
+        supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dare'),
+        supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'tell_me'),
+        supabase.from('wishes').select('id', { count: 'exact', head: true }),
+      ]);
+      const hasError = [couples, profiles, interactions, dice, dares, tellMe, wishes].find(r => r.error);
+      if (hasError?.error) {
+        console.error('[ADMIN LOAD ERROR]', hasError.error.message);
+      }
+      setStats({
+        coupleCount: couples.count ?? 0,
+        userCount: profiles.count ?? 0,
+        interactionCount: interactions.count ?? 0,
+        diceCount: dice.count ?? 0,
+        dareCount: dares.count ?? 0,
+        tellMeCount: tellMe.count ?? 0,
+        wishCount: wishes.count ?? 0,
+      });
+    } catch (err: any) {
+      console.error('[ADMIN LOAD ERROR]', err?.message);
+    } finally {
+      setLoading(false);
     }
-    setStats({
-      coupleCount: couples.count ?? 0,
-      userCount: profiles.count ?? 0,
-      interactionCount: interactions.count ?? 0,
-      diceCount: dice.count ?? 0,
-      dareCount: dares.count ?? 0,
-      tellMeCount: tellMe.count ?? 0,
-      wishCount: wishes.count ?? 0,
-    });
-    setLoading(false);
   };
 
   const navItems = [

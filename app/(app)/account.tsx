@@ -551,12 +551,9 @@ export default function AccountScreen() {
     // Must be solo (no partner) to refresh
     if (couple?.user_b_id) return;
 
-    // Subscription gate — clear message instead of generic error
+    // Subscription gate — navigate to subscription screen rather than blocking with an alert
     if (!subscriptionInfo.canInvite) {
-      Alert.alert(
-        'Subscription Required',
-        'You need an active subscription before creating a new connection code.',
-      );
+      router.push('/(auth)/subscription');
       return;
     }
 
@@ -1142,6 +1139,18 @@ export default function AccountScreen() {
             <AppText style={[styles.manageConnectionText, { color: colors.textMuted }]}>Manage connection</AppText>
             <ChevronRight color={colors.textMuted} size={13} strokeWidth={2} />
           </TouchableOpacity>
+        </View>
+      ) : !couple?.user_b_id && subscriptionInfo.loading ? (
+        <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+          <View style={styles.inviteHeader}>
+            <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
+              <UserPlus color={colors.textMuted} size={18} strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1, gap: 6 }}>
+              <View style={{ height: 10, width: 120, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.08)' }} />
+              <View style={{ height: 8, width: 180, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.05)' }} />
+            </View>
+          </View>
         </View>
       ) : !couple?.user_b_id && couple?.invite_code && subscriptionInfo.canInvite ? (
         <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)' }]}>
