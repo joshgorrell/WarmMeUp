@@ -659,6 +659,37 @@ export default function AccountScreen() {
     setShowCancelInviteSheet(false);
   };
 
+  const handleInviteCardPress = () => {
+    let destination = 'none';
+
+    if (isAdmin || isSuperAdmin) {
+      if (!subscriptionInfo.canInvite) {
+        destination = '/(admin)/entitlements';
+        console.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
+        router.push('/(admin)/entitlements' as any);
+        return;
+      }
+      // Admin with canInvite — fall through to code generation
+    }
+
+    if (!subscriptionInfo.canInvite) {
+      destination = '/(auth)/subscription';
+      console.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
+      router.push('/(auth)/subscription');
+      return;
+    }
+
+    if (!couple?.invite_code) {
+      destination = 'generate_code';
+      console.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
+      handleRefreshCode();
+      return;
+    }
+
+    destination = 'has_code_noop';
+    console.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
+  };
+
   const handleInvitePartner = async () => {
     if (!user || creatingCouple) return;
     if (couple?.invite_code) { handleShareCode(); return; }
@@ -1160,118 +1191,109 @@ export default function AccountScreen() {
             </View>
           </View>
         </View>
-      ) : !couple?.user_b_id && couple?.invite_code && subscriptionInfo.canInvite ? (
-        <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)' }]}>
-          <View style={styles.inviteHeader}>
-            <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,46,138,0.12)' }]}>
-              <UserPlus color="#FF2E8A" size={18} strokeWidth={2} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>INVITE YOUR PARTNER</AppText>
-              <AppText style={[styles.inviteHint, { color: colors.textSecondary }]}>Share your code to connect</AppText>
-            </View>
-          </View>
-          {isCodeExpired(couple.invite_code_expires_at) && (
-            <TouchableOpacity
-              style={styles.codeExpiredBanner}
-              onPress={handleRefreshCode}
-              activeOpacity={0.75}
-              disabled={codeRefreshing}
-            >
-              <AlertTriangle color="#FF5A5F" size={13} strokeWidth={2.2} />
-              <AppText style={styles.codeExpiredText}>
-                Code expired — tap to refresh
-              </AppText>
-            </TouchableOpacity>
-          )}
-          <View style={[styles.codeBox, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: isCodeExpired(couple.invite_code_expires_at) ? 'rgba(255,90,90,0.40)' : 'rgba(255,46,138,0.20)' }]}>
-            <AppText style={[styles.codeText, { color: isCodeExpired(couple.invite_code_expires_at) ? 'rgba(255,255,255,0.45)' : colors.text }]}>{couple.invite_code}</AppText>
-            <TouchableOpacity
-              style={styles.codeRefreshBtn}
-              onPress={handleRefreshCode}
-              activeOpacity={0.7}
-              disabled={codeRefreshing}
-            >
-              <RefreshCw
-                color={codeRefreshing ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.45)'}
-                size={15}
-                strokeWidth={2}
-              />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.inviteActions}>
-            <TouchableOpacity
-              style={[styles.inviteBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
-              onPress={handleCopyCode} activeOpacity={0.75}
-            >
-              <Copy color={copied ? '#33D17A' : colors.textSecondary} size={15} strokeWidth={2} />
-              <AppText style={[styles.inviteBtnText, { color: copied ? '#33D17A' : colors.textSecondary }]}>{copied ? 'Copied!' : 'Copy'}</AppText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.inviteBtn, { borderColor: 'rgba(255,46,138,0.35)', backgroundColor: 'rgba(255,46,138,0.07)' }]}
-              onPress={handleShareCode} activeOpacity={0.75}
-            >
-              <Share2 color="#FF2E8A" size={15} strokeWidth={2} />
-              <AppText style={[styles.inviteBtnText, { color: '#FF2E8A' }]}>Share</AppText>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity
-            style={styles.cancelInviteBtn}
-            onPress={() => setShowCancelInviteSheet(true)}
-            activeOpacity={0.7}
-          >
-            <X color="rgba(255,90,90,0.70)" size={13} strokeWidth={2.2} />
-            <AppText style={styles.cancelInviteText}>Cancel invite</AppText>
-          </TouchableOpacity>
-        </View>
-      ) : !couple?.user_b_id && subscriptionInfo.canInvite && !subscriptionInfo.loading ? (
-        // Authorized to invite but no code exists yet — let them generate one
-        <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)' }]}>
-          <View style={styles.inviteHeader}>
-            <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,46,138,0.12)' }]}>
-              <UserPlus color="#FF2E8A" size={18} strokeWidth={2} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>INVITE YOUR PARTNER</AppText>
-              <AppText style={[styles.inviteHint, { color: colors.textSecondary }]}>Generate a code to connect</AppText>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={[styles.inviteBtn, { borderColor: 'rgba(255,46,138,0.35)', backgroundColor: 'rgba(255,46,138,0.07)', alignSelf: 'stretch', justifyContent: 'center', gap: 8 }]}
-            onPress={handleRefreshCode}
-            activeOpacity={0.75}
-            disabled={codeRefreshing}
-          >
-            {codeRefreshing
-              ? <ActivityIndicator size="small" color="#FF2E8A" />
-              : <RefreshCw color="#FF2E8A" size={15} strokeWidth={2} />}
-            <AppText style={[styles.inviteBtnText, { color: '#FF2E8A' }]}>Generate Invite Code</AppText>
-          </TouchableOpacity>
-        </View>
-      ) : !couple?.user_b_id && !subscriptionInfo.canInvite && !subscriptionInfo.loading ? (
+      ) : !couple?.user_b_id && !subscriptionInfo.loading ? (
+        // Single Pressable card for all "no partner yet" states:
+        // has code + canInvite / canInvite but no code / no access (admin or regular)
         <TouchableOpacity
-          style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-          onPress={() => {
-            if (isAdmin || isSuperAdmin) {
-              router.push('/(admin)/entitlements' as any);
-            } else {
-              router.push('/(auth)/subscription');
-            }
-          }}
+          style={[
+            styles.inviteCard,
+            { backgroundColor: colors.card, borderColor: subscriptionInfo.canInvite ? 'rgba(255,46,138,0.30)' : colors.borderSubtle },
+          ]}
+          onPress={handleInviteCardPress}
           activeOpacity={0.8}
         >
           <View style={styles.inviteHeader}>
-            <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
-              <UserPlus color="#FFB347" size={18} strokeWidth={2} />
+            <View style={[styles.heartWrap, { backgroundColor: subscriptionInfo.canInvite ? 'rgba(255,46,138,0.12)' : 'rgba(255,179,71,0.10)' }]}>
+              <UserPlus color={subscriptionInfo.canInvite ? '#FF2E8A' : '#FFB347'} size={18} strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
               <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>INVITE YOUR PARTNER</AppText>
               <AppText style={[styles.inviteHint, { color: colors.textSecondary }]}>
-                {(isAdmin || isSuperAdmin) ? 'Manage Access' : 'Subscribe to Invite Someone'}
+                {!subscriptionInfo.canInvite
+                  ? ((isAdmin || isSuperAdmin) ? 'Manage Access' : 'Subscribe to Invite')
+                  : couple?.invite_code
+                    ? 'Share your code to connect'
+                    : 'Tap to generate your invite code'}
               </AppText>
             </View>
-            <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
+            {!subscriptionInfo.canInvite && (
+              <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
+            )}
+            {subscriptionInfo.canInvite && !couple?.invite_code && (
+              <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
+            )}
           </View>
+
+          {/* Code area — only shown when user has access and a code */}
+          {subscriptionInfo.canInvite && couple?.invite_code ? (
+            <>
+              {isCodeExpired(couple.invite_code_expires_at) && (
+                <TouchableOpacity
+                  style={styles.codeExpiredBanner}
+                  onPress={handleRefreshCode}
+                  activeOpacity={0.75}
+                  disabled={codeRefreshing}
+                >
+                  <AlertTriangle color="#FF5A5F" size={13} strokeWidth={2.2} />
+                  <AppText style={styles.codeExpiredText}>Code expired — tap to refresh</AppText>
+                </TouchableOpacity>
+              )}
+              <View style={[styles.codeBox, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: isCodeExpired(couple.invite_code_expires_at) ? 'rgba(255,90,90,0.40)' : 'rgba(255,46,138,0.20)' }]}>
+                <AppText style={[styles.codeText, { color: isCodeExpired(couple.invite_code_expires_at) ? 'rgba(255,255,255,0.45)' : colors.text }]}>{couple.invite_code}</AppText>
+                <TouchableOpacity
+                  style={styles.codeRefreshBtn}
+                  onPress={handleRefreshCode}
+                  activeOpacity={0.7}
+                  disabled={codeRefreshing}
+                >
+                  <RefreshCw
+                    color={codeRefreshing ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.45)'}
+                    size={15}
+                    strokeWidth={2}
+                  />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.inviteActions}>
+                <TouchableOpacity
+                  style={[styles.inviteBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
+                  onPress={handleCopyCode}
+                  activeOpacity={0.75}
+                >
+                  <Copy color={copied ? '#33D17A' : colors.textSecondary} size={15} strokeWidth={2} />
+                  <AppText style={[styles.inviteBtnText, { color: copied ? '#33D17A' : colors.textSecondary }]}>{copied ? 'Copied!' : 'Copy'}</AppText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.inviteBtn, { borderColor: 'rgba(255,46,138,0.35)', backgroundColor: 'rgba(255,46,138,0.07)' }]}
+                  onPress={handleShareCode}
+                  activeOpacity={0.75}
+                >
+                  <Share2 color="#FF2E8A" size={15} strokeWidth={2} />
+                  <AppText style={[styles.inviteBtnText, { color: '#FF2E8A' }]}>Share</AppText>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.cancelInviteBtn}
+                onPress={() => setShowCancelInviteSheet(true)}
+                activeOpacity={0.7}
+              >
+                <X color="rgba(255,90,90,0.70)" size={13} strokeWidth={2.2} />
+                <AppText style={styles.cancelInviteText}>Cancel invite</AppText>
+              </TouchableOpacity>
+            </>
+          ) : subscriptionInfo.canInvite && !couple?.invite_code ? (
+            // Generate button as secondary affordance inside the card
+            <TouchableOpacity
+              style={[styles.inviteBtn, { borderColor: 'rgba(255,46,138,0.35)', backgroundColor: 'rgba(255,46,138,0.07)', alignSelf: 'stretch', justifyContent: 'center', gap: 8 }]}
+              onPress={handleRefreshCode}
+              activeOpacity={0.75}
+              disabled={codeRefreshing}
+            >
+              {codeRefreshing
+                ? <ActivityIndicator size="small" color="#FF2E8A" />
+                : <RefreshCw color="#FF2E8A" size={15} strokeWidth={2} />}
+              <AppText style={[styles.inviteBtnText, { color: '#FF2E8A' }]}>Generate Invite Code</AppText>
+            </TouchableOpacity>
+          ) : null}
         </TouchableOpacity>
       ) : null}
 
