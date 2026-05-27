@@ -123,24 +123,31 @@ export default function EntitlementsScreen() {
     try {
       let matchedId: string | null = null;
       let matchedName = '';
+      let matchedEmail = '';
 
       // Try exact email lookup via admin RPC first (searches auth.users)
       const looksLikeEmail = query.includes('@');
       if (looksLikeEmail) {
         const { data: rpcData, error: rpcError } = await supabase.rpc('admin_search_user_by_email', { p_email: query.toLowerCase() });
         if (rpcError) {
-          console.error('[ADMIN ENTITLEMENTS ERROR] email RPC:', rpcError.message);
-          // Fall through to display name search
+          console.error('[ADMIN ENTITLEMENTS ERROR] email RPC:', rpcError.code, rpcError.message);
+          setSearchError(`Email lookup failed: ${rpcError.message}`);
+          setSearchLoading(false);
+          return;
+        }
+        const found = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+        if (found?.user_id) {
+          matchedId = found.user_id;
+          matchedName = found.display_name ?? query;
+          matchedEmail = found.email ?? query;
         } else {
-          const found = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-          if (found?.user_id) {
-            matchedId = found.user_id;
-            matchedName = found.display_name ?? query;
-          }
+          setSearchError(`No account found for "${query}".`);
+          setSearchLoading(false);
+          return;
         }
       }
 
-      // Fall back to display name search if email lookup found nothing
+      // Fall back to display name search when query is not an email
       if (!matchedId) {
         const { data: profiles, error: profileError } = await supabase
           .from('profiles')
@@ -186,6 +193,7 @@ export default function EntitlementsScreen() {
       setSearchResult({
         id: matchedId!,
         display_name: matchedName,
+        email: matchedEmail || undefined,
         currentGrant: grant ?? null,
         subscriptionPlan: sub?.plan ?? null,
         subscriptionStatus: sub?.status ?? null,
@@ -338,7 +346,11 @@ export default function EntitlementsScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <AppText style={[styles.resultName, { color: colors.text }]}>{searchResult.display_name}</AppText>
-                <AppText style={[styles.resultId, { color: colors.textMuted }]}>{searchResult.id.slice(0, 16)}…</AppText>
+                {searchResult.email ? (
+                  <AppText style={[styles.resultId, { color: colors.textMuted }]}>{searchResult.email}</AppText>
+                ) : (
+                  <AppText style={[styles.resultId, { color: colors.textMuted }]}>{searchResult.id.slice(0, 16)}…</AppText>
+                )}
               </View>
               <TouchableOpacity onPress={() => { setSearchResult(null); setSearchEmail(''); }} activeOpacity={0.7}>
                 <X color={colors.textMuted} size={18} strokeWidth={2} />

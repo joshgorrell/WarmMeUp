@@ -468,6 +468,7 @@ export default function AccountScreen() {
         .select('invite_code, invite_code_expires_at, id, user_b_id, user_a_id, active, points_enabled, streaks_enabled, subscription_owner_id, disconnected_at, admin_notes, invite_code_used_at')
         .eq('user_a_id', user.id)
         .is('user_b_id', null)
+        .eq('active', true)
         .maybeSingle();
       if (!error && data && data.invite_code !== couple?.invite_code) {
         console.log('[account] direct fetch corrected invite_code from', couple?.invite_code, 'to', data.invite_code);
