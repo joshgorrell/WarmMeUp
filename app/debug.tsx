@@ -87,6 +87,8 @@ export default function DebugScreen() {
   const [hasPin, setHasPin] = useState<boolean | null>(null);
   const [inactiveCoupleCount, setInactiveCoupleCount] = useState<number | null>(null);
   const [events, setEvents] = useState<DebugEvent[]>(() => getDebugEvents());
+  const [rpcTestResult, setRpcTestResult] = useState<string | null>(null);
+  const [rpcTesting, setRpcTesting] = useState(false);
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -94,7 +96,7 @@ export default function DebugScreen() {
   const isUnlockRequired = computeIsUnlockRequired(settings, unlockedAtMs);
   const shouldShowPrivacyCover = computeShouldShowPrivacyCover(session, settings);
   const activeCoupleFound = couple?.active === true;
-  const canRefreshInviteCode = (subscriptionInfo as any).canInvite === true && !couple?.user_b_id && !couple?.active;
+  const canRefreshInviteCode = (subscriptionInfo as any).canInvite === true && !couple?.user_b_id && couple?.active === true;
   const refreshBlockReason = couple?.user_b_id
     ? 'already_paired'
     : !(subscriptionInfo as any).canInvite
@@ -167,6 +169,24 @@ export default function DebugScreen() {
     : couple?.id
     ? `${couple.id}/{user_id}/{ts}.ext`
     : '{couple_id}/{user_id}/{ts}.ext';
+
+  // --- Action: Test generate_invite_code RPC ---
+  const handleTestRpc = async () => {
+    setRpcTesting(true);
+    setRpcTestResult(null);
+    try {
+      const { data, error } = await supabase.rpc('generate_invite_code');
+      if (error) {
+        setRpcTestResult(`ERROR code=${error.code} msg=${error.message} details=${error.details ?? 'none'} hint=${error.hint ?? 'none'}`);
+      } else {
+        setRpcTestResult(`OK data=${JSON.stringify(data)}`);
+      }
+    } catch (e: any) {
+      setRpcTestResult(`EXCEPTION: ${e?.message ?? String(e)}`);
+    } finally {
+      setRpcTesting(false);
+    }
+  };
 
   // --- Action: Clear Local Device State ---
   const handleClearLocalState = () => {
@@ -305,6 +325,9 @@ export default function DebugScreen() {
       couple_subscription_owner_id: couple?.subscription_owner_id ?? null,
       canRefreshInviteCode,
       refreshBlockReason,
+      couple_invite_code: couple?.invite_code ?? null,
+      couple_invite_code_expires_at: couple?.invite_code_expires_at ?? null,
+      rpc_test_result: rpcTestResult,
       vault_bucket: 'vault',
       vault_uploadPathTemplate: uploadPathTemplate,
       vault_lastPickAt: lastVaultPick?.timestamp ?? null,
@@ -385,7 +408,10 @@ export default function DebugScreen() {
         <Row label="couple.streaks_enabled" value={couple?.streaks_enabled ?? null} />
         <Row label="canRefreshInviteCode" value={canRefreshInviteCode} />
         <Row label="refreshBlockReason" value={refreshBlockReason} />
+        <Row label="couple.invite_code" value={couple?.invite_code ?? null} />
+        <Row label="couple.invite_code_expires_at" value={couple?.invite_code_expires_at ?? null} />
         <Row label="couple.subscription_owner_id" value={couple?.subscription_owner_id ?? null} />
+        <Row label="rpc.test_result" value={rpcTestResult} />
 
         {/* ── 3. Vault Upload Diagnostics ── */}
         <Section title="Vault Upload Diagnostics" />
@@ -500,6 +526,21 @@ export default function DebugScreen() {
           </TouchableOpacity>
           <AppText style={styles.btnNote}>
             Sets login_method=password, disables stealth mode, clears lock timer in DB.
+          </AppText>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#1a3a1a' }, rpcTesting && styles.btnDisabled]}
+            onPress={handleTestRpc}
+            disabled={rpcTesting}
+            activeOpacity={0.8}
+          >
+            <RefreshCw size={15} color="#4CAF50" />
+            <AppText style={[styles.actionBtnLabel, { color: '#4CAF50' }]}>
+              {rpcTesting ? 'Testing RPC…' : 'Test generate_invite_code RPC'}
+            </AppText>
+          </TouchableOpacity>
+          <AppText style={styles.btnNote}>
+            Calls the RPC directly and shows raw data/error in rpc.test_result above.
           </AppText>
 
           <TouchableOpacity
