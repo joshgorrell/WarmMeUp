@@ -480,7 +480,7 @@ function WishForm({
                 {saving ? <ActivityIndicator color="#fff" size="small" /> : (
                   <>
                     <Sparkles color="#fff" size={16} strokeWidth={2} />
-                    <AppText style={styles.formCTAText}>{initial ? 'Save Changes' : 'Share with Partner'}</AppText>
+                    <AppText style={styles.formCTAText}>{initial ? 'Save Changes' : couple?.user_b_id ? 'Share with Partner' : 'Save to Wishlist'}</AppText>
                   </>
                 )}
               </LinearGradient>
@@ -783,8 +783,8 @@ export default function WishTab() {
     });
     setShowForm(false);
     setEditingWish(null);
-    if (saved.status === 'shared') setActiveTab('shared');
-    else if (saved.status === 'draft') setActiveTab('mine');
+    if (saved.status === 'shared' && couple?.user_b_id) setActiveTab('shared');
+    else setActiveTab('mine');
   }, []);
 
   const handleFulfilled = useCallback((updated: WishWithReactions) => {
@@ -793,10 +793,13 @@ export default function WishTab() {
     setActiveTab('granted');
   }, []);
 
+  const hasPartner = !!couple?.user_b_id;
+
   // Filter lists
   const myWishes = wishes.filter(w => w.created_by_user_id === user?.id && w.status !== 'fulfilled');
   const theirWishes = wishes.filter(w => w.created_by_user_id !== user?.id && w.status !== 'fulfilled');
-  const sharedWishes = wishes.filter(w => w.status === 'shared');
+  // "Ours" only makes sense once there's a partner — solo users see all their own wishes under "Mine"
+  const sharedWishes = hasPartner ? wishes.filter(w => w.status === 'shared') : [];
   const grantedWishes = wishes.filter(w => w.status === 'fulfilled');
 
   const displayedWishes = activeTab === 'mine' ? myWishes
