@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
-import { FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity, CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2, Star, UserCog, Bug, ShieldCheck } from 'lucide-react-native';
+import { FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity, CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2, Star, UserCog, Bug, ShieldCheck, MessageSquare } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -216,6 +216,15 @@ export default function AdminDashboard() {
       bg: 'rgba(51,209,122,0.10)',
       border: 'rgba(51,209,122,0.25)',
       route: '/(admin)/entitlements',
+    },
+    {
+      label: 'Greeting Subtitles',
+      sub: 'Manage the rotating phrases shown under the home screen greeting',
+      icon: <MessageSquare color="#FFB347" size={22} strokeWidth={2} />,
+      color: '#FFB347',
+      bg: 'rgba(255,179,71,0.10)',
+      border: 'rgba(255,179,71,0.25)',
+      route: '/(admin)/greetings',
     },
   ];
 

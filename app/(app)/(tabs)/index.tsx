@@ -16,33 +16,7 @@ import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
 import Avatar from '@/components/Avatar';
 
-const GREETING_SUBS = [
-  "What kind of fun are we starting?",
-  "What's the mood tonight?",
-  "Ready to stir up some trouble?",
-  "Let's make tonight interesting.",
-  "What are we getting into today?",
-  "Time to warm things up?",
-  "Let the flirting begin.",
-  "Your private playground awaits.",
-  "What's the vibe between you two today?",
-  "Feeling playful?",
-  "What's today's temptation?",
-  "Something fun is about to happen.",
-];
-
-const SOLO_GREETING_SUBS = [
-  "Explore what's waiting for you.",
-  "Your private playground is ready.",
-  "Set the stage before your partner arrives.",
-  "Get familiar before the fun begins.",
-  "Everything is set up and waiting.",
-];
-
-function getSessionSub(hasParter: boolean) {
-  const pool = hasParter ? GREETING_SUBS : SOLO_GREETING_SUBS;
-  return pool[Math.floor(Math.random() * pool.length)];
-}
+const FALLBACK_GREETING_SUB = "Everything is set up and waiting.";
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -81,7 +55,19 @@ export default function HomeScreen() {
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const hasPartner = !!couple?.user_b_id;
-  const [greetingSub] = useState(() => getSessionSub(hasPartner));
+  const [greetingSub, setGreetingSub] = useState(FALLBACK_GREETING_SUB);
+
+  useEffect(() => {
+    supabase
+      .from('greeting_subtitles')
+      .select('text')
+      .eq('is_active', true)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setGreetingSub(data[Math.floor(Math.random() * data.length)].text);
+        }
+      });
+  }, []);
 
   // Honour pending notification deep-link passed from transition.tsx.
   // We navigate here instead of in transition to avoid push-on-top-of-replace races.
