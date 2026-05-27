@@ -3,7 +3,6 @@ import * as SecureStore from 'expo-secure-store';
 
 const CODE_ALPHABET = 'ACDEFGHJKLMNPQRTUVWXY34679';
 const CODE_LENGTH = 6;
-const CODE_EXPIRY_DAYS = 7;
 const PENDING_CODE_KEY = 'warmup_pending_invite_code';
 
 export function generateInviteCode(): string {
@@ -12,17 +11,6 @@ export function generateInviteCode(): string {
     code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
   }
   return code;
-}
-
-export function codeExpiresAt(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + CODE_EXPIRY_DAYS);
-  return d.toISOString();
-}
-
-export function isCodeExpired(expiresAt: string | null | undefined): boolean {
-  if (!expiresAt) return false; // null = legacy row, treat as valid
-  return new Date(expiresAt) < new Date();
 }
 
 export function validateCodeFormat(code: string): boolean {

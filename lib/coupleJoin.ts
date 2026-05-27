@@ -1,9 +1,8 @@
 import { supabase } from '@/lib/supabase';
-import { isCodeExpired } from '@/lib/inviteCode';
 
 export type JoinResult =
   | { ok: true; partnerName: string | null; coupleId: string }
-  | { ok: false; reason: 'not_found' | 'expired' | 'already_full' | 'self' | 'already_connected' | 'error' };
+  | { ok: false; reason: 'not_found' | 'already_full' | 'self' | 'already_connected' | 'error' };
 
 export async function completePendingJoin(
   userId: string,
@@ -25,17 +24,13 @@ export async function completePendingJoin(
 
   if (targetCouple.user_a_id === userId) return { ok: false, reason: 'self' };
 
-  if (isCodeExpired(targetCouple.invite_code_expires_at)) return { ok: false, reason: 'expired' };
-
   if (targetCouple.user_b_id && targetCouple.user_b_id !== userId) {
     return { ok: false, reason: 'already_full' };
   }
 
-  const now = new Date().toISOString();
-
   const { error: updateError } = await supabase
     .from('couples')
-    .update({ user_b_id: userId, active: true, invite_code_used_at: now })
+    .update({ user_b_id: userId, active: true })
     .eq('id', targetCouple.id)
     .is('user_b_id', null);
 

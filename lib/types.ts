@@ -15,8 +15,6 @@ export interface Couple {
   user_a_id: string;
   user_b_id: string | null;
   invite_code: string;
-  invite_code_expires_at: string | null;
-  invite_code_used_at: string | null;
   active: boolean;
   admin_notes: string;
   points_enabled: boolean;

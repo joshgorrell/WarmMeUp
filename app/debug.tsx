@@ -326,7 +326,6 @@ export default function DebugScreen() {
       canRefreshInviteCode,
       refreshBlockReason,
       couple_invite_code: couple?.invite_code ?? null,
-      couple_invite_code_expires_at: couple?.invite_code_expires_at ?? null,
       rpc_test_result: rpcTestResult,
       vault_bucket: 'vault',
       vault_uploadPathTemplate: uploadPathTemplate,
@@ -409,7 +408,6 @@ export default function DebugScreen() {
         <Row label="canRefreshInviteCode" value={canRefreshInviteCode} />
         <Row label="refreshBlockReason" value={refreshBlockReason} />
         <Row label="couple.invite_code" value={couple?.invite_code ?? null} />
-        <Row label="couple.invite_code_expires_at" value={couple?.invite_code_expires_at ?? null} />
         <Row label="couple.subscription_owner_id" value={couple?.subscription_owner_id ?? null} />
         <Row label="rpc.test_result" value={rpcTestResult} />
 

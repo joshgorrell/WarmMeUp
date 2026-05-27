@@ -22,7 +22,6 @@ import { useAuth } from '@/context/AuthContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import {
-  isCodeExpired,
   validateCodeFormat,
   savePendingCode,
 } from '@/lib/inviteCode';
@@ -237,19 +236,14 @@ export default function PairScreen() {
         setError("That's your own code! Share it with your partner.");
         return;
       }
-      if (isCodeExpired(targetCouple.invite_code_expires_at)) {
-        setError('This code has expired. Ask your partner to generate a new one.');
-        return;
-      }
       if (targetCouple.user_b_id && targetCouple.user_b_id !== user.id) {
         setError('This code has already been used.');
         return;
       }
 
-      const now = new Date().toISOString();
       const { error: updateError } = await supabase
         .from('couples')
-        .update({ user_b_id: user.id, active: true, invite_code_used_at: now })
+        .update({ user_b_id: user.id, active: true })
         .eq('id', targetCouple.id)
         .is('user_b_id', null);
 
@@ -350,10 +344,6 @@ export default function PairScreen() {
 
       if (!targetCouple) {
         setError('Invalid code. Check with your partner.');
-        return;
-      }
-      if (isCodeExpired(targetCouple.invite_code_expires_at)) {
-        setError('This code has expired. Ask your partner to generate a new one.');
         return;
       }
       if (targetCouple.user_b_id) {

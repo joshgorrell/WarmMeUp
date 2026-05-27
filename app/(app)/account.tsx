@@ -14,7 +14,6 @@ import { secureKey } from '@/lib/secureKey';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { isCodeExpired } from '@/lib/inviteCode';
 import { logDebugEvent } from '@/lib/debugLog';
 import { FontSize, Spacing, Radius, Gradient } from '@/constants/theme';
 import Toggle from '@/components/Toggle';
@@ -466,7 +465,7 @@ export default function AccountScreen() {
     (async () => {
       const { data, error } = await supabase
         .from('couples')
-        .select('invite_code, invite_code_expires_at, id, user_b_id, user_a_id, active, points_enabled, streaks_enabled, subscription_owner_id, disconnected_at, admin_notes, invite_code_used_at')
+        .select('invite_code, id, user_b_id, user_a_id, active, points_enabled, streaks_enabled, subscription_owner_id, disconnected_at, admin_notes')
         .eq('user_a_id', user.id)
         .is('user_b_id', null)
         .eq('active', true)
@@ -582,7 +581,7 @@ export default function AccountScreen() {
       return;
     }
     logDebugEvent('INVITE CREATE SUCCESS', { source: 'handleRefreshCode', inviteCode: result.invite_code });
-    patchCouple({ invite_code: result.invite_code, invite_code_expires_at: result.invite_code_expires_at });
+    patchCouple({ invite_code: result.invite_code });
     try { await refreshCouple(); } catch {}
     setCodeRefreshing(false);
   };
@@ -1179,19 +1178,8 @@ export default function AccountScreen() {
           {/* Code area — only shown when user has access and a code */}
           {subscriptionInfo.canInvite && couple?.invite_code ? (
             <>
-              {isCodeExpired(couple.invite_code_expires_at) && (
-                <TouchableOpacity
-                  style={styles.codeExpiredBanner}
-                  onPress={handleRefreshCode}
-                  activeOpacity={0.75}
-                  disabled={codeRefreshing}
-                >
-                  <AlertTriangle color="#FF5A5F" size={13} strokeWidth={2.2} />
-                  <AppText style={styles.codeExpiredText}>Code expired — tap to refresh</AppText>
-                </TouchableOpacity>
-              )}
-              <View style={[styles.codeBox, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: isCodeExpired(couple.invite_code_expires_at) ? 'rgba(255,90,90,0.40)' : 'rgba(255,46,138,0.20)' }]}>
-                <AppText style={[styles.codeText, { color: isCodeExpired(couple.invite_code_expires_at) ? 'rgba(255,255,255,0.45)' : colors.text }]}>{couple.invite_code}</AppText>
+              <View style={[styles.codeBox, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: 'rgba(255,46,138,0.20)' }]}>
+                <AppText style={[styles.codeText, { color: colors.text }]}>{couple.invite_code}</AppText>
                 <TouchableOpacity
                   style={styles.codeRefreshBtn}
                   onPress={handleRefreshCode}

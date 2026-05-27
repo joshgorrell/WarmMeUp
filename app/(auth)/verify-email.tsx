@@ -73,7 +73,6 @@ export default function VerifyEmailScreen() {
         await clearPendingCode();
         // Non-fatal — show a message and continue to onboarding
         const msg =
-          result.reason === 'expired' ? "Invite code expired. You can pair from the app later." :
           result.reason === 'self' ? "You can't use your own invite code." :
           result.reason === 'already_connected' ? "You're already connected to a partner." :
           result.reason === 'not_found' ? "Invite code not found. You can pair from the app later." :
