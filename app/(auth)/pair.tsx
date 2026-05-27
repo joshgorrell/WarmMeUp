@@ -22,8 +22,6 @@ import { useAuth } from '@/context/AuthContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import {
-  generateInviteCode,
-  codeExpiresAt,
   isCodeExpired,
   validateCodeFormat,
   savePendingCode,
@@ -146,44 +144,25 @@ export default function PairScreen() {
       setMyCode(existing.invite_code);
       await refreshCouple();
     } else {
-      // Fallback: no solo couple exists yet — create one
-      const code = generateInviteCode();
-      const payload = {
-        user_a_id: user.id,
-        invite_code: code,
-        active: true,
-        invite_code_expires_at: codeExpiresAt(),
-      };
-      logDebugEvent('INVITE CREATE START', { source: 'insert', userId: user.id, payload });
-      const { data: newCouple, error: insertError } = await supabase
-        .from('couples')
-        .insert(payload)
-        .select()
-        .single();
-      if (insertError) {
+      // Fallback: no solo couple exists yet — create one via RPC to bypass schema cache
+      logDebugEvent('INVITE CREATE START', { source: 'rpc', userId: user.id });
+      const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
+      if (rpcError || !result) {
         logDebugEvent('INVITE CREATE ERROR', {
           userId: user.id,
-          payload,
-          code: insertError.code,
-          message: insertError.message,
-          details: insertError.details,
-          hint: insertError.hint,
-          status: (insertError as any).status ?? null,
+          code: rpcError?.code ?? null,
+          message: rpcError?.message ?? null,
         });
         setError(
           `Could not create invite record.\n` +
-          `Code: ${insertError.code ?? 'n/a'}\n` +
-          `Message: ${insertError.message}\n` +
-          `Details: ${insertError.details ?? 'none'}\n` +
-          `Hint: ${insertError.hint ?? 'none'}`
+          `Code: ${rpcError?.code ?? 'n/a'}\n` +
+          `Message: ${rpcError?.message ?? 'Unknown error'}`
         );
         return;
       }
-      if (newCouple) {
-        logDebugEvent('INVITE CREATE SUCCESS', { source: 'insert', coupleId: newCouple.id, inviteCode: newCouple.invite_code });
-        setMyCode(newCouple.invite_code);
-        await refreshCouple();
-      }
+      logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc', inviteCode: result.invite_code });
+      setMyCode(result.invite_code);
+      await refreshCouple();
     }
   };
 
@@ -202,21 +181,15 @@ export default function PairScreen() {
   };
 
   const handleRefreshCode = async () => {
-    if (!couple?.id || refreshing || couple.user_b_id) return;
+    if (refreshing || couple?.user_b_id) return;
     if (!subscriptionInfo.canInvite) {
       router.push('/(auth)/subscription');
       return;
     }
     setRefreshing(true);
-    const newCode = generateInviteCode();
-    const { data: updated, error: updateError } = await supabase
-      .from('couples')
-      .update({ invite_code: newCode, invite_code_expires_at: codeExpiresAt() })
-      .eq('id', couple.id)
-      .select()
-      .single();
-    if (!updateError && updated) {
-      setMyCode(updated.invite_code);
+    const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
+    if (!rpcError && result) {
+      setMyCode(result.invite_code);
       await refreshCouple();
     }
     setRefreshing(false);
