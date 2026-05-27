@@ -324,7 +324,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function loadUserData(userId: string) {
-    console.log('[Auth] loadUserData start uid:', userId);
+    console.log('[Auth] loadUserData start uid:', userId, '| SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL ?? '(not set)');
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       const accessToken = currentSession?.access_token ?? '';

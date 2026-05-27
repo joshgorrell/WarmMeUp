@@ -124,13 +124,14 @@ Deno.serve(async (req: Request) => {
           trialExpiresAt: ownSub!.plan === "trial" ? ownSub!.expires_at : null,
           canInvite: true,
           trialExpired: false,
-          // debug
           checkedSuperAdmin: true,
           checkedAdminGrant: false,
           adminGrantFound: false,
           finalSource: "self",
           finalCanInvite: true,
           finalIsPremium: true,
+          _v: "2026-05-27c",
+          _ts: new Date().toISOString(),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -157,13 +158,14 @@ Deno.serve(async (req: Request) => {
           trialExpiresAt: null,
           canInvite: true,
           trialExpired: false,
-          // debug
           checkedSuperAdmin: true,
           checkedAdminGrant: true,
           adminGrantFound: true,
           finalSource: "admin_grant",
           finalCanInvite: true,
           finalIsPremium: true,
+          _v: "2026-05-27c",
+          _ts: new Date().toISOString(),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -197,13 +199,14 @@ Deno.serve(async (req: Request) => {
               trialExpiresAt: null,
               canInvite: false,
               trialExpired: false,
-              // debug
               checkedSuperAdmin: true,
               checkedAdminGrant: true,
               adminGrantFound: false,
               finalSource: "partner",
               finalCanInvite: false,
               finalIsPremium: true,
+              _v: "2026-05-27c",
+              _ts: new Date().toISOString(),
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
