@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform, Share,
+  View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform, Share, ActivityIndicator,
 } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Constants from 'expo-constants';
@@ -88,10 +88,12 @@ export default function DebugScreen() {
   const [hasPin, setHasPin] = useState<boolean | null>(null);
   const [inactiveCoupleCount, setInactiveCoupleCount] = useState<number | null>(null);
   const [events, setEvents] = useState<DebugEvent[]>(() => getDebugEvents());
-  const [rpcTestResult, setRpcTestResult] = useState<string | null>(null);
-  const [rpcTestRanAt, setRpcTestRanAt] = useState<string | null>(null);
-  const [rpcTestError, setRpcTestError] = useState<{ code?: string; message?: string; details?: string; hint?: string } | null>(null);
-  const [rpcTesting, setRpcTesting] = useState(false);
+  const [rpcTest, setRpcTest] = useState<{
+    status: 'idle' | 'loading' | 'success' | 'error';
+    ranAt: string | null;
+    result: any | null;
+    error: { code: string | null; message: string | null; details: string | null; hint: string | null } | null;
+  }>({ status: 'idle', ranAt: null, result: null, error: null });
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -182,26 +184,32 @@ export default function DebugScreen() {
 
   // --- Action: Test generate_invite_code RPC ---
   const handleTestRpc = async () => {
-    setRpcTesting(true);
-    setRpcTestResult(null);
-    setRpcTestError(null);
-    setRpcTestRanAt(null);
+    setRpcTest({ status: 'loading', ranAt: null, result: null, error: null });
     try {
       const { data, error } = await supabase.rpc('generate_invite_code');
       const ranAt = new Date().toISOString();
-      setRpcTestRanAt(ranAt);
       if (error) {
-        setRpcTestError({ code: error.code, message: error.message, details: error.details ?? undefined, hint: error.hint ?? undefined });
-        setRpcTestResult(`ERROR`);
+        setRpcTest({
+          status: 'error',
+          ranAt,
+          result: null,
+          error: {
+            code: error.code ?? null,
+            message: error.message ?? null,
+            details: (error.details as string) ?? null,
+            hint: (error.hint as string) ?? null,
+          },
+        });
       } else {
-        setRpcTestResult(`SUCCESS data=${JSON.stringify(data)}`);
+        setRpcTest({ status: 'success', ranAt, result: data, error: null });
       }
     } catch (e: any) {
-      setRpcTestRanAt(new Date().toISOString());
-      setRpcTestError({ message: e?.message ?? String(e) });
-      setRpcTestResult(`EXCEPTION`);
-    } finally {
-      setRpcTesting(false);
+      setRpcTest({
+        status: 'error',
+        ranAt: new Date().toISOString(),
+        result: null,
+        error: { code: null, message: e?.message ?? String(e), details: null, hint: null },
+      });
     }
   };
 
@@ -346,12 +354,7 @@ export default function DebugScreen() {
       canRefreshInviteCode,
       refreshBlockReason,
       couple_invite_code: couple?.invite_code ?? null,
-      rpc_test_ran_at: rpcTestRanAt,
-      rpc_test_result: rpcTestResult,
-      rpc_error_code: rpcTestError?.code ?? null,
-      rpc_error_message: rpcTestError?.message ?? null,
-      rpc_error_details: rpcTestError?.details ?? null,
-      rpc_error_hint: rpcTestError?.hint ?? null,
+      rpc_test: rpcTest,
       vault_bucket: 'vault',
       vault_uploadPathTemplate: uploadPathTemplate,
       vault_lastPickAt: lastVaultPick?.timestamp ?? null,
@@ -445,12 +448,13 @@ export default function DebugScreen() {
         <Row label="refreshBlockReason" value={refreshBlockReason} />
         <Row label="couple.invite_code" value={couple?.invite_code ?? null} />
         <Row label="couple.subscription_owner_id" value={couple?.subscription_owner_id ?? null} />
-        <Row label="rpc_test_ran_at" value={rpcTestRanAt} />
-        <Row label="rpc_test_result" value={rpcTestResult} />
-        <Row label="rpc_error.code" value={rpcTestError?.code ?? null} />
-        <Row label="rpc_error.message" value={rpcTestError?.message ?? null} />
-        <Row label="rpc_error.details" value={rpcTestError?.details ?? null} />
-        <Row label="rpc_error.hint" value={rpcTestError?.hint ?? null} />
+        <Row label="rpc_test.status" value={rpcTest.status} />
+        <Row label="rpc_test.ranAt" value={rpcTest.ranAt} />
+        <Row label="rpc_test.result" value={rpcTest.result !== null ? JSON.stringify(rpcTest.result) : null} />
+        <Row label="rpc_test.error.code" value={rpcTest.error?.code ?? null} />
+        <Row label="rpc_test.error.message" value={rpcTest.error?.message ?? null} />
+        <Row label="rpc_test.error.details" value={rpcTest.error?.details ?? null} />
+        <Row label="rpc_test.error.hint" value={rpcTest.error?.hint ?? null} />
 
         {/* ── 3. Vault Upload Diagnostics ── */}
         <Section title="Vault Upload Diagnostics" />
@@ -569,41 +573,84 @@ export default function DebugScreen() {
           </AppText>
 
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#1a3a1a' }, rpcTesting && styles.btnDisabled]}
+            style={[styles.actionBtn, { backgroundColor: '#1a3a1a' }, rpcTest.status === 'loading' && styles.btnDisabled]}
             onPress={handleTestRpc}
-            disabled={rpcTesting}
+            disabled={rpcTest.status === 'loading'}
             activeOpacity={0.8}
           >
-            <RefreshCw size={15} color="#4CAF50" />
+            {rpcTest.status === 'loading'
+              ? <ActivityIndicator size="small" color="#4CAF50" />
+              : <RefreshCw size={15} color="#4CAF50" />
+            }
             <AppText style={[styles.actionBtnLabel, { color: '#4CAF50' }]}>
-              {rpcTesting ? 'Testing RPC…' : 'Test generate_invite_code RPC'}
+              {rpcTest.status === 'loading' ? 'Testing RPC…' : 'Test generate_invite_code RPC'}
             </AppText>
           </TouchableOpacity>
-          {rpcTestResult !== null && (
+
+          {/* Inline result card — always visible after first run */}
+          {rpcTest.status !== 'idle' && (
             <View style={[
-              styles.rpcResultBanner,
-              rpcTestResult.startsWith('SUCCESS') ? styles.rpcResultBannerSuccess : styles.rpcResultBannerError,
+              styles.rpcCard,
+              rpcTest.status === 'loading' && styles.rpcCardLoading,
+              rpcTest.status === 'success' && styles.rpcCardSuccess,
+              rpcTest.status === 'error' && styles.rpcCardError,
             ]}>
-              <AppText style={styles.rpcResultBannerText} selectable numberOfLines={0}>
-                {rpcTestResult}
-              </AppText>
-              {rpcTestError && (
-                <AppText style={styles.rpcResultBannerDetail} selectable numberOfLines={0}>
-                  {[
-                    rpcTestError.code && `code: ${rpcTestError.code}`,
-                    rpcTestError.message && `msg: ${rpcTestError.message}`,
-                    rpcTestError.details && `details: ${rpcTestError.details}`,
-                    rpcTestError.hint && `hint: ${rpcTestError.hint}`,
-                  ].filter(Boolean).join('\n')}
+              <View style={styles.rpcCardHeader}>
+                <AppText style={[
+                  styles.rpcCardStatus,
+                  rpcTest.status === 'success' && { color: '#4CAF50' },
+                  rpcTest.status === 'error' && { color: '#FF6B6B' },
+                  rpcTest.status === 'loading' && { color: '#FFA040' },
+                ]}>
+                  {rpcTest.status.toUpperCase()}
                 </AppText>
+                {rpcTest.ranAt && (
+                  <AppText style={styles.rpcCardTs} selectable>{rpcTest.ranAt}</AppText>
+                )}
+              </View>
+
+              {rpcTest.status === 'success' && rpcTest.result !== null && (
+                <View style={styles.rpcCardField}>
+                  <AppText style={styles.rpcCardFieldLabel}>result</AppText>
+                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>
+                    {JSON.stringify(rpcTest.result, null, 2)}
+                  </AppText>
+                </View>
               )}
-              {rpcTestRanAt && (
-                <AppText style={styles.rpcResultBannerTs}>{rpcTestRanAt}</AppText>
+
+              {rpcTest.status === 'error' && rpcTest.error && (
+                <>
+                  {rpcTest.error.code && (
+                    <View style={styles.rpcCardField}>
+                      <AppText style={styles.rpcCardFieldLabel}>code</AppText>
+                      <AppText style={styles.rpcCardFieldValue} selectable>{rpcTest.error.code}</AppText>
+                    </View>
+                  )}
+                  {rpcTest.error.message && (
+                    <View style={styles.rpcCardField}>
+                      <AppText style={styles.rpcCardFieldLabel}>message</AppText>
+                      <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{rpcTest.error.message}</AppText>
+                    </View>
+                  )}
+                  {rpcTest.error.details && (
+                    <View style={styles.rpcCardField}>
+                      <AppText style={styles.rpcCardFieldLabel}>details</AppText>
+                      <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{rpcTest.error.details}</AppText>
+                    </View>
+                  )}
+                  {rpcTest.error.hint && (
+                    <View style={styles.rpcCardField}>
+                      <AppText style={styles.rpcCardFieldLabel}>hint</AppText>
+                      <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{rpcTest.error.hint}</AppText>
+                    </View>
+                  )}
+                </>
               )}
             </View>
           )}
+
           <AppText style={styles.btnNote}>
-            Calls the RPC directly. Result appears inline and in rpc_test_result rows above.
+            Calls generate_invite_code() RPC. Result appears immediately above.
           </AppText>
 
           <TouchableOpacity
@@ -759,38 +806,57 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
   },
-  rpcResultBanner: {
+  rpcCard: {
     borderRadius: Radius.md,
     padding: Spacing.sm,
     marginTop: 6,
-    gap: 4,
-  },
-  rpcResultBannerSuccess: {
-    backgroundColor: '#0d2b0d',
+    gap: 8,
     borderWidth: 1,
+  },
+  rpcCardLoading: {
+    backgroundColor: '#1a1a0d',
+    borderColor: '#4a4a1a',
+  },
+  rpcCardSuccess: {
+    backgroundColor: '#0d2b0d',
     borderColor: '#2d6a2d',
   },
-  rpcResultBannerError: {
+  rpcCardError: {
     backgroundColor: '#2b0d0d',
-    borderWidth: 1,
     borderColor: '#6a2d2d',
   },
-  rpcResultBannerText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#e0e0e0',
+  rpcCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  rpcResultBannerDetail: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#aaa',
-    lineHeight: 16,
+  rpcCardStatus: {
+    fontSize: 13,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: 0.5,
   },
-  rpcResultBannerTs: {
+  rpcCardTs: {
     fontSize: 10,
     fontFamily: 'Inter-Regular',
-    color: '#555',
-    marginTop: 2,
+    color: '#666',
+    flexShrink: 1,
+  },
+  rpcCardField: {
+    gap: 2,
+  },
+  rpcCardFieldLabel: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  rpcCardFieldValue: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#ddd',
+    lineHeight: 18,
   },
   emptyEventsText: {
     fontSize: 12,
