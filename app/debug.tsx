@@ -162,6 +162,10 @@ export default function DebugScreen() {
     ? supabaseUrlHost.replace(/\.supabase\.co$/, '')
     : null;
 
+  // Boot timing from event log
+  const lastBootEvent = events.find(e => e.tag === 'LAUNCH BOOT');
+  const bootElapsedMs = (lastBootEvent?.data?.bootElapsedMs as number) ?? null;
+
   // Vault upload diagnostics from event log
   const lastVaultPick = events.find(e => e.tag === 'VAULT PICK');
   const lastVaultUploadStart = events.find(e => e.tag === 'VAULT UPLOAD START');
@@ -310,6 +314,7 @@ export default function DebugScreen() {
       shouldShowPrivacyCover,
       blur_on_background: settings?.blur_on_background ?? null,
       push_notifications_enabled: settings?.push_notifications_enabled ?? null,
+      bootElapsedMs,
       tokenPresent, sessionExpiry, tokenExpiryCountdown,
       supabaseUrlHost, dbProjectRef,
       sub_loading: subscriptionInfo.loading,
@@ -402,6 +407,7 @@ export default function DebugScreen() {
         <Row label="shouldShowPrivacyCover" value={shouldShowPrivacyCover} />
         <Row label="blur_on_background" value={settings?.blur_on_background ?? null} />
         <Row label="push_notifications_enabled" value={settings?.push_notifications_enabled ?? null} />
+        <Row label="bootElapsedMs" value={bootElapsedMs} />
 
         {/* ── 2. Subscription / Pairing State ── */}
         <Section title="Subscription / Pairing State" />

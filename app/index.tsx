@@ -3,10 +3,11 @@ import { useRouter } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import { useAuth, computeIsUnlockRequired, computeShouldShowPrivacyCover } from '@/context/AuthContext';
 import { hasPinStored } from '@/lib/secureKey';
+import { logDebugEvent } from '@/lib/debugLog';
 
 // If settings haven't arrived this many ms after loading=false, fall through to
 // /transition rather than hanging on the black index screen indefinitely.
-const SETTINGS_WAIT_MS = 800;
+const SETTINGS_WAIT_MS = 300;
 
 export default function IndexScreen() {
   const router = useRouter();
@@ -18,6 +19,12 @@ export default function IndexScreen() {
   useEffect(() => {
     if (loading) return;
 
+    const bootElapsedMs = Date.now() - mountMs.current;
+    logDebugEvent('LAUNCH BOOT', {
+      hasSession: !!session,
+      settingsLoaded: !!settings,
+      bootElapsedMs,
+    });
     console.log('[LAUNCH DEBUG]', {
       hasSession: !!session,
       userId: session?.user?.id,
@@ -26,7 +33,7 @@ export default function IndexScreen() {
       stealthMode: settings?.stealth_mode_enabled,
       lockAfter: settings?.lock_after_seconds,
       unlockedAtMs,
-      transitionElapsedMs: Date.now() - mountMs.current,
+      transitionElapsedMs: bootElapsedMs,
     });
 
     if (!session) {

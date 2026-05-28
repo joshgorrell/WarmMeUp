@@ -314,8 +314,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Safety net: if loading never resolves (e.g. network hang), unblock after 4s.
-    const timeout = setTimeout(() => setLoading(false), 4000);
+    // Safety net: if loading never resolves (e.g. network hang), unblock after 1.5s.
+    const timeout = setTimeout(() => setLoading(false), 1500);
 
     return () => {
       subscription.unsubscribe();
