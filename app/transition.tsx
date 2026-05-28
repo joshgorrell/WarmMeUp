@@ -36,18 +36,18 @@ function resolveNotificationRoute(data: NotificationData): string | null {
 }
 
 // Maximum time to wait for couple data to arrive after auth is ready.
-const COUPLE_WAIT_MS = 2500;
+const COUPLE_WAIT_MS = 1000;
 // Maximum time to wait for subscription info — it's a separate async fetch.
-const SUB_WAIT_MS = 3500;
+const SUB_WAIT_MS = 1500;
 // Absolute hard deadline — transition MUST resolve within this time no matter what.
-const HARD_DEADLINE_MS = 5000;
+const HARD_DEADLINE_MS = 2000;
 
 const DEBUG_TAP_TARGET = 5;
 const DEBUG_TAP_WINDOW_MS = 10000;
 
 export default function TransitionScreen() {
   const router = useRouter();
-  const { couple, partnerProfile, settings, user, isAdmin, loading, subscriptionInfo, debugModeEnabled } = useAuth();
+  const { couple, partnerProfile, settings, user, isAdmin, isSuperAdmin, loading, subscriptionInfo, debugModeEnabled } = useAuth();
   const { width } = useWindowDimensions();
   const logoW = Math.min(width * 0.5, 200);
   const bgOpacity = useRef(new Animated.Value(0)).current;
@@ -68,6 +68,9 @@ export default function TransitionScreen() {
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debugModeRef = useRef(debugModeEnabled);
   debugModeRef.current = debugModeEnabled;
+  // Timing reference for elapsed-ms logs
+  const startMs = useRef(Date.now());
+  const elapsed = () => Date.now() - startMs.current;
 
   const handleDebugTap = () => {
     const canDebug = __DEV__ || isAdminRef.current || debugModeRef.current || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
@@ -88,30 +91,25 @@ export default function TransitionScreen() {
   const navigate = () => {
     if (routed.current) return;
 
-    console.log('[TRANSITION DEBUG]', {
-      userId: user?.id ?? null,
-      isAdmin,
-      coupleId: couple?.id ?? null,
-      coupleActive: couple?.active ?? null,
-      subLoading: subscriptionInfo.loading,
-      isPremium: subscriptionInfo.isPremium,
-      isOnTrial: subscriptionInfo.isOnTrial,
-      loginMethod: settings?.login_method ?? null,
-      lockAfter: settings?.lock_after_seconds ?? null,
-    });
+    // Admins and super-admins bypass subscription checks entirely.
+    const isPrivileged = isAdmin || isSuperAdmin;
 
-    // Admins bypass subscription checks entirely — never wait on sub loading.
-    // If subscription info hasn't resolved yet for non-admins, defer to avoid
-    // routing with the default isPremium:false while still loading.
-    if (!isAdmin && subscriptionInfo.loading) {
-      if (!subTimeoutRef.current) {
-        subTimeoutRef.current = setTimeout(() => {
-          subTimeoutRef.current = null;
-          console.log('[transition] sub timeout fired — forcing navigate');
-          navigate();
-        }, SUB_WAIT_MS);
+    // For non-privileged users, defer if subscription is still loading —
+    // UNLESS there is no active couple, in which case the destination is
+    // always /pair and subscription status doesn't matter.
+    if (!isPrivileged && subscriptionInfo.loading) {
+      const noCouple = !couple || couple.active === false;
+      if (!noCouple) {
+        if (!subTimeoutRef.current) {
+          console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — subscriptionInfo.loading=true`);
+          subTimeoutRef.current = setTimeout(() => {
+            subTimeoutRef.current = null;
+            console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — sub timeout fired, forcing navigate`);
+            navigate();
+          }, SUB_WAIT_MS);
+        }
+        return;
       }
-      return;
     }
 
     if (coupleTimeoutRef.current) {
@@ -123,6 +121,19 @@ export default function TransitionScreen() {
       subTimeoutRef.current = null;
     }
     routed.current = true;
+
+    console.log(`[TRANSITION ROUTE DECISION] +${elapsed()}ms`, {
+      userId: user?.id ?? null,
+      isAdmin,
+      isSuperAdmin,
+      coupleId: couple?.id ?? null,
+      coupleActive: couple?.active ?? null,
+      subLoading: subscriptionInfo.loading,
+      isPremium: subscriptionInfo.isPremium,
+      isOnTrial: subscriptionInfo.isOnTrial,
+      loginMethod: settings?.login_method ?? null,
+    });
+
     Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
       // Clear the hard deadline only after we are inside the animation callback
       // and about to route. This ensures the deadline stays armed as a fallback
@@ -132,9 +143,9 @@ export default function TransitionScreen() {
         hardDeadlineRef.current = null;
       }
 
-      // Admins bypass all subscription checks
-      if (isAdmin) {
-        console.log('[transition] → /(app)/(tabs) [admin]');
+      // Privileged users bypass all subscription checks
+      if (isPrivileged) {
+        console.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs) [privileged]`);
         router.replace('/(app)/(tabs)');
         return;
       }
@@ -143,7 +154,7 @@ export default function TransitionScreen() {
         // Check subscription access: isPremium covers active trial AND paid AND partner-paid
         if (!subscriptionInfo.isPremium) {
           const reason = subscriptionInfo.trialExpired ? 'expired_trial' : undefined;
-          console.log('[transition] → subscription [not premium, reason:', reason ?? 'none', ']');
+          console.log(`[TRANSITION ROUTED] +${elapsed()}ms → subscription [not premium]`);
           router.replace({ pathname: '/(auth)/subscription', params: reason ? { reason } : {} });
           return;
         }
@@ -154,7 +165,7 @@ export default function TransitionScreen() {
             .from('user_settings')
             .update({ celebration_seen: true, updated_at: new Date().toISOString() })
             .eq('user_id', user.id);
-          console.log('[transition] → paired-celebration');
+          console.log(`[TRANSITION ROUTED] +${elapsed()}ms → paired-celebration`);
           router.replace({
             pathname: '/(auth)/paired-celebration',
             params: { partnerName: partnerProfile?.display_name || '' },
@@ -164,13 +175,13 @@ export default function TransitionScreen() {
         const intent = pendingNotificationRoute.current;
         const notifDest = intent ? resolveNotificationRoute(intent) : null;
         if (intent) pendingNotificationRoute.current = null;
-        console.log('[transition] → /(app)/(tabs)', notifDest ? `pendingTab=${notifDest}` : '');
+        console.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs)`, notifDest ? `pendingTab=${notifDest}` : '');
         router.replace({
           pathname: '/(app)/(tabs)',
           params: notifDest ? { pendingTab: notifDest } : {},
         });
       } else {
-        console.log('[transition] → /(auth)/pair [no active couple]');
+        console.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/pair [no active couple]`);
         router.replace('/(auth)/pair');
       }
     });
@@ -180,14 +191,17 @@ export default function TransitionScreen() {
     if (routed.current) return;
     if (!animDone.current || !authReady.current) return;
 
-    console.log('[transition] tryNavigate — couple:', couple ? `id=${couple.id}` : 'null', 'user:', user?.id ?? 'null');
+    console.log(`[TRANSITION ROUTE DECISION] +${elapsed()}ms — couple: ${couple ? `id=${couple.id}` : 'null'} user: ${user?.id ?? 'null'}`);
 
     // Couple arrives slightly after loading=false due to React batching.
-    if (user && !couple) {
+    // Privileged users skip the couple wait — they go to app regardless.
+    const isPrivileged = isAdmin || isSuperAdmin;
+    if (user && !couple && !isPrivileged) {
       if (!coupleTimeoutRef.current) {
+        console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — couple null after auth ready`);
         coupleTimeoutRef.current = setTimeout(() => {
           coupleTimeoutRef.current = null;
-          console.log('[transition] couple timeout fired — forcing navigate');
+          console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — couple timeout fired, forcing navigate`);
           navigate();
         }, COUPLE_WAIT_MS);
       }
@@ -199,15 +213,16 @@ export default function TransitionScreen() {
   };
 
   useEffect(() => {
-    // Hard deadline: if transition hasn't resolved within 5s, force safe fallback.
+    console.log('[TRANSITION START] +0ms');
+
+    // Hard deadline: if transition hasn't resolved, force safe fallback.
     hardDeadlineRef.current = setTimeout(() => {
       hardDeadlineRef.current = null;
       if (!routed.current) {
         routed.current = true;
-        // Prefer a safe route: paired users go to app, everyone else to pair screen.
         const hasActiveCouple = coupleRef.current?.active === true;
         const dest = isAdminRef.current || hasActiveCouple ? '/(app)/(tabs)' : '/(auth)/pair';
-        console.warn('[transition] HARD DEADLINE reached — forcing fallback to', dest);
+        console.warn(`[TRANSITION ROUTED] +${elapsed()}ms HARD DEADLINE — fallback to ${dest}`);
         router.replace(dest);
       }
     }, HARD_DEADLINE_MS);
@@ -233,7 +248,7 @@ export default function TransitionScreen() {
       authReady.current = true;
       tryNavigate();
     }
-  }, [loading, couple?.id, couple?.active, user?.id, isAdmin, subscriptionInfo.loading, subscriptionInfo.isPremium]);
+  }, [loading, couple?.id, couple?.active, user?.id, isAdmin, isSuperAdmin, subscriptionInfo.loading, subscriptionInfo.isPremium]);
 
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>

@@ -66,11 +66,19 @@ const DEBUG_TAP_WINDOW_MS = 10000;
 
 export default function WeatherScreen() {
   const router = useRouter();
-  const { session, loading, user, profile, settings, unlockedAtMs, refreshSettings, unlockApp, isAuthenticatingRef, debugModeEnabled } = useAuth();
+  const { session, loading, user, profile, settings, unlockedAtMs, refreshSettings, unlockApp, isAuthenticatingRef, debugModeEnabled, refreshSubscription } = useAuth();
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debugLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
+
+  // Warm up subscription data while the user views the weather screen so that
+  // tapping "The Coast is Clear" can route through transition.tsx immediately
+  // without waiting on a cold subscription fetch.
+  useEffect(() => {
+    refreshSubscription().catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Hard session guard — this screen is exclusively for confirmed logged-in users.
   // SessionGuard in _layout.tsx handles the global case, but guard here too so
