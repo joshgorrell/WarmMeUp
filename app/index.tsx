@@ -6,13 +6,14 @@ import { hasPinStored } from '@/lib/secureKey';
 
 // If settings haven't arrived this many ms after loading=false, fall through to
 // /transition rather than hanging on the black index screen indefinitely.
-const SETTINGS_WAIT_MS = 4000;
+const SETTINGS_WAIT_MS = 800;
 
 export default function IndexScreen() {
   const router = useRouter();
   const { session, loading, settings, unlockedAtMs, unlockApp } = useAuth();
   const settingsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routedRef = useRef(false);
+  const mountMs = useRef(Date.now());
 
   useEffect(() => {
     if (loading) return;
@@ -25,6 +26,7 @@ export default function IndexScreen() {
       stealthMode: settings?.stealth_mode_enabled,
       lockAfter: settings?.lock_after_seconds,
       unlockedAtMs,
+      transitionElapsedMs: Date.now() - mountMs.current,
     });
 
     if (!session) {
@@ -43,7 +45,7 @@ export default function IndexScreen() {
         settingsTimeoutRef.current = setTimeout(() => {
           settingsTimeoutRef.current = null;
           if (!routedRef.current) {
-            console.warn('[index] settings timeout — falling through to /transition');
+            console.warn('[index] settings timeout — falling through to /transition', { transitionElapsedMs: Date.now() - mountMs.current });
             routedRef.current = true;
             unlockApp();
             router.replace('/transition');
