@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 import { secureKey, hasPinStored } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
 import { getDebugEvents, clearDebugEvents, subscribeDebugEvents, DebugEvent } from '@/lib/debugLog';
+import { APP_CODE_VERSION, GIT_SHA } from '@/lib/appVersion';
 import { Spacing, Radius, FontSize } from '@/constants/theme';
 
 function Row({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
@@ -290,6 +291,7 @@ export default function DebugScreen() {
   const handleShareDebugInfo = async () => {
     const lastErr = lastVaultUploadError?.data ?? null;
     const info: Record<string, unknown> = {
+      APP_CODE_VERSION, gitSha: GIT_SHA,
       updateId, runtimeVersion, channel, isEmbeddedLaunch, isEmergencyLaunch, createdAt,
       appVersion, nativeAppVersion: nativeVersion, nativeBuildVersion: buildVersion,
       userId,
@@ -371,6 +373,16 @@ export default function DebugScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* ── 0. App Code Version ── */}
+        <Section title="App Code Version" />
+        <Row label="APP_CODE_VERSION" value={APP_CODE_VERSION} />
+        <Row label="gitSha" value={GIT_SHA} />
+        <Row label="updateId" value={updateId} />
+        <Row label="createdAt" value={createdAt} />
+        <Row label="isEmbeddedLaunch" value={isEmbeddedLaunch} />
+        <Row label="runtimeVersion" value={runtimeVersion} />
+        <Row label="channel" value={channel} />
+
         {/* ── 1. Launch / Auth State ── */}
         <Section title="Launch / Auth State" />
         <Row label="userId" value={userId} />
