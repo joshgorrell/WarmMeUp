@@ -36,11 +36,11 @@ function resolveNotificationRoute(data: NotificationData): string | null {
 }
 
 // Maximum time to wait for couple data to arrive after auth is ready.
-const COUPLE_WAIT_MS = 1000;
+const COUPLE_WAIT_MS = 300;
 // Maximum time to wait for subscription info — it's a separate async fetch.
-const SUB_WAIT_MS = 1500;
+const SUB_WAIT_MS = 400;
 // Absolute hard deadline — transition MUST resolve within this time no matter what.
-const HARD_DEADLINE_MS = 2000;
+const HARD_DEADLINE_MS = 1000;
 
 const DEBUG_TAP_TARGET = 5;
 const DEBUG_TAP_WINDOW_MS = 10000;
@@ -62,8 +62,12 @@ export default function TransitionScreen() {
   // Kept current so the hard-deadline callback (empty-deps effect) reads latest values.
   const coupleRef = useRef(couple);
   const isAdminRef = useRef(isAdmin);
+  const isSuperAdminRef = useRef(isSuperAdmin);
+  const canInviteRef = useRef(subscriptionInfo.canInvite);
   coupleRef.current = couple;
   isAdminRef.current = isAdmin;
+  isSuperAdminRef.current = isSuperAdmin;
+  canInviteRef.current = subscriptionInfo.canInvite;
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debugModeRef = useRef(debugModeEnabled);
@@ -101,10 +105,10 @@ export default function TransitionScreen() {
       const noCouple = !couple || couple.active === false;
       if (!noCouple) {
         if (!subTimeoutRef.current) {
-          console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — subscriptionInfo.loading=true`);
+          console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — subscriptionInfo.loading=true`, { elapsedMs: elapsed() });
           subTimeoutRef.current = setTimeout(() => {
             subTimeoutRef.current = null;
-            console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — sub timeout fired, forcing navigate`);
+            console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — sub timeout fired, forcing navigate`, { elapsedMs: elapsed() });
             navigate();
           }, SUB_WAIT_MS);
         }
@@ -123,11 +127,13 @@ export default function TransitionScreen() {
     routed.current = true;
 
     console.log(`[TRANSITION ROUTE DECISION] +${elapsed()}ms`, {
+      elapsedMs: elapsed(),
       userId: user?.id ?? null,
       isAdmin,
       isSuperAdmin,
       coupleId: couple?.id ?? null,
       coupleActive: couple?.active ?? null,
+      canInvite: subscriptionInfo.canInvite,
       subLoading: subscriptionInfo.loading,
       isPremium: subscriptionInfo.isPremium,
       isOnTrial: subscriptionInfo.isOnTrial,
@@ -145,7 +151,7 @@ export default function TransitionScreen() {
 
       // Privileged users bypass all subscription checks
       if (isPrivileged) {
-        console.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs) [privileged]`);
+        console.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs) [privileged]`, { elapsedMs: elapsed() });
         router.replace('/(app)/(tabs)');
         return;
       }
@@ -154,7 +160,7 @@ export default function TransitionScreen() {
         // Check subscription access: isPremium covers active trial AND paid AND partner-paid
         if (!subscriptionInfo.isPremium) {
           const reason = subscriptionInfo.trialExpired ? 'expired_trial' : undefined;
-          console.log(`[TRANSITION ROUTED] +${elapsed()}ms → subscription [not premium]`);
+          console.log(`[TRANSITION ROUTED] +${elapsed()}ms → subscription [not premium]`, { elapsedMs: elapsed() });
           router.replace({ pathname: '/(auth)/subscription', params: reason ? { reason } : {} });
           return;
         }
@@ -165,7 +171,7 @@ export default function TransitionScreen() {
             .from('user_settings')
             .update({ celebration_seen: true, updated_at: new Date().toISOString() })
             .eq('user_id', user.id);
-          console.log(`[TRANSITION ROUTED] +${elapsed()}ms → paired-celebration`);
+          console.log(`[TRANSITION ROUTED] +${elapsed()}ms → paired-celebration`, { elapsedMs: elapsed() });
           router.replace({
             pathname: '/(auth)/paired-celebration',
             params: { partnerName: partnerProfile?.display_name || '' },
@@ -175,13 +181,17 @@ export default function TransitionScreen() {
         const intent = pendingNotificationRoute.current;
         const notifDest = intent ? resolveNotificationRoute(intent) : null;
         if (intent) pendingNotificationRoute.current = null;
-        console.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs)`, notifDest ? `pendingTab=${notifDest}` : '');
+        console.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs)`, { elapsedMs: elapsed(), pendingTab: notifDest ?? undefined });
         router.replace({
           pathname: '/(app)/(tabs)',
           params: notifDest ? { pendingTab: notifDest } : {},
         });
+      } else if (subscriptionInfo.canInvite) {
+        // User has no active partner yet but holds a valid subscription — route into app.
+        console.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs) [canInvite, no partner]`, { elapsedMs: elapsed() });
+        router.replace('/(app)/(tabs)');
       } else {
-        console.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/pair [no active couple]`);
+        console.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/pair [no active couple]`, { elapsedMs: elapsed() });
         router.replace('/(auth)/pair');
       }
     });
@@ -191,17 +201,17 @@ export default function TransitionScreen() {
     if (routed.current) return;
     if (!animDone.current || !authReady.current) return;
 
-    console.log(`[TRANSITION ROUTE DECISION] +${elapsed()}ms — couple: ${couple ? `id=${couple.id}` : 'null'} user: ${user?.id ?? 'null'}`);
+    console.log(`[TRANSITION TRY NAVIGATE] +${elapsed()}ms`, { elapsedMs: elapsed(), couple: couple ? `id=${couple.id}` : 'null', userId: user?.id ?? 'null' });
 
     // Couple arrives slightly after loading=false due to React batching.
     // Privileged users skip the couple wait — they go to app regardless.
     const isPrivileged = isAdmin || isSuperAdmin;
     if (user && !couple && !isPrivileged) {
       if (!coupleTimeoutRef.current) {
-        console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — couple null after auth ready`);
+        console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — couple null after auth ready`, { elapsedMs: elapsed() });
         coupleTimeoutRef.current = setTimeout(() => {
           coupleTimeoutRef.current = null;
-          console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — couple timeout fired, forcing navigate`);
+          console.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — couple timeout fired, forcing navigate`, { elapsedMs: elapsed() });
           navigate();
         }, COUPLE_WAIT_MS);
       }
@@ -221,8 +231,9 @@ export default function TransitionScreen() {
       if (!routed.current) {
         routed.current = true;
         const hasActiveCouple = coupleRef.current?.active === true;
-        const dest = isAdminRef.current || hasActiveCouple ? '/(app)/(tabs)' : '/(auth)/pair';
-        console.warn(`[TRANSITION ROUTED] +${elapsed()}ms HARD DEADLINE — fallback to ${dest}`);
+        const isPrivileged = isAdminRef.current || isSuperAdminRef.current;
+        const dest = isPrivileged || hasActiveCouple || canInviteRef.current ? '/(app)/(tabs)' : '/(auth)/pair';
+        console.warn(`[TRANSITION ROUTED] +${elapsed()}ms HARD DEADLINE — fallback to ${dest}`, { elapsedMs: elapsed() });
         router.replace(dest);
       }
     }, HARD_DEADLINE_MS);
@@ -245,6 +256,9 @@ export default function TransitionScreen() {
 
   useEffect(() => {
     if (!loading) {
+      if (!authReady.current) {
+        console.log(`[TRANSITION AUTH READY] +${elapsed()}ms`, { elapsedMs: elapsed(), userId: user?.id ?? null, isAdmin, isSuperAdmin });
+      }
       authReady.current = true;
       tryNavigate();
     }
