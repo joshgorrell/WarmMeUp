@@ -155,8 +155,11 @@ export default function DebugScreen() {
   const tokenExpiryCountdown = session?.expires_at
     ? Math.max(0, Math.round(session.expires_at - Date.now() / 1000))
     : null;
-  const supabaseHost = process.env.EXPO_PUBLIC_SUPABASE_URL
+  const supabaseUrlHost = process.env.EXPO_PUBLIC_SUPABASE_URL
     ? (() => { try { return new URL(process.env.EXPO_PUBLIC_SUPABASE_URL!).hostname; } catch { return null; } })()
+    : null;
+  const dbProjectRef = supabaseUrlHost
+    ? supabaseUrlHost.replace(/\.supabase\.co$/, '')
     : null;
 
   // Vault upload diagnostics from event log
@@ -308,6 +311,7 @@ export default function DebugScreen() {
       blur_on_background: settings?.blur_on_background ?? null,
       push_notifications_enabled: settings?.push_notifications_enabled ?? null,
       tokenPresent, sessionExpiry, tokenExpiryCountdown,
+      supabaseUrlHost, dbProjectRef,
       sub_loading: subscriptionInfo.loading,
       sub_isPremium: subscriptionInfo.isPremium,
       sub_isOnTrial: subscriptionInfo.isOnTrial,
@@ -453,7 +457,8 @@ export default function DebugScreen() {
         <Row label="tokenPresent" value={tokenPresent} />
         <Row label="sessionExpiry (ISO)" value={sessionExpiry} />
         <Row label="tokenExpiryCountdown (s)" value={tokenExpiryCountdown} />
-        <Row label="supabaseHost" value={supabaseHost} />
+        <Row label="supabaseUrlHost" value={supabaseUrlHost} />
+        <Row label="dbProjectRef" value={dbProjectRef} />
         <Row label="vaultBucket" value="vault" />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
