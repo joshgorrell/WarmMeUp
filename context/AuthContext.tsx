@@ -399,13 +399,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function fetchCouple(userId: string) {
-    // Primary fetch: active solo/invite-pending row owned by this user.
+    // Primary fetch: solo/invite-pending row owned by this user.
+    // Do NOT require active=true here — a freshly created invite row may still have
+    // active=false until the first couple-state write, and we need its invite_code.
     let { data, error } = await supabase
       .from('couples')
       .select('*')
       .eq('user_a_id', userId)
       .is('user_b_id', null)
-      .eq('active', true)
+      .order('created_at', { ascending: false })
       .maybeSingle();
 
     // Fallback: active paired couple (user_b has joined).
