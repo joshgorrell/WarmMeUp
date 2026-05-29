@@ -131,24 +131,25 @@ export default function PairScreen() {
       return;
     }
 
-    // Use the solo couple already created by the signup trigger
+    // Find any solo couple (active or inactive — active=false is a valid pending invite)
     const { data: existing } = await supabase
       .from('couples')
       .select('*')
       .eq('user_a_id', user.id)
       .is('user_b_id', null)
-      .eq('active', true)
+      .order('active', { ascending: false })
+      .order('created_at', { ascending: false })
       .maybeSingle();
 
-    if (existing) {
+    if (existing?.invite_code) {
       logDebugEvent('INVITE CREATE SUCCESS', { source: 'existing', coupleId: existing.id, inviteCode: existing.invite_code });
       setMyCode(existing.invite_code);
       await refreshCouple();
     } else {
-      // Fallback: no solo couple exists yet — create one via RPC to bypass schema cache
+      // No usable couple row — call RPC which creates one and returns the code
       logDebugEvent('INVITE CREATE START', { source: 'rpc', userId: user.id });
       const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
-      if (rpcError || !result) {
+      if (rpcError) {
         logDebugEvent('INVITE CREATE ERROR', {
           userId: user.id,
           code: rpcError?.code ?? null,
@@ -161,8 +162,18 @@ export default function PairScreen() {
         );
         return;
       }
-      logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc', inviteCode: result.invite_code });
-      setMyCode(result.invite_code);
+      const inviteCode = (result as any)?.invite_code ?? null;
+      if (!inviteCode) {
+        logDebugEvent('INVITE CREATE ERROR', {
+          userId: user.id,
+          reason: 'rpc_returned_no_invite_code',
+          result: JSON.stringify(result),
+        });
+        setError('Invite code generation failed — no code returned. Please try again.');
+        return;
+      }
+      logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc', inviteCode });
+      setMyCode(inviteCode);
       await refreshCouple();
     }
   };

@@ -107,13 +107,12 @@ export default function DebugScreen() {
   const isUnlockRequired = computeIsUnlockRequired(settings, unlockedAtMs);
   const shouldShowPrivacyCover = computeShouldShowPrivacyCover(session, settings);
   const activeCoupleFound = couple?.active === true;
-  const canRefreshInviteCode = (subscriptionInfo as any).canInvite === true && !couple?.user_b_id && couple?.active === true;
+  // A solo couple with active=false is still a valid pending invite — do not require active=true
+  const canRefreshInviteCode = (subscriptionInfo as any).canInvite === true && !couple?.user_b_id;
   const refreshBlockReason = couple?.user_b_id
     ? 'already_paired'
     : !(subscriptionInfo as any).canInvite
     ? 'no_subscription'
-    : !couple?.id
-    ? 'no_couple'
     : null;
 
   useEffect(() => {

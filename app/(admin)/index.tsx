@@ -66,16 +66,22 @@ export default function AdminDashboard() {
     return () => { mountedRef.current = false; };
   }, []);
 
+  // Fire on focus when session is already hydrated
   useFocusEffect(useCallback(() => {
     console.log('[ADMIN LOAD START] user:', user?.id, 'is_admin:', profile?.is_admin, 'is_super_admin:', profile?.is_super_admin);
-    if (!user?.id) {
-      // Session not yet hydrated — mark all stats as error so it's visible
-      logDebugEvent('ADMIN STATS ERROR', { reason: 'no_session_at_mount' });
-      return;
+    if (user?.id) {
+      fetchStats();
+      fetchDebugMode();
     }
-    fetchStats();
-    fetchDebugMode();
   }, [user?.id]));
+
+  // Also fire when user hydrates after the screen is already mounted/focused
+  useEffect(() => {
+    if (user?.id) {
+      fetchStats();
+      fetchDebugMode();
+    }
+  }, [user?.id]);
 
   const fetchDebugMode = async () => {
     const { data } = await supabase
@@ -102,17 +108,26 @@ export default function AdminDashboard() {
     queryFn: () => PromiseLike<{ count: number | null; error: any }>,
   ) => {
     if (!mountedRef.current) return;
+    console.log('[ADMIN QUERY START]', key);
     setStats(prev => ({ ...prev, [key]: { value: prev[key].value, error: null, errorCode: null, loading: true } }));
+
+    // Race the query against a 15-second timeout so spinners never hang forever
+    const timeoutPromise = new Promise<{ count: null; error: { message: string; code: string } }>(resolve =>
+      setTimeout(() => resolve({ count: null, error: { message: 'Query timed out', code: 'TIMEOUT' } }), 15000)
+    );
+
     try {
-      const { count, error } = await queryFn();
+      const { count, error } = await Promise.race([queryFn(), timeoutPromise]);
+      console.log('[ADMIN QUERY RESULT]', key, { count, error });
       if (!mountedRef.current) return;
       if (error) {
-        logDebugEvent('ADMIN STATS ERROR', { stat: key, code: error.code, message: error.message, details: error.details });
+        logDebugEvent('ADMIN STATS ERROR', { stat: key, code: error.code, message: error.message, details: (error as any).details });
         setStats(prev => ({ ...prev, [key]: { value: null, error: error.message, errorCode: error.code ?? null, loading: false } }));
       } else {
         setStats(prev => ({ ...prev, [key]: { value: count ?? 0, error: null, errorCode: null, loading: false } }));
       }
     } catch (err: any) {
+      console.log('[ADMIN QUERY RESULT]', key, { error: err?.message });
       if (!mountedRef.current) return;
       logDebugEvent('ADMIN STATS ERROR', { stat: key, message: err?.message });
       setStats(prev => ({ ...prev, [key]: { value: null, error: err?.message ?? 'Failed', errorCode: null, loading: false } }));
