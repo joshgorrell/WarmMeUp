@@ -94,6 +94,12 @@ export default function DebugScreen() {
     result: any | null;
     error: { code: string | null; message: string | null; details: string | null; hint: string | null } | null;
   }>({ status: 'idle', ranAt: null, result: null, error: null });
+  const [dbIdentity, setDbIdentity] = useState<{
+    status: 'idle' | 'loading' | 'success' | 'error';
+    ranAt: string | null;
+    result: any | null;
+    error: { code: string | null; message: string | null; details: string | null; hint: string | null } | null;
+  }>({ status: 'idle', ranAt: null, result: null, error: null });
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -205,6 +211,37 @@ export default function DebugScreen() {
       }
     } catch (e: any) {
       setRpcTest({
+        status: 'error',
+        ranAt: new Date().toISOString(),
+        result: null,
+        error: { code: null, message: e?.message ?? String(e), details: null, hint: null },
+      });
+    }
+  };
+
+  // --- Action: Test debug_database_identity RPC ---
+  const handleTestDbIdentity = async () => {
+    setDbIdentity({ status: 'loading', ranAt: null, result: null, error: null });
+    try {
+      const { data, error } = await supabase.rpc('debug_database_identity');
+      const ranAt = new Date().toISOString();
+      if (error) {
+        setDbIdentity({
+          status: 'error',
+          ranAt,
+          result: null,
+          error: {
+            code: error.code ?? null,
+            message: error.message ?? null,
+            details: (error.details as string) ?? null,
+            hint: (error.hint as string) ?? null,
+          },
+        });
+      } else {
+        setDbIdentity({ status: 'success', ranAt, result: data, error: null });
+      }
+    } catch (e: any) {
+      setDbIdentity({
         status: 'error',
         ranAt: new Date().toISOString(),
         result: null,
@@ -490,6 +527,12 @@ export default function DebugScreen() {
         <Row label="dbProjectRef" value={dbProjectRef} />
         <Row label="vaultBucket" value="vault" />
 
+        {/* ── 4b. Environment / Build-time Config ── */}
+        <Section title="Environment / Build-time Config" />
+        <Row label="SUPABASE_URL (full)" value={process.env.EXPO_PUBLIC_SUPABASE_URL ?? null} />
+        <Row label="ANON_KEY prefix (first 20)" value={process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 20) ?? null} />
+        <Row label="DEBUG_ALWAYS_ON" value={process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON ?? null} />
+
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info" />
         <Row label="updateId" value={updateId} />
@@ -651,6 +694,74 @@ export default function DebugScreen() {
 
           <AppText style={styles.btnNote}>
             Calls generate_invite_code() RPC. Result appears immediately above.
+          </AppText>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#0d2233' }, dbIdentity.status === 'loading' && styles.btnDisabled]}
+            onPress={handleTestDbIdentity}
+            disabled={dbIdentity.status === 'loading'}
+            activeOpacity={0.8}
+          >
+            {dbIdentity.status === 'loading'
+              ? <ActivityIndicator size="small" color="#60C8FF" />
+              : <Shield size={15} color="#60C8FF" />
+            }
+            <AppText style={[styles.actionBtnLabel, { color: '#60C8FF' }]}>
+              {dbIdentity.status === 'loading' ? 'Checking DB…' : 'Test DB Identity RPC'}
+            </AppText>
+          </TouchableOpacity>
+
+          {dbIdentity.status !== 'idle' && (
+            <View style={[
+              styles.rpcCard,
+              dbIdentity.status === 'loading' && styles.rpcCardLoading,
+              dbIdentity.status === 'success' && { backgroundColor: '#0d1f2b', borderColor: '#1a4a6a' },
+              dbIdentity.status === 'error' && styles.rpcCardError,
+            ]}>
+              <View style={styles.rpcCardHeader}>
+                <AppText style={[
+                  styles.rpcCardStatus,
+                  dbIdentity.status === 'success' && { color: '#60C8FF' },
+                  dbIdentity.status === 'error' && { color: '#FF6B6B' },
+                  dbIdentity.status === 'loading' && { color: '#FFA040' },
+                ]}>
+                  DB IDENTITY — {dbIdentity.status.toUpperCase()}
+                </AppText>
+                {dbIdentity.ranAt && (
+                  <AppText style={styles.rpcCardTs} selectable>{dbIdentity.ranAt.substring(11, 19)}</AppText>
+                )}
+              </View>
+
+              {dbIdentity.status === 'success' && dbIdentity.result !== null && (
+                Object.entries(dbIdentity.result as Record<string, any>).map(([k, v]) => (
+                  <View key={k} style={styles.rpcCardField}>
+                    <AppText style={styles.rpcCardFieldLabel}>{k}</AppText>
+                    <AppText style={styles.rpcCardFieldValue} selectable>{String(v)}</AppText>
+                  </View>
+                ))
+              )}
+
+              {dbIdentity.status === 'error' && dbIdentity.error && (
+                <>
+                  {dbIdentity.error.code && (
+                    <View style={styles.rpcCardField}>
+                      <AppText style={styles.rpcCardFieldLabel}>code</AppText>
+                      <AppText style={styles.rpcCardFieldValue} selectable>{dbIdentity.error.code}</AppText>
+                    </View>
+                  )}
+                  {dbIdentity.error.message && (
+                    <View style={styles.rpcCardField}>
+                      <AppText style={styles.rpcCardFieldLabel}>message</AppText>
+                      <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{dbIdentity.error.message}</AppText>
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+
+          <AppText style={styles.btnNote}>
+            Confirms which Supabase project the app is connected to.
           </AppText>
 
           <TouchableOpacity
