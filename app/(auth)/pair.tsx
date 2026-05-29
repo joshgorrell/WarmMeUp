@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -84,7 +85,8 @@ export default function PairScreen() {
     : {};
 
   const [myCode, setMyCode] = useState('');
-  const displayCode = couple?.invite_code || myCode;
+  const [inviteError, setInviteError] = useState('');
+  const displayCode = myCode || couple?.invite_code || '';
   const [joinCode, setJoinCode] = useState(prefilledCode ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -186,8 +188,19 @@ export default function PairScreen() {
       return;
     }
     setRefreshing(true);
+    setInviteError('');
+    logDebugEvent('INVITE CREATE START', { source: 'handleRefreshCode', userId: user?.id ?? null });
     const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
-    if (!rpcError && result) {
+    if (rpcError || !result) {
+      logDebugEvent('INVITE CREATE ERROR', {
+        source: 'handleRefreshCode',
+        code: rpcError?.code ?? null,
+        message: rpcError?.message ?? null,
+        hint: (rpcError as any)?.hint ?? null,
+      });
+      setInviteError(`[${rpcError?.code ?? 'ERR'}] ${rpcError?.message ?? 'Unknown error'}`);
+    } else {
+      logDebugEvent('INVITE CREATE SUCCESS', { source: 'handleRefreshCode', inviteCode: result.invite_code });
       setMyCode(result.invite_code);
       await refreshCouple();
     }
@@ -573,14 +586,27 @@ export default function PairScreen() {
             </TouchableOpacity>
             <AppText style={styles.modalTitle}>Your invite code</AppText>
 
-            {subscriptionInfo.canInvite ? (
+            {subscriptionInfo.loading ? (
+              <>
+                <AppText style={styles.modalSub}>Checking access...</AppText>
+                <View style={styles.codeBox}>
+                  <ActivityIndicator color="rgba(255,255,255,0.45)" size="small" />
+                </View>
+              </>
+            ) : subscriptionInfo.canInvite ? (
               <>
                 <AppText style={styles.modalSub}>
                   Share this with your partner to connect.{'\n'}One subscription covers both of you.
                 </AppText>
 
                 <View style={styles.codeBox}>
-                  <AppText style={[styles.codeDisplayText, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}>{displayCode || '------'}</AppText>
+                  {refreshing ? (
+                    <ActivityIndicator color="rgba(255,255,255,0.6)" size="small" />
+                  ) : (
+                    <AppText style={[styles.codeDisplayText, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]} selectable>
+                      {displayCode || '------'}
+                    </AppText>
+                  )}
                   <TouchableOpacity
                     style={styles.refreshBtn}
                     onPress={handleRefreshCode}
@@ -588,14 +614,18 @@ export default function PairScreen() {
                     disabled={refreshing}
                   >
                     <RefreshCw
-                      color={refreshing ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.45)'}
+                      color={refreshing ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.45)'}
                       size={15}
                       strokeWidth={2}
                     />
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity style={styles.actionBtn} onPress={handleCopy} activeOpacity={0.85}>
+                {!!inviteError && (
+                  <AppText style={styles.inviteErrorText}>{inviteError}</AppText>
+                )}
+
+                <TouchableOpacity style={styles.actionBtn} onPress={handleCopy} activeOpacity={0.85} disabled={!displayCode}>
                   <LinearGradient
                     colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
                     start={{ x: 0, y: 0 }}
@@ -963,6 +993,13 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
+  },
+  inviteErrorText: {
+    color: '#FF5A5F',
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 16,
   },
   inlineJoin: {
     gap: Spacing.md,

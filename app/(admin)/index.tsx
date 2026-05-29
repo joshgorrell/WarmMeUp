@@ -20,6 +20,7 @@ import Toggle from '@/components/Toggle';
 interface StatEntry {
   value: number | null;
   error: string | null;
+  errorCode: string | null;
   loading: boolean;
 }
 
@@ -33,7 +34,7 @@ interface Stats {
   wishCount: StatEntry;
 }
 
-const LOADING_STAT: StatEntry = { value: null, error: null, loading: true };
+const LOADING_STAT: StatEntry = { value: null, error: null, errorCode: null, loading: true };
 const initialStats = (): Stats => ({
   coupleCount: { ...LOADING_STAT },
   userCount: { ...LOADING_STAT },
@@ -67,9 +68,14 @@ export default function AdminDashboard() {
 
   useFocusEffect(useCallback(() => {
     console.log('[ADMIN LOAD START] user:', user?.id, 'is_admin:', profile?.is_admin, 'is_super_admin:', profile?.is_super_admin);
+    if (!user?.id) {
+      // Session not yet hydrated — mark all stats as error so it's visible
+      logDebugEvent('ADMIN STATS ERROR', { reason: 'no_session_at_mount' });
+      return;
+    }
     fetchStats();
     fetchDebugMode();
-  }, []));
+  }, [user?.id]));
 
   const fetchDebugMode = async () => {
     const { data } = await supabase
@@ -96,20 +102,20 @@ export default function AdminDashboard() {
     queryFn: () => PromiseLike<{ count: number | null; error: any }>,
   ) => {
     if (!mountedRef.current) return;
-    setStats(prev => ({ ...prev, [key]: { value: prev[key].value, error: null, loading: true } }));
+    setStats(prev => ({ ...prev, [key]: { value: prev[key].value, error: null, errorCode: null, loading: true } }));
     try {
       const { count, error } = await queryFn();
       if (!mountedRef.current) return;
       if (error) {
         logDebugEvent('ADMIN STATS ERROR', { stat: key, code: error.code, message: error.message, details: error.details });
-        setStats(prev => ({ ...prev, [key]: { value: null, error: error.message, loading: false } }));
+        setStats(prev => ({ ...prev, [key]: { value: null, error: error.message, errorCode: error.code ?? null, loading: false } }));
       } else {
-        setStats(prev => ({ ...prev, [key]: { value: count ?? 0, error: null, loading: false } }));
+        setStats(prev => ({ ...prev, [key]: { value: count ?? 0, error: null, errorCode: null, loading: false } }));
       }
     } catch (err: any) {
       if (!mountedRef.current) return;
       logDebugEvent('ADMIN STATS ERROR', { stat: key, message: err?.message });
-      setStats(prev => ({ ...prev, [key]: { value: null, error: err?.message ?? 'Failed', loading: false } }));
+      setStats(prev => ({ ...prev, [key]: { value: null, error: err?.message ?? 'Failed', errorCode: null, loading: false } }));
     }
   };
 
@@ -369,7 +375,15 @@ export default function AdminDashboard() {
                 }
                 <AppText style={[styles.statLabel, { color: hasError ? colors.danger : colors.textMuted }]}>{labels[i]}</AppText>
                 {hasError && (
-                  <AppText style={[styles.statError, { color: colors.danger }]} numberOfLines={2}>{entry.error}</AppText>
+                  <>
+                    {!!entry.errorCode && (
+                      <AppText style={[styles.statError, { color: colors.danger, fontFamily: 'Inter-Bold' }]} selectable numberOfLines={1}>
+                        {entry.errorCode}
+                      </AppText>
+                    )}
+                    <AppText style={[styles.statError, { color: colors.danger }]} selectable numberOfLines={3}>{entry.error}</AppText>
+                    <AppText style={[styles.statError, { color: 'rgba(255,90,90,0.55)' }]}>tap to retry</AppText>
+                  </>
                 )}
               </TouchableOpacity>
             );
@@ -403,7 +417,10 @@ export default function AdminDashboard() {
                       ? <ActivityIndicator color={color} size="small" />
                       : <AppText style={[styles.breakdownNum, { color: entry.error ? colors.danger : color }]}>{statVal(entry)}</AppText>
                     }
-                    <AppText style={[styles.breakdownLabel, { color: colors.textSecondary }]}>{label}</AppText>
+                    <AppText style={[styles.breakdownLabel, { color: entry.error ? colors.danger : colors.textSecondary }]}>{label}</AppText>
+                    {!!entry.errorCode && (
+                      <AppText style={[styles.statError, { color: colors.danger }]} selectable numberOfLines={1}>{entry.errorCode}</AppText>
+                    )}
                   </TouchableOpacity>
                 </React.Fragment>
               );
@@ -518,7 +535,7 @@ const styles = StyleSheet.create({
   },
   statNum: { fontSize: 28, fontFamily: 'Inter-Bold' },
   statLabel: { fontSize: 11, fontFamily: 'Inter-Medium', letterSpacing: 0.5 },
-  statError: { fontSize: 9, fontFamily: 'Inter-Regular', textAlign: 'center', marginTop: 2 },
+  statError: { fontSize: 10, fontFamily: 'Inter-Regular', textAlign: 'center', marginTop: 1 },
   breakdownCard: {
     borderRadius: Radius.lg,
     borderWidth: 1,
