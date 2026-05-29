@@ -50,7 +50,7 @@ type DiagCheck = { name: string; status: 'pending' | 'pass' | 'fail'; detail?: s
 export default function AdminDashboard() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { profile, user } = useAuth();
+  const { profile, user, loading: authLoading } = useAuth();
 
   const [stats, setStats] = useState<Stats>(initialStats());
   const [loading, setLoading] = useState(true);
@@ -66,22 +66,22 @@ export default function AdminDashboard() {
     return () => { mountedRef.current = false; };
   }, []);
 
-  // Fire on focus when session is already hydrated
+  // Fire on focus only after auth is fully hydrated
   useFocusEffect(useCallback(() => {
-    console.log('[ADMIN LOAD START] user:', user?.id, 'is_admin:', profile?.is_admin, 'is_super_admin:', profile?.is_super_admin);
-    if (user?.id) {
+    console.log('[ADMIN LOAD START] authLoading:', authLoading, 'user:', user?.id, 'is_admin:', profile?.is_admin, 'is_super_admin:', profile?.is_super_admin);
+    if (!authLoading && user?.id) {
       fetchStats();
       fetchDebugMode();
     }
-  }, [user?.id]));
+  }, [authLoading, user?.id]));
 
-  // Also fire when user hydrates after the screen is already mounted/focused
+  // Also fire when auth finishes hydrating while the screen is already mounted
   useEffect(() => {
-    if (user?.id) {
+    if (!authLoading && user?.id) {
       fetchStats();
       fetchDebugMode();
     }
-  }, [user?.id]);
+  }, [authLoading, user?.id]);
 
   const fetchDebugMode = async () => {
     const { data } = await supabase

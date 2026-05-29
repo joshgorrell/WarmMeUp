@@ -131,51 +131,35 @@ export default function PairScreen() {
       return;
     }
 
-    // Find any solo couple (active or inactive — active=false is a valid pending invite)
-    const { data: existing } = await supabase
-      .from('couples')
-      .select('*')
-      .eq('user_a_id', user.id)
-      .is('user_b_id', null)
-      .order('active', { ascending: false })
-      .order('created_at', { ascending: false })
-      .maybeSingle();
-
-    if (existing?.invite_code) {
-      logDebugEvent('INVITE CREATE SUCCESS', { source: 'existing', coupleId: existing.id, inviteCode: existing.invite_code });
-      setMyCode(existing.invite_code);
-      await refreshCouple();
-    } else {
-      // No usable couple row — call RPC which creates one and returns the code
-      logDebugEvent('INVITE CREATE START', { source: 'rpc', userId: user.id });
-      const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
-      if (rpcError) {
-        logDebugEvent('INVITE CREATE ERROR', {
-          userId: user.id,
-          code: rpcError?.code ?? null,
-          message: rpcError?.message ?? null,
-        });
-        setError(
-          `Could not create invite record.\n` +
-          `Code: ${rpcError?.code ?? 'n/a'}\n` +
-          `Message: ${rpcError?.message ?? 'Unknown error'}`
-        );
-        return;
-      }
-      const inviteCode = (result as any)?.invite_code ?? null;
-      if (!inviteCode) {
-        logDebugEvent('INVITE CREATE ERROR', {
-          userId: user.id,
-          reason: 'rpc_returned_no_invite_code',
-          result: JSON.stringify(result),
-        });
-        setError('Invite code generation failed — no code returned. Please try again.');
-        return;
-      }
-      logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc', inviteCode });
-      setMyCode(inviteCode);
-      await refreshCouple();
+    // Single code path: RPC finds or creates the solo couple and returns the invite code.
+    // This avoids a split between "DB query" and "RPC fallback" that could diverge.
+    const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
+    if (rpcError) {
+      logDebugEvent('INVITE CREATE ERROR', {
+        userId: user.id,
+        code: rpcError?.code ?? null,
+        message: rpcError?.message ?? null,
+      });
+      setInviteError(
+        `Could not generate invite code.\n` +
+        `Code: ${rpcError?.code ?? 'n/a'}\n` +
+        `Message: ${rpcError?.message ?? 'Unknown error'}`
+      );
+      return;
     }
+    const inviteCode = (result as any)?.invite_code ?? null;
+    if (!inviteCode) {
+      logDebugEvent('INVITE CREATE ERROR', {
+        userId: user.id,
+        reason: 'rpc_returned_no_invite_code',
+        result: JSON.stringify(result),
+      });
+      setInviteError('Invite code generation failed — no code returned. Please try again.');
+      return;
+    }
+    logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc', inviteCode });
+    setMyCode(inviteCode);
+    await refreshCouple();
   };
 
   const handleCopy = async () => {
@@ -202,7 +186,7 @@ export default function PairScreen() {
     setInviteError('');
     logDebugEvent('INVITE CREATE START', { source: 'handleRefreshCode', userId: user?.id ?? null });
     const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
-    if (rpcError || !result) {
+    if (rpcError) {
       logDebugEvent('INVITE CREATE ERROR', {
         source: 'handleRefreshCode',
         code: rpcError?.code ?? null,
@@ -211,9 +195,14 @@ export default function PairScreen() {
       });
       setInviteError(`[${rpcError?.code ?? 'ERR'}] ${rpcError?.message ?? 'Unknown error'}`);
     } else {
-      logDebugEvent('INVITE CREATE SUCCESS', { source: 'handleRefreshCode', inviteCode: result.invite_code });
-      setMyCode(result.invite_code);
-      await refreshCouple();
+      const newCode = (result as any)?.invite_code ?? null;
+      if (!newCode) {
+        setInviteError('Refresh failed — no code returned. Please try again.');
+      } else {
+        logDebugEvent('INVITE CREATE SUCCESS', { source: 'handleRefreshCode', inviteCode: newCode });
+        setMyCode(newCode);
+        await refreshCouple();
+      }
     }
     setRefreshing(false);
   };
