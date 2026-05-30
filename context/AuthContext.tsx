@@ -408,6 +408,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq('user_a_id', userId)
       .is('user_b_id', null)
       .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     // Fallback: active paired couple (user_b has joined).

@@ -119,12 +119,14 @@ export default function PairScreen() {
 
     logDebugEvent('INVITE CREATE START', { userId: user.id });
 
-    // If user already has a partner, skip straight to the app
+    // If user already has an active partner, skip straight to the app.
+    // Require active=true so historical/inactive paired rows don't trigger a redirect.
     const { data: paired } = await supabase
       .from('couples')
       .select('id')
       .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
       .not('user_b_id', 'is', null)
+      .eq('active', true)
       .maybeSingle();
     if (paired) {
       router.replace('/(app)/(tabs)');
