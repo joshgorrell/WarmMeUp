@@ -13,7 +13,7 @@ import { useAuth, computeIsUnlockRequired, computeShouldShowPrivacyCover } from 
 import { supabase } from '@/lib/supabase';
 import { secureKey, hasPinStored } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
-import { getDebugEvents, clearDebugEvents, subscribeDebugEvents, DebugEvent } from '@/lib/debugLog';
+import { getDebugEvents, clearDebugEvents, subscribeDebugEvents, logDebugEvent, DebugEvent } from '@/lib/debugLog';
 import { APP_CODE_VERSION, OTA_MARKER, GIT_SHA } from '@/lib/appVersion';
 import { Spacing, Radius, FontSize } from '@/constants/theme';
 
@@ -89,7 +89,7 @@ export default function DebugScreen() {
   const [inactiveCoupleCount, setInactiveCoupleCount] = useState<number | null>(null);
   const [events, setEvents] = useState<DebugEvent[]>(() => getDebugEvents());
   const [rpcTest, setRpcTest] = useState<{
-    status: 'idle' | 'loading' | 'success' | 'error';
+    status: 'idle' | 'loading' | 'success' | 'error' | 'timeout';
     ranAt: string | null;
     result: any | null;
     error: { code: string | null; message: string | null; details: string | null; hint: string | null } | null;
@@ -185,13 +185,20 @@ export default function DebugScreen() {
 
   // --- Action: Test generate_invite_code RPC ---
   const handleTestRpc = async () => {
-    setRpcTest({ status: 'loading', ranAt: null, result: null, error: null });
+    setRpcTest({ status: 'loading', ranAt: new Date().toISOString(), result: null, error: null });
     try {
-      const { data, error } = await supabase.rpc('generate_invite_code');
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('RPC test timed out after 10 seconds')), 10000)
+      );
+      const { data, error } = await Promise.race([
+        supabase.rpc('generate_invite_code'),
+        timeoutPromise,
+      ]) as any;
+
       const ranAt = new Date().toISOString();
       if (error) {
-        setRpcTest({
-          status: 'error',
+        const finalState = {
+          status: 'error' as const,
           ranAt,
           result: null,
           error: {
@@ -200,17 +207,30 @@ export default function DebugScreen() {
             details: (error.details as string) ?? null,
             hint: (error.hint as string) ?? null,
           },
-        });
+        };
+        setRpcTest(finalState);
+        logDebugEvent('RPC TEST FINISHED', { status: 'error', code: error.code ?? null, message: error.message ?? null });
       } else {
-        setRpcTest({ status: 'success', ranAt, result: data, error: null });
+        const finalState = { status: 'success' as const, ranAt, result: data, error: null };
+        setRpcTest(finalState);
+        logDebugEvent('RPC TEST FINISHED', {
+          status: 'success',
+          success: (data as any)?.success ?? null,
+          invite_code: (data as any)?.invite_code ?? null,
+          couple_id: (data as any)?.couple_id ?? null,
+        });
       }
     } catch (e: any) {
-      setRpcTest({
-        status: 'error',
-        ranAt: new Date().toISOString(),
+      const isTimeout = e?.message?.includes('timed out');
+      const ranAt = new Date().toISOString();
+      const finalState = {
+        status: (isTimeout ? 'timeout' : 'error') as 'timeout' | 'error',
+        ranAt,
         result: null,
         error: { code: null, message: e?.message ?? String(e), details: null, hint: null },
-      });
+      };
+      setRpcTest(finalState);
+      logDebugEvent('RPC TEST FINISHED', { status: finalState.status, message: e?.message ?? String(e) });
     }
   };
 
@@ -638,13 +658,13 @@ export default function DebugScreen() {
               styles.rpcCard,
               rpcTest.status === 'loading' && styles.rpcCardLoading,
               rpcTest.status === 'success' && styles.rpcCardSuccess,
-              rpcTest.status === 'error' && styles.rpcCardError,
+              (rpcTest.status === 'error' || rpcTest.status === 'timeout') && styles.rpcCardError,
             ]}>
               <View style={styles.rpcCardHeader}>
                 <AppText style={[
                   styles.rpcCardStatus,
                   rpcTest.status === 'success' && { color: '#4CAF50' },
-                  rpcTest.status === 'error' && { color: '#FF6B6B' },
+                  (rpcTest.status === 'error' || rpcTest.status === 'timeout') && { color: '#FF6B6B' },
                   rpcTest.status === 'loading' && { color: '#FFA040' },
                 ]}>
                   {rpcTest.status.toUpperCase()}
@@ -663,7 +683,7 @@ export default function DebugScreen() {
                 </View>
               )}
 
-              {rpcTest.status === 'error' && rpcTest.error && (
+              {(rpcTest.status === 'error' || rpcTest.status === 'timeout') && rpcTest.error && (
                 <>
                   {rpcTest.error.code && (
                     <View style={styles.rpcCardField}>
