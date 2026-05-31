@@ -107,7 +107,8 @@ export default function DebugScreen() {
   const isUnlockRequired = computeIsUnlockRequired(settings, unlockedAtMs);
   const shouldShowPrivacyCover = computeShouldShowPrivacyCover(session, settings);
   const activeCoupleFound = couple?.active === true;
-  const canRefreshInviteCode = Boolean(userId && (subscriptionInfo as any).canInvite);
+  const sub_canInvite: boolean = Boolean((subscriptionInfo as any).canInvite);
+  const canRefreshInviteCode = Boolean(userId && sub_canInvite);
   const refreshBlockReason = canRefreshInviteCode ? null : 'not_allowed';
 
   useEffect(() => {
@@ -212,6 +213,12 @@ export default function DebugScreen() {
       });
     }
   };
+
+  // Auto-run RPC test on mount once userId is available
+  useEffect(() => {
+    if (!userId) return;
+    handleTestRpc();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Action: Test debug_database_identity RPC ---
   const handleTestDbIdentity = async () => {
