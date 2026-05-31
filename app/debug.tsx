@@ -346,7 +346,7 @@ export default function DebugScreen() {
   const handleShareDebugInfo = async () => {
     const lastErr = lastVaultUploadError?.data ?? null;
     const info: Record<string, unknown> = {
-      APP_CODE_VERSION, gitSha: GIT_SHA,
+      APP_CODE_VERSION, otaVerification: 'NEW OTA ACTIVE', gitSha: GIT_SHA,
       updateId, runtimeVersion, channel, isEmbeddedLaunch, isEmergencyLaunch, createdAt,
       appVersion, nativeAppVersion: nativeVersion, nativeBuildVersion: buildVersion,
       userId,
@@ -433,6 +433,7 @@ export default function DebugScreen() {
         {/* ── 0. App Code Version ── */}
         <Section title="App Code Version" />
         <Row label="APP_CODE_VERSION" value={APP_CODE_VERSION} />
+        <Row label="otaVerification" value="NEW OTA ACTIVE" />
         <Row label="gitSha" value={GIT_SHA} />
         <Row label="updateId" value={updateId} />
         <Row label="createdAt" value={createdAt} />

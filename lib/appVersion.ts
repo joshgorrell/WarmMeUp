@@ -1,4 +1,4 @@
-export const APP_CODE_VERSION = 'invite-expiry-removed-2026-05-27';
+export const APP_CODE_VERSION = 'invite-rpc-live-fix-2026-05-31-v2';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.
