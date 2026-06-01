@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, Animated, Modal,
   Pressable, Linking, ActivityIndicator,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { Image } from 'react-native';
@@ -334,15 +335,24 @@ function WishForm({
       setUploading(true);
       setError('');
 
+      // Delete the old image from storage before uploading a new one
+      if (imgPath) {
+        await supabase.storage.from('vault').remove([imgPath]).catch(() => {});
+      }
+
       const storagePath = `${couple.id}/${user.id}/wish_${Date.now()}.jpg`;
       logDebugEvent('WISH IMAGE UPLOAD START', { storagePath });
       logDebugEvent('WISH LAST UPLOAD PATH', { path: storagePath });
 
-      const response = await fetch(asset.uri);
-      const blob = await response.blob();
+      // Use FileSystem.readAsStringAsync to reliably read local file URIs on iOS
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+      const byteChars = atob(base64);
+      const byteArray = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+
       const { error: uploadError } = await supabase.storage
         .from('vault')
-        .upload(storagePath, blob, { contentType: 'image/jpeg', upsert: false });
+        .upload(storagePath, byteArray, { contentType: 'image/jpeg', upsert: false });
 
       if (uploadError) {
         logDebugEvent('WISH IMAGE UPLOAD ERROR', {
@@ -378,6 +388,15 @@ function WishForm({
     } finally {
       setUploading(false);
     }
+  };
+
+  const removeImage = async () => {
+    if (imgPath) {
+      await supabase.storage.from('vault').remove([imgPath]).catch(() => {});
+      logDebugEvent('WISH IMAGE REMOVE', { path: imgPath });
+    }
+    setImgPath(null);
+    setImgUri(null);
   };
 
   const handleSave = async (shareNow: boolean) => {
@@ -526,6 +545,12 @@ function WishForm({
                 </View>
               )}
             </TouchableOpacity>
+            {(imgUri || imgPath) && !uploading && (
+              <TouchableOpacity onPress={removeImage} style={styles.imgRemoveBtn} activeOpacity={0.7}>
+                <Trash2 color="#FF5A5F" size={13} strokeWidth={2} />
+                <AppText style={styles.imgRemoveText}>Remove photo</AppText>
+              </TouchableOpacity>
+            )}
 
             {/* Link */}
             <AppText style={[styles.formLabel, { marginTop: Spacing.md }]}>Link</AppText>
@@ -633,9 +658,12 @@ function FulfillSheet({
       const path = `${couple.id}/${user.id}/wish_memory_${Date.now()}.jpg`;
       logDebugEvent('WISH MEMORY IMAGE UPLOAD START', { path });
 
-      const resp = await fetch(asset.uri);
-      const blob = await resp.blob();
-      const { error: upErr } = await supabase.storage.from('vault').upload(path, blob, { contentType: 'image/jpeg' });
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+      const byteChars = atob(base64);
+      const byteArray = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+
+      const { error: upErr } = await supabase.storage.from('vault').upload(path, byteArray, { contentType: 'image/jpeg' });
       if (upErr) {
         logDebugEvent('WISH MEMORY IMAGE UPLOAD ERROR', { path, error: upErr.message });
         throw upErr;
@@ -1124,6 +1152,8 @@ const styles = StyleSheet.create({
   imgPickerLabel: { color: 'rgba(255,255,255,0.35)', fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
   imgPickerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' } as any,
   imgPickerChange: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  imgRemoveBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingVertical: 5, marginTop: 4 },
+  imgRemoveText: { color: '#FF5A5F', fontSize: 12, fontFamily: 'Inter-Regular' },
   formCTA: { borderRadius: Radius.pill, overflow: 'hidden', marginTop: Spacing.md },
   formCTAGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 54 },
   formCTAText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-Bold', letterSpacing: 0.2 },
