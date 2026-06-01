@@ -791,7 +791,7 @@ export default function WishTab() {
   const { user, couple } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<TabKey>('shared');
+  const [activeTab, setActiveTab] = useState<TabKey>(couple?.user_b_id ? 'shared' : 'mine');
   const [wishes, setWishes] = useState<WishWithReactions[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -896,7 +896,11 @@ export default function WishTab() {
   const hasPartner = !!couple?.user_b_id;
 
   // Filter lists
-  const myWishes = wishes.filter(w => w.created_by_user_id === user?.id && w.status !== 'fulfilled');
+  // Solo users: "Mine" shows all their non-fulfilled wishes (including status='shared')
+  // Paired users: "Mine" shows only drafts; shared wishes go to "Ours"
+  const myWishes = hasPartner
+    ? wishes.filter(w => w.created_by_user_id === user?.id && w.status === 'draft')
+    : wishes.filter(w => w.created_by_user_id === user?.id && w.status !== 'fulfilled');
   const theirWishes = wishes.filter(w => w.created_by_user_id !== user?.id && w.status !== 'fulfilled');
   // "Ours" only makes sense once there's a partner — solo users see all their own wishes under "Mine"
   const sharedWishes = hasPartner ? wishes.filter(w => w.status === 'shared') : [];
