@@ -65,6 +65,7 @@ export interface Interaction {
   mode: 'tell_me' | 'text_me' | null;
   status: 'sent' | 'seen' | 'accepted' | 'rejected' | 'completed' | 'answered' | 'pending_verification';
   rolled_for: 'self' | 'partner' | null;
+  decline_reason: string | null;
   is_active: boolean;
   points_awarded: number;
   created_at: string;
@@ -208,6 +209,17 @@ export interface TellMePrompt {
   text: string;
   is_default: boolean;
   is_active: boolean;
+  created_at: string;
+}
+
+export interface DeclinePrompt {
+  id: string;
+  couple_id: string | null;
+  created_by_user_id: string | null;
+  text: string;
+  is_default: boolean;
+  is_active: boolean;
+  sort_order: number;
   created_at: string;
 }
 

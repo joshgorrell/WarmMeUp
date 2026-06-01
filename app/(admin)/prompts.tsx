@@ -10,13 +10,13 @@ import { Plus, Trash2, Pencil, X, Check, ChevronDown, ChevronUp, Tag } from 'luc
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
-import { DicePrompt, DarePrompt, TellMePrompt } from '@/lib/types';
+import { DicePrompt, DarePrompt, TellMePrompt, DeclinePrompt } from '@/lib/types';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
 
-type Tab = 'dice' | 'dare' | 'tellme';
-type AnyPrompt = DicePrompt | DarePrompt | TellMePrompt;
+type Tab = 'dice' | 'dare' | 'tellme' | 'decline';
+type AnyPrompt = DicePrompt | DarePrompt | TellMePrompt | DeclinePrompt;
 
 interface FaceLabel {
   id: string;
@@ -29,18 +29,21 @@ const TABLE_MAP: Record<Tab, string> = {
   dice: 'dice_prompts',
   dare: 'dare_prompts',
   tellme: 'tell_me_prompts',
+  decline: 'decline_prompts',
 };
 
 const TAB_LABELS: Record<Tab, string> = {
   dice: 'Dice',
   dare: 'Dare',
-  tellme: 'Tell Me',
+  tellme: 'Wish',
+  decline: 'Declines',
 };
 
 const TAB_COLORS: Record<Tab, string> = {
   dice: '#FFB347',
   dare: '#FF2E8A',
   tellme: '#FF8A3D',
+  decline: '#FF5A3D',
 };
 
 const COLOR_PRESETS = [

@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WarmupLogo from './WarmupLogo';
 import WarmupWordmark from './WarmupWordmark';
 import { useTheme } from '@/context/ThemeContext';
@@ -15,10 +14,9 @@ interface ScreenHeaderProps {
 
 export default function ScreenHeader({ onBack, rightSlot }: ScreenHeaderProps) {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
+    <View style={styles.container}>
       <TouchableOpacity
         onPress={onBack}
         activeOpacity={0.8}
@@ -44,6 +42,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing.md,
     paddingBottom: Spacing.md,
     gap: Spacing.md,
   },

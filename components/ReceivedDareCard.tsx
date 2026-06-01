@@ -1,21 +1,28 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CircleCheck as CheckCircle, Circle as XCircle, Flame, Clock } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, Circle as XCircle, Flame, Clock, ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { Gradient, FontSize, Radius, Spacing } from '@/constants/theme';
 import CountdownRing from '@/components/CountdownRing';
+import { supabase } from '@/lib/supabase';
 
-type Stage = 'pending' | 'accepted' | 'waiting';
+type Stage = 'pending' | 'declining' | 'accepted' | 'waiting';
+
+interface DeclinePrompt {
+  id: string;
+  text: string;
+}
 
 interface ReceivedDareCardProps {
   text?: string | null;
   awaitingConfirmation?: boolean;
   expiresAt?: string | null;
   totalExpirySeconds?: number;
+  coupleId?: string;
   onAccept: () => Promise<void> | void;
-  onReject: () => Promise<void> | void;
+  onReject: (reason: string) => Promise<void> | void;
   onComplete: () => Promise<void> | void;
   onTimeout?: () => void;
 }
@@ -25,6 +32,7 @@ export default function ReceivedDareCard({
   awaitingConfirmation = false,
   expiresAt,
   totalExpirySeconds = 86400,
+  coupleId,
   onAccept,
   onReject,
   onComplete,
@@ -33,6 +41,46 @@ export default function ReceivedDareCard({
   const { colors } = useTheme();
   const [stage, setStage] = useState<Stage>(awaitingConfirmation ? 'waiting' : 'pending');
   const [busy, setBusy] = useState(false);
+  const [declinePrompts, setDeclinePrompts] = useState<DeclinePrompt[]>([]);
+  const [loadingPrompts, setLoadingPrompts] = useState(false);
+
+  const loadDeclinePrompts = async () => {
+    setLoadingPrompts(true);
+    try {
+      const query = supabase
+        .from('decline_prompts')
+        .select('id, text, is_default')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+
+      const baseQuery = coupleId
+        ? query.or(`is_default.eq.true,couple_id.eq.${coupleId}`)
+        : query.eq('is_default', true);
+
+      const [promptsResult, hiddenResult] = await Promise.all([
+        baseQuery,
+        coupleId
+          ? supabase
+              .from('couple_hidden_prompts')
+              .select('prompt_id')
+              .eq('couple_id', coupleId)
+              .eq('prompt_table', 'decline_prompts')
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      if (promptsResult.data) {
+        const hiddenIds = new Set(
+          (hiddenResult.data ?? []).map((r: { prompt_id: string }) => r.prompt_id)
+        );
+        const visible = promptsResult.data.filter(
+          (d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id)
+        );
+        setDeclinePrompts(visible.map((d: { id: string; text: string }) => ({ id: d.id, text: d.text })));
+      }
+    } finally {
+      setLoadingPrompts(false);
+    }
+  };
 
   const handle = async (fn: () => Promise<void> | void) => {
     setBusy(true);
@@ -44,7 +92,14 @@ export default function ReceivedDareCard({
     setStage('accepted');
   };
 
-  const handleReject = () => handle(onReject);
+  const handleDeclinePress = async () => {
+    await loadDeclinePrompts();
+    setStage('declining');
+  };
+
+  const handleDeclineSelect = async (reason: string) => {
+    await handle(() => onReject(reason));
+  };
 
   const handleComplete = async () => {
     await handle(onComplete);
@@ -66,6 +121,7 @@ export default function ReceivedDareCard({
     >
       <AppText style={[styles.label, { color: colors.textMuted }]}>
         {stage === 'pending' && 'YOUR PARTNER SENT YOU A DARE'}
+        {stage === 'declining' && 'SEND A RESPONSE'}
         {stage === 'accepted' && 'DARE ACCEPTED — COMPLETE IT!'}
         {stage === 'waiting' && 'WAITING FOR PARTNER TO CONFIRM'}
       </AppText>
@@ -74,13 +130,15 @@ export default function ReceivedDareCard({
         <CountdownRing
           expiresAt={expiresAt}
           totalSeconds={totalExpirySeconds}
-          onExpire={onTimeout ?? onReject}
+          onExpire={onTimeout ?? (() => onReject('Time expired'))}
         />
       )}
 
-      <AppText style={[styles.text, { color: colors.text }]}>
-        {text ?? "They're waiting to see what you do."}
-      </AppText>
+      {stage !== 'declining' && (
+        <AppText style={[styles.text, { color: colors.text }]}>
+          {text ?? "They're waiting to see what you do."}
+        </AppText>
+      )}
 
       {stage === 'pending' && (
         <View style={styles.row}>
@@ -108,13 +166,53 @@ export default function ReceivedDareCard({
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={handleReject}
+            onPress={handleDeclinePress}
             activeOpacity={0.7}
             disabled={busy}
             style={[styles.rejectBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
           >
             <XCircle color={colors.textSecondary} size={18} />
             <AppText style={[styles.rejectText, { color: colors.textSecondary }]}>No Way!</AppText>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {stage === 'declining' && (
+        <View style={styles.decliningContainer}>
+          <AppText style={[styles.decliningHint, { color: colors.textSecondary }]}>
+            Pick a response to send back:
+          </AppText>
+
+          {loadingPrompts ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator color="#FF2E8A" size="small" />
+            </View>
+          ) : (
+            <View style={styles.promptsGrid}>
+              {declinePrompts.map((p) => (
+                <TouchableOpacity
+                  key={p.id}
+                  onPress={() => handleDeclineSelect(p.text)}
+                  disabled={busy}
+                  activeOpacity={0.75}
+                  style={[
+                    styles.promptChip,
+                    { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' },
+                  ]}
+                >
+                  <AppText style={[styles.promptChipText, { color: colors.text }]}>{p.text}</AppText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          <TouchableOpacity
+            onPress={() => setStage('pending')}
+            style={styles.backLink}
+            activeOpacity={0.7}
+          >
+            <ChevronLeft color={colors.textMuted} size={14} strokeWidth={2} />
+            <AppText style={[styles.backLinkText, { color: colors.textMuted }]}>Go back</AppText>
           </TouchableOpacity>
         </View>
       )}
@@ -202,4 +300,23 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   waitingText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', flex: 1 },
+  decliningContainer: { gap: Spacing.md },
+  decliningHint: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
+  loadingWrap: { alignItems: 'center', paddingVertical: Spacing.lg },
+  promptsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  promptChip: {
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  promptChipText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
+  backLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  backLinkText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
 });

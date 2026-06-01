@@ -257,7 +257,7 @@ export default function MyStatsScreen() {
       extra: `${myStats?.dice_skipped ?? 0} skipped`,
     },
     {
-      label: 'Ask', icon: <MessageCircle color="#FF8A3D" size={18} strokeWidth={2} />,
+      label: 'Wish', icon: <MessageCircle color="#FF8A3D" size={18} strokeWidth={2} />,
       bg: 'rgba(255,138,61,0.12)', border: 'rgba(255,138,61,0.25)',
       myVal: (myStats?.asks_sent ?? 0) + (myStats?.asks_replied ?? 0),
       partnerVal: (partnerStats?.asks_sent ?? 0) + (partnerStats?.asks_replied ?? 0),

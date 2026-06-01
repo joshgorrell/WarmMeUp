@@ -16,7 +16,7 @@ type FilterTab = 'all' | 'dare' | 'tell_me' | 'dice' | 'cash' | 'chat' | 'privac
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'dare', label: 'Dares' },
-  { key: 'tell_me', label: 'Tell Me' },
+  { key: 'tell_me', label: 'Wish' },
   { key: 'dice', label: 'Dice' },
   { key: 'cash', label: 'Cash In' },
   { key: 'chat', label: 'Chat' },
@@ -104,7 +104,13 @@ export default function ActivityScreen() {
           if (i.status === 'accepted') {
             label = isMine ? `${partnerName} accepted your dare` : 'You accepted the dare';
           } else if (i.status === 'rejected') {
-            label = isMine ? `${partnerName} said no way` : 'You passed on the dare';
+            if (isMine && i.decline_reason) {
+              label = `${partnerName} declined: ${i.decline_reason}`;
+            } else if (isMine) {
+              label = `${partnerName} declined your dare`;
+            } else {
+              label = 'You declined the dare';
+            }
           } else {
             label = isMine ? 'You sent a Dare' : `${partnerName} sent you a Dare`;
           }
@@ -113,8 +119,8 @@ export default function ActivityScreen() {
           break;
         case 'tell_me':
           label = i.status === 'answered'
-            ? (isMine ? `${partnerName} answered your Tell Me` : 'You answered Tell Me')
-            : (isMine ? 'You sent a Tell Me' : `${partnerName} asked you to Tell Me`);
+            ? (isMine ? `${partnerName} answered your Wish` : 'You answered the Wish')
+            : (isMine ? 'You sent a Wish' : `${partnerName} sent you a Wish`);
           icon = <MessageCircle color="#FF8A3D" size={18} strokeWidth={2} />;
           color = '#FF8A3D';
           break;

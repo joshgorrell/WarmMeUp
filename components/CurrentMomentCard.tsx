@@ -22,7 +22,7 @@ function typeIcon(type: string) {
 function typeLabel(type: string): string {
   if (type === 'dice') return 'Dice rolled';
   if (type === 'dare') return 'Dare sent';
-  if (type === 'tell_me') return 'Tell Me';
+  if (type === 'tell_me') return 'Wish';
   return type;
 }
 
@@ -69,6 +69,11 @@ export default function CurrentMomentCard({ interaction, onSeeAll }: CurrentMome
             <AppText style={[styles.statusText, { color: colors.accentPink }]}>
               {statusCopy(interaction.status)}
             </AppText>
+            {interaction.status === 'rejected' && interaction.decline_reason && (
+              <AppText style={[styles.declineReason, { color: colors.textSecondary }]}>
+                "{interaction.decline_reason}"
+              </AppText>
+            )}
           </View>
         </View>
       </View>
@@ -80,7 +85,7 @@ function statusCopy(status: string): string {
   if (status === 'sent') return "Waiting for their move…";
   if (status === 'accepted') return "Challenge accepted!";
   if (status === 'answered') return "Answered";
-  if (status === 'rejected') return "No Way!";
+  if (status === 'rejected') return "Dare declined";
   return status;
 }
 
@@ -139,5 +144,11 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: FontSize.sm,
     fontFamily: 'Inter-SemiBold',
+  },
+  declineReason: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    fontStyle: 'italic',
+    lineHeight: 18,
   },
 });

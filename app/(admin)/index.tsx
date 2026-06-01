@@ -276,7 +276,7 @@ export default function AdminDashboard() {
   const navItems = [
     {
       label: 'Prompt Management',
-      sub: 'Add, edit, or remove dice, dare & tell me prompts',
+      sub: 'Add, edit, or remove dice, dare & wish prompts',
       icon: <Sliders color="#FFB347" size={22} strokeWidth={2} />,
       color: '#FFB347',
       bg: 'rgba(255,179,71,0.10)',
@@ -412,7 +412,7 @@ export default function AdminDashboard() {
             {([
               { key: 'diceCount', label: 'Dice', color: '#FFB347', type: 'dice' },
               { key: 'dareCount', label: 'Dares', color: '#FF2E8A', type: 'dare' },
-              { key: 'tellMeCount', label: 'Tell Me', color: '#FF8A3D', type: 'tell_me' },
+              { key: 'tellMeCount', label: 'Wish', color: '#FF8A3D', type: 'tell_me' },
               { key: 'wishCount', label: 'Wishes', color: '#E8637A', type: null },
             ] as const).map(({ key, label, color, type }, i) => {
               const entry = stats[key];

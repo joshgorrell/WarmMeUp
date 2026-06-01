@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, ScrollView,
-  KeyboardAvoidingView, Platform,
+  View, StyleSheet,
+  KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
@@ -9,7 +9,7 @@ import { Zap } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { awardPoints, deactivatePreviousEphemeral, incrementMonthlyCounter, verifyCompletion } from '@/lib/points';
+import { awardPoints, deactivatePreviousEphemeral, incrementMonthlyCounter } from '@/lib/points';
 import { Interaction } from '@/lib/types';
 import PrimaryButton from '@/components/PrimaryButton';
 import SecondaryButton from '@/components/SecondaryButton';
@@ -28,7 +28,6 @@ const FALLBACK_DARES = [
   "Give me a compliment I'll remember",
   'Ask me anything',
   'Pick the next move',
-  'Tell me what happens next',
   'Surprise me',
   'Your choice',
 ];
@@ -38,7 +37,6 @@ export default function DareScreen() {
   const { user, couple } = useAuth();
   const { colors } = useTheme();
   const [quickDares, setQuickDares] = useState<string[]>(FALLBACK_DARES);
-  const [mode, setMode] = useState<'tell_me' | 'text_me'>('tell_me');
   const [dareText, setDareText] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -46,15 +44,27 @@ export default function DareScreen() {
   const [incomingDare, setIncomingDare] = useState<Interaction | null>(null);
 
   useEffect(() => {
-    supabase
-      .from('dare_prompts')
-      .select('text')
-      .eq('is_default', true)
-      .eq('is_active', true)
-      .then(({ data }) => {
-        if (data && data.length > 0) setQuickDares(data.map(d => d.text));
-      });
-  }, []);
+    const coupleId = couple?.id;
+    (async () => {
+      const baseQuery = supabase
+        .from('dare_prompts')
+        .select('id, text, is_default')
+        .eq('is_active', true);
+
+      const [promptsResult, hiddenResult] = await Promise.all([
+        coupleId
+          ? baseQuery.or(`is_default.eq.true,couple_id.eq.${coupleId}`)
+          : baseQuery.eq('is_default', true),
+        coupleId
+          ? supabase.from('couple_hidden_prompts').select('prompt_id').eq('couple_id', coupleId).eq('prompt_table', 'dare_prompts')
+          : Promise.resolve({ data: [] as { prompt_id: string }[] }),
+      ]);
+      if (!promptsResult.data?.length) return;
+      const hiddenIds = new Set((hiddenResult.data ?? []).map((r: { prompt_id: string }) => r.prompt_id));
+      const visible = promptsResult.data.filter((d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id));
+      if (visible.length > 0) setQuickDares(visible.map((d: { text: string }) => d.text));
+    })();
+  }, [couple?.id]);
 
   useEffect(() => {
     if (!couple?.id || !user) return;
@@ -79,8 +89,7 @@ export default function DareScreen() {
   };
 
   const handleSend = async () => {
-    if (!couple?.id || !user) return;
-    if (mode === 'text_me' && !dareText.trim()) return;
+    if (!couple?.id || !user || !dareText.trim()) return;
     setSending(true);
     setError('');
     try {
@@ -92,8 +101,7 @@ export default function DareScreen() {
         type: 'dare',
         sender_id: user.id,
         receiver_id: receiverId,
-        content_text: mode === 'text_me' ? dareText.trim() : null,
-        mode,
+        content_text: dareText.trim(),
         status: 'sent',
         is_active: true,
       }).select().single();
@@ -107,15 +115,16 @@ export default function DareScreen() {
     }
   };
 
-  const handleRespond = async (accepted: boolean) => {
+  const handleRespond = async (accepted: boolean, declineReason?: string) => {
     if (!incomingDare || !couple?.id || !user) return;
     const status = accepted ? 'accepted' : 'rejected';
-    await supabase.from('interactions').update({ status, is_active: accepted }).eq('id', incomingDare.id);
+    const update: Record<string, unknown> = { status, is_active: accepted };
+    if (!accepted && declineReason) update.decline_reason = declineReason;
+    await supabase.from('interactions').update(update).eq('id', incomingDare.id);
     if (accepted) {
       await awardPoints(couple.id, user.id, 3, 'Dare accepted', incomingDare.id);
       await incrementMonthlyCounter(couple.id, user.id, 'dares_accepted', 0);
     } else {
-      await awardPoints(couple.id, user.id, 1, 'Dare — participation', incomingDare.id);
       await incrementMonthlyCounter(couple.id, user.id, 'dares_skipped', 0);
       setIncomingDare(null);
     }
@@ -138,7 +147,6 @@ export default function DareScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Icon */}
           <View style={styles.iconWrap}>
             <Zap color="#FF2E8A" size={44} strokeWidth={2} fill="rgba(255,46,138,0.12)" />
           </View>
@@ -146,13 +154,13 @@ export default function DareScreen() {
           {incomingDare && (
             <ReceivedDareCard
               text={incomingDare.content_text}
+              coupleId={couple?.id}
               onAccept={() => handleRespond(true)}
-              onReject={() => handleRespond(false)}
+              onReject={(reason) => handleRespond(false, reason)}
               onComplete={handleMarkComplete}
             />
           )}
 
-          {/* Send form */}
           {!sent && (
             <>
               {error ? (
@@ -161,55 +169,26 @@ export default function DareScreen() {
                 </View>
               ) : null}
 
-              {/* Mode cards */}
-              <View style={styles.modeRow}>
-                {(['tell_me', 'text_me'] as const).map(m => (
-                  <TouchableOpacity
-                    key={m}
-                    style={[
-                      styles.modeCard,
-                      {
-                        backgroundColor: mode === m ? 'rgba(255,46,138,0.12)' : colors.card,
-                        borderColor: mode === m ? 'rgba(255,46,138,0.45)' : colors.borderSubtle,
-                      },
-                    ]}
-                    onPress={() => setMode(m)}
-                    activeOpacity={0.8}
-                  >
-                    <AppText style={[styles.modeTitle, { color: mode === m ? '#FF2E8A' : colors.text }]}>
-                      {m === 'tell_me' ? 'Tell Me' : 'Text Me'}
-                    </AppText>
-                    <AppText style={[styles.modeSub, { color: colors.textMuted }]}>
-                      {m === 'tell_me' ? 'Say it out loud' : 'Type your dare'}
-                    </AppText>
-                  </TouchableOpacity>
+              <WarmTextInput
+                value={dareText}
+                onChangeText={setDareText}
+                placeholder="Type your dare…"
+                multiline
+                minHeight={100}
+                charLimit={200}
+                containerStyle={{ marginBottom: Spacing.md }}
+              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickRow}>
+                {quickDares.map(d => (
+                  <PromptChip key={d} label={d} active={dareText === d} onPress={() => setDareText(d)} style={{ marginRight: 8 }} />
                 ))}
-              </View>
-
-              {mode === 'text_me' && (
-                <>
-                  <WarmTextInput
-                    value={dareText}
-                    onChangeText={setDareText}
-                    placeholder="Type your dare…"
-                    multiline
-                    minHeight={100}
-                    charLimit={200}
-                    containerStyle={{ marginBottom: Spacing.md }}
-                  />
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickRow}>
-                    {quickDares.map(d => (
-                      <PromptChip key={d} label={d} active={dareText === d} onPress={() => setDareText(d)} style={{ marginRight: 8 }} />
-                    ))}
-                  </ScrollView>
-                </>
-              )}
+              </ScrollView>
 
               <PrimaryButton
                 label="Send Dare"
                 onPress={handleSend}
                 loading={sending}
-                disabled={mode === 'text_me' && !dareText.trim()}
+                disabled={!dareText.trim()}
                 style={{ marginTop: Spacing.lg }}
               />
             </>
@@ -232,10 +211,6 @@ export default function DareScreen() {
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 60 },
   iconWrap: { alignItems: 'center', marginBottom: Spacing.md },
-  modeRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg },
-  modeCard: { flex: 1, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, gap: 4 },
-  modeTitle: { fontSize: FontSize.body, fontFamily: 'Inter-Bold' },
-  modeSub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
   quickRow: { marginBottom: Spacing.md },
   sentCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.xl, alignItems: 'center', gap: 8 },
   sentEmoji: { fontSize: 48, marginBottom: 8 },

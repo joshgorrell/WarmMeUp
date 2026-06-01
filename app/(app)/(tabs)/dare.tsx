@@ -192,10 +192,12 @@ export default function DareTab() {
     }
   };
 
-  const handleRespond = async (accepted: boolean) => {
+  const handleRespond = async (accepted: boolean, declineReason?: string) => {
     if (!incomingDare || !couple?.id || !user) return;
     const status = accepted ? 'accepted' : 'rejected';
-    await supabase.from('interactions').update({ status, is_active: false }).eq('id', incomingDare.id);
+    const update: Record<string, unknown> = { status, is_active: false };
+    if (!accepted && declineReason) update.decline_reason = declineReason;
+    await supabase.from('interactions').update(update).eq('id', incomingDare.id);
     const eventType = accepted ? 'dare_accepted' : 'dare_rejected';
     notifyPartner({ event_type: eventType, couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
     if (accepted) {
@@ -271,8 +273,9 @@ export default function DareTab() {
                 awaitingConfirmation={incomingDare.status === 'pending_verification'}
                 expiresAt={incomingDare.expires_at}
                 totalExpirySeconds={expirySeconds}
+                coupleId={couple?.id}
                 onAccept={() => handleRespond(true)}
-                onReject={() => handleRespond(false)}
+                onReject={(reason) => handleRespond(false, reason)}
                 onComplete={handleMarkComplete}
                 onTimeout={() => handleRespond(false)}
               />
