@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
   Modal, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Plus, Pencil, Trash2, ChevronLeft, Dices, Zap, X as XIcon } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -48,6 +49,7 @@ export default function CustomizePromptsScreen() {
   const [error, setError] = useState('');
 
   const currentTab = TABS.find(t => t.key === activeTab)!;
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const loadPrompts = useCallback(async () => {
     if (!couple?.id) return;
@@ -84,6 +86,50 @@ export default function CustomizePromptsScreen() {
   useEffect(() => {
     loadPrompts();
   }, [loadPrompts]);
+
+  // Realtime: subscribe to all prompt table changes for this couple
+  useEffect(() => {
+    if (!couple?.id) return;
+
+    const channelName = `customize-prompts-${couple.id}-${activeTab}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: currentTab.table,
+          filter: `couple_id=eq.${couple.id}`,
+        },
+        () => { loadPrompts(); }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'couple_hidden_prompts',
+          filter: `couple_id=eq.${couple.id}`,
+        },
+        () => { loadPrompts(); }
+      )
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      realtimeChannelRef.current = null;
+    };
+  }, [couple?.id, activeTab, currentTab.table, loadPrompts]);
+
+  // Focus refresh: reload when screen comes back into view
+  useFocusEffect(
+    useCallback(() => {
+      loadPrompts();
+    }, [loadPrompts])
+  );
 
   const visiblePrompts = prompts.filter(p =>
     p.is_default ? !hiddenIds.has(p.id) : p.couple_id === couple?.id
@@ -244,7 +290,7 @@ export default function CustomizePromptsScreen() {
               <View style={{ flex: 1 }}>
                 <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>ALL PROMPTS</AppText>
                 <AppText style={[styles.sectionHint, { color: colors.textMuted }]}>
-                  Edit or delete any prompt. Changes only affect your account.
+                  Edit or hide any prompt. Custom prompts are shared with your partner.
                 </AppText>
               </View>
               <TouchableOpacity
