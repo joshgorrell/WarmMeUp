@@ -294,7 +294,7 @@ export default function GreetingsScreen() {
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
             <AppText style={[styles.modalTitle, { color: colors.text, marginBottom: Spacing.sm }]}>Delete Phrase?</AppText>
             <AppText style={[styles.deleteConfirmText, { color: colors.textSecondary }]} numberOfLines={4}>
-              "{deleteConfirm?.text}"
+              &quot;{deleteConfirm?.text}&quot;
             </AppText>
             <AppText style={[styles.deleteConfirmSub, { color: colors.textMuted }]}>
               This cannot be undone.

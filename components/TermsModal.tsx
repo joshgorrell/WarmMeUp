@@ -230,7 +230,7 @@ export default function TermsModal({ visible, onClose }: Props) {
           {/* Intro */}
           <AppText style={styles.intro}>
             Welcome to Warm Me Up.{'\n\n'}
-            Warm Me Up is a private communication and interaction platform designed for consensual adult relationships. By creating an account, accessing, or using the Warm Me Up application, website, or related services ("Services"), you agree to these Terms of Service ("Terms").{'\n\n'}
+            Warm Me Up is a private communication and interaction platform designed for consensual adult relationships. By creating an account, accessing, or using the Warm Me Up application, website, or related services ({'"'}Services{'"'}), you agree to these Terms of Service ({'"'}Terms{'"'}).{'\n\n'}
             If you do not agree to these Terms, do not use the Services.
           </AppText>
 
