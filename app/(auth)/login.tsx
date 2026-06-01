@@ -237,6 +237,14 @@ export default function LoginScreen() {
               <AppText style={styles.footerAccent}>Create one</AppText>
             </AppText>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.debugLink}
+            onPress={() => router.push('/debug')}
+            activeOpacity={0.7}
+          >
+            <AppText style={styles.debugLinkText}>Debug</AppText>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -356,5 +364,14 @@ const styles = StyleSheet.create({
   footerAccent: {
     color: '#E05548',
     fontFamily: 'Inter-SemiBold',
+  },
+  debugLink: {
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  debugLinkText: {
+    color: 'rgba(255,255,255,0.2)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
   },
 });
