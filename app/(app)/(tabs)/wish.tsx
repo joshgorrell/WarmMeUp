@@ -406,6 +406,17 @@ function WishForm({
           .from('wishes').update(payload).eq('id', initial.id).select().single();
         if (updateError) throw updateError;
         result = data;
+        // Log activity event for wish edit
+        const imageAdded = !!imgPath && !initial.image_storage_path;
+        if (partnerId) {
+          supabase.from('activity_events').insert({
+            couple_id: couple.id,
+            actor_user_id: user.id,
+            target_user_id: partnerId,
+            event_type: imageAdded ? 'wish_image_added' : 'wish_updated',
+            wish_id: result.id,
+          }).then(() => {}, () => {});
+        }
       } else {
         const { data, error: insertError } = await supabase
           .from('wishes').insert(payload).select().single();
@@ -413,6 +424,16 @@ function WishForm({
         result = data;
         logDebugEvent('WISH SAVE SUCCESS', { wishId: result.id, hasImage: !!imgPath, status: payload.status });
         logDebugEvent('WISH LAST CREATED ID', { id: result.id });
+        // Log activity event for new wish creation
+        if (partnerId) {
+          supabase.from('activity_events').insert({
+            couple_id: couple.id,
+            actor_user_id: user.id,
+            target_user_id: partnerId,
+            event_type: imgPath ? 'wish_image_added' : 'wish_created',
+            wish_id: result.id,
+          }).then(() => {}, () => {});
+        }
         if (shareNow) {
           try {
             const pts = await getPointValue('wish_sent');
@@ -689,6 +710,15 @@ function FulfillSheet({
         notifyPartner({ event_type: 'wish_fulfilled', couple_id: couple.id, target_route: '/(app)/(tabs)/wish', item_id: wish.id, partnerUserId: partnerId });
       }
       await incrementMonthlyCounter(couple.id, user.id, 'wishes_fulfilled', pts);
+
+      // Log wish_completed for both users so both see it in their activity feeds
+      supabase.from('activity_events').insert({
+        couple_id: couple.id,
+        actor_user_id: user.id,
+        target_user_id: partnerId ?? user.id,
+        event_type: 'wish_completed',
+        wish_id: wish.id,
+      }).then(() => {}, () => {});
 
       // Celebration animation
       Animated.spring(celebAnim, { toValue: 1, friction: 6, tension: 60, useNativeDriver: true }).start();

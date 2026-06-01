@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera } from 'lucide-react-native';
+import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -108,9 +108,9 @@ export default function HomeScreen() {
   const loadRecentActivity = async () => {
     if (!couple?.id || !user) return;
     const partnerName = partnerProfile?.display_name ?? 'Partner';
-    const [{ data: interactions }, { data: privacyEvents }] = await Promise.all([
+    const [{ data: interactions }, { data: activityEvts }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
-      supabase.from('activity_events').select('*').eq('couple_id', couple.id).eq('target_user_id', user.id).order('created_at', { ascending: false }).limit(5),
+      supabase.from('activity_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(20),
     ]);
 
     const items: Array<ActivityItem & { _rawTime: string }> = [];
@@ -121,7 +121,7 @@ export default function HomeScreen() {
       let icon: React.ReactNode;
       let color = '#FF2E8A';
 
-      switch (i.type) {
+      switch (i.type as string) {
         case 'chat':
           label = isMine ? 'You sent a chat' : `${partnerName} sent a chat`;
           icon = <MessageCircle color="#4DA6FF" size={16} strokeWidth={2} />;
@@ -167,14 +167,47 @@ export default function HomeScreen() {
       });
     });
 
-    (privacyEvents ?? []).forEach((ev: any) => {
+    (activityEvts ?? []).forEach((ev: any) => {
+      const isMine = ev.actor_user_id === user.id;
+
+      if (ev.event_type === 'screenshot_detected') {
+        items.push({
+          id: `privacy_${ev.id}`,
+          label: `${partnerName} screenshotted your content`,
+          sub: ev.vault_item_id ? 'Vault item' : '',
+          time: timeAgo(ev.created_at),
+          icon: <Camera color="#FF8A3D" size={16} strokeWidth={2} />,
+          color: '#FF8A3D',
+          _rawTime: ev.created_at,
+        });
+        return;
+      }
+
+      let label = '';
+      switch (ev.event_type) {
+        case 'wish_created':
+          label = isMine ? 'You created a new wish' : `${partnerName} created a new wish`;
+          break;
+        case 'wish_updated':
+          label = isMine ? 'You updated a wish' : `${partnerName} updated a wish`;
+          break;
+        case 'wish_image_added':
+          label = isMine ? 'You added a photo to a wish' : `${partnerName} added a photo to a wish`;
+          break;
+        case 'wish_completed':
+          label = isMine ? 'You granted a wish' : `${partnerName} granted a wish`;
+          break;
+        default:
+          return;
+      }
+
       items.push({
-        id: `privacy_${ev.id}`,
-        label: `${partnerName} screenshotted your content`,
-        sub: ev.vault_item_id ? 'Vault item' : '',
+        id: `activity_${ev.id}`,
+        label,
+        sub: '',
         time: timeAgo(ev.created_at),
-        icon: <Camera color="#FF8A3D" size={16} strokeWidth={2} />,
-        color: '#FF8A3D',
+        icon: <Sparkles color="#F0A96A" size={16} strokeWidth={2} />,
+        color: '#F0A96A',
         _rawTime: ev.created_at,
       });
     });

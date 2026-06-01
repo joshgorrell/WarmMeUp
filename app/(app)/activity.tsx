@@ -76,10 +76,10 @@ export default function ActivityScreen() {
 
   const load = async () => {
     if (!couple?.id || !user) return;
-    const [{ data: interactions }, { data: chats }, { data: privacyEvents }] = await Promise.all([
-      supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(30),
-      supabase.from('chat_messages').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(30),
-      supabase.from('activity_events').select('*').eq('couple_id', couple.id).eq('target_user_id', user.id).order('created_at', { ascending: false }).limit(30),
+    const [{ data: interactions }, { data: chats }, { data: activityEvts }] = await Promise.all([
+      supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(50),
+      supabase.from('chat_messages').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(50),
+      supabase.from('activity_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(50),
     ]);
 
     const mapped: ActivityItem[] = [];
@@ -169,15 +169,53 @@ export default function ActivityScreen() {
       });
     });
 
-    (privacyEvents ?? []).forEach((ev: any) => {
+    (activityEvts ?? []).forEach((ev: any) => {
+      const isMine = ev.actor_user_id === user.id;
+      const name = isMine ? 'You' : partnerName;
+
+      if (ev.event_type === 'screenshot_detected') {
+        mapped.push({
+          id: `privacy_${ev.id}`,
+          _type: 'privacy',
+          label: `${partnerName} screenshotted your content`,
+          sub: ev.vault_item_id ? 'Vault item' : '',
+          time: timeAgo(ev.created_at),
+          icon: <Camera color="#FF8A3D" size={18} strokeWidth={2} />,
+          color: '#FF8A3D',
+          _rawTime: ev.created_at,
+        });
+        return;
+      }
+
+      let label = '';
+      let sub = '';
+      switch (ev.event_type) {
+        case 'wish_created':
+          label = isMine ? 'You created a new wish' : `${partnerName} created a new wish`;
+          break;
+        case 'wish_updated':
+          label = isMine ? 'You updated a wish' : `${partnerName} updated a wish`;
+          break;
+        case 'wish_image_added':
+          label = isMine ? 'You added a photo to a wish' : `${partnerName} added a photo to a wish`;
+          sub = 'Wish';
+          break;
+        case 'wish_completed':
+          label = isMine ? 'You granted a wish' : `${partnerName} granted a wish`;
+          sub = 'Wish completed';
+          break;
+        default:
+          return;
+      }
+
       mapped.push({
-        id: `privacy_${ev.id}`,
-        _type: 'privacy',
-        label: `${partnerName} screenshotted your content`,
-        sub: ev.vault_item_id ? 'Vault item' : '',
+        id: `activity_${ev.id}`,
+        _type: 'wish',
+        label,
+        sub,
         time: timeAgo(ev.created_at),
-        icon: <Camera color="#FF8A3D" size={18} strokeWidth={2} />,
-        color: '#FF8A3D',
+        icon: <Sparkles color="#F0A96A" size={18} strokeWidth={2} />,
+        color: '#F0A96A',
         _rawTime: ev.created_at,
       });
     });

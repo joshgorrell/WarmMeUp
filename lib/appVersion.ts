@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'pre-login-debug-2026-06-01-v9';
-export const OTA_MARKER = 'V9 ACTIVITY SCREEN POLISH';
+export const APP_CODE_VERSION = 'pre-login-debug-2026-06-01-v10';
+export const OTA_MARKER = 'V10 WISH ACTIVITY FEED';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.
