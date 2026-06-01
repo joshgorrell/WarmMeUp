@@ -47,3 +47,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
   global: { fetch: fetchWithTimeout as typeof fetch },
 });
+
+// Boot-time diagnostics — appear in Metro / device logs before any login attempt.
+const _supabaseUrlHost = supabaseUrl ? (() => { try { return new URL(supabaseUrl).hostname; } catch { return null; } })() : null;
+const _dbProjectRef = _supabaseUrlHost ? _supabaseUrlHost.replace(/\.supabase\.co$/, '') : null;
+console.log('Supabase URL host:', _supabaseUrlHost);
+console.log('Supabase project ref:', _dbProjectRef);
+console.log('Anon key present:', Boolean(supabaseAnonKey));
+console.log('Anon key prefix:', supabaseAnonKey?.slice(0, 12) ?? null);

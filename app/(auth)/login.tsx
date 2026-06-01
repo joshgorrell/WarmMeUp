@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView,
@@ -35,6 +35,20 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'apple' | 'google' | null>(null);
   const [error, setError] = useState('');
+
+  // Hidden 5-tap logo trigger — opens debug screen without auth
+  const logoTapCount = useRef(0);
+  const logoTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleLogoTap = () => {
+    logoTapCount.current += 1;
+    if (logoTapTimer.current) clearTimeout(logoTapTimer.current);
+    if (logoTapCount.current >= 5) {
+      logoTapCount.current = 0;
+      router.push('/debug');
+      return;
+    }
+    logoTapTimer.current = setTimeout(() => { logoTapCount.current = 0; }, 3000);
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -115,10 +129,14 @@ export default function LoginScreen() {
         bounces={false}
       >
         <View style={isTablet ? [styles.innerWrap, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }] : styles.innerWrap}>
-          {/* Brand */}
-          <View style={[styles.brandBlock, { marginBottom: V_MD }]}>
+          {/* Brand — tap 5 times to open debug screen */}
+          <TouchableOpacity
+            style={[styles.brandBlock, { marginBottom: V_MD }]}
+            onPress={handleLogoTap}
+            activeOpacity={1}
+          >
             <WarmupBrand logoSize={logoSize} sloganWidth={sloganWidth} showTagline />
-          </View>
+          </TouchableOpacity>
 
           {/* Sign-in panel */}
           <View style={[styles.panel, { padding: V_MD, gap: V_SM }]}>

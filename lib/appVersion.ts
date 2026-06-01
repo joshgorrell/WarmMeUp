@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'invite-rpc-live-fix-2026-05-31-v5';
-export const OTA_MARKER = 'V5 LIVE OR NEW BINARY';
+export const APP_CODE_VERSION = 'pre-login-debug-2026-06-01-v6';
+export const OTA_MARKER = 'V6 PRE-LOGIN DEBUG';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.

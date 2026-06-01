@@ -459,7 +459,7 @@ export default function DebugScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.canGoBack() ? router.back() : router.replace('/transition')}
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(auth)/login')}
           style={styles.back}
           hitSlop={12}
         >
@@ -473,6 +473,20 @@ export default function DebugScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* ── CRITICAL: Build Config (visible without login) ── */}
+        <Section title="Build Config — verify these first" />
+        <Row label="APP_CODE_VERSION" value={APP_CODE_VERSION} />
+        <Row label="OTA_MARKER" value={OTA_MARKER} />
+        <Row label="supabaseUrlHost" value={supabaseUrlHost} />
+        <Row label="dbProjectRef" value={dbProjectRef} />
+        <Row label="anonKeyPresent" value={Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)} />
+        <Row label="anonKeyPrefix (12)" value={process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 12) ?? null} />
+        <Row label="anonKeyJwtPayloadRef" value={anonKeyProjectRefDecoded} />
+        <Row label="channel" value={channel} />
+        <Row label="isEmbeddedLaunch" value={isEmbeddedLaunch} />
+        <Row label="updateId" value={updateId} />
+        <Row label="createdAt" value={createdAt} />
+
         {/* ── 0. App Code Version ── */}
         <Section title="App Code Version" />
         <Row label="APP_CODE_VERSION" value={APP_CODE_VERSION} />
