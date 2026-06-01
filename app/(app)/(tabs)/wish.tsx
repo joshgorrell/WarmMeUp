@@ -4,7 +4,6 @@ import {
   KeyboardAvoidingView, Platform, Animated, Modal,
   Pressable, Linking, ActivityIndicator,
 } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { Image } from 'react-native';
@@ -20,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 import { awardPoints, getPointValue, incrementMonthlyCounter } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { logDebugEvent } from '@/lib/debugLog';
+import { uploadMediaFile } from '@/lib/uploadMedia';
 import { Wish, WishReaction, WishCategory } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
@@ -344,25 +344,7 @@ function WishForm({
       logDebugEvent('WISH IMAGE UPLOAD START', { storagePath });
       logDebugEvent('WISH LAST UPLOAD PATH', { path: storagePath });
 
-      // Use FileSystem.readAsStringAsync to reliably read local file URIs on iOS
-      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const byteChars = atob(base64);
-      const byteArray = new Uint8Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-
-      const { error: uploadError } = await supabase.storage
-        .from('vault')
-        .upload(storagePath, byteArray, { contentType: 'image/jpeg', upsert: false });
-
-      if (uploadError) {
-        logDebugEvent('WISH IMAGE UPLOAD ERROR', {
-          storagePath,
-          error: uploadError.message,
-          statusCode: (uploadError as any).statusCode ?? null,
-        });
-        logDebugEvent('WISH LAST UPLOAD ERROR', { error: uploadError.message });
-        throw uploadError;
-      }
+      await uploadMediaFile(asset.uri, 'vault', storagePath, 'image/jpeg', undefined, user.id, couple.id);
 
       // Generate a signed URL immediately so the preview survives a restart
       const { data: signedData, error: signError } = await supabase.storage
@@ -658,16 +640,7 @@ function FulfillSheet({
       const path = `${couple.id}/${user.id}/wish_memory_${Date.now()}.jpg`;
       logDebugEvent('WISH MEMORY IMAGE UPLOAD START', { path });
 
-      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const byteChars = atob(base64);
-      const byteArray = new Uint8Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-
-      const { error: upErr } = await supabase.storage.from('vault').upload(path, byteArray, { contentType: 'image/jpeg' });
-      if (upErr) {
-        logDebugEvent('WISH MEMORY IMAGE UPLOAD ERROR', { path, error: upErr.message });
-        throw upErr;
-      }
+      await uploadMediaFile(asset.uri, 'vault', path, 'image/jpeg', undefined, user.id, couple.id);
 
       // Use signed URL for the preview so it survives memory flush
       const { data: signedData, error: signErr } = await supabase.storage.from('vault').createSignedUrl(path, 3600);
