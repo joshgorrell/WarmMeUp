@@ -6,7 +6,7 @@ import {
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon } from 'lucide-react-native';
+import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Video as VideoIcon } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -442,6 +442,60 @@ export default function VaultScreen() {
     }
   };
 
+  const handleTakePhotoOnly = async () => {
+    setShowAdd(false);
+    await new Promise(r => setTimeout(r, 350));
+    try {
+      const ImagePicker = await import('expo-image-picker');
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+        return;
+      }
+      cameraActiveRef.current = true;
+      let result;
+      try {
+        result = await ImagePicker.launchCameraAsync({ ...PICKER_OPTIONS, mediaTypes: ['images'] as any });
+      } finally {
+        cameraActiveRef.current = false;
+      }
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const mimeType = resolveAssetMimeType(asset);
+      await uploadToVault(asset.uri, 'photo', mimeType);
+    } catch (e: any) {
+      setUploading(false);
+      Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
+    }
+  };
+
+  const handleRecordVideo = async () => {
+    setShowAdd(false);
+    await new Promise(r => setTimeout(r, 350));
+    try {
+      const ImagePicker = await import('expo-image-picker');
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+        return;
+      }
+      cameraActiveRef.current = true;
+      let result;
+      try {
+        result = await ImagePicker.launchCameraAsync({ ...PICKER_OPTIONS, mediaTypes: ['videos'] as any });
+      } finally {
+        cameraActiveRef.current = false;
+      }
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const mimeType = resolveAssetMimeType(asset);
+      await uploadToVault(asset.uri, 'video', mimeType);
+    } catch (e: any) {
+      setUploading(false);
+      Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
+    }
+  };
+
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const unviewed = items.filter(i => i.uploaded_by_user_id !== user?.id && !i.viewed_by_partner).length;
@@ -508,17 +562,31 @@ export default function VaultScreen() {
                   activeOpacity={0.85}
                 >
                   {signedUrls[item.id] ? (
-                    <Image
-                      source={{ uri: signedUrls[item.id] }}
-                      style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
-                      blurRadius={blurEnabled && !isRevealed ? 6 : 0}
-                    />
+                    item.media_type === 'video' && isRevealed ? (
+                      // Revealed video: dark placeholder with centred play icon
+                      <View style={[StyleSheet.absoluteFill, styles.videoThumbRevealed, { borderRadius: Radius.sm }]}>
+                        <Play color="#fff" size={28} fill="rgba(255,255,255,0.85)" strokeWidth={1.5} />
+                      </View>
+                    ) : (
+                      <Image
+                        source={{ uri: signedUrls[item.id] }}
+                        style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
+                        blurRadius={blurEnabled && !isRevealed ? 6 : 0}
+                      />
+                    )
                   ) : (
-                    <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.04)' }]} />
+                    <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center' }]}>
+                      <ActivityIndicator color="rgba(255,255,255,0.25)" size="small" />
+                    </View>
                   )}
                   {blurEnabled && !isRevealed && (
                     <View style={styles.blurOverlay}>
                       <EyeOff color="rgba(255,255,255,0.7)" size={20} strokeWidth={2} />
+                    </View>
+                  )}
+                  {item.media_type === 'video' && !isRevealed && !blurEnabled && (
+                    <View style={styles.videoBadge}>
+                      <Play color="#fff" size={10} fill="#fff" strokeWidth={1.5} />
                     </View>
                   )}
                   {isNew && <View style={[styles.newDot, { borderColor: '#050507' }]} />}
@@ -605,7 +673,7 @@ export default function VaultScreen() {
               <AppText style={[styles.pickerLabel, { color: colors.text }]}>Photo Library</AppText>
               <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Choose existing</AppText>
             </TouchableOpacity>
-            {Platform.OS !== 'web' && (
+            {Platform.OS !== 'web' && Platform.OS !== 'android' && (
               <TouchableOpacity
                 style={[styles.pickerBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
                 onPress={handleTakePhoto}
@@ -613,10 +681,32 @@ export default function VaultScreen() {
               >
                 <Camera color="#FF8A3D" size={24} strokeWidth={1.8} />
                 <AppText style={[styles.pickerLabel, { color: colors.text }]}>Camera</AppText>
-                <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Take now</AppText>
+                <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Photo or video</AppText>
               </TouchableOpacity>
             )}
           </View>
+          {Platform.OS === 'android' && (
+            <View style={styles.pickerRow}>
+              <TouchableOpacity
+                style={[styles.pickerBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
+                onPress={handleTakePhotoOnly}
+                activeOpacity={0.75}
+              >
+                <Camera color="#FF8A3D" size={24} strokeWidth={1.8} />
+                <AppText style={[styles.pickerLabel, { color: colors.text }]}>Take Photo</AppText>
+                <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Camera</AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.pickerBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
+                onPress={handleRecordVideo}
+                activeOpacity={0.75}
+              >
+                <VideoIcon color="#FF8A3D" size={24} strokeWidth={1.8} />
+                <AppText style={[styles.pickerLabel, { color: colors.text }]}>Record Video</AppText>
+                <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Camera</AppText>
+              </TouchableOpacity>
+            </View>
+          )}
           <SecondaryButton label="Cancel" onPress={() => setShowAdd(false)} style={{ marginTop: Spacing.sm }} />
         </View>
       </BottomSheet>
@@ -631,6 +721,8 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   gridItem: { borderRadius: Radius.sm, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
   blurOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)' },
+  videoThumbRevealed: { backgroundColor: '#0D0D12', alignItems: 'center', justifyContent: 'center' },
+  videoBadge: { position: 'absolute', bottom: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, padding: 4 },
   newDot: { position: 'absolute', top: 6, right: 6, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF2E8A', borderWidth: 2 },
   shieldBadge: { position: 'absolute', bottom: 6, left: 6, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: 3 },
   empty: { alignItems: 'center', paddingTop: 80, gap: Spacing.lg },
