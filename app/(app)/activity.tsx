@@ -11,7 +11,6 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import WarmupLogo from '@/components/WarmupLogo';
 import WarmupWordmark from '@/components/WarmupWordmark';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type FilterTab = 'all' | 'chat' | 'dare' | 'dice' | 'wish' | 'privacy';
 
@@ -49,7 +48,6 @@ export default function ActivityScreen() {
   const router = useRouter();
   const { user, partnerProfile, couple } = useAuth();
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const [allItems, setAllItems] = useState<ActivityItem[]>([]);
   const [filter, setFilter] = useState<FilterTab>('all');
   const [refreshing, setRefreshing] = useState(false);
@@ -192,8 +190,8 @@ export default function ActivityScreen() {
 
   return (
     <AppShell scrollable={false}>
-      {/* Header — matches TabHeader/BrandHeader layout exactly */}
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
+      {/* Header — identical padding to BrandHeader/TabHeader */}
+      <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
           activeOpacity={0.8}
@@ -227,7 +225,7 @@ export default function ActivityScreen() {
                 styles.filterTab,
                 {
                   backgroundColor: filter === tab.key ? 'rgba(255,46,138,0.12)' : colors.card,
-                  borderColor: filter === tab.key ? 'rgba(255,46,138,0.45)' : colors.borderSubtle,
+                  borderColor: filter === tab.key ? 'rgba(255,46,138,0.45)' : 'rgba(255,255,255,0.14)',
                 },
               ]}
               onPress={() => setFilter(tab.key)}
@@ -279,6 +277,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing.md,
     paddingBottom: Spacing.md,
     gap: Spacing.md,
   },
@@ -302,9 +301,9 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 40 },
-  filterScroll: { marginTop: Spacing.md, marginBottom: Spacing.lg },
+  filterScroll: { marginTop: Spacing.lg, marginBottom: Spacing.lg },
   filterContent: { gap: Spacing.sm, paddingRight: Spacing.screen },
-  filterTab: { borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 7 },
+  filterTab: { borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 8, minWidth: 60, alignItems: 'center' },
   filterTabText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
@@ -318,7 +317,7 @@ const styles = StyleSheet.create({
   rowTime: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular' },
   pointsPill: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 2 },
   pointsText: { color: '#FFB347', fontSize: 10, fontFamily: 'Inter-Bold' },
-  empty: { alignItems: 'center', paddingTop: 80, gap: Spacing.md },
+  empty: { alignItems: 'center', paddingTop: 48, gap: Spacing.md },
   emptyTitle: { fontSize: FontSize.xl, fontFamily: 'Inter-Bold' },
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 22, maxWidth: 280 },
 });
