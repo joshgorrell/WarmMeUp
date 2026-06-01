@@ -3,10 +3,11 @@ import {
   View, StyleSheet, ScrollView, TouchableOpacity,
   Image, RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated,
 } from 'react-native';
+import { ResizeMode, Video } from 'expo-av';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Video as VideoIcon } from 'lucide-react-native';
+import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Video as VideoIcon, Eye } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -22,7 +23,7 @@ import SecondaryButton from '@/components/SecondaryButton';
 import BottomSheet from '@/components/BottomSheet';
 import TabHeader from '@/components/TabHeader';
 import AppShell from '@/components/AppShell';
-import { FontSize, Spacing, Radius, NavHeight } from '@/constants/theme';
+import { FontSize, Spacing, Radius } from '@/constants/theme';
 
 
 export default function VaultScreen() {
@@ -35,7 +36,8 @@ export default function VaultScreen() {
   const NUM_COLS = cols(3, 4);
   const ITEM_SIZE = width > 0 ? (width - Spacing.screen * 2 - Spacing.sm * (NUM_COLS - 1)) / NUM_COLS : 100;
   const [items, setItems] = useState<VaultItem[]>([]);
-  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  // Single flag: has the user tapped to reveal the whole grid this session?
+  const [pageRevealed, setPageRevealed] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -57,6 +59,9 @@ export default function VaultScreen() {
   const blurEnabled = settings?.blur_media ?? true;
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const cameraActiveRef = useRef(false);
+
+  // Whether thumbnails are currently visible (blur off, or user has tapped to reveal)
+  const thumbnailsVisible = !blurEnabled || pageRevealed;
 
   // Unlock the vault via biometrics
   const unlockVault = useCallback(async () => {
@@ -95,7 +100,7 @@ export default function VaultScreen() {
       const prev = appStateRef.current;
       appStateRef.current = next;
       if ((prev === 'background' || prev === 'inactive') && next === 'active') {
-        if (blurEnabled) setRevealed(new Set());
+        if (blurEnabled) setPageRevealed(false);
         if (vaultFaceIdRequired && !cameraActiveRef.current) {
           setVaultUnlocked(false);
           unlockVault();
@@ -172,31 +177,42 @@ export default function VaultScreen() {
     return null;
   };
 
-  const handleReveal = async (item: VaultItem) => {
-    if (!revealed.has(item.id)) {
-      setRevealed(prev => new Set([...prev, item.id]));
-      // Generate signed URL now so it's ready when the image renders
-      await resolveSignedUrl(item);
-      if (item.uploaded_by_user_id !== user?.id && !item.viewed_by_partner && couple?.id) {
-        await supabase.rpc('mark_vault_item_viewed', { item_id: item.id });
-        await awardPoints(couple.id, user!.id, 2, 'Vault media viewed');
-      }
-    } else {
-      const signedUrl = await resolveSignedUrl(item);
-      if (!signedUrl) return;
-      router.push({
-        pathname: '/(app)/vault-viewer',
-        params: {
-          id: item.id,
-          storagePath: item.storage_path ?? item.file_path,
-          storageBucket: item.storage_bucket ?? 'vault',
-          mediaType: item.media_type,
-          allowScreenshot: item.allow_screenshot ? '1' : '0',
-          allowSave: item.allow_save ? '1' : '0',
-          allowShare: item.allow_share ? '1' : '0',
-        },
-      });
+  // Mark all unviewed partner items as viewed and award points
+  const markAllViewed = async (allItems: VaultItem[]) => {
+    if (!couple?.id || !user) return;
+    const unviewed = allItems.filter(i => i.uploaded_by_user_id !== user.id && !i.viewed_by_partner);
+    for (const item of unviewed) {
+      supabase.rpc('mark_vault_item_viewed', { item_id: item.id }).then(() => {}, () => {});
+      awardPoints(couple.id, user.id, 2, 'Vault media viewed');
     }
+  };
+
+  const handleRevealPage = async () => {
+    setPageRevealed(true);
+    await markAllViewed(items);
+  };
+
+  const handleTilePress = async (item: VaultItem) => {
+    if (blurEnabled && !pageRevealed) {
+      // First tap while blurred: reveal all thumbnails
+      await handleRevealPage();
+      return;
+    }
+    // Thumbnails visible: open fullscreen viewer
+    const signedUrl = await resolveSignedUrl(item);
+    if (!signedUrl) return;
+    router.push({
+      pathname: '/(app)/vault-viewer',
+      params: {
+        id: item.id,
+        storagePath: item.storage_path ?? item.file_path,
+        storageBucket: item.storage_bucket ?? 'vault',
+        mediaType: item.media_type,
+        allowScreenshot: item.allow_screenshot ? '1' : '0',
+        allowSave: item.allow_save ? '1' : '0',
+        allowShare: item.allow_share ? '1' : '0',
+      },
+    });
   };
 
   const handleDeleteItem = (item: VaultItem) => {
@@ -226,7 +242,6 @@ export default function VaultScreen() {
             // Remove from local state only after DB confirms deletion
             setItems(prev => prev.filter(i => i.id !== item.id));
             setSignedUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
-            setRevealed(prev => { const n = new Set(prev); n.delete(item.id); return n; });
             // Best-effort storage cleanup (fire-and-forget)
             const bucket = item.storage_bucket ?? 'vault';
             const path = item.storage_path ?? item.file_path;
@@ -249,7 +264,6 @@ export default function VaultScreen() {
       ]
     );
   };
-
 
   // Spin animation for the progress overlay
   const startSpin = () => {
@@ -537,6 +551,18 @@ export default function VaultScreen() {
           </AppText>
         </View>
 
+        {/* Tap-to-reveal banner — shown when blur is on and grid hasn't been revealed yet */}
+        {blurEnabled && !pageRevealed && items.length > 0 && (
+          <TouchableOpacity
+            style={[styles.revealBanner, { backgroundColor: 'rgba(255,46,138,0.10)', borderColor: 'rgba(255,46,138,0.28)' }]}
+            onPress={handleRevealPage}
+            activeOpacity={0.75}
+          >
+            <Eye color="#FF2E8A" size={18} strokeWidth={2} />
+            <AppText style={[styles.revealBannerText, { color: '#FF2E8A' }]}>Tap to reveal your Vault</AppText>
+          </TouchableOpacity>
+        )}
+
         {items.length === 0 ? (
           <View style={styles.empty}>
             <View style={[styles.emptyIconWrap, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
@@ -550,28 +576,34 @@ export default function VaultScreen() {
         ) : (
           <View style={styles.grid}>
             {items.map(item => {
-              const isRevealed = revealed.has(item.id);
               const isNew = item.uploaded_by_user_id !== user?.id && !item.viewed_by_partner;
+              const url = signedUrls[item.id];
               return (
                 <TouchableOpacity
                   key={item.id}
                   style={[styles.gridItem, { width: ITEM_SIZE, height: ITEM_SIZE }]}
-                  onPress={() => handleReveal(item)}
+                  onPress={() => handleTilePress(item)}
                   onLongPress={() => handleDeleteItem(item)}
                   delayLongPress={500}
                   activeOpacity={0.85}
                 >
-                  {signedUrls[item.id] ? (
-                    item.media_type === 'video' && isRevealed ? (
-                      // Revealed video: dark placeholder with centred play icon
-                      <View style={[StyleSheet.absoluteFill, styles.videoThumbRevealed, { borderRadius: Radius.sm }]}>
-                        <Play color="#fff" size={28} fill="rgba(255,255,255,0.85)" strokeWidth={1.5} />
-                      </View>
+                  {/* Thumbnail — photo uses Image, video uses Video (first frame) */}
+                  {url ? (
+                    item.media_type === 'video' ? (
+                      <Video
+                        source={{ uri: url }}
+                        style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
+                        resizeMode={ResizeMode.COVER}
+                        shouldPlay={false}
+                        isMuted
+                        positionMillis={0}
+                        isLooping={false}
+                      />
                     ) : (
                       <Image
-                        source={{ uri: signedUrls[item.id] }}
+                        source={{ uri: url }}
                         style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
-                        blurRadius={blurEnabled && !isRevealed ? 6 : 0}
+                        blurRadius={thumbnailsVisible ? 0 : 6}
                       />
                     )
                   ) : (
@@ -579,16 +611,26 @@ export default function VaultScreen() {
                       <ActivityIndicator color="rgba(255,255,255,0.25)" size="small" />
                     </View>
                   )}
-                  {blurEnabled && !isRevealed && (
+
+                  {/* Blur overlay for videos (Video component has no blurRadius prop) */}
+                  {!thumbnailsVisible && item.media_type === 'video' && url && (
+                    <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, backgroundColor: 'rgba(0,0,0,0.75)' }]} />
+                  )}
+
+                  {/* Blur overlay + eye icon — shown for all items while blurred */}
+                  {!thumbnailsVisible && (
                     <View style={styles.blurOverlay}>
                       <EyeOff color="rgba(255,255,255,0.7)" size={20} strokeWidth={2} />
                     </View>
                   )}
-                  {item.media_type === 'video' && !isRevealed && !blurEnabled && (
+
+                  {/* Play badge for videos when thumbnails are visible */}
+                  {thumbnailsVisible && item.media_type === 'video' && (
                     <View style={styles.videoBadge}>
                       <Play color="#fff" size={10} fill="#fff" strokeWidth={1.5} />
                     </View>
                   )}
+
                   {isNew && <View style={[styles.newDot, { borderColor: '#050507' }]} />}
                   {!item.allow_screenshot && (
                     <View style={styles.shieldBadge}>
@@ -716,12 +758,17 @@ export default function VaultScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 40 },
-  privNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.lg },
+  privNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.sm },
   privText: { flex: 1, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18 },
+  revealBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, borderRadius: Radius.md, borderWidth: 1,
+    padding: Spacing.md, marginBottom: Spacing.lg,
+  },
+  revealBannerText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   gridItem: { borderRadius: Radius.sm, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
   blurOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)' },
-  videoThumbRevealed: { backgroundColor: '#0D0D12', alignItems: 'center', justifyContent: 'center' },
   videoBadge: { position: 'absolute', bottom: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, padding: 4 },
   newDot: { position: 'absolute', top: 6, right: 6, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF2E8A', borderWidth: 2 },
   shieldBadge: { position: 'absolute', bottom: 6, left: 6, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: 3 },
