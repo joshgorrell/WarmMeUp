@@ -249,10 +249,10 @@ export default function GreetingsScreen() {
               style={[styles.modalInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.bg2 }]}
               multiline
               numberOfLines={3}
-              maxLength={200}
+              maxLength={50}
               autoFocus
             />
-            <AppText style={[styles.charCount, { color: colors.textMuted }]}>{draftText.length}/200</AppText>
+            <AppText style={[styles.charCount, { color: colors.textMuted }]}>{draftText.length}/50 — one line on small screens</AppText>
 
             {modalError && (
               <AppText style={[styles.modalError, { color: colors.danger }]}>{modalError}</AppText>

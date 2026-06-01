@@ -15,8 +15,7 @@ import AppShell from '@/components/AppShell';
 import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
 import Avatar from '@/components/Avatar';
-
-const FALLBACK_GREETING_SUB = "Everything is set up and waiting.";
+import { useGreeting } from '@/hooks/useGreeting';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -55,19 +54,7 @@ export default function HomeScreen() {
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const hasPartner = !!couple?.user_b_id;
-  const [greetingSub, setGreetingSub] = useState(FALLBACK_GREETING_SUB);
-
-  useEffect(() => {
-    supabase
-      .from('greeting_subtitles')
-      .select('text')
-      .eq('is_active', true)
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          setGreetingSub(data[Math.floor(Math.random() * data.length)].text);
-        }
-      });
-  }, []);
+  const greetingSub = useGreeting();
 
   // Honour pending notification deep-link passed from transition.tsx.
   // We navigate here instead of in transition to avoid push-on-top-of-replace races.
