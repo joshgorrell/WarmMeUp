@@ -166,6 +166,20 @@ export default function DebugScreen() {
   const dbProjectRef = supabaseUrlHost
     ? supabaseUrlHost.replace(/\.supabase\.co$/, '')
     : null;
+  const anonKeyProjectRefDecoded: string | null = (() => {
+    try {
+      const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      if (!key) return null;
+      const payload = key.split('.')[1];
+      if (!payload) return null;
+      const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+      const decoded = atob(padded);
+      const json = JSON.parse(decoded);
+      return json?.ref ?? null;
+    } catch {
+      return null;
+    }
+  })();
 
   // Boot timing from event log
   const lastBootEvent = events.find(e => e.tag === 'LAUNCH BOOT');
@@ -392,6 +406,8 @@ export default function DebugScreen() {
       bootElapsedMs,
       tokenPresent, sessionExpiry, tokenExpiryCountdown,
       supabaseUrlHost, dbProjectRef,
+      anonKeyPrefix24: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 24) ?? null,
+      anonKeyProjectRefDecoded,
       sub_loading: subscriptionInfo.loading,
       sub_isPremium: subscriptionInfo.isPremium,
       sub_isOnTrial: subscriptionInfo.isOnTrial,
@@ -552,7 +568,8 @@ export default function DebugScreen() {
         {/* ── 4b. Environment / Build-time Config ── */}
         <Section title="Environment / Build-time Config" />
         <Row label="SUPABASE_URL (full)" value={process.env.EXPO_PUBLIC_SUPABASE_URL ?? null} />
-        <Row label="ANON_KEY prefix (first 20)" value={process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 20) ?? null} />
+        <Row label="ANON_KEY prefix (first 24)" value={process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 24) ?? null} />
+        <Row label="anonKeyProjectRefDecoded" value={anonKeyProjectRefDecoded} />
         <Row label="DEBUG_ALWAYS_ON" value={process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON ?? null} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
