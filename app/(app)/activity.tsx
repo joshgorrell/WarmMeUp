@@ -2,25 +2,25 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
-import { Zap, Lock, Trophy, MessageCircle, Dice6, Camera } from 'lucide-react-native';
+import { ArrowLeft, Zap, Lock, MessageCircle, Dice6, Camera, Sparkles } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { Interaction, CashInEvent, ChatMessage } from '@/lib/types';
+import { Interaction, ChatMessage } from '@/lib/types';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
-import ScreenHeader from '@/components/ScreenHeader';
+import WarmupLogo from '@/components/WarmupLogo';
+import WarmupWordmark from '@/components/WarmupWordmark';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type FilterTab = 'all' | 'dare' | 'tell_me' | 'dice' | 'cash' | 'chat' | 'privacy';
+type FilterTab = 'all' | 'chat' | 'dare' | 'dice' | 'wish' | 'privacy';
 
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'dare', label: 'Dares' },
-  { key: 'tell_me', label: 'Wish' },
-  { key: 'dice', label: 'Dice' },
-  { key: 'cash', label: 'Cash In' },
   { key: 'chat', label: 'Chat' },
-  { key: 'privacy', label: 'Privacy' },
+  { key: 'dare', label: 'Dare' },
+  { key: 'dice', label: 'Dice' },
+  { key: 'wish', label: 'Wish' },
 ];
 
 type ActivityItem = {
@@ -32,6 +32,7 @@ type ActivityItem = {
   icon: React.ReactNode;
   color: string;
   points?: number;
+  _rawTime: string;
 };
 
 function timeAgo(iso: string) {
@@ -46,20 +47,20 @@ function timeAgo(iso: string) {
 
 export default function ActivityScreen() {
   const router = useRouter();
-  const { user, profile, partnerProfile, couple } = useAuth();
+  const { user, partnerProfile, couple } = useAuth();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [allItems, setAllItems] = useState<ActivityItem[]>([]);
   const [filter, setFilter] = useState<FilterTab>('all');
   const [refreshing, setRefreshing] = useState(false);
 
   const items = filter === 'all'
     ? allItems
-    : allItems.filter(i => (i as any)._type === filter);
+    : allItems.filter(i => i._type === filter);
 
   useEffect(() => {
     if (!couple?.id || !user?.id) return;
     load();
-    // Mark all unread privacy events as read when the screen is opened
     supabase
       .from('activity_events')
       .update({ read: true })
@@ -69,7 +70,6 @@ export default function ActivityScreen() {
       .then(() => {});
     const ch = supabase.channel(`activity_screen_${couple.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, load)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cash_in_events', filter: `couple_id=eq.${couple.id}` }, load)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, load)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, load)
       .subscribe();
@@ -78,9 +78,8 @@ export default function ActivityScreen() {
 
   const load = async () => {
     if (!couple?.id || !user) return;
-    const [{ data: interactions }, { data: cashIns }, { data: chats }, { data: privacyEvents }] = await Promise.all([
+    const [{ data: interactions }, { data: chats }, { data: privacyEvents }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(30),
-      supabase.from('cash_in_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('chat_messages').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(30),
       supabase.from('activity_events').select('*').eq('couple_id', couple.id).eq('target_user_id', user.id).order('created_at', { ascending: false }).limit(30),
     ]);
@@ -93,14 +92,17 @@ export default function ActivityScreen() {
       let label = '';
       let icon: React.ReactNode;
       let color = '#FF2E8A';
+      let type: FilterTab = 'dare';
 
       switch (i.type) {
         case 'dice':
+          type = 'dice';
           label = isMine ? 'You rolled the dice' : `${partnerName} rolled the dice`;
           icon = <Dice6 color="#FFB347" size={18} strokeWidth={2} />;
           color = '#FFB347';
           break;
         case 'dare':
+          type = 'dare';
           if (i.status === 'accepted') {
             label = isMine ? `${partnerName} accepted your dare` : 'You accepted the dare';
           } else if (i.status === 'rejected') {
@@ -118,25 +120,28 @@ export default function ActivityScreen() {
           color = '#FF2E8A';
           break;
         case 'tell_me':
+          type = 'wish';
           label = i.status === 'answered'
             ? (isMine ? `${partnerName} answered your Wish` : 'You answered the Wish')
             : (isMine ? 'You sent a Wish' : `${partnerName} sent you a Wish`);
-          icon = <MessageCircle color="#FF8A3D" size={18} strokeWidth={2} />;
-          color = '#FF8A3D';
+          icon = <Sparkles color="#F0A96A" size={18} strokeWidth={2} />;
+          color = '#F0A96A';
           break;
         case 'media':
+          type = 'dare';
           label = isMine ? 'New Vault item added' : `${partnerName} added to the Vault`;
           icon = <Lock color="#FF2E8A" size={18} strokeWidth={2} />;
           color = '#FF2E8A';
           break;
         default:
+          type = 'dare';
           label = 'Activity';
           icon = <Zap color="#FF2E8A" size={18} strokeWidth={2} />;
       }
 
       mapped.push({
         id: i.id,
-        _type: i.type as FilterTab,
+        _type: type,
         label,
         sub: i.content_text ? `"${i.content_text.slice(0, 60)}${i.content_text.length > 60 ? '…' : ''}"` : '',
         time: timeAgo(i.created_at),
@@ -144,21 +149,7 @@ export default function ActivityScreen() {
         color,
         points: i.points_awarded > 0 ? i.points_awarded : undefined,
         _rawTime: i.created_at,
-      } as ActivityItem & { _rawTime: string });
-    });
-
-    (cashIns ?? []).forEach((ev: CashInEvent) => {
-      const isMine = ev.winner_user_id === user.id;
-      mapped.push({
-        id: ev.id,
-        _type: 'cash',
-        label: isMine ? `Cash In — ${ev.winner_choice === 'give' ? 'Give' : 'Receive'}` : `${partnerName} Cashed In`,
-        sub: `${ev.winner_points} vs ${ev.loser_points} points`,
-        time: timeAgo(ev.created_at),
-        icon: <Trophy color="#FFB347" size={18} strokeWidth={2} />,
-        color: '#FFB347',
-        _rawTime: ev.created_at,
-      } as ActivityItem & { _rawTime: string });
+      });
     });
 
     (chats ?? []).forEach((msg: ChatMessage) => {
@@ -177,7 +168,7 @@ export default function ActivityScreen() {
         icon: <MessageCircle color="#4FC3F7" size={18} strokeWidth={2} />,
         color: '#4FC3F7',
         _rawTime: msg.created_at,
-      } as ActivityItem & { _rawTime: string });
+      });
     });
 
     (privacyEvents ?? []).forEach((ev: any) => {
@@ -190,30 +181,39 @@ export default function ActivityScreen() {
         icon: <Camera color="#FF8A3D" size={18} strokeWidth={2} />,
         color: '#FF8A3D',
         _rawTime: ev.created_at,
-      } as ActivityItem & { _rawTime: string });
+      });
     });
 
-    // Sort all items newest first
-    mapped.sort((a, b) => {
-      const ta = (a as any)._rawTime as string;
-      const tb = (b as any)._rawTime as string;
-      return tb.localeCompare(ta);
-    });
-
+    mapped.sort((a, b) => b._rawTime.localeCompare(a._rawTime));
     setAllItems(mapped);
   };
 
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   return (
-    <AppShell scrollable={false} noTopPadding>
-      <ScreenHeader title="Activity" onBack={() => router.back()} />
+    <AppShell scrollable={false}>
+      {/* Header — matches TabHeader/BrandHeader layout exactly */}
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          activeOpacity={0.8}
+          style={[styles.backBtn, { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: colors.borderSubtle }]}
+        >
+          <ArrowLeft color={colors.text} size={20} strokeWidth={2} />
+        </TouchableOpacity>
+        <View style={styles.brand}>
+          <WarmupLogo size={28} />
+          <WarmupWordmark size={13} />
+        </View>
+        <View style={styles.headerRight} />
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
       >
-        {/* Filter tabs */}
+        {/* Filter pills */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -242,10 +242,10 @@ export default function ActivityScreen() {
 
         {items.length === 0 ? (
           <View style={styles.empty}>
-            <AppText style={styles.emptyEmoji}>✨</AppText>
+            <Sparkles color="#FFB347" size={48} strokeWidth={1.5} />
             <AppText style={[styles.emptyTitle, { color: colors.text }]}>Nothing yet</AppText>
             <AppText style={[styles.emptySub, { color: colors.textSecondary }]}>
-              Start a moment with your partner. Roll the dice, send a dare, or drop a note.
+              Start a moment with your partner. Send a chat, roll the dice, send a dare, or create a wish.
             </AppText>
           </View>
         ) : (
@@ -260,11 +260,11 @@ export default function ActivityScreen() {
               </View>
               <View style={styles.rowRight}>
                 <AppText style={[styles.rowTime, { color: colors.textMuted }]}>{item.time}</AppText>
-                {item.points && (
+                {item.points ? (
                   <View style={[styles.pointsPill, { backgroundColor: 'rgba(255,179,71,0.12)', borderColor: 'rgba(255,179,71,0.30)' }]}>
                     <AppText style={styles.pointsText}>+{item.points}</AppText>
                   </View>
-                )}
+                ) : null}
               </View>
             </View>
           ))
@@ -275,7 +275,37 @@ export default function ActivityScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.screen,
+    paddingBottom: Spacing.md,
+    gap: Spacing.md,
+  },
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  brand: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerRight: {
+    width: 42,
+    flexShrink: 0,
+  },
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 40 },
+  filterScroll: { marginTop: Spacing.md, marginBottom: Spacing.lg },
+  filterContent: { gap: Spacing.sm, paddingRight: Spacing.screen },
+  filterTab: { borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 7 },
+  filterTabText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
     borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.sm,
@@ -288,12 +318,7 @@ const styles = StyleSheet.create({
   rowTime: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular' },
   pointsPill: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 2 },
   pointsText: { color: '#FFB347', fontSize: 10, fontFamily: 'Inter-Bold' },
-  filterScroll: { marginBottom: Spacing.lg },
-  filterContent: { gap: Spacing.sm, paddingRight: Spacing.screen },
-  filterTab: { borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 7 },
-  filterTabText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   empty: { alignItems: 'center', paddingTop: 80, gap: Spacing.md },
-  emptyEmoji: { fontSize: 48 },
   emptyTitle: { fontSize: FontSize.xl, fontFamily: 'Inter-Bold' },
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 22, maxWidth: 280 },
 });
