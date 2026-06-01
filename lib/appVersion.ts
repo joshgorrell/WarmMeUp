@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'pre-login-debug-2026-06-01-v8';
-export const OTA_MARKER = 'V8 RECENT ACTIVITY FIX';
+export const APP_CODE_VERSION = 'pre-login-debug-2026-06-01-v9';
+export const OTA_MARKER = 'V9 HOME TAB ACTIVITY FIX';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.

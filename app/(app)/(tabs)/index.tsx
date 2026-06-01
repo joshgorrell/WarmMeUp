@@ -4,12 +4,12 @@ import {
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Zap, Lock, Trophy, MessageCircle, Dice6, ChevronRight, Heart, Camera } from 'lucide-react-native';
+import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { Interaction, CashInEvent } from '@/lib/types';
+import { Interaction } from '@/lib/types';
 import { Spacing, Radius, FontSize, Gradient } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import BrandHeader from '@/components/BrandHeader';
@@ -98,7 +98,7 @@ export default function HomeScreen() {
       .select('*')
       .eq('couple_id', couple.id)
       .eq('is_active', true)
-      .in('type', ['dice', 'dare', 'tell_me'])
+      .in('type', ['dice', 'dare', 'wish', 'tell_me'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -108,13 +108,12 @@ export default function HomeScreen() {
   const loadRecentActivity = async () => {
     if (!couple?.id || !user) return;
     const partnerName = partnerProfile?.display_name ?? 'Partner';
-    const [{ data: interactions }, { data: cashIns }, { data: privacyEvents }] = await Promise.all([
+    const [{ data: interactions }, { data: privacyEvents }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
-      supabase.from('cash_in_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(3),
       supabase.from('activity_events').select('*').eq('couple_id', couple.id).eq('target_user_id', user.id).order('created_at', { ascending: false }).limit(5),
     ]);
 
-    const items: ActivityItem[] = [];
+    const items: Array<ActivityItem & { _rawTime: string }> = [];
 
     (interactions ?? []).forEach((i: Interaction) => {
       const isMine = i.sender_id === user.id;
@@ -123,6 +122,11 @@ export default function HomeScreen() {
       let color = '#FF2E8A';
 
       switch (i.type) {
+        case 'chat':
+          label = isMine ? 'You sent a chat' : `${partnerName} sent a chat`;
+          icon = <MessageCircle color="#4DA6FF" size={16} strokeWidth={2} />;
+          color = '#4DA6FF';
+          break;
         case 'dice':
           label = isMine ? 'You rolled the dice' : `${partnerName} rolled the dice`;
           icon = <Dice6 color="#FFB347" size={16} strokeWidth={2} />;
@@ -135,11 +139,12 @@ export default function HomeScreen() {
           icon = <Zap color="#FF2E8A" size={16} strokeWidth={2} />;
           color = '#FF2E8A';
           break;
+        case 'wish':
         case 'tell_me':
           label = i.status === 'answered'
-            ? (isMine ? `${partnerName} answered` : 'You answered')
-            : (isMine ? 'You asked them' : `${partnerName} asked you`);
-          icon = <MessageCircle color="#FF8A3D" size={16} strokeWidth={2} />;
+            ? (isMine ? `${partnerName} answered your Wish` : 'You answered the Wish')
+            : (isMine ? 'You sent a Wish' : `${partnerName} sent you a Wish`);
+          icon = <Star color="#FF8A3D" size={16} strokeWidth={2} />;
           color = '#FF8A3D';
           break;
         case 'media':
@@ -158,20 +163,8 @@ export default function HomeScreen() {
         time: timeAgo(i.created_at),
         icon,
         color,
+        _rawTime: i.created_at,
       });
-    });
-
-    (cashIns ?? []).forEach((ev: CashInEvent) => {
-      const isMine = ev.winner_user_id === user.id;
-      items.push({
-        id: ev.id,
-        label: isMine ? `Cash In — ${ev.winner_choice === 'give' ? 'Give' : 'Receive'}` : `${partnerName} Cashed In`,
-        sub: `${ev.winner_points} vs ${ev.loser_points} pts`,
-        time: timeAgo(ev.created_at),
-        icon: <Trophy color="#FFB347" size={16} strokeWidth={2} />,
-        color: '#FFB347',
-        _rawTime: ev.created_at,
-      } as ActivityItem & { _rawTime: string });
     });
 
     (privacyEvents ?? []).forEach((ev: any) => {
@@ -183,13 +176,10 @@ export default function HomeScreen() {
         icon: <Camera color="#FF8A3D" size={16} strokeWidth={2} />,
         color: '#FF8A3D',
         _rawTime: ev.created_at,
-      } as ActivityItem & { _rawTime: string });
+      });
     });
 
-    // Sort newest first
-    (items as Array<ActivityItem & { _rawTime?: string }>).sort((a, b) =>
-      (b._rawTime ?? '').localeCompare(a._rawTime ?? '')
-    );
+    items.sort((a, b) => b._rawTime.localeCompare(a._rawTime));
 
     setRecentActivity(items.slice(0, 5));
   };
@@ -278,7 +268,7 @@ export default function HomeScreen() {
               </View>
             ) : (
               <View style={[styles.activityEmpty, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                <AppText style={[styles.activityEmptyText, { color: colors.textMuted }]}>No activity yet</AppText>
+                <AppText style={[styles.activityEmptyText, { color: colors.textMuted }]}>Start a moment with your partner. Send a chat, roll the dice, send a dare, or create a wish.</AppText>
               </View>
             )}
           </View>
@@ -384,12 +374,15 @@ const styles = StyleSheet.create({
   activityEmpty: {
     borderRadius: Radius.lg,
     borderWidth: 1,
-    paddingVertical: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.md,
     alignItems: 'center',
   },
   activityEmptyText: {
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   activityRow: {
     flexDirection: 'row',
