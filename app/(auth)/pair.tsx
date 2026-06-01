@@ -92,6 +92,7 @@ export default function PairScreen() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [codeLoading, setCodeLoading] = useState(false);
   const [activeModal, setActiveModal] = useState<ActiveModal>(prefilledCode ? 'join' : null);
   const lastJoinAttemptRef = useRef(0);
 
@@ -101,67 +102,75 @@ export default function PairScreen() {
   }, [user]);
 
   useEffect(() => {
-    if (!couple?.id) return;
-    const interval = setInterval(async () => {
-      await refreshCouple();
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [couple?.id]);
-
-  useEffect(() => {
     if (couple?.user_b_id) {
       router.replace('/(app)/(tabs)');
     }
   }, [couple?.user_b_id]);
 
+  // Auto-submit when a full 6-character code is entered
+  useEffect(() => {
+    const normalized = joinCode.toUpperCase().trim();
+    if (normalized.length !== 6) return;
+    if (user) {
+      handleJoin();
+    } else {
+      handlePreAuthJoin();
+    }
+  }, [joinCode]);
+
   const loadOrCreateCouple = async () => {
     if (!user) return;
 
+    setCodeLoading(true);
     logDebugEvent('INVITE CREATE START', { userId: user.id });
 
     // If user already has an active partner, skip straight to the app.
     // Require active=true so historical/inactive paired rows don't trigger a redirect.
-    const { data: paired } = await supabase
-      .from('couples')
-      .select('id')
-      .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-      .not('user_b_id', 'is', null)
-      .eq('active', true)
-      .maybeSingle();
-    if (paired) {
-      router.replace('/(app)/(tabs)');
-      return;
-    }
+    try {
+      const { data: paired } = await supabase
+        .from('couples')
+        .select('id')
+        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+        .not('user_b_id', 'is', null)
+        .eq('active', true)
+        .maybeSingle();
+      if (paired) {
+        router.replace('/(app)/(tabs)');
+        return;
+      }
 
-    // Single code path: RPC finds or creates the solo couple and returns the invite code.
-    // This avoids a split between "DB query" and "RPC fallback" that could diverge.
-    const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
-    if (rpcError) {
-      logDebugEvent('INVITE CREATE ERROR', {
-        userId: user.id,
-        code: rpcError?.code ?? null,
-        message: rpcError?.message ?? null,
-      });
-      setInviteError(
-        `Could not generate invite code.\n` +
-        `Code: ${rpcError?.code ?? 'n/a'}\n` +
-        `Message: ${rpcError?.message ?? 'Unknown error'}`
-      );
-      return;
+      // Single code path: RPC finds or creates the solo couple and returns the invite code.
+      // This avoids a split between "DB query" and "RPC fallback" that could diverge.
+      const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
+      if (rpcError) {
+        logDebugEvent('INVITE CREATE ERROR', {
+          userId: user.id,
+          code: rpcError?.code ?? null,
+          message: rpcError?.message ?? null,
+        });
+        setInviteError(
+          `Could not generate invite code.\n` +
+          `Code: ${rpcError?.code ?? 'n/a'}\n` +
+          `Message: ${rpcError?.message ?? 'Unknown error'}`
+        );
+        return;
+      }
+      const inviteCode = (result as any)?.invite_code ?? null;
+      if (!inviteCode) {
+        logDebugEvent('INVITE CREATE ERROR', {
+          userId: user.id,
+          reason: 'rpc_returned_no_invite_code',
+          result: JSON.stringify(result),
+        });
+        setInviteError('Invite code generation failed — no code returned. Please try again.');
+        return;
+      }
+      logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc', inviteCode });
+      setMyCode(inviteCode);
+      await refreshCouple();
+    } finally {
+      setCodeLoading(false);
     }
-    const inviteCode = (result as any)?.invite_code ?? null;
-    if (!inviteCode) {
-      logDebugEvent('INVITE CREATE ERROR', {
-        userId: user.id,
-        reason: 'rpc_returned_no_invite_code',
-        result: JSON.stringify(result),
-      });
-      setInviteError('Invite code generation failed — no code returned. Please try again.');
-      return;
-    }
-    logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc', inviteCode });
-    setMyCode(inviteCode);
-    await refreshCouple();
   };
 
   const handleCopy = async () => {
@@ -602,7 +611,7 @@ export default function PairScreen() {
                 </AppText>
 
                 <View style={styles.codeBox}>
-                  {refreshing ? (
+                  {(refreshing || codeLoading) ? (
                     <ActivityIndicator color="rgba(255,255,255,0.6)" size="small" />
                   ) : (
                     <AppText style={[styles.codeDisplayText, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]} selectable>
@@ -613,10 +622,10 @@ export default function PairScreen() {
                     style={styles.refreshBtn}
                     onPress={handleRefreshCode}
                     activeOpacity={0.7}
-                    disabled={refreshing}
+                    disabled={refreshing || codeLoading}
                   >
                     <RefreshCw
-                      color={refreshing ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.45)'}
+                      color={(refreshing || codeLoading) ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.45)'}
                       size={15}
                       strokeWidth={2}
                     />
@@ -627,7 +636,7 @@ export default function PairScreen() {
                   <AppText style={styles.inviteErrorText}>{inviteError}</AppText>
                 )}
 
-                <TouchableOpacity style={styles.actionBtn} onPress={handleCopy} activeOpacity={0.85} disabled={!displayCode}>
+                <TouchableOpacity style={styles.actionBtn} onPress={handleCopy} activeOpacity={0.85} disabled={!displayCode || codeLoading}>
                   <LinearGradient
                     colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
                     start={{ x: 0, y: 0 }}
@@ -673,7 +682,7 @@ export default function PairScreen() {
       </Modal>
 
       {/* Join modal */}
-      <Modal visible={activeModal === 'join'} transparent animationType="slide" onRequestClose={() => { setActiveModal(null); setError(''); setJoinCode(''); }}>
+      <Modal visible={activeModal === 'join'} transparent animationType="slide" onRequestClose={() => { setActiveModal(null); setError(''); }}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -683,7 +692,7 @@ export default function PairScreen() {
               <LinearGradient colors={['#18101C', '#100810']} style={StyleSheet.absoluteFill} />
               <TouchableOpacity
                 style={styles.modalClose}
-                onPress={() => { setActiveModal(null); setError(''); setJoinCode(''); }}
+                onPress={() => { setActiveModal(null); setError(''); }}
               >
                 <X color="rgba(255,255,255,0.80)" size={20} />
               </TouchableOpacity>
@@ -693,7 +702,7 @@ export default function PairScreen() {
               <AppTextInput
                 style={[styles.codeInput, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}
                 value={joinCode}
-                onChangeText={setJoinCode}
+                onChangeText={(t) => { setJoinCode(t); setError(''); }}
                 placeholder="e.g. AB12CD"
                 placeholderTextColor="rgba(255,255,255,0.20)"
                 autoCapitalize="characters"
