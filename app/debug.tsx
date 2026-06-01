@@ -570,6 +570,24 @@ export default function DebugScreen() {
         <Row label="lastError.supabaseMessage" value={(lastVaultUploadError?.data?.supabaseMessage as string) ?? null} />
         <Row label="lastError.supabaseStatusCode" value={(lastVaultUploadError?.data?.supabaseStatusCode as string) ?? null} />
 
+        {/* ── 3b. Wish Upload Diagnostics ── */}
+        <Section title="Wish Upload Diagnostics" />
+        {(() => {
+          const lastPick      = events.find(e => e.tag === 'WISH LAST IMAGE PICK');
+          const lastPath      = events.find(e => e.tag === 'WISH LAST UPLOAD PATH');
+          const lastErrEv     = events.find(e => e.tag === 'WISH LAST UPLOAD ERROR');
+          const lastCreatedId = events.find(e => e.tag === 'WISH LAST CREATED ID');
+          return (
+            <>
+              <Row label="wish_lastImagePickAt"   value={(lastPick?.data?.at as string) ?? null} />
+              <Row label="wish_lastImageMime"      value={(lastPick?.data?.mime as string) ?? null} />
+              <Row label="wish_lastUploadPath"     value={(lastPath?.data?.path as string) ?? null} />
+              <Row label="wish_lastUploadError"    value={(lastErrEv?.data?.error as string | null) ?? null} />
+              <Row label="wish_lastCreatedId"      value={(lastCreatedId?.data?.id as string) ?? null} />
+            </>
+          );
+        })()}
+
         {/* ── 4. Storage / Auth Token State ── */}
         <Section title="Storage / Auth Token State" />
         <Row label="tokenPresent" value={tokenPresent} />

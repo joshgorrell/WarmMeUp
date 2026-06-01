@@ -18,6 +18,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { awardPoints, getPointValue, incrementMonthlyCounter } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
+import { logDebugEvent } from '@/lib/debugLog';
 import { Wish, WishReaction, WishCategory } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
@@ -88,8 +89,14 @@ function WishCard({
     supabase.storage
       .from(wish.image_storage_bucket)
       .createSignedUrl(wish.image_storage_path, 3600)
-      .then(({ data }) => { if (data?.signedUrl) setImgUri(data.signedUrl); });
-  }, [wish.image_storage_path]);
+      .then(({ data, error }) => {
+        if (error) {
+          logDebugEvent('WISH IMAGE SIGN ERROR', { path: wish.image_storage_path, error: error.message });
+          return;
+        }
+        if (data?.signedUrl) setImgUri(data.signedUrl);
+      });
+  }, [wish.image_storage_path, wish.image_storage_bucket]);
 
   const reactionCounts: Record<string, number> = {};
   wish.reactions.forEach(r => { reactionCounts[r.emoji] = (reactionCounts[r.emoji] ?? 0) + 1; });
@@ -209,11 +216,23 @@ function GrantedCard({ wish, isMine }: { wish: WishWithReactions; isMine: boolea
   useEffect(() => {
     if (wish.image_storage_path && wish.image_storage_bucket) {
       supabase.storage.from(wish.image_storage_bucket).createSignedUrl(wish.image_storage_path, 3600)
-        .then(({ data }) => { if (data?.signedUrl) setImgUri(data.signedUrl); });
+        .then(({ data, error }) => {
+          if (error) {
+            logDebugEvent('WISH IMAGE SIGN ERROR', { path: wish.image_storage_path, error: error.message });
+            return;
+          }
+          if (data?.signedUrl) setImgUri(data.signedUrl);
+        });
     }
     if (wish.fulfilled_image_path) {
       supabase.storage.from('vault').createSignedUrl(wish.fulfilled_image_path, 3600)
-        .then(({ data }) => { if (data?.signedUrl) setMemImgUri(data.signedUrl); });
+        .then(({ data, error }) => {
+          if (error) {
+            logDebugEvent('WISH MEMORY IMAGE SIGN ERROR', { path: wish.fulfilled_image_path, error: error.message });
+            return;
+          }
+          if (data?.signedUrl) setMemImgUri(data.signedUrl);
+        });
     }
   }, [wish]);
 
@@ -275,7 +294,13 @@ function WishForm({
       setError('');
       if (initial?.image_storage_path && initial?.image_storage_bucket) {
         supabase.storage.from(initial.image_storage_bucket).createSignedUrl(initial.image_storage_path, 3600)
-          .then(({ data }) => { if (data?.signedUrl) setImgUri(data.signedUrl); });
+          .then(({ data, error }) => {
+            if (error) {
+              logDebugEvent('WISH IMAGE SIGN ERROR', { path: initial.image_storage_path, error: error.message });
+              return;
+            }
+            if (data?.signedUrl) setImgUri(data.signedUrl);
+          });
       }
     }
   }, [visible, initial]);
@@ -285,7 +310,10 @@ function WishForm({
     try {
       const ImagePicker = await import('expo-image-picker');
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) return;
+      if (!perm.granted) {
+        setError('Photo library permission is required to add an image.');
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'] as any,
         quality: 0.8,
@@ -294,17 +322,58 @@ function WishForm({
       });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
+
+      const mime = asset.mimeType ?? 'image/jpeg';
+      logDebugEvent('WISH IMAGE PICK', {
+        localUri: asset.uri,
+        mimeType: mime,
+        fileSize: asset.fileSize ?? null,
+      });
+      logDebugEvent('WISH LAST IMAGE PICK', { at: new Date().toISOString(), mime });
+
       setUploading(true);
+      setError('');
+
+      const storagePath = `${couple.id}/${user.id}/wish_${Date.now()}.jpg`;
+      logDebugEvent('WISH IMAGE UPLOAD START', { storagePath });
+      logDebugEvent('WISH LAST UPLOAD PATH', { path: storagePath });
+
       const response = await fetch(asset.uri);
       const blob = await response.blob();
-      const storagePath = `${couple.id}/${user.id}/wish_${Date.now()}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from('vault')
         .upload(storagePath, blob, { contentType: 'image/jpeg', upsert: false });
-      if (uploadError) throw uploadError;
-      setImgPath(storagePath);
-      setImgUri(asset.uri);
-    } catch {
+
+      if (uploadError) {
+        logDebugEvent('WISH IMAGE UPLOAD ERROR', {
+          storagePath,
+          error: uploadError.message,
+          statusCode: (uploadError as any).statusCode ?? null,
+        });
+        logDebugEvent('WISH LAST UPLOAD ERROR', { error: uploadError.message });
+        throw uploadError;
+      }
+
+      // Generate a signed URL immediately so the preview survives a restart
+      const { data: signedData, error: signError } = await supabase.storage
+        .from('vault')
+        .createSignedUrl(storagePath, 3600);
+
+      if (signError || !signedData?.signedUrl) {
+        logDebugEvent('WISH IMAGE SIGN ERROR', { storagePath, error: signError?.message ?? 'no signedUrl' });
+        // Still persist the path — the card will re-sign on load
+        setImgPath(storagePath);
+        setImgUri(null);
+      } else {
+        logDebugEvent('WISH IMAGE UPLOAD SUCCESS', { storagePath, signedUrl: signedData.signedUrl.slice(0, 60) });
+        logDebugEvent('WISH LAST UPLOAD ERROR', { error: null });
+        setImgPath(storagePath);
+        setImgUri(signedData.signedUrl);
+      }
+    } catch (err: any) {
+      const msg = err?.message ?? 'Unknown error';
+      logDebugEvent('WISH IMAGE UPLOAD ERROR', { error: msg });
+      logDebugEvent('WISH LAST UPLOAD ERROR', { error: msg });
       setError('Image upload failed. Please try again.');
     } finally {
       setUploading(false);
@@ -341,6 +410,8 @@ function WishForm({
           .from('wishes').insert(payload).select().single();
         if (insertError) throw insertError;
         result = data;
+        logDebugEvent('WISH SAVE SUCCESS', { wishId: result.id, hasImage: !!imgPath, status: payload.status });
+        logDebugEvent('WISH LAST CREATED ID', { id: result.id });
         if (shareNow) {
           try {
             const pts = await getPointValue('wish_sent');
@@ -353,7 +424,9 @@ function WishForm({
         }
       }
       onSave({ ...result, reactions: initial?.reactions ?? [] });
-    } catch {
+    } catch (err: any) {
+      const msg = err?.message ?? 'Unknown error';
+      logDebugEvent('WISH SAVE ERROR', { error: msg, hasImage: !!imgPath });
       setError('Could not save your wish. Please try again.');
     } finally {
       setSaving(false);
@@ -539,7 +612,10 @@ function FulfillSheet({
     try {
       const ImagePicker = await import('expo-image-picker');
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) return;
+      if (!perm.granted) {
+        setError('Photo library permission is required to add a memory photo.');
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'] as any,
         quality: 0.85,
@@ -548,16 +624,38 @@ function FulfillSheet({
       });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
+      const mime = asset.mimeType ?? 'image/jpeg';
+      logDebugEvent('WISH MEMORY IMAGE PICK', { mimeType: mime, fileSize: asset.fileSize ?? null });
+
       setUploading(true);
+      setError('');
+
+      const path = `${couple.id}/${user.id}/wish_memory_${Date.now()}.jpg`;
+      logDebugEvent('WISH MEMORY IMAGE UPLOAD START', { path });
+
       const resp = await fetch(asset.uri);
       const blob = await resp.blob();
-      const path = `${couple.id}/${user.id}/wish_memory_${Date.now()}.jpg`;
       const { error: upErr } = await supabase.storage.from('vault').upload(path, blob, { contentType: 'image/jpeg' });
-      if (upErr) throw upErr;
-      setMemImgPath(path);
-      setMemImgUri(asset.uri);
-    } catch {
-      setError('Image upload failed.');
+      if (upErr) {
+        logDebugEvent('WISH MEMORY IMAGE UPLOAD ERROR', { path, error: upErr.message });
+        throw upErr;
+      }
+
+      // Use signed URL for the preview so it survives memory flush
+      const { data: signedData, error: signErr } = await supabase.storage.from('vault').createSignedUrl(path, 3600);
+      if (signErr || !signedData?.signedUrl) {
+        logDebugEvent('WISH MEMORY IMAGE SIGN ERROR', { path, error: signErr?.message ?? 'no signedUrl' });
+        setMemImgPath(path);
+        setMemImgUri(null);
+      } else {
+        logDebugEvent('WISH MEMORY IMAGE UPLOAD SUCCESS', { path });
+        setMemImgPath(path);
+        setMemImgUri(signedData.signedUrl);
+      }
+    } catch (err: any) {
+      const msg = err?.message ?? 'Unknown error';
+      logDebugEvent('WISH MEMORY IMAGE UPLOAD ERROR', { error: msg });
+      setError('Image upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -597,7 +695,9 @@ function FulfillSheet({
       setTimeout(() => {
         onFulfilled({ ...data, reactions: wish.reactions });
       }, 1800);
-    } catch {
+    } catch (err: any) {
+      const msg = err?.message ?? 'Unknown error';
+      logDebugEvent('WISH GRANT ERROR', { wishId: wish?.id ?? null, error: msg });
       setError('Could not grant this wish. Please try again.');
     } finally {
       setSaving(false);
