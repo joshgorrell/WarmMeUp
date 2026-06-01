@@ -42,7 +42,7 @@ const CATEGORIES: { label: WishCategory; emoji: string }[] = [
   { label: 'Someday',     emoji: '🌙' },
 ];
 
-const REACTIONS = ['❤️', '🔥', '✨', '💫', '😍'];
+const REACTIONS = ['❤️', '🔥', '😍', '🤩'];
 
 type TabKey = 'mine' | 'shared' | 'theirs' | 'granted';
 
@@ -1108,9 +1108,9 @@ const styles = StyleSheet.create({
   linkText: { fontSize: 12, fontFamily: 'Inter-Regular', flex: 1 },
 
   // Reactions
-  reactionBar: { flexDirection: 'row', gap: 4, marginTop: 2, flexWrap: 'wrap' },
-  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 5, paddingVertical: 2 },
-  reactionEmoji: { fontSize: 12 },
+  reactionBar: { flexDirection: 'row', gap: 6, marginTop: 2, flexWrap: 'wrap' },
+  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4 },
+  reactionEmoji: { fontSize: 15 },
   reactionCount: { fontSize: 11, fontFamily: 'Inter-SemiBold' },
 
   // Actions menu
