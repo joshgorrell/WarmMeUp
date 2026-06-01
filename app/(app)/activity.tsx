@@ -206,7 +206,7 @@ export default function ActivityScreen() {
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader title="Activity" onBack={() => router.back()} />
       <ScrollView
         contentContainerStyle={styles.scroll}

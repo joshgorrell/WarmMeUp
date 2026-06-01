@@ -305,7 +305,7 @@ export default function EntitlementsScreen() {
   };
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader title="Entitlements" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 

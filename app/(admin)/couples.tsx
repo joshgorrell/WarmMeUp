@@ -103,7 +103,7 @@ export default function CouplesAdmin() {
   };
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader title="Couples & Users" onBack={() => router.back()} />
 
       {loading ? (

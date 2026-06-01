@@ -340,7 +340,7 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader
         onBack={() => router.back()}
         rightSlot={

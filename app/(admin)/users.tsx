@@ -85,7 +85,7 @@ export default function UsersAdmin() {
   const isSelf = selected?.id === myProfile?.id;
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader title="Manage Users" onBack={() => router.back()} />
 
       {loading ? (

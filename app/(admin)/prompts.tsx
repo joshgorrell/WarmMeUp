@@ -208,7 +208,7 @@ export default function PromptsAdmin() {
   faceLabels.forEach(l => { faceLabelColorMap[l.label] = l.color; });
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader title="Prompt Management" onBack={() => router.back()} />
 
       {/* Tabs */}

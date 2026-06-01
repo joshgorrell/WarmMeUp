@@ -145,7 +145,7 @@ export default function GreetingsScreen() {
   const activeCount = phrases.filter(p => p.is_active).length;
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader onBack={() => router.back()} />
 
       <View style={styles.titleRow}>

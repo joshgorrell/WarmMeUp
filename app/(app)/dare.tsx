@@ -139,7 +139,7 @@ export default function DareScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <AppShell scrollable={false}>
+      <AppShell scrollable={false} noTopPadding>
         <ScreenHeader title="Send a Dare" onBack={() => router.back()} />
 
         <ScrollView
