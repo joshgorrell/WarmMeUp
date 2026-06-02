@@ -267,7 +267,7 @@ export default function PairScreen() {
 
       const { error: updateError } = await supabase
         .from('couples')
-        .update({ user_b_id: user.id, active: true })
+        .update({ user_b_id: user.id, active: true, invite_code_used_at: new Date().toISOString() })
         .eq('id', targetCouple.id)
         .is('user_b_id', null);
 

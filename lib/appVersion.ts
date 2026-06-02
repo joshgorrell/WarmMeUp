@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'pre-login-debug-2026-06-01-v11';
-export const OTA_MARKER = 'V11 INVITE CODE SANITIZATION';
+export const APP_CODE_VERSION = 'pre-login-debug-2026-06-01-v12';
+export const OTA_MARKER = 'V12 POST-PAIRING CELEBRATION';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.

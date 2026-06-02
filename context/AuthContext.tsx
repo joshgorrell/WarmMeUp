@@ -83,6 +83,9 @@ interface AuthContextType {
   refreshSettings: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   signOut: () => void;
+  /** Set to the partner's display_name when User A's partner just joined via realtime. Clear after navigating to the celebration screen. */
+  justPairedPartnerName: string | null;
+  clearJustPaired: () => void;
   /**
    * Shared ref that any biometric prompt must set to true while in-flight and
    * false when done. BackgroundLockManager checks this before navigating to /unlock
@@ -125,6 +128,8 @@ const AuthContext = createContext<AuthContextType>({
   vaultUnlocked: false,
   setVaultUnlocked: () => {},
   debugModeEnabled: false,
+  justPairedPartnerName: null,
+  clearJustPaired: () => {},
 });
 
 function unlockedAtKey(userId: string) {
@@ -252,6 +257,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo>(DEFAULT_SUBSCRIPTION_INFO);
+  const [justPairedPartnerName, setJustPairedPartnerName] = useState<string | null>(null);
+  // Tracks the previous user_b_id so we can detect the null→populated transition.
   // Timestamp (ms) of the last successful unlock. Persisted across restarts.
   const unlockedAtRef = useRef<number | null>(null);
   // Prevents double-loading when getSession() and onAuthStateChange both fire on mount.
@@ -493,22 +500,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // a manual pull-to-refresh or screen focus event.
   useEffect(() => {
     if (!couple?.id) return;
+    const prevUserBId = couple.user_b_id;
     const channel = supabase
       .channel(`couple:${couple.id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'couples', filter: `id=eq.${couple.id}` },
-        () => {
-          if (user) fetchCouple(user.id);
+        async (payload: any) => {
+          if (!user) return;
+          const newUserBId: string | null = payload?.new?.user_b_id ?? null;
+          // Detect User A's partner joining: user_b_id went from null to populated
+          // and this user is User A (couple.user_a_id === user.id).
+          const isUserA = couple.user_a_id === user.id;
+          const partnerJustJoined = isUserA && !prevUserBId && !!newUserBId;
+          await fetchCouple(user.id);
+          if (partnerJustJoined) {
+            // Fetch partner's display name for the celebration screen
+            const { data: partnerProf } = await supabase
+              .from('profiles')
+              .select('display_name')
+              .eq('id', newUserBId)
+              .maybeSingle();
+            setJustPairedPartnerName(partnerProf?.display_name ?? '');
+          }
         },
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [couple?.id, user?.id]);
+  }, [couple?.id, couple?.user_b_id, user?.id]);
 
   const patchCouple = useCallback((patch: Partial<Couple>) => {
     setCouple(prev => prev ? { ...prev, ...patch } : prev);
   }, []);
+
+  const clearJustPaired = useCallback(() => setJustPairedPartnerName(null), []);
 
   const refreshSettings = useCallback(async () => {
     if (user) await fetchSettings(user.id);
@@ -580,7 +605,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled, justPairedPartnerName, clearJustPaired }}
     >
       {children}
     </AuthContext.Provider>

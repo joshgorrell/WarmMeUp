@@ -46,7 +46,7 @@ type ActivityItem = {
 export default function HomeScreen() {
   const router = useRouter();
   const { pendingTab } = useLocalSearchParams<{ pendingTab?: string }>();
-  const { user, profile, partnerProfile, couple } = useAuth();
+  const { user, profile, partnerProfile, couple, justPairedPartnerName, clearJustPaired } = useAuth();
   const { colors } = useTheme();
   const [myScore, setMyScore] = useState(0);
   const [partnerScore, setPartnerScore] = useState(0);
@@ -55,6 +55,16 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
+
+  // When User A's partner joins via realtime, show the celebration screen.
+  useEffect(() => {
+    if (justPairedPartnerName === null) return;
+    clearJustPaired();
+    router.push({
+      pathname: '/(auth)/paired-celebration',
+      params: { partnerName: justPairedPartnerName },
+    });
+  }, [justPairedPartnerName]);
 
   // Honour pending notification deep-link passed from transition.tsx.
   // We navigate here instead of in transition to avoid push-on-top-of-replace races.
