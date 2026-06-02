@@ -7,7 +7,7 @@ import {
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
-import { Image as ImageIcon, Camera, X, Lock, Send, Vault, Pencil, Trash2, EyeOff } from 'lucide-react-native';
+import { Image as ImageIcon, Camera, X, Lock, Send, Vault, Pencil, Trash2, EyeOff, Eye, Check } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -68,15 +68,27 @@ function BubbleMenu({
   onEdit,
   onDelete,
   onDismiss,
+  onViewMedia,
+  onSaveToVault,
+  alreadyInVault,
+  hasMedia,
+  isMine,
 }: {
   anchor: MenuAnchor;
   onEdit: () => void;
   onDelete: () => void;
   onDismiss: () => void;
+  onViewMedia?: () => void;
+  onSaveToVault?: () => void;
+  alreadyInVault?: boolean;
+  hasMedia?: boolean;
+  isMine?: boolean;
 }) {
   const { colors } = useTheme();
-  const menuWidth = 130;
-  const menuHeight = 88; // approximate: 2 items * 44px
+  const menuWidth = 160;
+  // Count rows: view (if media), save to vault (if media), edit (if mine + text), delete (if mine)
+  const rowCount = (hasMedia ? 2 : 0) + (isMine && !hasMedia ? 1 : 0) + (isMine ? 1 : 0);
+  const menuHeight = rowCount * 44 + (rowCount - 1);
   const left = Math.max(8, anchor.x + anchor.width - menuWidth);
   const top = anchor.y - menuHeight - 8;
 
@@ -86,17 +98,50 @@ function BubbleMenu({
       <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onDismiss} activeOpacity={1} />
       <View style={[
         styles.menuCard,
-        { backgroundColor: '#1c1c28', borderColor: 'rgba(255,255,255,0.12)', left, top },
+        { backgroundColor: '#1c1c28', borderColor: 'rgba(255,255,255,0.12)', left, top, width: menuWidth },
       ]}>
-        <TouchableOpacity style={styles.menuItem} onPress={onEdit} activeOpacity={0.75}>
-          <Pencil color="#FF8A3D" size={14} strokeWidth={2} />
-          <AppText style={[styles.menuText, { color: colors.text }]}>Edit</AppText>
-        </TouchableOpacity>
-        <View style={[styles.menuDivider, { backgroundColor: 'rgba(255,255,255,0.10)' }]} />
-        <TouchableOpacity style={styles.menuItem} onPress={onDelete} activeOpacity={0.75}>
-          <Trash2 color="#FF4444" size={14} strokeWidth={2} />
-          <AppText style={[styles.menuText, { color: '#FF4444' }]}>Delete</AppText>
-        </TouchableOpacity>
+        {hasMedia && onViewMedia && (
+          <>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { onDismiss(); onViewMedia(); }} activeOpacity={0.75}>
+              <Eye color="#4DA6FF" size={14} strokeWidth={2} />
+              <AppText style={[styles.menuText, { color: colors.text }]}>View</AppText>
+            </TouchableOpacity>
+            <View style={[styles.menuDivider, { backgroundColor: 'rgba(255,255,255,0.10)' }]} />
+          </>
+        )}
+        {hasMedia && onSaveToVault && (
+          <>
+            <TouchableOpacity
+              style={[styles.menuItem, alreadyInVault && styles.menuItemDisabled]}
+              onPress={alreadyInVault ? onDismiss : () => { onDismiss(); onSaveToVault(); }}
+              activeOpacity={alreadyInVault ? 1 : 0.75}
+            >
+              {alreadyInVault
+                ? <Check color="#4CAF50" size={14} strokeWidth={2} />
+                : <Vault color="#FFB347" size={14} strokeWidth={2} />
+              }
+              <AppText style={[styles.menuText, { color: alreadyInVault ? '#4CAF50' : colors.text }]}>
+                {alreadyInVault ? 'In Vault' : 'Save to Vault'}
+              </AppText>
+            </TouchableOpacity>
+            {isMine && <View style={[styles.menuDivider, { backgroundColor: 'rgba(255,255,255,0.10)' }]} />}
+          </>
+        )}
+        {isMine && !hasMedia && (
+          <>
+            <TouchableOpacity style={styles.menuItem} onPress={onEdit} activeOpacity={0.75}>
+              <Pencil color="#FF8A3D" size={14} strokeWidth={2} />
+              <AppText style={[styles.menuText, { color: colors.text }]}>Edit</AppText>
+            </TouchableOpacity>
+            <View style={[styles.menuDivider, { backgroundColor: 'rgba(255,255,255,0.10)' }]} />
+          </>
+        )}
+        {isMine && (
+          <TouchableOpacity style={styles.menuItem} onPress={onDelete} activeOpacity={0.75}>
+            <Trash2 color="#FF4444" size={14} strokeWidth={2} />
+            <AppText style={[styles.menuText, { color: '#FF4444' }]}>Delete</AppText>
+          </TouchableOpacity>
+        )}
       </View>
     </>
   );
@@ -742,10 +787,7 @@ export default function ChatTab() {
 
   const handleSaveToVault = useCallback(async (msg: ChatMessage) => {
     if (!msg.media_storage_path || !couple?.id || !user) return;
-    if (msg.vault_item_id) {
-      Alert.alert('Already in Vault', 'This media is already saved to your Vault.');
-      return;
-    }
+    if (msg.vault_item_id) return; // already saved — menu shows disabled state
     const srcBucket = msg.media_storage_bucket ?? 'chat_media';
     const srcExt = (msg.media_storage_path?.split('.').pop() ?? '').toLowerCase();
     const mimeType = extensionToMime(srcExt);
@@ -968,6 +1010,11 @@ export default function ChatTab() {
           onEdit={() => handleStartEdit(activeMsg)}
           onDelete={() => handleDeleteMessage(activeMsg)}
           onDismiss={handleDismissMenu}
+          onViewMedia={activeMsg.media_storage_path ? () => handleOpenMedia(activeMsg) : undefined}
+          onSaveToVault={activeMsg.media_storage_path ? () => handleSaveToVault(activeMsg) : undefined}
+          alreadyInVault={!!activeMsg.vault_item_id}
+          hasMedia={!!activeMsg.media_storage_path}
+          isMine={activeMsg.sender_id === user?.id}
         />
       )}
     </View>
@@ -1032,7 +1079,7 @@ const MessageRow = React.memo(function MessageRow({
         )}
         <TouchableOpacity
           ref={ref => { bubbleRefs.current[item.id] = ref as any; }}
-          onLongPress={isMine ? () => onLongPress(item) : undefined}
+          onLongPress={(isMine || hasMedia) ? () => onLongPress(item) : undefined}
           delayLongPress={350}
           activeOpacity={1}
         >
@@ -1110,6 +1157,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
   },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 11 },
+  menuItemDisabled: { opacity: 0.6 },
   menuText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
   menuDivider: { height: 1, marginHorizontal: 8 },
   // Edit banner
