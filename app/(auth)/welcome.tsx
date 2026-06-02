@@ -4,13 +4,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
+import { Asset } from 'expo-asset';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const { width: SW, height: SH } = Dimensions.get('window');
 
 const LOGIN_BG = require('@/assets/onboarding/New_Login_page_6.2.26.png');
 
@@ -28,35 +27,70 @@ const ZONES = {
 } as const;
 
 // ─── Runtime image size hook ─────────────────────────────────────────────────
-function useImageSize(asset: ReturnType<typeof require>) {
+// Stage 1: Image.resolveAssetSource + Image.getSize (fast path)
+// Stage 2: expo-asset Asset.fromModule (reliable bundled-asset fallback)
+// Stage 3: hardcoded 390x844 (last resort — always logged loudly)
+function useImageSize(asset: ReturnType<typeof require>, screenW: number, screenH: number) {
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
-    let uri: string;
-    try {
-      uri = Image.resolveAssetSource(asset).uri;
-    } catch (e) {
-      console.warn(
-        `[useImageSize] resolveAssetSource threw – screen: ${SW}x${SH} – using fallback 390x844:`,
-        e,
-      );
-      setSize({ w: 390, h: 844 });
-      return;
-    }
-    Image.getSize(
-      uri,
-      (w, h) => {
-        console.log(`[useImageSize] source image: ${w}x${h}px`);
-        setSize({ w, h });
-      },
-      (err) => {
+    let cancelled = false;
+
+    async function resolve() {
+      // Stage 1
+      try {
+        const uri = Image.resolveAssetSource(asset).uri;
+        await new Promise<void>((ok, fail) => {
+          Image.getSize(
+            uri,
+            (w, h) => {
+              if (!cancelled) {
+                console.log(`[useImageSize] source image via resolveAssetSource: ${w}x${h}px`);
+                setSize({ w, h });
+              }
+              ok();
+            },
+            fail,
+          );
+        });
+        return;
+      } catch (e) {
         console.warn(
-          `[useImageSize] getSize failed – screen: ${SW}x${SH} – using fallback 390x844:`,
-          err,
+          `[useImageSize] resolveAssetSource/getSize failed – screen: ${screenW}x${screenH} – trying expo-asset:`,
+          e,
+        );
+      }
+
+      // Stage 2
+      try {
+        const a = Asset.fromModule(asset);
+        await a.downloadAsync();
+        console.log(
+          `[useImageSize] expo-asset metadata: width=${a.width} height=${a.height} localUri=${a.localUri}`,
+        );
+        if (a.width && a.height) {
+          if (!cancelled) {
+            console.log(`[useImageSize] source image via expo-asset: ${a.width}x${a.height}px`);
+            setSize({ w: a.width, h: a.height });
+          }
+          return;
+        }
+        console.warn('[useImageSize] expo-asset resolved but width/height are null');
+      } catch (e2) {
+        console.warn('[useImageSize] expo-asset failed:', e2);
+      }
+
+      // Stage 3
+      if (!cancelled) {
+        console.warn(
+          `[useImageSize] ALL dimension probes failed – screen: ${screenW}x${screenH} – using fallback 390x844`,
         );
         setSize({ w: 390, h: 844 });
-      },
-    );
+      }
+    }
+
+    resolve();
+    return () => { cancelled = true; };
   }, []);
 
   return size;
@@ -103,6 +137,7 @@ function computeContainLayout(
 export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: SW, height: SH } = useWindowDimensions();
 
   const { pendingCode, prefilledCode, code } = useLocalSearchParams<{
     pendingCode?: string;
@@ -117,23 +152,29 @@ export default function WelcomeScreen() {
     }
   }, [codeToPreserve]);
 
-  const imageSize = useImageSize(LOGIN_BG);
+  const imageSize = useImageSize(LOGIN_BG, SW, SH);
 
   const layout = useMemo(() => {
     if (!imageSize) return null;
     return computeContainLayout(imageSize.w, imageSize.h, SW, SH, insets.top);
-  }, [imageSize, insets.top]);
+  }, [imageSize, SW, SH, insets.top]);
 
   return (
     <View style={s.root}>
       <StatusBar style="light" />
 
-      {/* Artwork — rendered only once dimensions are known so layout is correct */}
+      {/* Artwork — positioned at exact coordinates computed by layout math */}
       {layout && (
         <Image
           source={LOGIN_BG}
-          style={StyleSheet.absoluteFill}
-          resizeMode="contain"
+          style={{
+            position: 'absolute',
+            left: layout.offsetX,
+            top: layout.offsetY,
+            width: layout.renderedW,
+            height: layout.renderedH,
+          }}
+          resizeMode="stretch"
           accessibilityLabel="Warm Me Up – Stay Playful"
         />
       )}

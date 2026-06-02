@@ -4,13 +4,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  Dimensions,
+  useWindowDimensions,
   Image,
   ViewToken,
 } from 'react-native';
+import { Asset } from 'expo-asset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const { width: SW, height: SH } = Dimensions.get('window');
 
 export type OnboardingMode = 'preview' | 'post-auth';
 export type OnboardingFinishAction = 'get-started' | 'invite-partner';
@@ -50,35 +49,70 @@ const ZONES = {
 } as const;
 
 // ─── Runtime image size hook ──────────────────────────────────────────────────
-function useImageSize(asset: ReturnType<typeof require>) {
+// Stage 1: Image.resolveAssetSource + Image.getSize (fast path)
+// Stage 2: expo-asset Asset.fromModule (reliable bundled-asset fallback)
+// Stage 3: hardcoded 390x844 (last resort — always logged loudly)
+function useImageSize(asset: ReturnType<typeof require>, screenW: number, screenH: number) {
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
-    let uri: string;
-    try {
-      uri = Image.resolveAssetSource(asset).uri;
-    } catch (e) {
-      console.warn(
-        `[useImageSize] resolveAssetSource threw – screen: ${SW}x${SH} – using fallback 390x844:`,
-        e,
-      );
-      setSize({ w: 390, h: 844 });
-      return;
-    }
-    Image.getSize(
-      uri,
-      (w, h) => {
-        console.log(`[useImageSize] source image: ${w}x${h}px`);
-        setSize({ w, h });
-      },
-      (err) => {
+    let cancelled = false;
+
+    async function resolve() {
+      // Stage 1
+      try {
+        const uri = Image.resolveAssetSource(asset).uri;
+        await new Promise<void>((ok, fail) => {
+          Image.getSize(
+            uri,
+            (w, h) => {
+              if (!cancelled) {
+                console.log(`[useImageSize] source image via resolveAssetSource: ${w}x${h}px`);
+                setSize({ w, h });
+              }
+              ok();
+            },
+            fail,
+          );
+        });
+        return;
+      } catch (e) {
         console.warn(
-          `[useImageSize] getSize failed – screen: ${SW}x${SH} – using fallback 390x844:`,
-          err,
+          `[useImageSize] resolveAssetSource/getSize failed – screen: ${screenW}x${screenH} – trying expo-asset:`,
+          e,
+        );
+      }
+
+      // Stage 2
+      try {
+        const a = Asset.fromModule(asset);
+        await a.downloadAsync();
+        console.log(
+          `[useImageSize] expo-asset metadata: width=${a.width} height=${a.height} localUri=${a.localUri}`,
+        );
+        if (a.width && a.height) {
+          if (!cancelled) {
+            console.log(`[useImageSize] source image via expo-asset: ${a.width}x${a.height}px`);
+            setSize({ w: a.width, h: a.height });
+          }
+          return;
+        }
+        console.warn('[useImageSize] expo-asset resolved but width/height are null');
+      } catch (e2) {
+        console.warn('[useImageSize] expo-asset failed:', e2);
+      }
+
+      // Stage 3
+      if (!cancelled) {
+        console.warn(
+          `[useImageSize] ALL dimension probes failed – screen: ${screenW}x${screenH} – using fallback 390x844`,
         );
         setSize({ w: 390, h: 844 });
-      },
-    );
+      }
+    }
+
+    resolve();
+    return () => { cancelled = true; };
   }, []);
 
   return size;
@@ -133,27 +167,36 @@ interface SlideProps {
   index: number;
   imgW: number;
   imgH: number;
+  screenW: number;
+  screenH: number;
   onNext: () => void;
   onSkip: () => void;
   onComplete: (action: OnboardingFinishAction) => void;
 }
 
-function Slide({ asset, index, imgW, imgH, onNext, onSkip, onComplete }: SlideProps) {
+function Slide({ asset, index, imgW, imgH, screenW, screenH, onNext, onSkip, onComplete }: SlideProps) {
   const { top: insetTop } = useSafeAreaInsets();
 
   const layout = useMemo(
-    () => computeContainLayout(imgW, imgH, SW, SH, insetTop, `slide-${index}`),
-    [imgW, imgH, insetTop, index],
+    () => computeContainLayout(imgW, imgH, screenW, screenH, insetTop, `slide-${index}`),
+    [imgW, imgH, screenW, screenH, insetTop, index],
   );
 
   const isUpsell = index === LAST_INDEX;
 
   return (
-    <View style={s.slide}>
+    <View style={{ width: screenW, height: screenH, backgroundColor: '#000' }}>
+      {/* Artwork — positioned at exact coordinates computed by layout math */}
       <Image
         source={asset}
-        style={StyleSheet.absoluteFill}
-        resizeMode="contain"
+        style={{
+          position: 'absolute',
+          left: layout.offsetX,
+          top: layout.offsetY,
+          width: layout.renderedW,
+          height: layout.renderedH,
+        }}
+        resizeMode="stretch"
         accessibilityLabel={`Onboarding step ${index + 1}`}
       />
 
@@ -202,9 +245,10 @@ function Slide({ asset, index, imgW, imgH, onNext, onSkip, onComplete }: SlidePr
 export default function OnboardingCarousel({ onComplete }: Props) {
   const flatRef  = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const { width: SW, height: SH } = useWindowDimensions();
 
   // Measure slide 0 — all slides should share the same canvas.
-  const slide0Size = useImageSize(SLIDE_IMAGES[0]);
+  const slide0Size = useImageSize(SLIDE_IMAGES[0], SW, SH);
 
   // Cross-check every other slide when slide 0 is measured.
   useEffect(() => {
@@ -224,7 +268,7 @@ export default function OnboardingCarousel({ onComplete }: Props) {
             ` differ from slide 0 (${slide0Size.w}x${slide0Size.h})`,
           );
         } else {
-          console.log(`[OnboardingCarousel] slide ${i + 1}: ${w}x${h} ✓`);
+          console.log(`[OnboardingCarousel] slide ${i + 1}: ${w}x${h} ok`);
         }
       });
     });
@@ -271,6 +315,8 @@ export default function OnboardingCarousel({ onComplete }: Props) {
             index={index}
             imgW={slide0Size.w}
             imgH={slide0Size.h}
+            screenW={SW}
+            screenH={SH}
             onNext={handleNext}
             onSkip={handleSkip}
             onComplete={onComplete}
@@ -294,11 +340,6 @@ export default function OnboardingCarousel({ onComplete }: Props) {
 const s = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
-  },
-  slide: {
-    width: SW,
-    height: SH,
     backgroundColor: '#000',
   },
   zone: {
