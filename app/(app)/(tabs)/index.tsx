@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles, RotateCcw } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -16,6 +16,7 @@ import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
+import * as SecureStore from 'expo-secure-store';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -42,6 +43,7 @@ type ActivityItem = {
   icon: React.ReactNode;
   color: string;
   route: string;
+  seen: boolean;
 };
 
 export default function HomeScreen() {
@@ -54,6 +56,9 @@ export default function HomeScreen() {
   const [activeInteraction, setActiveInteraction] = useState<Interaction | null>(null);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const markSeenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
 
@@ -73,6 +78,19 @@ export default function HomeScreen() {
     if (!pendingTab) return;
     router.push(pendingTab as any);
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    SecureStore.getItemAsync(`seen_activity_${user.id}`).then(raw => {
+      if (!raw) return;
+      try {
+        const ids: string[] = JSON.parse(raw);
+        const s = new Set(ids);
+        seenIdsRef.current = s;
+        setSeenIds(s);
+      } catch {}
+    });
+  }, [user?.id]);
 
   useEffect(() => {
     if (!couple?.id || !user) return;
@@ -126,7 +144,7 @@ export default function HomeScreen() {
       supabase.from('activity_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(20),
     ]);
 
-    const items: Array<ActivityItem & { _rawTime: string }> = [];
+    const items: Array<Omit<ActivityItem, 'seen'> & { _rawTime: string }> = [];
 
     (interactions ?? []).forEach((i: Interaction) => {
       const isMine = i.sender_id === user.id;
@@ -247,7 +265,11 @@ export default function HomeScreen() {
 
     items.sort((a, b) => b._rawTime.localeCompare(a._rawTime));
 
-    setRecentActivity(items.slice(0, 5));
+    const top5 = items.slice(0, 5).map(item => ({
+      ...item,
+      seen: seenIdsRef.current.has(item.id),
+    }));
+    setRecentActivity(top5);
   };
 
   const onRefresh = async () => {
@@ -255,6 +277,36 @@ export default function HomeScreen() {
     await loadAll();
     setRefreshing(false);
   };
+
+  const saveSeen = useCallback((ids: Set<string>) => {
+    if (!user?.id) return;
+    SecureStore.setItemAsync(`seen_activity_${user.id}`, JSON.stringify([...ids])).catch(() => {});
+  }, [user?.id]);
+
+  useFocusEffect(useCallback(() => {
+    markSeenTimerRef.current = setTimeout(() => {
+      setRecentActivity(prev => {
+        const next = new Set(seenIdsRef.current);
+        prev.forEach(item => next.add(item.id));
+        seenIdsRef.current = next;
+        setSeenIds(next);
+        saveSeen(next);
+        return prev.map(item => ({ ...item, seen: true }));
+      });
+    }, 1500);
+    return () => {
+      if (markSeenTimerRef.current) clearTimeout(markSeenTimerRef.current);
+    };
+  }, [saveSeen]));
+
+  const handleClearSeen = useCallback(() => {
+    seenIdsRef.current = new Set();
+    setSeenIds(new Set());
+    if (user?.id) {
+      SecureStore.deleteItemAsync(`seen_activity_${user.id}`).catch(() => {});
+    }
+    setRecentActivity(prev => prev.map(item => ({ ...item, seen: false })));
+  }, [user?.id]);
 
   const myName = profile?.display_name ?? 'You';
   const partnerName = partnerProfile?.display_name ?? 'Partner';
@@ -301,10 +353,17 @@ export default function HomeScreen() {
           <View style={styles.activitySection}>
             <View style={styles.sectionRow}>
               <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>RECENT ACTIVITY</AppText>
-              <TouchableOpacity onPress={() => router.push('/(app)/activity')} activeOpacity={0.7} style={styles.seeAll}>
-                <AppText style={[styles.seeAllText, { color: '#FF2E8A' }]}>See all</AppText>
-                <ChevronRight color="#FF2E8A" size={13} strokeWidth={2.5} />
-              </TouchableOpacity>
+              <View style={styles.sectionActions}>
+                {seenIds.size > 0 && (
+                  <TouchableOpacity onPress={handleClearSeen} activeOpacity={0.7} style={styles.clearSeenBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <RotateCcw color={colors.textMuted} size={13} strokeWidth={2} />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => router.push('/(app)/activity')} activeOpacity={0.7} style={styles.seeAll}>
+                  <AppText style={[styles.seeAllText, { color: '#FF2E8A' }]}>See all</AppText>
+                  <ChevronRight color="#FF2E8A" size={13} strokeWidth={2.5} />
+                </TouchableOpacity>
+              </View>
             </View>
             {recentActivity.length > 0 ? (
               <View style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
@@ -318,6 +377,7 @@ export default function HomeScreen() {
                       {
                         borderBottomColor: colors.borderSubtle,
                         borderBottomWidth: i < recentActivity.length - 1 ? 1 : 0,
+                        opacity: item.seen ? 0.38 : 1,
                       },
                     ]}
                   >
@@ -418,6 +478,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: Spacing.sm,
+  },
+  sectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  clearSeenBtn: {
+    padding: 2,
   },
   seeAll: {
     flexDirection: 'row',
