@@ -108,8 +108,15 @@ export default function DebugScreen() {
   const shouldShowPrivacyCover = computeShouldShowPrivacyCover(session, settings);
   const activeCoupleFound = couple?.active === true;
   const sub_canInvite: boolean = Boolean((subscriptionInfo as any).canInvite);
-  const canRefreshInviteCode = Boolean(userId && sub_canInvite);
-  const refreshBlockReason = canRefreshInviteCode ? null : 'not_allowed';
+  const alreadyPaired = couple?.user_b_id != null;
+  const canRefreshInviteCode = Boolean(userId && sub_canInvite && !alreadyPaired);
+  const refreshBlockReason = !userId
+    ? 'no_user'
+    : alreadyPaired
+    ? 'already_paired'
+    : !sub_canInvite
+    ? 'not_allowed'
+    : null;
 
   useEffect(() => {
     if (userId) {
