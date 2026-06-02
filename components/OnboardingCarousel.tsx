@@ -8,9 +8,13 @@ import {
   ImageBackground,
   ViewToken,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SW, height: SH } = Dimensions.get('window');
+
+// iPhone SE (1st gen) logical height is 568pt; SE 2nd/3rd is 667pt.
+// Shift bottom tap zones up on very small screens so they don't fall off.
+const IS_SMALL = SH < 700;
+const SMALL_SHIFT = IS_SMALL ? -22 : 0;
 
 export type OnboardingMode = 'preview' | 'post-auth';
 export type OnboardingFinishAction = 'get-started' | 'invite-partner';
@@ -21,7 +25,6 @@ interface Props {
 }
 
 // ─── Slide image assets ───────────────────────────────────────────────────────
-// Loaded statically so they are bundled and decoded before the carousel mounts.
 const SLIDE_IMAGES = [
   require('@/assets/onboarding/Intro_Step_1.png'),
   require('@/assets/onboarding/Intro_Step_2.png'),
@@ -36,76 +39,61 @@ const SLIDE_IMAGES = [
   require('@/assets/onboarding/Intro_Step_11.png'),
 ];
 
-// ─── Slide definitions ────────────────────────────────────────────────────────
-interface SlideData {
-  key: string;
-  image: ReturnType<typeof require>;
-  // Slides 1–10 have a single "Next / Get Started" tap zone.
-  // Slide 11 (upsell) has two zones: primary CTA + invite partner.
-  isUpsell?: boolean;
-  // Last tour slide triggers onComplete instead of advancing.
-  isFinalTour?: boolean;
-}
-
-const SLIDES: SlideData[] = [
-  { key: 'step1',  image: SLIDE_IMAGES[0]  },
-  { key: 'step2',  image: SLIDE_IMAGES[1]  },
-  { key: 'step3',  image: SLIDE_IMAGES[2]  },
-  { key: 'step4',  image: SLIDE_IMAGES[3]  },
-  { key: 'step5',  image: SLIDE_IMAGES[4]  },
-  { key: 'step6',  image: SLIDE_IMAGES[5]  },
-  { key: 'step7',  image: SLIDE_IMAGES[6]  },
-  { key: 'step8',  image: SLIDE_IMAGES[7]  },
-  { key: 'step9',  image: SLIDE_IMAGES[8]  },
-  { key: 'step10', image: SLIDE_IMAGES[9],  isFinalTour: true  },
-  { key: 'step11', image: SLIDE_IMAGES[10], isUpsell: true },
-];
+const LAST_INDEX = SLIDE_IMAGES.length - 1; // 10
 
 // ─── Tap zone positions ───────────────────────────────────────────────────────
-// All y-positions are fractions of screen height so they track across iPhone
-// sizes (SE 667 pt → Pro Max 932 pt). The images use `contain` so artwork is
-// never cropped; black fills any letterbox bands.
-//
-// Reference frame: 390 × 844 pt (iPhone 14)
-//   "Next →" pill on slides 1–9:          ~92.5 % from top
-//   "Get Started →" pill on slide 10:     ~92.5 % from top
-//   "Join Now →" pill on slide 11:        ~88.5 % from top
-//   "Invite a Partner" on slide 11:       ~93.5 % from top
+// Expressed as fractions of SH so they track across all iPhone sizes.
+// Reference frame: 390 × 844 pt (iPhone 14).
+//   "Next →" pill (slides 1–9):           ~92.5 % from top
+//   "Get Started →" pill (slide 10):      ~92.5 % from top
+//   "Join Now →" pill (slide 11):         ~88.2 % from top
+//   "Invite a Partner" (slide 11):        ~93.3 % from top
+//   Skip link (top-right of artwork):     top 0, right 0
 
-const NEXT_BTN_TOP    = SH * 0.925;
-const NEXT_BTN_HEIGHT = 58;
+const NEXT_TOP    = SH * 0.925 + SMALL_SHIFT;
+const NEXT_H      = 58;
 
-const UPSELL_JOIN_TOP      = SH * 0.882;
-const UPSELL_JOIN_HEIGHT   = 58;
-const UPSELL_INVITE_TOP    = SH * 0.933;
-const UPSELL_INVITE_HEIGHT = 48;
+const JOIN_TOP    = SH * 0.882 + SMALL_SHIFT;
+const JOIN_H      = 58;
+const INVITE_TOP  = SH * 0.933 + SMALL_SHIFT;
+const INVITE_H    = 48;
 
-// ─── Individual slide ─────────────────────────────────────────────────────────
+// ─── Slide component ──────────────────────────────────────────────────────────
 function Slide({
   item,
+  index,
   onNext,
+  onSkip,
   onComplete,
 }: {
-  item: SlideData;
+  item: ReturnType<typeof require>;
+  index: number;
   onNext: () => void;
-  onComplete: (action?: OnboardingFinishAction) => void;
+  onSkip: () => void;
+  onComplete: (action: OnboardingFinishAction) => void;
 }) {
+  const isUpsell = index === LAST_INDEX;
+  const isFinalTour = index === LAST_INDEX - 1; // slide 10 says "Get Started"
+
   return (
-    <View style={{ width: SW, height: SH, backgroundColor: '#000' }}>
+    <View style={s.slide}>
+      {/* Full-bleed portrait image */}
       <ImageBackground
-        source={item.image}
+        source={item}
         style={StyleSheet.absoluteFill}
-        resizeMode="contain"
-        accessibilityLabel={`Onboarding slide ${item.key}`}
+        imageStyle={StyleSheet.absoluteFill}
+        resizeMode="cover"
+        accessibilityLabel={`Onboarding step ${index + 1}`}
       />
 
-      {/* Invisible tap zones only */}
+      {/* Invisible tap zones only — zero visible styling */}
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        {item.isUpsell ? (
+
+        {isUpsell ? (
           <>
-            {/* Join Now */}
+            {/* Join Now → Register (unauthenticated) or Paywall (authenticated) */}
             <TouchableOpacity
-              style={[s.zone, { top: UPSELL_JOIN_TOP, height: UPSELL_JOIN_HEIGHT }]}
+              style={[s.zone, { top: JOIN_TOP, height: JOIN_H }]}
               onPress={() => onComplete('get-started')}
               activeOpacity={1}
               accessibilityLabel="Join Now"
@@ -113,41 +101,34 @@ function Slide({
             />
             {/* Invite a Partner */}
             <TouchableOpacity
-              style={[s.zone, { top: UPSELL_INVITE_TOP, height: UPSELL_INVITE_HEIGHT }]}
+              style={[s.zone, { top: INVITE_TOP, height: INVITE_H }]}
               onPress={() => onComplete('invite-partner')}
               activeOpacity={1}
               accessibilityLabel="Invite a Partner"
               accessibilityRole="button"
             />
           </>
-        ) : item.isFinalTour ? (
-          /* "Get Started" on the last tour slide */
-          <TouchableOpacity
-            style={[s.zone, { top: NEXT_BTN_TOP, height: NEXT_BTN_HEIGHT }]}
-            onPress={() => onNext()}
-            activeOpacity={1}
-            accessibilityLabel="Get Started"
-            accessibilityRole="button"
-          />
         ) : (
-          /* "Next" on regular tour slides */
-          <TouchableOpacity
-            style={[s.zone, { top: NEXT_BTN_TOP, height: NEXT_BTN_HEIGHT }]}
-            onPress={onNext}
-            activeOpacity={1}
-            accessibilityLabel="Next"
-            accessibilityRole="button"
-          />
-        )}
+          <>
+            {/* Next / Get Started */}
+            <TouchableOpacity
+              style={[s.zone, { top: NEXT_TOP, height: NEXT_H }]}
+              onPress={isFinalTour ? () => onNext() : onNext}
+              activeOpacity={1}
+              accessibilityLabel={isFinalTour ? 'Get Started' : 'Next'}
+              accessibilityRole="button"
+            />
 
-        {/* Skip — covers the top-right corner where "Skip" lives in the artwork */}
-        <TouchableOpacity
-          style={s.skipZone}
-          onPress={() => onComplete('get-started')}
-          activeOpacity={1}
-          accessibilityLabel="Skip"
-          accessibilityRole="button"
-        />
+            {/* Skip — top-right corner, matches artwork placement */}
+            <TouchableOpacity
+              style={s.skipZone}
+              onPress={onSkip}
+              activeOpacity={1}
+              accessibilityLabel="Skip"
+              accessibilityRole="button"
+            />
+          </>
+        )}
       </View>
     </View>
   );
@@ -155,11 +136,11 @@ function Slide({
 
 // ─── Main carousel ────────────────────────────────────────────────────────────
 export default function OnboardingCarousel({ onComplete }: Props) {
-  const insets = useSafeAreaInsets();
-  const flatRef = useRef<FlatList<SlideData>>(null);
+  const flatRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
+
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (viewableItems.length > 0) {
@@ -170,22 +151,33 @@ export default function OnboardingCarousel({ onComplete }: Props) {
   );
 
   const handleNext = useCallback(() => {
-    const nextIndex = currentIndex + 1;
-    if (nextIndex < SLIDES.length) {
-      flatRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+    const next = currentIndex + 1;
+    if (next <= LAST_INDEX) {
+      flatRef.current?.scrollToIndex({ index: next, animated: true });
     } else {
       onComplete('get-started');
     }
   }, [currentIndex, onComplete]);
 
+  // Skip jumps directly to the upsell slide (slide 11, index 10)
+  const handleSkip = useCallback(() => {
+    flatRef.current?.scrollToIndex({ index: LAST_INDEX, animated: true });
+  }, []);
+
   return (
     <View style={s.root}>
       <FlatList
         ref={flatRef}
-        data={SLIDES}
-        keyExtractor={item => item.key}
-        renderItem={({ item }) => (
-          <Slide item={item} onNext={handleNext} onComplete={onComplete} />
+        data={SLIDE_IMAGES}
+        keyExtractor={(_, i) => String(i)}
+        renderItem={({ item, index }) => (
+          <Slide
+            item={item}
+            index={index}
+            onNext={handleNext}
+            onSkip={handleSkip}
+            onComplete={onComplete}
+          />
         )}
         horizontal
         pagingEnabled
@@ -196,6 +188,7 @@ export default function OnboardingCarousel({ onComplete }: Props) {
         getItemLayout={(_, index) => ({ length: SW, offset: SW * index, index })}
         decelerationRate="fast"
         bounces={false}
+        scrollEnabled={false}
       />
     </View>
   );
@@ -206,18 +199,23 @@ const s = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  slide: {
+    width: SW,
+    height: SH,
+    backgroundColor: '#000',
+  },
   // Base for all invisible tap zones
   zone: {
     position: 'absolute',
     left: '6%',
     right: '6%',
   },
-  // Skip tap zone — top-right quadrant matching artwork placement
+  // Skip zone — top-right quadrant, generous hit area
   skipZone: {
     position: 'absolute',
     top: 0,
     right: 0,
-    width: SW * 0.28,
-    height: SH * 0.10,
+    width: SW * 0.30,
+    height: SH * 0.11,
   },
 });

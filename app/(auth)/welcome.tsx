@@ -11,6 +11,10 @@ import { StatusBar } from 'expo-status-bar';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
+// iPhone SE (1st/2nd gen) has a shorter screen — shift tap zones up slightly
+const IS_SMALL   = SH < 700;
+const SMALL_SHIFT = IS_SMALL ? -20 : 0;
+
 const LOGIN_BG = require('@/assets/onboarding/New_Login_page_6.2.26.png');
 
 export default function WelcomeScreen() {
@@ -29,37 +33,38 @@ export default function WelcomeScreen() {
     }
   }, [codeToPreserve]);
 
-  // The image contains all visual branding — logo, wordmark, tagline, feature
-  // icons, and button artwork. We render only invisible tap zones aligned to
-  // the baked-in button/link positions.
+  // The image contains all visual branding. We render only invisible tap zones
+  // aligned to the baked-in button/link positions in the artwork.
   //
-  // Tap zone offsets are expressed as fractions of SH so they scale across
-  // iPhone SE (667 pt) through Pro Max (932 pt). The image uses `contain` so
-  // it is never cropped; the black background fills any letterbox bands.
-  //
-  // Reference frame: 390 × 844 pt (iPhone 14)
+  // Reference frame: 390 × 844 pt (iPhone 14) with resizeMode="cover"
   //   "Get Started" pill centre: ~82.5 % from top
   //   "Enter" link row:          ~88.0 %
   //   "Sign In" link row:        ~92.0 %
   //   "See how it works →":      ~95.5 %
 
+  const getStartedTop = SH * 0.822 + SMALL_SHIFT;
+  const enterTop      = SH * 0.875 + SMALL_SHIFT;
+  const signInTop     = SH * 0.912 + SMALL_SHIFT;
+  const seeHowTop     = SH * 0.950 + SMALL_SHIFT;
+
   return (
-    <View style={styles.root}>
+    <View style={s.root}>
       <StatusBar style="light" />
 
       <ImageBackground
         source={LOGIN_BG}
-        style={styles.bg}
-        resizeMode="contain"
+        style={StyleSheet.absoluteFill}
+        imageStyle={StyleSheet.absoluteFill}
+        resizeMode="cover"
         accessibilityLabel="Warm Me Up – Stay Playful"
       />
 
-      {/* Invisible hit areas only — zero visible styling */}
+      {/* Invisible hit areas only — no visible styling */}
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
 
         {/* Get Started */}
         <TouchableOpacity
-          style={[styles.zone, { top: SH * 0.822, height: 58 }]}
+          style={[s.zone, { top: getStartedTop, height: 58 }]}
           onPress={() =>
             router.push(
               codeToPreserve
@@ -74,7 +79,7 @@ export default function WelcomeScreen() {
 
         {/* Already have a code? Enter */}
         <TouchableOpacity
-          style={[styles.zone, { top: SH * 0.875, height: 40 }]}
+          style={[s.zone, { top: enterTop, height: 40 }]}
           onPress={() =>
             router.push(
               codeToPreserve
@@ -89,7 +94,7 @@ export default function WelcomeScreen() {
 
         {/* Already have an account? Sign In */}
         <TouchableOpacity
-          style={[styles.zone, { top: SH * 0.912, height: 40 }]}
+          style={[s.zone, { top: signInTop, height: 40 }]}
           onPress={() =>
             router.push(
               codeToPreserve
@@ -104,7 +109,7 @@ export default function WelcomeScreen() {
 
         {/* See how it works → */}
         <TouchableOpacity
-          style={[styles.zone, { top: SH * 0.950, height: 36 }]}
+          style={[s.zone, { top: seeHowTop, height: 36 }]}
           onPress={() => router.push('/(auth)/onboarding-preview')}
           activeOpacity={1}
           accessibilityLabel="See how it works"
@@ -115,19 +120,11 @@ export default function WelcomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#000',
   },
-  bg: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: SW,
-    height: SH,
-  },
-  // Base style shared by all invisible tap zones
   zone: {
     position: 'absolute',
     left: '6%',
