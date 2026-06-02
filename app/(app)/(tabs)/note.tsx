@@ -7,9 +7,7 @@ import {
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
-import { Image as ImageIcon, Camera, X, Lock, Send, Vault, Pencil, Trash2, EyeOff, Eye, Check, MoveVertical as MoreVertical } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
-import { logDebugEvent } from '@/lib/debugLog';
+import { Image as ImageIcon, Camera, X, Lock, Send, Vault, Pencil, Trash2, EyeOff, Eye, Check } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -153,22 +151,20 @@ function MediaBubble({
   msg,
   blurEnabled,
   revealed,
-  isMine,
   onReveal,
   signedUrl,
   onOpen,
-  onMediaAction,
+  onLongPress,
   bubbleWidth,
   bubbleHeight,
 }: {
   msg: ChatMessage;
   blurEnabled: boolean;
   revealed: boolean;
-  isMine: boolean;
   onReveal: (id: string) => void;
   signedUrl: string | null | undefined;
   onOpen: (m: ChatMessage) => void;
-  onMediaAction: (m: ChatMessage) => void;
+  onLongPress: (m: ChatMessage) => void;
   bubbleWidth: number;
   bubbleHeight: number;
 }) {
@@ -183,71 +179,43 @@ function MediaBubble({
     }
   };
 
-  const handleOverlayPress = () => {
-    logDebugEvent('CHAT_MEDIA_OVERLAY_TAP', {
-      messageId: msg.id,
-      isMine,
-      hasVaultItem: !!msg.vault_item_id,
-    });
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }
-    onMediaAction(msg);
-  };
-
   return (
-    // Outer View has no overflow:hidden so the overlay Pressable is never clipped
-    <View style={[styles.mediaTap, { width: bubbleWidth, height: bubbleHeight }]}>
-      {/* Image layer — tappable, clips to border radius */}
-      <Pressable
-        onPress={handleImagePress}
-        style={[styles.mediaWrap, { width: bubbleWidth, height: bubbleHeight }]}
-        android_ripple={null}
-      >
-        {!loaded ? (
-          <View style={styles.mediaPlaceholder}>
-            <ActivityIndicator color="#FF5A3D" size="small" />
-          </View>
-        ) : signedUrl ? (
-          <Image
-            source={{ uri: signedUrl }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-            blurRadius={isBlurred ? 6 : 0}
-          />
-        ) : (
-          <View style={styles.mediaPlaceholder}>
-            <Lock color="rgba(255,255,255,0.5)" size={20} />
-          </View>
-        )}
-        {msg.media_type === 'video' && loaded && signedUrl && (
-          <View style={styles.playOverlay}>
-            <View style={styles.playCircle}>
-              <AppText style={styles.playTriangle}>&#9654;</AppText>
-            </View>
-          </View>
-        )}
-        {isBlurred && loaded && signedUrl && (
-          <View style={styles.mediaBlurOverlay}>
-            <EyeOff color="rgba(255,255,255,0.7)" size={20} strokeWidth={2} />
-          </View>
-        )}
-      </Pressable>
-
-      {/* Overlay action button — sibling of image layer, above it via zIndex */}
-      {!isBlurred && isMine && (
-        <Pressable
-          onPress={handleOverlayPress}
-          hitSlop={{ top: 14, left: 14, bottom: 14, right: 14 }}
-          style={({ pressed }) => [
-            styles.mediaActionBtn,
-            pressed && styles.mediaActionBtnPressed,
-          ]}
-        >
-          <MoreVertical color="#fff" size={16} strokeWidth={2.5} />
-        </Pressable>
+    <Pressable
+      onPress={handleImagePress}
+      onLongPress={() => onLongPress(msg)}
+      delayLongPress={350}
+      android_ripple={null}
+      style={[styles.mediaTap, { width: bubbleWidth, height: bubbleHeight }]}
+    >
+      {!loaded ? (
+        <View style={styles.mediaPlaceholder}>
+          <ActivityIndicator color="#FF5A3D" size="small" />
+        </View>
+      ) : signedUrl ? (
+        <Image
+          source={{ uri: signedUrl }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+          blurRadius={isBlurred ? 6 : 0}
+        />
+      ) : (
+        <View style={styles.mediaPlaceholder}>
+          <Lock color="rgba(255,255,255,0.5)" size={20} />
+        </View>
       )}
-    </View>
+      {msg.media_type === 'video' && loaded && signedUrl && !isBlurred && (
+        <View style={styles.playOverlay}>
+          <View style={styles.playCircle}>
+            <AppText style={styles.playTriangle}>&#9654;</AppText>
+          </View>
+        </View>
+      )}
+      {isBlurred && loaded && signedUrl && (
+        <View style={styles.mediaBlurOverlay}>
+          <EyeOff color="rgba(255,255,255,0.7)" size={20} strokeWidth={2} />
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -808,126 +776,6 @@ export default function ChatTab() {
     });
   }, [router]);
 
-  // Media overlay action sheet — triggered by the top-right overlay button on media bubbles.
-  // Shows View Fullscreen + contextual delete options based on auto-save setting.
-  const handleMediaAction = useCallback((msg: ChatMessage) => {
-    if (!msg.media_storage_path) return;
-    const autoSaveOn = settings?.chat_auto_save_to_vault ?? true;
-    const hasVaultItem = !!msg.vault_item_id;
-
-    const doView = () => handleOpenMedia(msg);
-
-    const softDeleteChat = async () => {
-      const deletedAt = new Date().toISOString();
-      const { error } = await supabase
-        .from('chat_messages')
-        .update({ deleted_at: deletedAt })
-        .eq('id', msg.id)
-        .eq('sender_id', user!.id);
-      return error;
-    };
-
-    const deleteVaultItem = async (): Promise<string | null> => {
-      if (!msg.vault_item_id) return null;
-      const { data: vi, error: fetchErr } = await supabase
-        .from('vault_items')
-        .select('storage_path, storage_bucket')
-        .eq('id', msg.vault_item_id)
-        .maybeSingle();
-      if (fetchErr) return fetchErr.message;
-      const deletedAt = new Date().toISOString();
-      const { error: updateErr } = await supabase
-        .from('vault_items')
-        .update({ deleted_at: deletedAt })
-        .eq('id', msg.vault_item_id);
-      if (updateErr) return updateErr.message;
-      if (vi?.storage_path) {
-        supabase.storage.from(vi.storage_bucket ?? 'vault').remove([vi.storage_path]).catch(() => {});
-      }
-      return null;
-    };
-
-    const doDeleteChatOnly = async () => {
-      setMessages(prev => prev.filter(m => m.id !== msg.id));
-      const err = await softDeleteChat();
-      if (err) {
-        setMessages(prev => {
-          if (prev.some(m => m.id === msg.id)) return prev;
-          return [...prev, msg].sort((a, b) => a.created_at.localeCompare(b.created_at));
-        });
-        Alert.alert('Delete Failed', 'Could not remove the message. Please try again.');
-      }
-    };
-
-    const doDeleteChatAndVault = async () => {
-      const vaultErr = await deleteVaultItem();
-      if (vaultErr) {
-        Alert.alert('Delete Failed', `Could not remove from Vault: ${vaultErr}\n\nNo changes were made.`);
-        return;
-      }
-      setMessages(prev => prev.filter(m => m.id !== msg.id));
-      const chatErr = await softDeleteChat();
-      if (chatErr) {
-        Alert.alert('Partial Delete', 'Removed from Vault but could not remove from Chat. Pull to refresh.');
-        return;
-      }
-      if (msg.media_storage_path) {
-        const bucket = msg.media_storage_bucket ?? 'chat_media';
-        supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
-      }
-    };
-
-    const doDeleteChatNoVault = async () => {
-      setMessages(prev => prev.filter(m => m.id !== msg.id));
-      const err = await softDeleteChat();
-      if (err) {
-        Alert.alert('Delete Failed', 'Could not remove the message. Please try again.');
-        return;
-      }
-      if (msg.media_storage_path) {
-        const bucket = msg.media_storage_bucket ?? 'chat_media';
-        supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
-      }
-    };
-
-    if (Platform.OS === 'web') {
-      const action = window.prompt(
-        autoSaveOn && hasVaultItem
-          ? 'Options: view / delete-chat / delete-both / cancel'
-          : 'Options: view / delete / cancel',
-        'view'
-      );
-      if (action === 'view') doView();
-      else if (action === 'delete-chat') doDeleteChatOnly();
-      else if (action === 'delete-both') doDeleteChatAndVault();
-      else if (action === 'delete') doDeleteChatNoVault();
-      return;
-    }
-
-    if (autoSaveOn && hasVaultItem) {
-      Alert.alert(
-        'Media options',
-        'This photo/video is also saved in your Vault.',
-        [
-          { text: 'View Fullscreen', onPress: doView },
-          { text: 'Delete From Chat Only', onPress: doDeleteChatOnly },
-          { text: 'Delete From Chat + Vault', style: 'destructive', onPress: doDeleteChatAndVault },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
-    } else {
-      Alert.alert(
-        'Media options',
-        undefined,
-        [
-          { text: 'View Fullscreen', onPress: doView },
-          { text: 'Delete From Chat', style: 'destructive', onPress: doDeleteChatNoVault },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
-    }
-  }, [settings, user, handleOpenMedia]);
-
   const handleSaveToVault = useCallback(async (msg: ChatMessage) => {
     if (!msg.media_storage_path || !couple?.id || !user) return;
     if (msg.vault_item_id) return; // already saved — menu shows disabled state
@@ -986,12 +834,11 @@ export default function ChatTab() {
         mediaBubbleHeight={mediaBubbleHeight}
         onReveal={handleRevealMedia}
         onOpen={handleOpenMedia}
-        onMediaAction={handleMediaAction}
         onLongPress={handleLongPress}
         prevCreatedAt={index > 0 ? (item as any).__prevCreatedAt : undefined}
       />
     );
-  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, handleMediaAction, mediaBubbleWidth, mediaBubbleHeight]);
+  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight]);
 
   // Attach prev date to each item so renderItem doesn't need the full messages array
   const messagesWithPrev = useMemo(() =>
@@ -1180,7 +1027,6 @@ const MessageRow = React.memo(function MessageRow({
   mediaBubbleHeight,
   onReveal,
   onOpen,
-  onMediaAction,
   onLongPress,
   prevCreatedAt,
 }: {
@@ -1198,7 +1044,6 @@ const MessageRow = React.memo(function MessageRow({
   mediaBubbleHeight: number;
   onReveal: (id: string) => void;
   onOpen: (m: ChatMessage) => void;
-  onMediaAction: (m: ChatMessage) => void;
   onLongPress: (m: ChatMessage) => void;
   prevCreatedAt?: string | null;
 }) {
@@ -1235,13 +1080,12 @@ const MessageRow = React.memo(function MessageRow({
             {hasMedia && (
               <MediaBubble
                 msg={item}
-                isMine={isMine}
                 blurEnabled={blurEnabled}
                 revealed={revealed}
                 onReveal={onReveal}
                 signedUrl={signedUrl}
                 onOpen={onOpen}
-                onMediaAction={onMediaAction}
+                onLongPress={onLongPress}
                 bubbleWidth={mediaBubbleWidth}
                 bubbleHeight={mediaBubbleHeight}
               />
@@ -1315,32 +1159,12 @@ const styles = StyleSheet.create({
   },
   editBannerText: { flex: 1, fontSize: 12, fontFamily: 'Inter-Medium' },
   // Media bubble
-  // No overflow:hidden here — the action button must not be clipped by the container
-  mediaTap: { marginBottom: 4, position: 'relative' },
-  // Inner image layer clips to border radius
-  mediaWrap: { borderRadius: Radius.md, overflow: 'hidden', backgroundColor: '#1A1A2E' },
+  mediaTap: { borderRadius: Radius.md, overflow: 'hidden', marginBottom: 4 },
   mediaPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' },
   mediaBlurOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)' },
   playCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' },
   playTriangle: { color: '#fff', fontSize: 14, marginLeft: 3 },
-  // Overlay action button — top-right corner, above image layer
-  mediaActionBtn: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-    elevation: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  mediaActionBtnPressed: { opacity: 0.7, transform: [{ scale: 0.92 }] },
   uploadPctWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   uploadPctText: { color: '#FF5A3D', fontSize: 11, fontFamily: 'Inter-Bold', minWidth: 30 },
   // Compose
