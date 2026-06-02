@@ -1,249 +1,202 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  useWindowDimensions,
-} from 'react-native';
-import { Asset } from 'expo-asset';
+import React, { useEffect } from 'react';
+import { View, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FontSize, Spacing, Radius } from '@/constants/theme';
+import WarmupLogo from '@/components/WarmupLogo';
+import WarmupWordmark from '@/components/WarmupWordmark';
+import { useLayout } from '@/hooks/useLayout';
 
-const LOGIN_BG = require('@/assets/onboarding/New_Login_page_6.2.26.png');
+const TAGLINE_SOURCE = require('@/assets/images/image_(2).png');
 
-// ─── Tap zone positions expressed as fractions of the image canvas ─────────
-// These fractions are applied to the *rendered* image rectangle at runtime,
-// so they are correct regardless of the actual image pixel dimensions.
-//
-// Reference: artwork designed for iPhone 14 (390 × 844 pt).
-// Adjust these if the console logs show zones are off.
-const ZONES = {
-  getStarted: { topFrac: 0.822, hFrac: 0.069, lFrac: 0.06, rFrac: 0.06 },
-  enter:      { topFrac: 0.875, hFrac: 0.048, lFrac: 0.06, rFrac: 0.06 },
-  signIn:     { topFrac: 0.912, hFrac: 0.048, lFrac: 0.06, rFrac: 0.06 },
-  seeHow:     { topFrac: 0.950, hFrac: 0.043, lFrac: 0.06, rFrac: 0.06 },
-} as const;
-
-// ─── Runtime image size hook ─────────────────────────────────────────────────
-// Stage 1: Image.resolveAssetSource + Image.getSize (fast path)
-// Stage 2: expo-asset Asset.fromModule (reliable bundled-asset fallback)
-// Stage 3: hardcoded 390x844 (last resort — always logged loudly)
-function useImageSize(asset: ReturnType<typeof require>, screenW: number, screenH: number) {
-  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function resolve() {
-      // Stage 1
-      try {
-        const uri = Image.resolveAssetSource(asset).uri;
-        await new Promise<void>((ok, fail) => {
-          Image.getSize(
-            uri,
-            (w, h) => {
-              if (!cancelled) {
-                console.log(`[useImageSize] source image via resolveAssetSource: ${w}x${h}px`);
-                setSize({ w, h });
-              }
-              ok();
-            },
-            fail,
-          );
-        });
-        return;
-      } catch (e) {
-        console.warn(
-          `[useImageSize] resolveAssetSource/getSize failed – screen: ${screenW}x${screenH} – trying expo-asset:`,
-          e,
-        );
-      }
-
-      // Stage 2
-      try {
-        const a = Asset.fromModule(asset);
-        await a.downloadAsync();
-        console.log(
-          `[useImageSize] expo-asset metadata: width=${a.width} height=${a.height} localUri=${a.localUri}`,
-        );
-        if (a.width && a.height) {
-          if (!cancelled) {
-            console.log(`[useImageSize] source image via expo-asset: ${a.width}x${a.height}px`);
-            setSize({ w: a.width, h: a.height });
-          }
-          return;
-        }
-        console.warn('[useImageSize] expo-asset resolved but width/height are null');
-      } catch (e2) {
-        console.warn('[useImageSize] expo-asset failed:', e2);
-      }
-
-      // Stage 3
-      if (!cancelled) {
-        console.warn(
-          `[useImageSize] ALL dimension probes failed – screen: ${screenW}x${screenH} – using fallback 390x844`,
-        );
-        setSize({ w: 390, h: 844 });
-      }
-    }
-
-    resolve();
-    return () => { cancelled = true; };
-  }, []);
-
-  return size;
-}
-
-// ─── Contain layout calculator ───────────────────────────────────────────────
-function computeContainLayout(
-  imgW: number,
-  imgH: number,
-  screenW: number,
-  screenH: number,
-  minOffsetY: number,
-) {
-  const scale = Math.min(screenW / imgW, screenH / imgH);
-  const renderedW = imgW * scale;
-  const renderedH = imgH * scale;
-  const offsetX = (screenW - renderedW) / 2;
-  const offsetY = Math.max((screenH - renderedH) / 2, minOffsetY);
-
-  console.log(
-    `[ContainLayout] screen: ${screenW}x${screenH} | image: ${imgW}x${imgH}` +
-    ` | rendered: ${renderedW.toFixed(1)}x${renderedH.toFixed(1)}` +
-    ` | offset: (${offsetX.toFixed(1)}, ${offsetY.toFixed(1)})`,
-  );
-
-  // Convert a zone definition into absolute screen-space style values.
-  const toZone = (topFrac: number, hFrac: number, lFrac: number, rFrac: number) => {
-    const zoneTop    = offsetY + topFrac  * renderedH;
-    const zoneHeight = hFrac * renderedH;
-    const zoneLeft   = offsetX + lFrac   * renderedW;
-    // rFrac is the fraction from the image's RIGHT edge inward
-    const zoneRight  = screenW - (offsetX + (1 - rFrac) * renderedW);
-    console.log(
-      `[ContainLayout] zone top=${zoneTop.toFixed(1)} h=${zoneHeight.toFixed(1)}` +
-      ` left=${zoneLeft.toFixed(1)} right=${zoneRight.toFixed(1)}`,
-    );
-    return { top: zoneTop, height: zoneHeight, left: zoneLeft, right: zoneRight };
-  };
-
-  return { scale, renderedW, renderedH, offsetX, offsetY, toZone };
-}
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function WelcomeScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { width: SW, height: SH } = useWindowDimensions();
-
-  const { pendingCode, prefilledCode, code } = useLocalSearchParams<{
-    pendingCode?: string;
-    prefilledCode?: string;
-    code?: string;
-  }>();
+  const { pendingCode, prefilledCode, code } = useLocalSearchParams<{ pendingCode?: string; prefilledCode?: string; code?: string }>();
   const codeToPreserve = (pendingCode || prefilledCode || code || '').toUpperCase().trim();
+  const insets = useSafeAreaInsets();
 
+  // If a code arrived via deep-link params, forward immediately to pair screen.
   useEffect(() => {
     if (codeToPreserve) {
       router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } });
     }
   }, [codeToPreserve]);
-
-  const imageSize = useImageSize(LOGIN_BG, SW, SH);
-
-  const layout = useMemo(() => {
-    if (!imageSize) return null;
-    return computeContainLayout(imageSize.w, imageSize.h, SW, SH, insets.top);
-  }, [imageSize, SW, SH, insets.top]);
+  const { width, height, isTablet, contentMaxWidth } = useLayout();
+  const logoSize = Math.min(Math.round(width * 0.38), 180);
+  const wordmarkSize = Math.round(logoSize * 0.16);
+  const taglineWidth = Math.min(width - Spacing.md * 2, 440);
+  const taglineHeight = taglineWidth * (148 / 340);
+  const paddingTop = Math.max(40, Math.round(height * 0.1)) + insets.top;
+  const paddingBottom = Math.max(28, Math.round(height * 0.07)) + insets.bottom;
 
   return (
-    <View style={s.root}>
-      <StatusBar style="light" />
+    <View style={styles.root}>
+      <LinearGradient
+        colors={['#000000', '#0A0A0A', '#0D0D0D']}
+        style={StyleSheet.absoluteFill}
+      />
 
-      {/* Artwork — positioned at exact coordinates computed by layout math */}
-      {layout && (
-        <Image
-          source={LOGIN_BG}
-          style={{
-            position: 'absolute',
-            left: layout.offsetX,
-            top: layout.offsetY,
-            width: layout.renderedW,
-            height: layout.renderedH,
-          }}
-          resizeMode="stretch"
-          accessibilityLabel="Warm Me Up – Stay Playful"
-        />
-      )}
-
-      {/* Invisible tap zones — only mounted once layout is computed */}
-      {layout && (
-        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-
-          <TouchableOpacity
-            style={[s.zone, layout.toZone(...Object.values(ZONES.getStarted) as [number, number, number, number])]}
-            onPress={() =>
-              router.push(
-                codeToPreserve
-                  ? { pathname: '/(auth)/register', params: { pendingCode: codeToPreserve } }
-                  : '/(auth)/register',
-              )
-            }
-            activeOpacity={1}
-            accessibilityLabel="Get Started"
-            accessibilityRole="button"
-          />
-
-          <TouchableOpacity
-            style={[s.zone, layout.toZone(...Object.values(ZONES.enter) as [number, number, number, number])]}
-            onPress={() =>
-              router.push(
-                codeToPreserve
-                  ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
-                  : '/(auth)/pair',
-              )
-            }
-            activeOpacity={1}
-            accessibilityLabel="Already have a code? Enter"
-            accessibilityRole="button"
-          />
-
-          <TouchableOpacity
-            style={[s.zone, layout.toZone(...Object.values(ZONES.signIn) as [number, number, number, number])]}
-            onPress={() =>
-              router.push(
-                codeToPreserve
-                  ? { pathname: '/(auth)/login', params: { pendingCode: codeToPreserve } }
-                  : '/(auth)/login',
-              )
-            }
-            activeOpacity={1}
-            accessibilityLabel="Already have an account? Sign In"
-            accessibilityRole="button"
-          />
-
-          <TouchableOpacity
-            style={[s.zone, layout.toZone(...Object.values(ZONES.seeHow) as [number, number, number, number])]}
-            onPress={() => router.push('/(auth)/onboarding-preview')}
-            activeOpacity={1}
-            accessibilityLabel="See how it works"
-            accessibilityRole="button"
+      <View style={[
+        styles.container,
+        { paddingTop, paddingBottom },
+        isTablet && { alignSelf: 'center', width: '100%', maxWidth: contentMaxWidth },
+      ]}>
+        {/* Hero: logo + wordmark + tagline */}
+        <View style={styles.hero}>
+          <View style={styles.glow} />
+          <WarmupLogo size={logoSize} />
+          <WarmupWordmark size={wordmarkSize} style={styles.wordmark} />
+          <Image
+            source={TAGLINE_SOURCE}
+            style={{ width: taglineWidth, height: taglineHeight, marginTop: 20, alignSelf: 'center' }}
+            resizeMode="contain"
           />
         </View>
-      )}
+
+        <View style={styles.spacer} />
+
+        {/* Bottom: subtitle + CTAs */}
+        <View style={styles.actions}>
+          <AppText style={styles.subtitle}>A private space for a playful connection.</AppText>
+
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => router.push(codeToPreserve
+              ? { pathname: '/(auth)/register', params: { pendingCode: codeToPreserve } }
+              : '/(auth)/register'
+            )}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={['#FFB347', '#FF5A3D', '#FF2E8A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.primaryGrad}
+            >
+              <AppText style={styles.primaryLabel}>Get Started</AppText>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <View style={styles.linkRow}>
+            <AppText style={styles.linkText}>Already have a code? </AppText>
+            <TouchableOpacity onPress={() => router.push(codeToPreserve
+              ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
+              : '/(auth)/pair'
+            )} activeOpacity={0.7}>
+              <AppText style={styles.linkAccent}>Enter</AppText>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.linkRow}>
+            <AppText style={styles.linkText}>Already have an account? </AppText>
+            <TouchableOpacity onPress={() => router.push(codeToPreserve
+              ? { pathname: '/(auth)/login', params: { pendingCode: codeToPreserve } }
+              : '/(auth)/login'
+            )} activeOpacity={0.7}>
+              <AppText style={styles.linkAccent}>Sign In</AppText>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/onboarding-preview')}
+            activeOpacity={0.7}
+            style={styles.previewLink}
+          >
+            <AppText style={styles.previewLinkText}>See how it works →</AppText>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 }
 
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#000000',
   },
-  zone: {
+  glow: {
     position: 'absolute',
+    alignSelf: 'center',
+    width: 440,
+    height: 440,
+    borderRadius: 220,
+    top: -80,
+    backgroundColor: 'rgba(255, 90, 61, 0.06)',
+  },
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  hero: {
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
+  wordmark: {
+    marginTop: 8,
+  },
+  spacer: {
+    flex: 1,
+  },
+  actions: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 14,
+  },
+  subtitle: {
+    color: 'rgba(255,255,255,0.50)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 2,
+  },
+  primaryBtn: {
+    width: '88%',
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+    shadowColor: '#FF5A3D',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  primaryGrad: {
+    paddingVertical: 15,
+    alignItems: 'center',
+    borderRadius: Radius.pill,
+  },
+  primaryLabel: {
+    color: '#fff',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: 0.3,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  linkText: {
+    color: 'rgba(255,255,255,0.32)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+  },
+  linkAccent: {
+    color: '#FF7A45',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+  },
+  previewLink: {
+    marginTop: 4,
+    paddingVertical: 4,
+  },
+  previewLinkText: {
+    color: 'rgba(255,255,255,0.28)',
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    letterSpacing: 0.2,
   },
 });
