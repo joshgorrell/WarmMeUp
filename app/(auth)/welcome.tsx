@@ -36,7 +36,10 @@ function useImageSize(asset: ReturnType<typeof require>) {
     try {
       uri = Image.resolveAssetSource(asset).uri;
     } catch (e) {
-      console.warn('[useImageSize] resolveAssetSource threw, using fallback 390x844:', e);
+      console.warn(
+        `[useImageSize] resolveAssetSource threw – screen: ${SW}x${SH} – using fallback 390x844:`,
+        e,
+      );
       setSize({ w: 390, h: 844 });
       return;
     }
@@ -47,7 +50,10 @@ function useImageSize(asset: ReturnType<typeof require>) {
         setSize({ w, h });
       },
       (err) => {
-        console.warn('[useImageSize] getSize failed, using fallback 390x844:', err);
+        console.warn(
+          `[useImageSize] getSize failed – screen: ${SW}x${SH} – using fallback 390x844:`,
+          err,
+        );
         setSize({ w: 390, h: 844 });
       },
     );
