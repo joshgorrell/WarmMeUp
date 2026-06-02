@@ -17,6 +17,13 @@ import { clearWeatherSessionCache } from '@/hooks/useWeather';
  *   - elapsed time since last unlock >= lock_after_seconds
  *
  * If lock_after_seconds === -1 or null, ALWAYS returns false.
+ *
+ * Special case: lock_after_seconds === 0 ("Immediately") — require unlock on
+ * every app open. When unlockedAtMs is null the user has never unlocked this
+ * session, so unlock IS required.
+ *
+ * For timer-based values (> 0), null unlockedAtMs means the timer hasn't
+ * started yet (first install / cleared state) — treat as within grace period.
  */
 export function computeIsUnlockRequired(
   settings: UserSettings | null,
@@ -26,7 +33,9 @@ export function computeIsUnlockRequired(
   if (method === 'password') return false;
   const lockAfter = settings?.lock_after_seconds ?? null;
   if (lockAfter === null || lockAfter < 0) return false;
-  // Never force a lock on first launch (no recorded unlock yet).
+  // "Immediately" (0s): always require unlock when no prior unlock this session.
+  if (lockAfter === 0) return unlockedAtMs === null || (Date.now() - unlockedAtMs) / 1000 >= 0;
+  // Timer-based: no prior unlock means timer hasn't started — treat as in grace period.
   if (unlockedAtMs === null) return false;
   return (Date.now() - unlockedAtMs) / 1000 >= lockAfter;
 }

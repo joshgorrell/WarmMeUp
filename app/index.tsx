@@ -20,13 +20,35 @@ export default function IndexScreen() {
     if (loading) return;
 
     const bootElapsedMs = Date.now() - mountMs.current;
+
+    // Rule 1: No valid session → Welcome/Login. Never show Fake Weather for guests.
+    if (!session) {
+      logDebugEvent('LAUNCH BOOT', { hasSession: false, settingsLoaded: false, bootElapsedMs });
+      logDebugEvent('LAUNCH ROUTE DECISION', {
+        sessionHydrated: true,
+        sessionValidAtLaunch: false,
+        privacyModeEnabled: null,
+        requireUnlockAfterSeconds: null,
+        lastUnlockedAt: null,
+        unlockRequiredReason: 'no_session',
+        initialRouteDecision: '/(auth)/welcome',
+        routeDecisionReason: 'No valid session',
+        fakeWeatherShownReason: 'not_shown',
+        bootElapsedMs,
+      });
+      console.log('[LAUNCH DEBUG] no session → welcome');
+      router.replace('/(auth)/welcome');
+      return;
+    }
+
     logDebugEvent('LAUNCH BOOT', {
-      hasSession: !!session,
+      hasSession: true,
+      userId: session?.user?.id,
       settingsLoaded: !!settings,
       bootElapsedMs,
     });
     console.log('[LAUNCH DEBUG]', {
-      hasSession: !!session,
+      hasSession: true,
       userId: session?.user?.id,
       settingsLoaded: !!settings,
       loginMethod: settings?.login_method,
@@ -36,25 +58,31 @@ export default function IndexScreen() {
       transitionElapsedMs: bootElapsedMs,
     });
 
-    if (!session) {
-      router.replace('/(auth)/welcome');
-      return;
-    }
-
-    // Wait for settings to be populated before routing.
-    // AuthContext loads them in the same async batch as the session, so they
-    // arrive within a render or two. Routing before they're ready causes
-    // unlock.tsx to see null settings and default to PIN even when the user
-    // has biometric configured.
+    // Wait for settings before routing — they arrive in the same async batch as
+    // the session. Routing early means unlock.tsx sees null settings and can't
+    // determine the correct method.
     if (!settings) {
-      // Start a fallback timer the first time we land here without settings.
       if (!settingsTimeoutRef.current) {
         settingsTimeoutRef.current = setTimeout(() => {
           settingsTimeoutRef.current = null;
           if (!routedRef.current) {
             console.warn('[index] settings timeout — falling through to /transition', { transitionElapsedMs: Date.now() - mountMs.current });
             routedRef.current = true;
-            unlockApp();
+            // Do NOT call unlockApp() here — we don't know if unlock is required.
+            // Skipping the stamp means a subsequent foreground lock check will
+            // correctly apply the user's configured lock_after_seconds.
+            logDebugEvent('LAUNCH ROUTE DECISION', {
+              sessionHydrated: true,
+              sessionValidAtLaunch: true,
+              privacyModeEnabled: null,
+              requireUnlockAfterSeconds: null,
+              lastUnlockedAt: unlockedAtMs,
+              unlockRequiredReason: 'settings_timeout_unknown',
+              initialRouteDecision: '/transition',
+              routeDecisionReason: 'Settings did not load within timeout — falling through safely',
+              fakeWeatherShownReason: 'not_shown',
+              bootElapsedMs: Date.now() - mountMs.current,
+            });
             router.replace('/transition');
           }
         }, SETTINGS_WAIT_MS);
@@ -71,20 +99,22 @@ export default function IndexScreen() {
     if (routedRef.current) return;
 
     const bypass = settings.stealth_bypass_until;
+    const bypassActive = bypass ? new Date(bypass) > new Date() : false;
     const shouldShowPrivacyCover = computeShouldShowPrivacyCover(session, settings);
+    const mustLock = computeIsUnlockRequired(settings, unlockedAtMs);
 
     console.log('[INDEX ROUTE DECISION]', {
       shouldShowPrivacyCover,
-      bypass,
-      bypassActive: bypass ? new Date(bypass) > new Date() : false,
+      bypassActive,
       loginMethod: settings.login_method ?? 'password',
+      mustLock,
     });
 
+    // Privacy Mode OFF (or bypass active) → check unlock requirement, then app
     const goNext = async () => {
       if (routedRef.current) return;
       routedRef.current = true;
       const userId = session.user?.id;
-      const mustLock = computeIsUnlockRequired(settings, unlockedAtMs);
       const loginMethod = settings.login_method ?? 'password';
 
       console.log('[INDEX ROUTE DECISION] gate', {
@@ -97,27 +127,60 @@ export default function IndexScreen() {
 
       if (mustLock) {
         const pinExists = loginMethod === 'pin' ? await hasPinStored(userId!) : true;
-        router.replace(pinExists ? '/unlock' : '/(auth)/setup-pin');
+        const dest = pinExists ? '/unlock' : '/(auth)/setup-pin';
+        logDebugEvent('LAUNCH ROUTE DECISION', {
+          sessionHydrated: true,
+          sessionValidAtLaunch: true,
+          privacyModeEnabled: settings.stealth_mode_enabled ?? false,
+          requireUnlockAfterSeconds: settings.lock_after_seconds ?? null,
+          lastUnlockedAt: unlockedAtMs,
+          unlockRequiredReason: `lock_after_seconds=${settings.lock_after_seconds}, method=${loginMethod}`,
+          initialRouteDecision: dest,
+          routeDecisionReason: 'Unlock required — Privacy Mode off or bypass active',
+          fakeWeatherShownReason: bypassActive ? 'bypass_active' : 'not_shown',
+          bootElapsedMs,
+        });
+        router.replace(dest);
       } else {
         unlockApp();
+        logDebugEvent('LAUNCH ROUTE DECISION', {
+          sessionHydrated: true,
+          sessionValidAtLaunch: true,
+          privacyModeEnabled: settings.stealth_mode_enabled ?? false,
+          requireUnlockAfterSeconds: settings.lock_after_seconds ?? null,
+          lastUnlockedAt: unlockedAtMs,
+          unlockRequiredReason: 'none',
+          initialRouteDecision: '/transition',
+          routeDecisionReason: 'No unlock required — entering app',
+          fakeWeatherShownReason: bypassActive ? 'bypass_active' : 'not_shown',
+          bootElapsedMs,
+        });
         router.replace('/transition');
       }
     };
 
-    if (!shouldShowPrivacyCover) {
+    // Privacy Mode OFF or bypass active → skip weather, check unlock
+    if (!shouldShowPrivacyCover || bypassActive) {
       goNext();
       return;
     }
 
-    if (bypass && new Date(bypass) > new Date()) {
-      goNext();
-      return;
-    }
-
-    // Stealth mode active — show weather cover screen.
-    // weather.tsx handles the lock/PIN gate when the user taps "Coast is Clear".
-    console.log('[INDEX ROUTE DECISION] → /weather (stealth active, no bypass)');
+    // Privacy Mode ON and no active bypass → show fake weather.
+    // weather.tsx evaluates the unlock requirement after "Coast is Clear" tap.
     routedRef.current = true;
+    logDebugEvent('LAUNCH ROUTE DECISION', {
+      sessionHydrated: true,
+      sessionValidAtLaunch: true,
+      privacyModeEnabled: true,
+      requireUnlockAfterSeconds: settings.lock_after_seconds ?? null,
+      lastUnlockedAt: unlockedAtMs,
+      unlockRequiredReason: mustLock ? `lock_after_seconds=${settings.lock_after_seconds}, method=${settings.login_method}` : 'none',
+      initialRouteDecision: '/weather',
+      routeDecisionReason: 'Privacy Mode is ON — show fake weather cover first',
+      fakeWeatherShownReason: 'stealth_mode_enabled=true, no_bypass',
+      bootElapsedMs,
+    });
+    console.log('[INDEX ROUTE DECISION] → /weather (stealth active, no bypass)');
     router.replace('/weather');
   }, [loading, session, settings, unlockedAtMs]);
 

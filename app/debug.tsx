@@ -81,7 +81,7 @@ export default function DebugScreen() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { session, user, profile, settings, couple, subscriptionInfo, unlockedAtMs, signOut, refreshSettings } = useAuth();
+  const { session, user, profile, settings, couple, subscriptionInfo, unlockedAtMs, loading, signOut, refreshSettings } = useAuth();
   const [clearing, setClearing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -184,6 +184,18 @@ export default function DebugScreen() {
   // Boot timing from event log
   const lastBootEvent = events.find(e => e.tag === 'LAUNCH BOOT');
   const bootElapsedMs = (lastBootEvent?.data?.bootElapsedMs as number) ?? null;
+
+  // Launch route decision from event log
+  const lastRouteDecision = events.find(e => e.tag === 'LAUNCH ROUTE DECISION');
+  const sessionHydrated = !loading;
+  const sessionValidAtLaunch = (lastRouteDecision?.data?.sessionValidAtLaunch as boolean) ?? (!!session);
+  const privacyModeEnabled = settings?.stealth_mode_enabled ?? null;
+  const requireUnlockAfterSeconds = settings?.lock_after_seconds ?? null;
+  const lastUnlockedAt = unlockedAtMs;
+  const unlockRequiredReason = (lastRouteDecision?.data?.unlockRequiredReason as string) ?? (isUnlockRequired ? `lock_after_seconds=${settings?.lock_after_seconds}, method=${settings?.login_method}` : 'none');
+  const initialRouteDecision = (lastRouteDecision?.data?.initialRouteDecision as string) ?? null;
+  const routeDecisionReason = (lastRouteDecision?.data?.routeDecisionReason as string) ?? null;
+  const fakeWeatherShownReason = (lastRouteDecision?.data?.fakeWeatherShownReason as string) ?? null;
 
   // Vault upload diagnostics from event log
   const lastVaultPick = events.find(e => e.tag === 'VAULT PICK');
@@ -500,6 +512,15 @@ export default function DebugScreen() {
 
         {/* ── 1. Launch / Auth State ── */}
         <Section title="Launch / Auth State" />
+        <Row label="sessionHydrated" value={sessionHydrated} />
+        <Row label="sessionValidAtLaunch" value={sessionValidAtLaunch} />
+        <Row label="privacyModeEnabled" value={privacyModeEnabled} />
+        <Row label="requireUnlockAfterSeconds" value={requireUnlockAfterSeconds} />
+        <Row label="lastUnlockedAt" value={lastUnlockedAt} />
+        <Row label="unlockRequiredReason" value={unlockRequiredReason} />
+        <Row label="initialRouteDecision" value={initialRouteDecision} />
+        <Row label="routeDecisionReason" value={routeDecisionReason} />
+        <Row label="fakeWeatherShownReason" value={fakeWeatherShownReason} />
         <Row label="userId" value={userId} />
         <Row label="email" value={user?.email ?? session?.user?.email ?? null} />
         <Row label="is_admin" value={profile?.is_admin ?? null} />

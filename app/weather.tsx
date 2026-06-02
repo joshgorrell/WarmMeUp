@@ -259,22 +259,24 @@ export default function WeatherScreen() {
         userId = liveSession?.user?.id;
       }
 
-      // If settings haven't loaded yet, fetch login_method directly from the DB.
-      let loginMethod = settings?.login_method;
-      if (!loginMethod && userId) {
+      // If settings haven't loaded yet, fetch BOTH login_method AND lock_after_seconds
+      // from the DB. Both are required by computeIsUnlockRequired — a partial object
+      // missing lock_after_seconds causes it to always return false and skip the unlock.
+      let liveSettings = settings;
+      if (!liveSettings && userId) {
         const { data } = await supabase
           .from('user_settings')
-          .select('login_method')
+          .select('login_method, lock_after_seconds')
           .eq('user_id', userId)
           .maybeSingle();
-        loginMethod = data?.login_method ?? 'password';
+        if (data) {
+          liveSettings = data as any;
+        }
       }
-      loginMethod = loginMethod ?? 'password';
 
       // Use the shared computeIsUnlockRequired so lock_after_seconds=-1 NEVER
       // routes to /unlock, even if login_method was left as 'pin' in the DB.
-      const liveSettings = settings ?? { login_method: loginMethod } as any;
-      const mustLock = computeIsUnlockRequired(liveSettings, unlockedAtMs);
+      const mustLock = computeIsUnlockRequired(liveSettings ?? null, unlockedAtMs);
       if (mustLock) {
         router.replace('/unlock');
       } else {
