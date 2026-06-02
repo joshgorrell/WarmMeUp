@@ -143,6 +143,11 @@ export default function PairScreen() {
       // This avoids a split between "DB query" and "RPC fallback" that could diverge.
       const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
       if (rpcError) {
+        // RPC refuses when the user is already paired — redirect to app instead of showing an error.
+        if ((rpcError as any)?.message === 'already_paired') {
+          router.replace('/(app)/(tabs)');
+          return;
+        }
         logDebugEvent('INVITE CREATE ERROR', {
           userId: user.id,
           code: rpcError?.code ?? null,
@@ -198,6 +203,12 @@ export default function PairScreen() {
     logDebugEvent('INVITE CREATE START', { source: 'handleRefreshCode', userId: user?.id ?? null });
     const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
     if (rpcError) {
+      // RPC refuses when the user is already paired — redirect rather than surface an error.
+      if ((rpcError as any)?.message === 'already_paired') {
+        router.replace('/(app)/(tabs)');
+        setRefreshing(false);
+        return;
+      }
       logDebugEvent('INVITE CREATE ERROR', {
         source: 'handleRefreshCode',
         code: rpcError?.code ?? null,
