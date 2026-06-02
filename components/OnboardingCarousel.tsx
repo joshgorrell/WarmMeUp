@@ -1,20 +1,21 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   FlatList,
   Dimensions,
-  ImageBackground,
+  Image,
   ViewToken,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-// iPhone SE (1st gen) logical height is 568pt; SE 2nd/3rd is 667pt.
-// Shift bottom tap zones up on very small screens so they don't fall off.
-const IS_SMALL = SH < 700;
-const SMALL_SHIFT = IS_SMALL ? -22 : 0;
+// Artwork was designed for iPhone 14 (390 × 844 pt portrait).
+// These are the logical design dimensions — used only for tap-zone proportions.
+const ART_W = 390;
+const ART_H = 844;
 
 export type OnboardingMode = 'preview' | 'post-auth';
 export type OnboardingFinishAction = 'get-started' | 'invite-partner';
@@ -41,22 +42,46 @@ const SLIDE_IMAGES = [
 
 const LAST_INDEX = SLIDE_IMAGES.length - 1; // 10
 
-// ─── Tap zone positions ───────────────────────────────────────────────────────
-// Expressed as fractions of SH so they track across all iPhone sizes.
-// Reference frame: 390 × 844 pt (iPhone 14).
-//   "Next →" pill (slides 1–9):           ~92.5 % from top
-//   "Get Started →" pill (slide 10):      ~92.5 % from top
-//   "Join Now →" pill (slide 11):         ~88.2 % from top
-//   "Invite a Partner" (slide 11):        ~93.3 % from top
-//   Skip link (top-right of artwork):     top 0, right 0
+// ─── Image-relative tap zone positions ───────────────────────────────────────
+// Expressed as fractions of the artwork's design frame (ART_W × ART_H).
+// At runtime we multiply by the contain-scale and add the letterbox offset
+// so zones always track the visible button positions regardless of device.
+//
+// Reference: iPhone 14 (390 × 844) artwork
+//   "Next →" / "Get Started →" pill:  y ≈ 91.5 % of ART_H
+//   "Join Now →" pill (slide 11):      y ≈ 87.2 %
+//   "Invite a Partner" (slide 11):     y ≈ 92.5 %
+//   Skip zone: top-right corner        y = 0 %, right edge
+//
+//   All horizontal zones: left ≈ 6 %, right ≈ 6 % margins (= 88 % wide)
 
-const NEXT_TOP    = SH * 0.925 + SMALL_SHIFT;
-const NEXT_H      = 58;
+const ZONES = {
+  next:   { topFrac: 0.915, hFrac: 0.069, lFrac: 0.06, rFrac: 0.06 },
+  join:   { topFrac: 0.872, hFrac: 0.069, lFrac: 0.06, rFrac: 0.06 },
+  invite: { topFrac: 0.925, hFrac: 0.057, lFrac: 0.06, rFrac: 0.06 },
+  skip:   { topFrac: 0.0,   hFrac: 0.11,  lFrac: 0.70, rFrac: 0.0  },
+} as const;
 
-const JOIN_TOP    = SH * 0.882 + SMALL_SHIFT;
-const JOIN_H      = 58;
-const INVITE_TOP  = SH * 0.933 + SMALL_SHIFT;
-const INVITE_H    = 48;
+// ─── Helper: compute contain layout ──────────────────────────────────────────
+function useContainLayout(insetTop: number) {
+  return useMemo(() => {
+    const scale = Math.min(SW / ART_W, SH / ART_H);
+    const renderedW = ART_W * scale;
+    const renderedH = ART_H * scale;
+    const offsetX = (SW - renderedW) / 2;
+    // Centre vertically but respect safe-area so artwork never hides under status bar
+    const rawOffsetY = (SH - renderedH) / 2;
+    const offsetY = Math.max(rawOffsetY, insetTop);
+
+    // Convert a design-space fraction to a real screen coordinate
+    const toScreenY  = (frac: number) => offsetY + frac * renderedH;
+    const toScreenH  = (frac: number) => frac * renderedH;
+    const toScreenX  = (frac: number) => offsetX + frac * renderedW;
+    const toScreenW  = (frac: number) => frac * renderedW;
+
+    return { offsetX, offsetY, renderedW, renderedH, toScreenY, toScreenH, toScreenX, toScreenW };
+  }, [insetTop]);
+}
 
 // ─── Slide component ──────────────────────────────────────────────────────────
 function Slide({
@@ -72,36 +97,62 @@ function Slide({
   onSkip: () => void;
   onComplete: (action: OnboardingFinishAction) => void;
 }) {
-  const isUpsell = index === LAST_INDEX;
-  const isFinalTour = index === LAST_INDEX - 1; // slide 10 says "Get Started"
+  const { top: insetTop } = useSafeAreaInsets();
+  const layout = useContainLayout(insetTop);
+
+  const isUpsell    = index === LAST_INDEX;
+
+  const nextZone = {
+    top:    layout.toScreenY(ZONES.next.topFrac),
+    height: layout.toScreenH(ZONES.next.hFrac),
+    left:   layout.toScreenX(ZONES.next.lFrac),
+    right:  layout.offsetX + layout.renderedW * ZONES.next.rFrac,
+  };
+
+  const joinZone = {
+    top:    layout.toScreenY(ZONES.join.topFrac),
+    height: layout.toScreenH(ZONES.join.hFrac),
+    left:   layout.toScreenX(ZONES.join.lFrac),
+    right:  layout.offsetX + layout.renderedW * ZONES.join.rFrac,
+  };
+
+  const inviteZone = {
+    top:    layout.toScreenY(ZONES.invite.topFrac),
+    height: layout.toScreenH(ZONES.invite.hFrac),
+    left:   layout.toScreenX(ZONES.invite.lFrac),
+    right:  layout.offsetX + layout.renderedW * ZONES.invite.rFrac,
+  };
+
+  const skipZone = {
+    top:    layout.toScreenY(ZONES.skip.topFrac),
+    height: layout.toScreenH(ZONES.skip.hFrac),
+    left:   layout.toScreenX(ZONES.skip.lFrac),
+    right:  layout.offsetX,
+  };
 
   return (
     <View style={s.slide}>
-      {/* Full-bleed portrait image */}
-      <ImageBackground
+      {/* Contained artwork — black letterbox bars on mismatch devices */}
+      <Image
         source={item}
         style={StyleSheet.absoluteFill}
-        imageStyle={StyleSheet.absoluteFill}
-        resizeMode="cover"
+        resizeMode="contain"
         accessibilityLabel={`Onboarding step ${index + 1}`}
       />
 
-      {/* Invisible tap zones only — zero visible styling */}
+      {/* Invisible tap zones — positioned relative to rendered image bounds */}
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-
         {isUpsell ? (
           <>
-            {/* Join Now → Register (unauthenticated) or Paywall (authenticated) */}
             <TouchableOpacity
-              style={[s.zone, { top: JOIN_TOP, height: JOIN_H }]}
+              style={[s.zone, joinZone]}
               onPress={() => onComplete('get-started')}
               activeOpacity={1}
               accessibilityLabel="Join Now"
               accessibilityRole="button"
             />
-            {/* Invite a Partner */}
             <TouchableOpacity
-              style={[s.zone, { top: INVITE_TOP, height: INVITE_H }]}
+              style={[s.zone, inviteZone]}
               onPress={() => onComplete('invite-partner')}
               activeOpacity={1}
               accessibilityLabel="Invite a Partner"
@@ -110,18 +161,15 @@ function Slide({
           </>
         ) : (
           <>
-            {/* Next / Get Started */}
             <TouchableOpacity
-              style={[s.zone, { top: NEXT_TOP, height: NEXT_H }]}
-              onPress={isFinalTour ? () => onNext() : onNext}
+              style={[s.zone, nextZone]}
+              onPress={onNext}
               activeOpacity={1}
-              accessibilityLabel={isFinalTour ? 'Get Started' : 'Next'}
+              accessibilityLabel={index === LAST_INDEX - 1 ? 'Get Started' : 'Next'}
               accessibilityRole="button"
             />
-
-            {/* Skip — top-right corner, matches artwork placement */}
             <TouchableOpacity
-              style={s.skipZone}
+              style={[s.zone, skipZone]}
               onPress={onSkip}
               activeOpacity={1}
               accessibilityLabel="Skip"
@@ -204,18 +252,7 @@ const s = StyleSheet.create({
     height: SH,
     backgroundColor: '#000',
   },
-  // Base for all invisible tap zones
   zone: {
     position: 'absolute',
-    left: '6%',
-    right: '6%',
-  },
-  // Skip zone — top-right quadrant, generous hit area
-  skipZone: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: SW * 0.30,
-    height: SH * 0.11,
   },
 });

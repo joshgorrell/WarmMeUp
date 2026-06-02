@@ -1,24 +1,42 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
-  ImageBackground,
+  Image,
   Dimensions,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-// iPhone SE (1st/2nd gen) has a shorter screen — shift tap zones up slightly
-const IS_SMALL   = SH < 700;
-const SMALL_SHIFT = IS_SMALL ? -20 : 0;
+// Artwork design dimensions (iPhone 14, 390 × 844 pt).
+const ART_W = 390;
+const ART_H = 844;
+
+// Button positions in the artwork, expressed as fractions of ART_H / ART_W.
+// At runtime we multiply by the contain-scale and add the letterbox offset.
+//
+//   "Get Started" pill:              y ≈ 82.2 %
+//   "Already have a code? Enter":   y ≈ 87.5 %
+//   "Sign In" link row:              y ≈ 91.2 %
+//   "See how it works →":            y ≈ 95.0 %
+//   All: left ≈ 6 %, right ≈ 6 %
+const ZONES = {
+  getStarted: { topFrac: 0.822, hFrac: 0.069, lFrac: 0.06, rFrac: 0.06 },
+  enter:      { topFrac: 0.875, hFrac: 0.048, lFrac: 0.06, rFrac: 0.06 },
+  signIn:     { topFrac: 0.912, hFrac: 0.048, lFrac: 0.06, rFrac: 0.06 },
+  seeHow:     { topFrac: 0.950, hFrac: 0.043, lFrac: 0.06, rFrac: 0.06 },
+} as const;
 
 const LOGIN_BG = require('@/assets/onboarding/New_Login_page_6.2.26.png');
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+
   const { pendingCode, prefilledCode, code } = useLocalSearchParams<{
     pendingCode?: string;
     prefilledCode?: string;
@@ -26,45 +44,58 @@ export default function WelcomeScreen() {
   }>();
   const codeToPreserve = (pendingCode || prefilledCode || code || '').toUpperCase().trim();
 
-  // If a code arrived via deep-link params, forward immediately to pair screen.
+  // Forward deep-link codes straight to pair screen.
   useEffect(() => {
     if (codeToPreserve) {
       router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } });
     }
   }, [codeToPreserve]);
 
-  // The image contains all visual branding. We render only invisible tap zones
-  // aligned to the baked-in button/link positions in the artwork.
-  //
-  // Reference frame: 390 × 844 pt (iPhone 14) with resizeMode="cover"
-  //   "Get Started" pill centre: ~82.5 % from top
-  //   "Enter" link row:          ~88.0 %
-  //   "Sign In" link row:        ~92.0 %
-  //   "See how it works →":      ~95.5 %
+  // Compute contain-scale layout so tap zones track the visible artwork.
+  const layout = useMemo(() => {
+    const scale = Math.min(SW / ART_W, SH / ART_H);
+    const renderedW = ART_W * scale;
+    const renderedH = ART_H * scale;
+    const offsetX = (SW - renderedW) / 2;
+    const rawOffsetY = (SH - renderedH) / 2;
+    // Never let artwork start above the status bar
+    const offsetY = Math.max(rawOffsetY, insets.top);
 
-  const getStartedTop = SH * 0.822 + SMALL_SHIFT;
-  const enterTop      = SH * 0.875 + SMALL_SHIFT;
-  const signInTop     = SH * 0.912 + SMALL_SHIFT;
-  const seeHowTop     = SH * 0.950 + SMALL_SHIFT;
+    const toScreenY = (frac: number) => offsetY + frac * renderedH;
+    const toScreenH = (frac: number) => frac * renderedH;
+    const toScreenLeft  = (frac: number) => offsetX + frac * renderedW;
+    const toScreenRight = (frac: number) => offsetX + frac * renderedW;
+
+    return { toScreenY, toScreenH, toScreenLeft, toScreenRight };
+  }, [insets.top]);
+
+  const zone = (key: keyof typeof ZONES) => {
+    const z = ZONES[key];
+    return {
+      top:    layout.toScreenY(z.topFrac),
+      height: layout.toScreenH(z.hFrac),
+      left:   layout.toScreenLeft(z.lFrac),
+      right:  layout.toScreenRight(z.rFrac),
+    };
+  };
 
   return (
     <View style={s.root}>
       <StatusBar style="light" />
 
-      <ImageBackground
+      {/* Contained artwork — no horizontal crop on any device */}
+      <Image
         source={LOGIN_BG}
         style={StyleSheet.absoluteFill}
-        imageStyle={StyleSheet.absoluteFill}
-        resizeMode="cover"
+        resizeMode="contain"
         accessibilityLabel="Warm Me Up – Stay Playful"
       />
 
-      {/* Invisible hit areas only — no visible styling */}
+      {/* Invisible hit areas aligned to the rendered image bounds */}
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
 
-        {/* Get Started */}
         <TouchableOpacity
-          style={[s.zone, { top: getStartedTop, height: 58 }]}
+          style={[s.zone, zone('getStarted')]}
           onPress={() =>
             router.push(
               codeToPreserve
@@ -77,9 +108,8 @@ export default function WelcomeScreen() {
           accessibilityRole="button"
         />
 
-        {/* Already have a code? Enter */}
         <TouchableOpacity
-          style={[s.zone, { top: enterTop, height: 40 }]}
+          style={[s.zone, zone('enter')]}
           onPress={() =>
             router.push(
               codeToPreserve
@@ -92,9 +122,8 @@ export default function WelcomeScreen() {
           accessibilityRole="button"
         />
 
-        {/* Already have an account? Sign In */}
         <TouchableOpacity
-          style={[s.zone, { top: signInTop, height: 40 }]}
+          style={[s.zone, zone('signIn')]}
           onPress={() =>
             router.push(
               codeToPreserve
@@ -107,9 +136,8 @@ export default function WelcomeScreen() {
           accessibilityRole="button"
         />
 
-        {/* See how it works → */}
         <TouchableOpacity
-          style={[s.zone, { top: seeHowTop, height: 36 }]}
+          style={[s.zone, zone('seeHow')]}
           onPress={() => router.push('/(auth)/onboarding-preview')}
           activeOpacity={1}
           accessibilityLabel="See how it works"
@@ -127,7 +155,5 @@ const s = StyleSheet.create({
   },
   zone: {
     position: 'absolute',
-    left: '6%',
-    right: '6%',
   },
 });
