@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ScrollView,
-  KeyboardAvoidingView, Platform, Animated,
+  KeyboardAvoidingView, Platform, Animated, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AppText from '@/components/AppText';
@@ -239,6 +239,38 @@ export default function DareTab() {
     }
   };
 
+  const handleCancelDare = () => {
+    if (!sentDare) return;
+    const doCancel = async () => {
+      const { error: updateError } = await supabase
+        .from('interactions')
+        .update({ status: 'cancelled', is_active: false })
+        .eq('id', sentDare.id)
+        .eq('sender_id', user!.id);
+      if (updateError) {
+        setError('Could not cancel the dare. Please try again.');
+        return;
+      }
+      setSent(false);
+      setSentDare(null);
+      setDareText('');
+      setError('');
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm("Cancel this dare? Your partner won't see it anymore.")) doCancel();
+    } else {
+      Alert.alert(
+        'Cancel dare?',
+        "Your partner won't see it anymore.",
+        [
+          { text: 'Keep it', style: 'cancel' },
+          { text: 'Yes, cancel', style: 'destructive', onPress: doCancel },
+        ]
+      );
+    }
+  };
+
   const handleFlip = () => {
     const toValue = flipped ? 0 : 1;
     Animated.spring(flipAnim, { toValue, useNativeDriver: true, friction: 8, tension: 60 }).start();
@@ -397,6 +429,11 @@ export default function DareTab() {
                 </View>
               )}
               <SecondaryButton label="Send Another" onPress={() => { setSent(false); setDareText(''); setError(''); }} style={{ marginTop: Spacing.md }} />
+              {sentDare && (
+                <TouchableOpacity onPress={handleCancelDare} style={styles.cancelDareBtn} activeOpacity={0.7}>
+                  <AppText style={[styles.cancelDareBtnText, { color: colors.textMuted }]}>Cancel dare</AppText>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </ScrollView>
@@ -461,4 +498,6 @@ const styles = StyleSheet.create({
   expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   expiryText: { fontSize: 12, fontFamily: 'Inter-Regular' },
   errorBanner: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.md },
+  cancelDareBtn: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, marginTop: Spacing.xs },
+  cancelDareBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center' },
 });
