@@ -31,6 +31,32 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: List EAS channels
+        run: eas channel:list --non-interactive
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: List EAS branches
+        run: eas branch:list --non-interactive
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: List recent updates on branch Main
+        run: eas update:list --branch Main --limit 3 --non-interactive
+        continue-on-error: true
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: List recent updates on branch production
+        run: eas update:list --branch production --limit 3 --non-interactive
+        continue-on-error: true
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
       - name: Publish update
         run: eas update --branch production --message "Production OTA update" --non-interactive
         env:
