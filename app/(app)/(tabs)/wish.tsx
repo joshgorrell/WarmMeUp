@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, Animated, Modal,
@@ -13,6 +13,7 @@ import {
   ExternalLink, Image as ImageIcon, Trash2, Pencil,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -822,6 +823,8 @@ export default function WishTab() {
   const { user, couple } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { wish_id: deepLinkWishId } = useLocalSearchParams<{ wish_id?: string }>();
   const [activeTab, setActiveTab] = useState<TabKey>(couple?.user_b_id ? 'shared' : 'mine');
   const [wishes, setWishes] = useState<WishWithReactions[]>([]);
   const [loading, setLoading] = useState(false);
@@ -876,6 +879,17 @@ export default function WishTab() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id, loadWishes]);
+
+  // Open a specific wish when deep-linked from Home activity feed
+  useEffect(() => {
+    if (!deepLinkWishId || wishes.length === 0) return;
+    const target = wishes.find(w => w.id === deepLinkWishId);
+    if (!target) return;
+    setEditingWish(target);
+    setShowForm(true);
+    // Clear the param so re-focusing the tab doesn't re-open the modal
+    router.setParams({ wish_id: undefined });
+  }, [deepLinkWishId, wishes]);
 
   const handleTabPress = useCallback((key: TabKey, idx: number) => {
     setActiveTab(key);

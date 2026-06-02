@@ -24,6 +24,8 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
 
 type ActivityItem = {
   id: string;
+  sourceTable: 'interactions' | 'chat_messages' | 'activity_events';
+  sourceId: string;
   _type: FilterTab;
   label: string;
   sub: string;
@@ -49,6 +51,7 @@ export default function ActivityScreen() {
   const { user, partnerProfile, couple } = useAuth();
   const { colors } = useTheme();
   const [allItems, setAllItems] = useState<ActivityItem[]>([]);
+  const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<FilterTab>('all');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -59,13 +62,6 @@ export default function ActivityScreen() {
   useEffect(() => {
     if (!couple?.id || !user?.id) return;
     load();
-    supabase
-      .from('activity_events')
-      .update({ read: true })
-      .eq('couple_id', couple.id)
-      .eq('target_user_id', user.id)
-      .eq('read', false)
-      .then(() => {});
     const ch = supabase.channel(`activity_screen_${couple.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, load)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, load)
@@ -76,11 +72,17 @@ export default function ActivityScreen() {
 
   const load = async () => {
     if (!couple?.id || !user) return;
-    const [{ data: interactions }, { data: chats }, { data: activityEvts }] = await Promise.all([
+    const [{ data: interactions }, { data: chats }, { data: activityEvts }, { data: viewedRows }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(50),
-      supabase.from('chat_messages').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(50),
-      supabase.from('activity_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(50),
+      supabase.from('chat_messages').select('*').eq('couple_id', couple.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(50),
+      supabase.from('activity_events').select('*').eq('couple_id', couple.id).eq('target_user_id', user.id).order('created_at', { ascending: false }).limit(50),
+      supabase.from('activity_views').select('source_table, source_id').eq('couple_id', couple.id).eq('user_id', user.id),
     ]);
+
+    const viewed = new Set<string>(
+      (viewedRows ?? []).map((v: any) => `${v.source_table}:${v.source_id}`)
+    );
+    setViewedSet(viewed);
 
     const mapped: ActivityItem[] = [];
     const partnerName = partnerProfile?.display_name ?? 'Partner';
@@ -139,6 +141,8 @@ export default function ActivityScreen() {
 
       mapped.push({
         id: i.id,
+        sourceTable: 'interactions',
+        sourceId: i.id,
         _type: type,
         label,
         sub: i.content_text ? `"${i.content_text.slice(0, 60)}${i.content_text.length > 60 ? '…' : ''}"` : '',
@@ -155,6 +159,8 @@ export default function ActivityScreen() {
       const isMedia = !!msg.media_storage_path;
       mapped.push({
         id: msg.id,
+        sourceTable: 'chat_messages',
+        sourceId: msg.id,
         _type: 'chat',
         label: isMine ? 'You sent a message' : `${partnerName} sent you a message`,
         sub: isMedia
@@ -171,11 +177,12 @@ export default function ActivityScreen() {
 
     (activityEvts ?? []).forEach((ev: any) => {
       const isMine = ev.actor_user_id === user.id;
-      const name = isMine ? 'You' : partnerName;
 
       if (ev.event_type === 'screenshot_detected') {
         mapped.push({
           id: `privacy_${ev.id}`,
+          sourceTable: 'activity_events',
+          sourceId: ev.id,
           _type: 'privacy',
           label: `${partnerName} screenshotted your content`,
           sub: ev.vault_item_id ? 'Vault item' : '',
@@ -210,6 +217,8 @@ export default function ActivityScreen() {
 
       mapped.push({
         id: `activity_${ev.id}`,
+        sourceTable: 'activity_events',
+        sourceId: ev.id,
         _type: 'wish',
         label,
         sub,
@@ -228,7 +237,7 @@ export default function ActivityScreen() {
 
   return (
     <AppShell scrollable={false}>
-      {/* Header — identical padding to BrandHeader/TabHeader */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -285,25 +294,31 @@ export default function ActivityScreen() {
             </AppText>
           </View>
         ) : (
-          items.map(item => (
-            <View key={item.id} style={[styles.row, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-              <View style={[styles.iconWrap, { backgroundColor: `${item.color}18` }]}>
-                {item.icon}
+          items.map(item => {
+            const isUnread = !viewedSet.has(`${item.sourceTable}:${item.sourceId}`);
+            return (
+              <View key={item.id} style={[styles.row, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+                <View style={styles.unreadIndicatorWrap}>
+                  {isUnread && <View style={styles.unreadDot} />}
+                </View>
+                <View style={[styles.iconWrap, { backgroundColor: `${item.color}18` }]}>
+                  {item.icon}
+                </View>
+                <View style={styles.rowText}>
+                  <AppText style={[styles.rowLabel, { color: colors.text }]}>{item.label}</AppText>
+                  {item.sub ? <AppText style={[styles.rowSub, { color: colors.textSecondary }]}>{item.sub}</AppText> : null}
+                </View>
+                <View style={styles.rowRight}>
+                  <AppText style={[styles.rowTime, { color: colors.textMuted }]}>{item.time}</AppText>
+                  {item.points ? (
+                    <View style={[styles.pointsPill, { backgroundColor: 'rgba(255,179,71,0.12)', borderColor: 'rgba(255,179,71,0.30)' }]}>
+                      <AppText style={styles.pointsText}>+{item.points}</AppText>
+                    </View>
+                  ) : null}
+                </View>
               </View>
-              <View style={styles.rowText}>
-                <AppText style={[styles.rowLabel, { color: colors.text }]}>{item.label}</AppText>
-                {item.sub ? <AppText style={[styles.rowSub, { color: colors.textSecondary }]}>{item.sub}</AppText> : null}
-              </View>
-              <View style={styles.rowRight}>
-                <AppText style={[styles.rowTime, { color: colors.textMuted }]}>{item.time}</AppText>
-                {item.points ? (
-                  <View style={[styles.pointsPill, { backgroundColor: 'rgba(255,179,71,0.12)', borderColor: 'rgba(255,179,71,0.30)' }]}>
-                    <AppText style={styles.pointsText}>+{item.points}</AppText>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
     </AppShell>
@@ -346,6 +361,17 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
     borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.sm,
+  },
+  unreadIndicatorWrap: {
+    width: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FF2E8A',
   },
   iconWrap: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1 },

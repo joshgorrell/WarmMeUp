@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles, RotateCcw } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles, CheckCheck } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -16,31 +16,6 @@ import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
-
-const kv = {
-  get: (key: string) => {
-    if (Platform.OS === 'web') {
-      return Promise.resolve(typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null);
-    }
-    return SecureStore.getItemAsync(key);
-  },
-  set: (key: string, value: string) => {
-    if (Platform.OS === 'web') {
-      try { localStorage.setItem(key, value); } catch {}
-      return Promise.resolve();
-    }
-    return SecureStore.setItemAsync(key, value);
-  },
-  del: (key: string) => {
-    if (Platform.OS === 'web') {
-      try { localStorage.removeItem(key); } catch {}
-      return Promise.resolve();
-    }
-    return SecureStore.deleteItemAsync(key);
-  },
-};
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -61,13 +36,15 @@ function timeAgo(iso: string) {
 
 type ActivityItem = {
   id: string;
+  sourceTable: 'interactions' | 'chat_messages' | 'activity_events';
+  sourceId: string;
   label: string;
   sub: string;
   time: string;
   icon: React.ReactNode;
   color: string;
   route: string;
-  seen: boolean;
+  routeParams?: Record<string, string>;
 };
 
 export default function HomeScreen() {
@@ -80,13 +57,9 @@ export default function HomeScreen() {
   const [activeInteraction, setActiveInteraction] = useState<Interaction | null>(null);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
-  const seenIdsRef = useRef<Set<string>>(new Set());
-  const markSeenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
 
-  // When User A's partner joins via realtime, show the celebration screen.
   useEffect(() => {
     if (justPairedPartnerName === null) return;
     clearJustPaired();
@@ -96,25 +69,10 @@ export default function HomeScreen() {
     });
   }, [justPairedPartnerName]);
 
-  // Honour pending notification deep-link passed from transition.tsx.
-  // We navigate here instead of in transition to avoid push-on-top-of-replace races.
   useEffect(() => {
     if (!pendingTab) return;
     router.push(pendingTab as any);
   }, []);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    kv.get(`seen_activity_${user.id}`).then(raw => {
-      if (!raw) return;
-      try {
-        const ids: string[] = JSON.parse(raw);
-        const s = new Set(ids);
-        seenIdsRef.current = s;
-        setSeenIds(s);
-      } catch {}
-    });
-  }, [user?.id]);
 
   useEffect(() => {
     if (!couple?.id || !user) return;
@@ -126,6 +84,7 @@ export default function HomeScreen() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, loadAll)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, loadAll)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, loadAll)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_views', filter: `couple_id=eq.${couple.id}` }, loadAll)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -162,16 +121,46 @@ export default function HomeScreen() {
   const loadRecentActivity = async () => {
     if (!couple?.id || !user) return;
     const partnerName = partnerProfile?.display_name ?? 'Partner';
-    const [{ data: interactions }, { data: chatMsgs }, { data: activityEvts }] = await Promise.all([
-      supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
-      supabase.from('chat_messages').select('id, sender_id, content_text, created_at').eq('couple_id', couple.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(10),
-      supabase.from('activity_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(20),
+
+    const [{ data: interactions }, { data: chatMsgs }, { data: activityEvts }, { data: viewedRows }] = await Promise.all([
+      // Only items where current user is the receiver
+      supabase.from('interactions')
+        .select('*')
+        .eq('couple_id', couple.id)
+        .eq('receiver_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(30),
+      // Only messages sent by the partner
+      supabase.from('chat_messages')
+        .select('id, sender_id, content_text, created_at')
+        .eq('couple_id', couple.id)
+        .neq('sender_id', user.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(30),
+      // activity_events already scoped to target_user_id
+      supabase.from('activity_events')
+        .select('*')
+        .eq('couple_id', couple.id)
+        .eq('target_user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(30),
+      // What the current user has already viewed
+      supabase.from('activity_views')
+        .select('source_table, source_id')
+        .eq('couple_id', couple.id)
+        .eq('user_id', user.id),
     ]);
 
-    const items: Array<Omit<ActivityItem, 'seen'> & { _rawTime: string }> = [];
+    const viewedSet = new Set<string>(
+      (viewedRows ?? []).map((v: any) => `${v.source_table}:${v.source_id}`)
+    );
+
+    const items: Array<ActivityItem & { _rawTime: string }> = [];
 
     (interactions ?? []).forEach((i: Interaction) => {
-      const isMine = i.sender_id === user.id;
+      if (viewedSet.has(`interactions:${i.id}`)) return;
+
       let label = '';
       let icon: React.ReactNode;
       let color = '#FF2E8A';
@@ -179,15 +168,15 @@ export default function HomeScreen() {
 
       switch (i.type as string) {
         case 'dice':
-          label = isMine ? 'You rolled the dice' : `${partnerName} rolled the dice`;
+          label = `${partnerName} rolled the dice`;
           icon = <Dice6 color="#FFB347" size={16} strokeWidth={2} />;
           color = '#FFB347';
           route = '/(app)/(tabs)/dice';
           break;
         case 'dare':
           label = i.status === 'accepted'
-            ? (isMine ? `${partnerName} accepted your dare` : 'You accepted the dare')
-            : (isMine ? 'You sent a Dare' : `${partnerName} sent you a Dare`);
+            ? `${partnerName} accepted your dare`
+            : `${partnerName} sent you a Dare`;
           icon = <Zap color="#FF2E8A" size={16} strokeWidth={2} />;
           color = '#FF2E8A';
           route = '/(app)/(tabs)/dare';
@@ -195,14 +184,14 @@ export default function HomeScreen() {
         case 'wish':
         case 'tell_me':
           label = i.status === 'answered'
-            ? (isMine ? `${partnerName} answered your Wish` : 'You answered the Wish')
-            : (isMine ? 'You sent a Wish' : `${partnerName} sent you a Wish`);
+            ? `${partnerName} answered your Wish`
+            : `${partnerName} sent you a Wish`;
           icon = <Star color="#FF8A3D" size={16} strokeWidth={2} />;
           color = '#FF8A3D';
           route = '/(app)/(tabs)/wish';
           break;
         case 'media':
-          label = isMine ? 'You added to Vault' : `${partnerName} added to Vault`;
+          label = `${partnerName} added to Vault`;
           icon = <Lock color="#FF2E8A" size={16} strokeWidth={2} />;
           color = '#FF2E8A';
           route = '/(app)/(tabs)/vault';
@@ -213,6 +202,8 @@ export default function HomeScreen() {
 
       items.push({
         id: i.id,
+        sourceTable: 'interactions',
+        sourceId: i.id,
         label,
         sub: i.content_text ? `"${i.content_text.slice(0, 60)}${i.content_text.length > 60 ? '…' : ''}"` : '',
         time: timeAgo(i.created_at),
@@ -224,13 +215,15 @@ export default function HomeScreen() {
     });
 
     (chatMsgs ?? []).forEach((m: any) => {
-      const isMine = m.sender_id === user.id;
+      if (viewedSet.has(`chat_messages:${m.id}`)) return;
       const preview = m.content_text
         ? `"${m.content_text.slice(0, 60)}${m.content_text.length > 60 ? '…' : ''}"`
         : '';
       items.push({
         id: `chat_${m.id}`,
-        label: isMine ? 'You sent a chat' : `${partnerName} sent a chat`,
+        sourceTable: 'chat_messages',
+        sourceId: m.id,
+        label: `${partnerName} sent a chat`,
         sub: preview,
         time: timeAgo(m.created_at),
         icon: <MessageCircle color="#4DA6FF" size={16} strokeWidth={2} />,
@@ -241,11 +234,13 @@ export default function HomeScreen() {
     });
 
     (activityEvts ?? []).forEach((ev: any) => {
-      const isMine = ev.actor_user_id === user.id;
+      if (viewedSet.has(`activity_events:${ev.id}`)) return;
 
       if (ev.event_type === 'screenshot_detected') {
         items.push({
           id: `privacy_${ev.id}`,
+          sourceTable: 'activity_events',
+          sourceId: ev.id,
           label: `${partnerName} screenshotted your content`,
           sub: ev.vault_item_id ? 'Vault item' : '',
           time: timeAgo(ev.created_at),
@@ -258,79 +253,84 @@ export default function HomeScreen() {
       }
 
       let label = '';
+      let routeParams: Record<string, string> | undefined;
       switch (ev.event_type) {
         case 'wish_created':
-          label = isMine ? 'You created a new wish' : `${partnerName} created a new wish`;
+          label = `${partnerName} created a new wish`;
           break;
         case 'wish_updated':
-          label = isMine ? 'You updated a wish' : `${partnerName} updated a wish`;
+          label = `${partnerName} updated a wish`;
           break;
         case 'wish_image_added':
-          label = isMine ? 'You added a photo to a wish' : `${partnerName} added a photo to a wish`;
+          label = `${partnerName} added a photo to a wish`;
           break;
         case 'wish_completed':
-          label = isMine ? 'You granted a wish' : `${partnerName} granted a wish`;
+          label = `${partnerName} granted a wish`;
           break;
         default:
           return;
       }
 
+      if (ev.wish_id) {
+        routeParams = { wish_id: ev.wish_id };
+      }
+
       items.push({
         id: `activity_${ev.id}`,
+        sourceTable: 'activity_events',
+        sourceId: ev.id,
         label,
         sub: '',
         time: timeAgo(ev.created_at),
         icon: <Sparkles color="#F0A96A" size={16} strokeWidth={2} />,
         color: '#F0A96A',
         route: '/(app)/(tabs)/wish',
+        routeParams,
         _rawTime: ev.created_at,
       });
     });
 
     items.sort((a, b) => b._rawTime.localeCompare(a._rawTime));
-
-    const top5 = items.slice(0, 5).map(item => ({
-      ...item,
-      seen: seenIdsRef.current.has(item.id),
-    }));
-    setRecentActivity(top5);
+    setRecentActivity(items.slice(0, 5));
   };
+
+  const markViewed = useCallback(async (item: ActivityItem) => {
+    if (!couple?.id || !user?.id) return;
+    await supabase.from('activity_views').insert({
+      couple_id: couple.id,
+      user_id: user.id,
+      source_table: item.sourceTable,
+      source_id: item.sourceId,
+    }).then(() => {});
+  }, [couple?.id, user?.id]);
+
+  const handleItemPress = useCallback(async (item: ActivityItem) => {
+    setRecentActivity(prev => prev.filter(i => i.id !== item.id));
+    await markViewed(item);
+    if (item.routeParams) {
+      router.push({ pathname: item.route as any, params: item.routeParams });
+    } else {
+      router.push(item.route as any);
+    }
+  }, [markViewed]);
+
+  const handleMarkAllViewed = useCallback(async () => {
+    if (!couple?.id || !user?.id || recentActivity.length === 0) return;
+    const rows = recentActivity.map(item => ({
+      couple_id: couple.id,
+      user_id: user.id,
+      source_table: item.sourceTable,
+      source_id: item.sourceId,
+    }));
+    setRecentActivity([]);
+    await supabase.from('activity_views').insert(rows).then(() => {});
+  }, [couple?.id, user?.id, recentActivity]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadAll();
     setRefreshing(false);
   };
-
-  const saveSeen = useCallback((ids: Set<string>) => {
-    if (!user?.id) return;
-    kv.set(`seen_activity_${user.id}`, JSON.stringify([...ids])).catch(() => {});
-  }, [user?.id]);
-
-  useFocusEffect(useCallback(() => {
-    markSeenTimerRef.current = setTimeout(() => {
-      setRecentActivity(prev => {
-        const next = new Set(seenIdsRef.current);
-        prev.forEach(item => next.add(item.id));
-        seenIdsRef.current = next;
-        setSeenIds(next);
-        saveSeen(next);
-        return prev.map(item => ({ ...item, seen: true }));
-      });
-    }, 1500);
-    return () => {
-      if (markSeenTimerRef.current) clearTimeout(markSeenTimerRef.current);
-    };
-  }, [saveSeen]));
-
-  const handleClearSeen = useCallback(() => {
-    seenIdsRef.current = new Set();
-    setSeenIds(new Set());
-    if (user?.id) {
-      kv.del(`seen_activity_${user.id}`).catch(() => {});
-    }
-    setRecentActivity(prev => prev.map(item => ({ ...item, seen: false })));
-  }, [user?.id]);
 
   const myName = profile?.display_name ?? 'You';
   const partnerName = partnerProfile?.display_name ?? 'Partner';
@@ -378,9 +378,9 @@ export default function HomeScreen() {
             <View style={styles.sectionRow}>
               <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>RECENT ACTIVITY</AppText>
               <View style={styles.sectionActions}>
-                {seenIds.size > 0 && (
-                  <TouchableOpacity onPress={handleClearSeen} activeOpacity={0.7} style={styles.clearSeenBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <RotateCcw color={colors.textMuted} size={13} strokeWidth={2} />
+                {recentActivity.length > 0 && (
+                  <TouchableOpacity onPress={handleMarkAllViewed} activeOpacity={0.7} style={styles.markAllBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <CheckCheck color={colors.textMuted} size={13} strokeWidth={2} />
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity onPress={() => router.push('/(app)/activity')} activeOpacity={0.7} style={styles.seeAll}>
@@ -394,14 +394,13 @@ export default function HomeScreen() {
                 {recentActivity.map((item, i) => (
                   <TouchableOpacity
                     key={item.id}
-                    onPress={() => router.push(item.route as any)}
+                    onPress={() => handleItemPress(item)}
                     activeOpacity={0.7}
                     style={[
                       styles.activityRow,
                       {
                         borderBottomColor: colors.borderSubtle,
                         borderBottomWidth: i < recentActivity.length - 1 ? 1 : 0,
-                        opacity: item.seen ? 0.38 : 1,
                       },
                     ]}
                   >
@@ -421,7 +420,8 @@ export default function HomeScreen() {
               </View>
             ) : (
               <View style={[styles.activityEmpty, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                <AppText style={[styles.activityEmptyText, { color: colors.textMuted }]}>Start a moment with your partner. Send a chat, roll the dice, send a dare, or create a wish.</AppText>
+                <AppText style={[styles.activityEmptyTitle, { color: colors.text }]}>You're all caught up!</AppText>
+                <AppText style={[styles.activityEmptyText, { color: colors.textMuted }]}>Send a chat, roll the dice, send a dare, or create a wish.</AppText>
               </View>
             )}
           </View>
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
   },
-  clearSeenBtn: {
+  markAllBtn: {
     padding: 2,
   },
   seeAll: {
@@ -538,6 +538,12 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.md,
     alignItems: 'center',
+    gap: 6,
+  },
+  activityEmptyTitle: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+    textAlign: 'center',
   },
   activityEmptyText: {
     fontSize: FontSize.sm,
