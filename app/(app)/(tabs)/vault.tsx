@@ -53,6 +53,9 @@ export default function VaultScreen() {
   // Use a ref instead of state so changes don't cause useCallback/useEffect identity churn,
   // which was causing the AppState listener to re-register mid-auth and fire stale closures.
   const unlockingRef = useRef(false);
+  // Tracks whether we've already prompted this vault visit — prevents re-prompting
+  // on background/foreground while the vault tab stays mounted.
+  const biometricAttemptedThisVisit = useRef(false);
 
   const vaultFaceIdRequired = (settings?.vault_face_id_required ?? false) && Platform.OS !== 'web';
 
@@ -86,29 +89,31 @@ export default function VaultScreen() {
     }
   }, [bioAvailable, bioAuthenticate, isAuthenticatingRef]);
 
-  // On mount, check if vault requires biometric gate
+  // On mount, prompt once if vault Face ID is required and not yet unlocked this session.
+  // Reset the "attempted" flag on unmount so navigating away and back triggers a fresh prompt.
   useEffect(() => {
-    if (vaultFaceIdRequired && !vaultUnlocked) {
+    if (vaultFaceIdRequired && !vaultUnlocked && !biometricAttemptedThisVisit.current) {
+      biometricAttemptedThisVisit.current = true;
       unlockVault();
     }
+    return () => {
+      biometricAttemptedThisVisit.current = false;
+    };
   }, [vaultFaceIdRequired]);
 
-  // Re-lock vault and re-blur when returning from background
+  // Re-blur thumbnails when returning from background (visual only — never re-locks vault
+  // or re-triggers Face ID; app-level BackgroundLockManager handles session lock policy).
   useEffect(() => {
-    if (!blurEnabled && !vaultFaceIdRequired) return;
+    if (!blurEnabled) return;
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       const prev = appStateRef.current;
       appStateRef.current = next;
       if ((prev === 'background' || prev === 'inactive') && next === 'active') {
-        if (blurEnabled) setPageRevealed(false);
-        if (vaultFaceIdRequired && !cameraActiveRef.current) {
-          setVaultUnlocked(false);
-          unlockVault();
-        }
+        setPageRevealed(false);
       }
     });
     return () => sub.remove();
-  }, [blurEnabled, vaultFaceIdRequired, unlockVault]);
+  }, [blurEnabled]);
 
   useEffect(() => {
     if (!couple?.id) return;
