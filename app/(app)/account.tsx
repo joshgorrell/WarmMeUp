@@ -1496,17 +1496,14 @@ export default function AccountScreen() {
         />
       </Section>
 
-      <Section title="MY VAULT UPLOADS" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately." onInfo={() => setShowVaultSecurityInfo(true)}>
+      <Section title="VAULT PREFERENCES" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately." onInfo={() => setShowVaultSecurityInfo(true)}>
+        <SettingsRow label="Face ID to open Vault" sub="Extra protection for Vault content" toggle value={s?.vault_face_id_required ?? true} onChange={v => update({ vault_face_id_required: v })} />
+        <SettingsRow label="Blur images and video until tapped" sub="Tap once to reveal in Chat and Vault; re-blurs when you leave the app" toggle value={s?.blur_media ?? true} onChange={v => update({ blur_media: v })} />
         <SettingsRow label="Allow Screenshots of My Uploads" sub="Your partner can screenshot items you've added to the Vault" toggle value={s?.vault_allow_screenshot_default ?? false} onChange={v => update({ vault_allow_screenshot_default: v })} />
         <SettingsRow label="Allow Saving My Uploads" sub="Your partner can save your uploads to their phone" toggle value={s?.vault_allow_save_default ?? false} onChange={v => update({ vault_allow_save_default: v })} />
         <SettingsRow label="Allow Sharing My Uploads Outside App" sub="Your partner can share your content externally" toggle value={s?.vault_allow_share_default ?? false} onChange={v => update({ vault_allow_share_default: v })} />
         <SettingsRow label="Notify Me if My Content is Screenshotted" sub="You'll be alerted when your partner screenshots something you uploaded" toggle value={s?.screenshot_notify_partner ?? true} onChange={v => update({ screenshot_notify_partner: v })} />
         <SettingsRow label="Auto-Save Chat Media to Vault" sub="Photos and videos you send in Chat are automatically saved to your Vault. Deleting from either place removes both." toggle value={s?.chat_auto_save_to_vault ?? true} onChange={v => update({ chat_auto_save_to_vault: v })} last />
-      </Section>
-
-      <Section title="VAULT PREFERENCES">
-        <SettingsRow label="Face ID to open Vault" sub="Extra protection for Vault content" toggle value={s?.vault_face_id_required ?? true} onChange={v => update({ vault_face_id_required: v })} />
-        <SettingsRow label="Blur images and video until tapped" sub="Tap once to reveal in Chat and Vault; re-blurs when you leave the app" toggle value={s?.blur_media ?? true} onChange={v => update({ blur_media: v })} last />
       </Section>
 
       <Section title="NOTIFICATIONS">
