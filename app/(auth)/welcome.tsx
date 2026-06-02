@@ -1,21 +1,26 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import AppText from '@/components/AppText';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ImageBackground,
+  Dimensions,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FontSize, Spacing, Radius } from '@/constants/theme';
-import WarmupLogo from '@/components/WarmupLogo';
-import WarmupWordmark from '@/components/WarmupWordmark';
-import { useLayout } from '@/hooks/useLayout';
+import { StatusBar } from 'expo-status-bar';
 
-const TAGLINE_SOURCE = require('@/assets/images/image_(2).png');
+const { width: SW, height: SH } = Dimensions.get('window');
+
+const LOGIN_BG = require('@/assets/onboarding/New_Login_page_6.2.26.png');
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { pendingCode, prefilledCode, code } = useLocalSearchParams<{ pendingCode?: string; prefilledCode?: string; code?: string }>();
+  const { pendingCode, prefilledCode, code } = useLocalSearchParams<{
+    pendingCode?: string;
+    prefilledCode?: string;
+    code?: string;
+  }>();
   const codeToPreserve = (pendingCode || prefilledCode || code || '').toUpperCase().trim();
-  const insets = useSafeAreaInsets();
 
   // If a code arrived via deep-link params, forward immediately to pair screen.
   useEffect(() => {
@@ -23,90 +28,88 @@ export default function WelcomeScreen() {
       router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } });
     }
   }, [codeToPreserve]);
-  const { width, height, isTablet, contentMaxWidth } = useLayout();
-  const logoSize = Math.min(Math.round(width * 0.38), 180);
-  const wordmarkSize = Math.round(logoSize * 0.16);
-  const taglineWidth = Math.min(width - Spacing.md * 2, 440);
-  const taglineHeight = taglineWidth * (148 / 340);
-  const paddingTop = Math.max(40, Math.round(height * 0.1)) + insets.top;
-  const paddingBottom = Math.max(28, Math.round(height * 0.07)) + insets.bottom;
+
+  // The image contains all visual branding — logo, wordmark, tagline, feature
+  // icons, and button artwork. We render only invisible tap zones aligned to
+  // the baked-in button/link positions.
+  //
+  // Tap zone offsets are expressed as fractions of SH so they scale across
+  // iPhone SE (667 pt) through Pro Max (932 pt). The image uses `contain` so
+  // it is never cropped; the black background fills any letterbox bands.
+  //
+  // Reference frame: 390 × 844 pt (iPhone 14)
+  //   "Get Started" pill centre: ~82.5 % from top
+  //   "Enter" link row:          ~88.0 %
+  //   "Sign In" link row:        ~92.0 %
+  //   "See how it works →":      ~95.5 %
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={['#000000', '#0A0A0A', '#0D0D0D']}
-        style={StyleSheet.absoluteFill}
+      <StatusBar style="light" />
+
+      <ImageBackground
+        source={LOGIN_BG}
+        style={styles.bg}
+        resizeMode="contain"
+        accessibilityLabel="Warm Me Up – Stay Playful"
       />
 
-      <View style={[
-        styles.container,
-        { paddingTop, paddingBottom },
-        isTablet && { alignSelf: 'center', width: '100%', maxWidth: contentMaxWidth },
-      ]}>
-        {/* Hero: logo + wordmark + tagline */}
-        <View style={styles.hero}>
-          <View style={styles.glow} />
-          <WarmupLogo size={logoSize} />
-          <WarmupWordmark size={wordmarkSize} style={styles.wordmark} />
-          <Image
-            source={TAGLINE_SOURCE}
-            style={{ width: taglineWidth, height: taglineHeight, marginTop: 20, alignSelf: 'center' }}
-            resizeMode="contain"
-          />
-        </View>
+      {/* Invisible hit areas only — zero visible styling */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
 
-        <View style={styles.spacer} />
+        {/* Get Started */}
+        <TouchableOpacity
+          style={[styles.zone, { top: SH * 0.822, height: 58 }]}
+          onPress={() =>
+            router.push(
+              codeToPreserve
+                ? { pathname: '/(auth)/register', params: { pendingCode: codeToPreserve } }
+                : '/(auth)/register',
+            )
+          }
+          activeOpacity={1}
+          accessibilityLabel="Get Started"
+          accessibilityRole="button"
+        />
 
-        {/* Bottom: subtitle + CTAs */}
-        <View style={styles.actions}>
-          <AppText style={styles.subtitle}>A private space for a playful connection.</AppText>
+        {/* Already have a code? Enter */}
+        <TouchableOpacity
+          style={[styles.zone, { top: SH * 0.875, height: 40 }]}
+          onPress={() =>
+            router.push(
+              codeToPreserve
+                ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
+                : '/(auth)/pair',
+            )
+          }
+          activeOpacity={1}
+          accessibilityLabel="Already have a code? Enter"
+          accessibilityRole="button"
+        />
 
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() => router.push(codeToPreserve
-              ? { pathname: '/(auth)/register', params: { pendingCode: codeToPreserve } }
-              : '/(auth)/register'
-            )}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={['#FFB347', '#FF5A3D', '#FF2E8A']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.primaryGrad}
-            >
-              <AppText style={styles.primaryLabel}>Get Started</AppText>
-            </LinearGradient>
-          </TouchableOpacity>
+        {/* Already have an account? Sign In */}
+        <TouchableOpacity
+          style={[styles.zone, { top: SH * 0.912, height: 40 }]}
+          onPress={() =>
+            router.push(
+              codeToPreserve
+                ? { pathname: '/(auth)/login', params: { pendingCode: codeToPreserve } }
+                : '/(auth)/login',
+            )
+          }
+          activeOpacity={1}
+          accessibilityLabel="Already have an account? Sign In"
+          accessibilityRole="button"
+        />
 
-          <View style={styles.linkRow}>
-            <AppText style={styles.linkText}>Already have a code? </AppText>
-            <TouchableOpacity onPress={() => router.push(codeToPreserve
-              ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
-              : '/(auth)/pair'
-            )} activeOpacity={0.7}>
-              <AppText style={styles.linkAccent}>Enter</AppText>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.linkRow}>
-            <AppText style={styles.linkText}>Already have an account? </AppText>
-            <TouchableOpacity onPress={() => router.push(codeToPreserve
-              ? { pathname: '/(auth)/login', params: { pendingCode: codeToPreserve } }
-              : '/(auth)/login'
-            )} activeOpacity={0.7}>
-              <AppText style={styles.linkAccent}>Sign In</AppText>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            onPress={() => router.push('/(auth)/onboarding-preview')}
-            activeOpacity={0.7}
-            style={styles.previewLink}
-          >
-            <AppText style={styles.previewLinkText}>See how it works →</AppText>
-          </TouchableOpacity>
-        </View>
+        {/* See how it works → */}
+        <TouchableOpacity
+          style={[styles.zone, { top: SH * 0.950, height: 36 }]}
+          onPress={() => router.push('/(auth)/onboarding-preview')}
+          activeOpacity={1}
+          accessibilityLabel="See how it works"
+          accessibilityRole="button"
+        />
       </View>
     </View>
   );
@@ -115,88 +118,19 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#000',
   },
-  glow: {
+  bg: {
     position: 'absolute',
-    alignSelf: 'center',
-    width: 440,
-    height: 440,
-    borderRadius: 220,
-    top: -80,
-    backgroundColor: 'rgba(255, 90, 61, 0.06)',
+    top: 0,
+    left: 0,
+    width: SW,
+    height: SH,
   },
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-  },
-  hero: {
-    alignItems: 'center',
-    alignSelf: 'center',
-  },
-  wordmark: {
-    marginTop: 8,
-  },
-  spacer: {
-    flex: 1,
-  },
-  actions: {
-    width: '100%',
-    alignItems: 'center',
-    gap: 14,
-  },
-  subtitle: {
-    color: 'rgba(255,255,255,0.50)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 2,
-  },
-  primaryBtn: {
-    width: '88%',
-    borderRadius: Radius.pill,
-    overflow: 'hidden',
-    shadowColor: '#FF5A3D',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 12,
-  },
-  primaryGrad: {
-    paddingVertical: 15,
-    alignItems: 'center',
-    borderRadius: Radius.pill,
-  },
-  primaryLabel: {
-    color: '#fff',
-    fontSize: FontSize.body,
-    fontFamily: 'Inter-Bold',
-    letterSpacing: 0.3,
-  },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  linkText: {
-    color: 'rgba(255,255,255,0.32)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-  },
-  linkAccent: {
-    color: '#FF7A45',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-  },
-  previewLink: {
-    marginTop: 4,
-    paddingVertical: 4,
-  },
-  previewLinkText: {
-    color: 'rgba(255,255,255,0.28)',
-    fontSize: FontSize.xs,
-    fontFamily: 'Inter-Regular',
-    letterSpacing: 0.2,
+  // Base style shared by all invisible tap zones
+  zone: {
+    position: 'absolute',
+    left: '6%',
+    right: '6%',
   },
 });
