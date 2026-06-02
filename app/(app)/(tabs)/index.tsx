@@ -41,6 +41,7 @@ type ActivityItem = {
   time: string;
   icon: React.ReactNode;
   color: string;
+  route: string;
 };
 
 export default function HomeScreen() {
@@ -81,6 +82,7 @@ export default function HomeScreen() {
       .channel(`home_${couple.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `couple_id=eq.${couple.id}` }, loadAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, loadAll)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, loadAll)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, loadAll)
       .subscribe();
 
@@ -118,8 +120,9 @@ export default function HomeScreen() {
   const loadRecentActivity = async () => {
     if (!couple?.id || !user) return;
     const partnerName = partnerProfile?.display_name ?? 'Partner';
-    const [{ data: interactions }, { data: activityEvts }] = await Promise.all([
+    const [{ data: interactions }, { data: chatMsgs }, { data: activityEvts }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('chat_messages').select('id, sender_id, content_text, created_at').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('activity_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(20),
     ]);
 
@@ -130,17 +133,14 @@ export default function HomeScreen() {
       let label = '';
       let icon: React.ReactNode;
       let color = '#FF2E8A';
+      let route = '/(app)/(tabs)';
 
       switch (i.type as string) {
-        case 'chat':
-          label = isMine ? 'You sent a chat' : `${partnerName} sent a chat`;
-          icon = <MessageCircle color="#4DA6FF" size={16} strokeWidth={2} />;
-          color = '#4DA6FF';
-          break;
         case 'dice':
           label = isMine ? 'You rolled the dice' : `${partnerName} rolled the dice`;
           icon = <Dice6 color="#FFB347" size={16} strokeWidth={2} />;
           color = '#FFB347';
+          route = '/(app)/(tabs)/dice';
           break;
         case 'dare':
           label = i.status === 'accepted'
@@ -148,6 +148,7 @@ export default function HomeScreen() {
             : (isMine ? 'You sent a Dare' : `${partnerName} sent you a Dare`);
           icon = <Zap color="#FF2E8A" size={16} strokeWidth={2} />;
           color = '#FF2E8A';
+          route = '/(app)/(tabs)/dare';
           break;
         case 'wish':
         case 'tell_me':
@@ -156,11 +157,13 @@ export default function HomeScreen() {
             : (isMine ? 'You sent a Wish' : `${partnerName} sent you a Wish`);
           icon = <Star color="#FF8A3D" size={16} strokeWidth={2} />;
           color = '#FF8A3D';
+          route = '/(app)/(tabs)/wish';
           break;
         case 'media':
           label = isMine ? 'You added to Vault' : `${partnerName} added to Vault`;
           icon = <Lock color="#FF2E8A" size={16} strokeWidth={2} />;
           color = '#FF2E8A';
+          route = '/(app)/(tabs)/vault';
           break;
         default:
           return;
@@ -169,11 +172,29 @@ export default function HomeScreen() {
       items.push({
         id: i.id,
         label,
-        sub: i.content_text ? `"${i.content_text.slice(0, 50)}${i.content_text.length > 50 ? '…' : ''}"` : '',
+        sub: i.content_text ? `"${i.content_text.slice(0, 60)}${i.content_text.length > 60 ? '…' : ''}"` : '',
         time: timeAgo(i.created_at),
         icon,
         color,
+        route,
         _rawTime: i.created_at,
+      });
+    });
+
+    (chatMsgs ?? []).forEach((m: any) => {
+      const isMine = m.sender_id === user.id;
+      const preview = m.content_text
+        ? `"${m.content_text.slice(0, 60)}${m.content_text.length > 60 ? '…' : ''}"`
+        : '';
+      items.push({
+        id: `chat_${m.id}`,
+        label: isMine ? 'You sent a chat' : `${partnerName} sent a chat`,
+        sub: preview,
+        time: timeAgo(m.created_at),
+        icon: <MessageCircle color="#4DA6FF" size={16} strokeWidth={2} />,
+        color: '#4DA6FF',
+        route: '/(app)/(tabs)/note',
+        _rawTime: m.created_at,
       });
     });
 
@@ -188,6 +209,7 @@ export default function HomeScreen() {
           time: timeAgo(ev.created_at),
           icon: <Camera color="#FF8A3D" size={16} strokeWidth={2} />,
           color: '#FF8A3D',
+          route: '/(app)/(tabs)/vault',
           _rawTime: ev.created_at,
         });
         return;
@@ -218,6 +240,7 @@ export default function HomeScreen() {
         time: timeAgo(ev.created_at),
         icon: <Sparkles color="#F0A96A" size={16} strokeWidth={2} />,
         color: '#F0A96A',
+        route: '/(app)/(tabs)/wish',
         _rawTime: ev.created_at,
       });
     });
@@ -286,8 +309,10 @@ export default function HomeScreen() {
             {recentActivity.length > 0 ? (
               <View style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                 {recentActivity.map((item, i) => (
-                  <View
+                  <TouchableOpacity
                     key={item.id}
+                    onPress={() => router.push(item.route as any)}
+                    activeOpacity={0.7}
                     style={[
                       styles.activityRow,
                       {
@@ -306,7 +331,8 @@ export default function HomeScreen() {
                       ) : null}
                     </View>
                     <AppText style={[styles.activityTime, { color: colors.textMuted }]}>{item.time}</AppText>
-                  </View>
+                    <ChevronRight color={colors.textMuted} size={13} strokeWidth={2} />
+                  </TouchableOpacity>
                 ))}
               </View>
             ) : (

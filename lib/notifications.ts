@@ -25,9 +25,17 @@ export interface NotificationData {
   item_id?: string;
 }
 
+// EAS project ID from app.json — required for getExpoPushTokenAsync in production builds.
+const EAS_PROJECT_ID = 'cfde070c-187f-4d7e-b643-a20446ff95ab';
+
 /**
  * Request push permission and return the Expo push token string,
  * or null if permission is denied or we're on web.
+ *
+ * Always call this on app load (not gated on push_notifications_enabled).
+ * The OS only shows the permission prompt once; subsequent calls return the
+ * cached token immediately. The EAS projectId is required in production —
+ * without it getExpoPushTokenAsync silently fails in TestFlight/release builds.
  */
 export async function registerForPushNotifications(): Promise<string | null> {
   if (Platform.OS === 'web') return null;
@@ -43,7 +51,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
   if (finalStatus !== 'granted') return null;
 
   try {
-    const token = await Notifications.getExpoPushTokenAsync();
+    const token = await Notifications.getExpoPushTokenAsync({ projectId: EAS_PROJECT_ID });
     return token.data;
   } catch {
     return null;
@@ -51,11 +59,17 @@ export async function registerForPushNotifications(): Promise<string | null> {
 }
 
 /**
- * Save the push token to the user's profile row.
+ * Save the push token to the user's profile row and mark notifications enabled.
  * Call after registration and on each app open (tokens can rotate).
  */
 export async function savePushToken(userId: string, token: string) {
-  await supabase.from('profiles').update({ push_token: token }).eq('id', userId);
+  await Promise.all([
+    supabase.from('profiles').update({ push_token: token }).eq('id', userId),
+    supabase
+      .from('user_settings')
+      .update({ push_notifications_enabled: true, updated_at: new Date().toISOString() })
+      .eq('user_id', userId),
+  ]);
 }
 
 /**

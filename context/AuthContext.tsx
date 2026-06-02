@@ -263,6 +263,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const unlockedAtRef = useRef<number | null>(null);
   // Prevents double-loading when getSession() and onAuthStateChange both fire on mount.
   const loadedUserIdRef = useRef<string | null>(null);
+  // Set to true after the very first fetchCouple() completes. Only after this point
+  // should realtime couple updates trigger the "partner just joined" celebration path.
+  // Without this guard, every app open causes a false-positive: couple starts as null,
+  // fetchCouple sets user_b_id to a real value, and the realtime effect sees null→value.
+  const coupleInitialLoadDoneRef = useRef(false);
   // Global flag: true while any biometric prompt is open. Prevents BackgroundLockManager
   // from navigating to /unlock and interrupting an already-open Face ID prompt.
   const isAuthenticatingRef = useRef(false);
@@ -371,12 +376,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUnlockedAtMs(persistedTs);
       console.log('[Auth] unlockedAt restored:', persistedTs);
 
-      // Register / refresh push token if the user has notifications enabled
-      if (fetchedSettings?.push_notifications_enabled) {
-        registerForPushNotifications().then(token => {
-          if (token) savePushToken(userId, token);
-        });
-      }
+      // Always attempt push token registration on load — the OS prompt only appears
+      // once, and subsequent calls return the cached token immediately.
+      // We do NOT gate this on push_notifications_enabled because that flag starts
+      // false and would never let us prompt the user the first time.
+      registerForPushNotifications().then(token => {
+        if (token) savePushToken(userId, token);
+      });
 
       // Load subscription info — fire after other data so we don't block the UI gate
       if (accessToken) {
@@ -457,6 +463,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // blanking the couple and sending the user to the /pair screen.
     if (!error) {
       setCouple(data);
+      // Mark that the initial couple load has completed. The realtime "partner just joined"
+      // detection must only fire AFTER this point — not during the initial state hydration.
+      coupleInitialLoadDoneRef.current = true;
     }
 
     if (error) return null;
@@ -500,7 +509,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // a manual pull-to-refresh or screen focus event.
   useEffect(() => {
     if (!couple?.id) return;
-    const prevUserBId = couple.user_b_id;
     const channel = supabase
       .channel(`couple:${couple.id}`)
       .on(
@@ -509,13 +517,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         async (payload: any) => {
           if (!user) return;
           const newUserBId: string | null = payload?.new?.user_b_id ?? null;
-          // Detect User A's partner joining: user_b_id went from null to populated
-          // and this user is User A (couple.user_a_id === user.id).
+          // Detect User A's partner joining: user_b_id went from null to populated,
+          // this user is User A, AND the initial load has already completed.
+          // The coupleInitialLoadDoneRef guard prevents a false positive on every app
+          // open: without it, couple starts null, fetchCouple populates user_b_id,
+          // and the realtime channel sees null→value as if the partner just joined.
           const isUserA = couple.user_a_id === user.id;
-          const partnerJustJoined = isUserA && !prevUserBId && !!newUserBId;
+          const wasAlreadyPaired = !!couple.user_b_id;
+          const partnerJustJoined =
+            coupleInitialLoadDoneRef.current &&
+            isUserA &&
+            !wasAlreadyPaired &&
+            !!newUserBId;
           await fetchCouple(user.id);
           if (partnerJustJoined) {
-            // Fetch partner's display name for the celebration screen
             const { data: partnerProf } = await supabase
               .from('profiles')
               .select('display_name')
@@ -526,7 +541,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    // Also subscribe to partner's profile changes so avatar updates are reflected live.
+    const partnerId = couple.user_a_id === user?.id ? couple.user_b_id : couple.user_a_id;
+    const profileChannel = partnerId
+      ? supabase
+          .channel(`partner_profile:${partnerId}`)
+          .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${partnerId}` },
+            async () => {
+              const { data } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', partnerId)
+                .maybeSingle();
+              if (data) setPartnerProfile(data);
+            },
+          )
+          .subscribe()
+      : null;
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (profileChannel) supabase.removeChannel(profileChannel);
+    };
   }, [couple?.id, couple?.user_b_id, user?.id]);
 
   const patchCouple = useCallback((patch: Partial<Couple>) => {

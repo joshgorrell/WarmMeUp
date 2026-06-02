@@ -19,6 +19,7 @@ import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function formatTime(iso: string) {
   const d = new Date(iso);
@@ -186,6 +187,7 @@ export default function ChatTab() {
   const router = useRouter();
   const { user, couple, profile, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const hasPartner = !!couple?.user_b_id;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(true);
@@ -783,7 +785,7 @@ export default function ChatTab() {
           )}
 
           {/* Compose bar — hidden for solo users (no partner yet) */}
-          <View style={[styles.compose, { backgroundColor: colors.card, borderTopColor: colors.borderSubtle }, !hasPartner && styles.composeHidden]}>
+          <View style={[styles.compose, { backgroundColor: colors.card, borderTopColor: colors.borderSubtle, paddingBottom: Math.max(insets.bottom, Spacing.sm) }, !hasPartner && styles.composeHidden]}>
             {attachedMedia && !editingState && (
               <View style={styles.previewRow}>
                 <Image source={{ uri: attachedMedia.uri }} style={styles.previewThumb} />
@@ -977,7 +979,7 @@ const styles = StyleSheet.create({
   msgRowLeft: { justifyContent: 'flex-start' },
   msgAvatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   msgAvatarText: { fontSize: 12, fontFamily: 'Inter-Bold', color: '#FF8A3D' },
-  bubble: { maxWidth: '78%', borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.sm, paddingHorizontal: 12, gap: 4 },
+  bubble: { maxWidth: '78%', minWidth: 80, borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.sm, paddingHorizontal: 12, gap: 4 },
   bubbleText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20 },
   bubbleMeta: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-end' },
   bubbleTime: { fontSize: 10, fontFamily: 'Inter-Regular' },
@@ -1024,7 +1026,7 @@ const styles = StyleSheet.create({
   uploadPctWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   uploadPctText: { color: '#FF5A3D', fontSize: 11, fontFamily: 'Inter-Bold', minWidth: 30 },
   // Compose
-  compose: { borderTopWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.sm, paddingBottom: Platform.OS === 'ios' ? 24 : Spacing.sm },
+  compose: { borderTopWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.sm },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: Spacing.sm, paddingHorizontal: 4 },
   previewThumb: { width: 44, height: 44, borderRadius: Radius.sm },
   previewInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
