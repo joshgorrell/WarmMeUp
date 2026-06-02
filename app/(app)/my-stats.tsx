@@ -4,18 +4,33 @@ import {
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, ChevronRight, Zap, MessageCircle, Star, Vault, Trophy, Flame, Clock, EyeOff } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Zap, MessageCircle, Star, Vault, Trophy, Flame, Clock, EyeOff, Bug } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { MonthlyScore } from '@/lib/types';
+import { MonthlyScore, PointEvent } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
+
+// Per-category point sums for the current month (derived from raw point_events).
+// Historical months only have counts stored in monthly_scores, so pts fields are null.
+interface CategoryPoints {
+  pts_dares: number | null;
+  pts_dice: number | null;
+  pts_wish: number | null;
+  pts_chat: number | null;
+  pts_vault: number | null;
+}
+
+interface StatsResult {
+  monthly: MonthlyScore;
+  catPts: CategoryPoints;
+}
 
 function BraveMeter({ completed, skipped, label, color, countOnly }: { completed: number; skipped: number; label: string; color: string; countOnly?: boolean }) {
   const total = completed + skipped;
@@ -66,10 +81,87 @@ function sumMonthlyScores(rows: MonthlyScore[]): MonthlyScore | null {
     dice_skipped: acc.dice_skipped + r.dice_skipped,
     asks_sent: acc.asks_sent + r.asks_sent,
     asks_replied: acc.asks_replied + r.asks_replied,
+    wishes_sent: acc.wishes_sent + r.wishes_sent,
+    wishes_fulfilled: acc.wishes_fulfilled + r.wishes_fulfilled,
     chat_messages_sent: acc.chat_messages_sent + r.chat_messages_sent,
     media_sent: acc.media_sent + r.media_sent,
     vault_uploads: acc.vault_uploads + r.vault_uploads,
-  }), { ...rows[0], points: 0, dares_accepted: 0, dares_completed: 0, dares_skipped: 0, dice_accepted: 0, dice_completed: 0, dice_skipped: 0, asks_sent: 0, asks_replied: 0, chat_messages_sent: 0, media_sent: 0, vault_uploads: 0 });
+  }), {
+    ...rows[0],
+    points: 0,
+    dares_accepted: 0, dares_completed: 0, dares_skipped: 0,
+    dice_accepted: 0, dice_completed: 0, dice_skipped: 0,
+    asks_sent: 0, asks_replied: 0,
+    wishes_sent: 0, wishes_fulfilled: 0,
+    chat_messages_sent: 0, media_sent: 0, vault_uploads: 0,
+  });
+}
+
+// Builds a MonthlyScore (counts) AND per-category point sums from raw point_events.
+// This is used for the current month where we have actual event records.
+// The .points field on MonthlyScore is the true sum of all awarded points.
+// Category point sums guarantee: pts_dares + pts_dice + pts_wish + pts_chat + pts_vault === monthly.points
+function buildStatsFromEvents(
+  events: Pick<PointEvent, 'reason' | 'points'>[],
+  uid: string,
+  coupleId: string,
+  year: number,
+  month: number,
+): StatsResult {
+  const monthly: MonthlyScore = {
+    id: '', couple_id: coupleId, user_id: uid,
+    year, month, points: 0,
+    dares_accepted: 0, dares_completed: 0, dares_skipped: 0,
+    dice_accepted: 0, dice_completed: 0, dice_skipped: 0,
+    asks_sent: 0, asks_replied: 0,
+    wishes_sent: 0, wishes_fulfilled: 0,
+    chat_messages_sent: 0, media_sent: 0, vault_uploads: 0,
+    created_at: '',
+  };
+  const catPts: CategoryPoints = {
+    pts_dares: 0,
+    pts_dice: 0,
+    pts_wish: 0,
+    pts_chat: 0,
+    pts_vault: 0,
+  };
+
+  for (const e of events) {
+    const r = e.reason ?? '';
+    const p = e.points ?? 0;
+    monthly.points += p;
+
+    if (r.includes('Dare accepted')) { monthly.dares_accepted++; catPts.pts_dares! += p; }
+    else if (r.includes('Dare completed')) { monthly.dares_completed++; catPts.pts_dares! += p; }
+    else if (r.includes('Dare') && r.includes('participation')) { monthly.dares_skipped++; catPts.pts_dares! += p; }
+    else if (r.includes('Dice') && r.includes('accepted')) { monthly.dice_accepted++; catPts.pts_dice! += p; }
+    else if (r.includes('Dice completed')) { monthly.dice_completed++; catPts.pts_dice! += p; }
+    else if (r.includes('Dice') && r.includes('participation')) { monthly.dice_skipped++; catPts.pts_dice! += p; }
+    else if (r.includes('Dice') && r.includes('self-roll')) { catPts.pts_dice! += p; }
+    else if (r.includes('Ask') && r.includes('sent')) { monthly.asks_sent++; catPts.pts_wish! += p; }
+    else if (r.includes('Ask') && r.includes('replied')) { monthly.asks_replied++; catPts.pts_wish! += p; }
+    else if (r === 'Wish shared') { monthly.wishes_sent++; catPts.pts_wish! += p; }
+    else if (r === 'Wish granted') { monthly.wishes_fulfilled++; catPts.pts_wish! += p; }
+    else if (r === 'Chat message') { monthly.chat_messages_sent++; catPts.pts_chat! += p; }
+    else if (r === 'Chat media') { monthly.media_sent++; catPts.pts_chat! += p; }
+    else if (r.includes('Vault')) { monthly.vault_uploads++; catPts.pts_vault! += p; }
+    // Uncategorised events still add to monthly.points via the top-of-loop increment
+  }
+
+  return { monthly, catPts };
+}
+
+interface DebugInfo {
+  couple_id: string;
+  points_month_start: string;
+  points_month_end: string;
+  points_total_source: string;
+  my_event_count: number;
+  partner_event_count: number;
+  my_raw_events: Pick<PointEvent, 'reason' | 'points' | 'created_at'>[];
+  partner_raw_events: Pick<PointEvent, 'reason' | 'points' | 'created_at'>[];
+  my_cat_pts: CategoryPoints | null;
+  partner_cat_pts: CategoryPoints | null;
 }
 
 export default function MyStatsScreen() {
@@ -82,40 +174,16 @@ export default function MyStatsScreen() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [myStats, setMyStats] = useState<MonthlyScore | null>(null);
   const [partnerStats, setPartnerStats] = useState<MonthlyScore | null>(null);
-  const [currentMonthPoints, setCurrentMonthPoints] = useState<{ me: number; partner: number } | null>(null);
+  // Per-category point sums — only populated for current month (from point_events)
+  const [myCatPts, setMyCatPts] = useState<CategoryPoints | null>(null);
+  const [partnerCatPts, setPartnerCatPts] = useState<CategoryPoints | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [allTime, setAllTime] = useState(false);
   const [streak, setStreak] = useState(0);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
-
-  const buildStatsFromEvents = useCallback((events: { reason: string; points: number }[], uid: string): MonthlyScore => {
-    const s: MonthlyScore = {
-      id: '', couple_id: couple?.id ?? '', user_id: uid,
-      year, month, points: events.reduce((a, e) => a + (e.points ?? 0), 0),
-      dares_accepted: 0, dares_completed: 0, dares_skipped: 0,
-      dice_accepted: 0, dice_completed: 0, dice_skipped: 0,
-      asks_sent: 0, asks_replied: 0,
-      wishes_sent: 0, wishes_fulfilled: 0,
-      chat_messages_sent: 0, media_sent: 0, vault_uploads: 0,
-      created_at: '',
-    };
-    for (const e of events) {
-      const r = e.reason ?? '';
-      if (r.includes('Dare accepted')) s.dares_accepted++;
-      else if (r.includes('Dare completed')) s.dares_completed++;
-      else if (r.includes('Dare') && r.includes('participation')) s.dares_skipped++;
-      else if (r.includes('Dice') && r.includes('accepted')) s.dice_accepted++;
-      else if (r.includes('Dice completed')) s.dice_completed++;
-      else if (r.includes('Dice') && r.includes('participation')) s.dice_skipped++;
-      else if (r.includes('Ask') && r.includes('sent')) s.asks_sent++;
-      else if (r.includes('Ask') && r.includes('replied')) s.asks_replied++;
-      else if (r === 'Chat message') s.chat_messages_sent++;
-      else if (r === 'Chat media') s.media_sent++;
-      else if (r.includes('Vault')) s.vault_uploads++;
-    }
-    return s;
-  }, [couple?.id, year, month]);
 
   const loadStreak = useCallback(async () => {
     if (!couple?.id) return;
@@ -143,36 +211,56 @@ export default function MyStatsScreen() {
 
     const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
     const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-    const [myArchiveRes, partnerArchiveRes, myEventsRes, partnerEventsRes, myScoreRes, partnerScoreRes] = await Promise.all([
+    const [myArchiveRes, partnerArchiveRes, myEventsRes, partnerEventsRes] = await Promise.all([
       supabase.from('monthly_scores').select('*').eq('couple_id', couple.id).eq('user_id', user.id),
       partnerId ? supabase.from('monthly_scores').select('*').eq('couple_id', couple.id).eq('user_id', partnerId) : Promise.resolve({ data: [] }),
-      supabase.from('point_events').select('reason, points').eq('couple_id', couple.id).eq('user_id', user.id).gte('created_at', periodStart),
-      partnerId ? supabase.from('point_events').select('reason, points').eq('couple_id', couple.id).eq('user_id', partnerId).gte('created_at', periodStart) : Promise.resolve({ data: [] }),
-      supabase.from('scores').select('points').eq('couple_id', couple.id).eq('user_id', user.id).maybeSingle(),
-      partnerId ? supabase.from('scores').select('points').eq('couple_id', couple.id).eq('user_id', partnerId).maybeSingle() : Promise.resolve({ data: null }),
+      supabase.from('point_events').select('reason, points, created_at').eq('couple_id', couple.id).eq('user_id', user.id).gte('created_at', periodStart),
+      partnerId ? supabase.from('point_events').select('reason, points, created_at').eq('couple_id', couple.id).eq('user_id', partnerId).gte('created_at', periodStart) : Promise.resolve({ data: [] }),
       loadStreak(),
     ]);
 
-    const myCurrentStats = buildStatsFromEvents(myEventsRes.data ?? [], user.id);
-    const partnerCurrentStats = buildStatsFromEvents((partnerEventsRes as any).data ?? [], partnerId ?? '');
+    const myEvts = myEventsRes.data ?? [];
+    const partnerEvts = (partnerEventsRes as any).data ?? [];
+
+    const myCurrent = buildStatsFromEvents(myEvts, user.id, couple.id, now.getFullYear(), now.getMonth() + 1);
+    const partnerCurrent = buildStatsFromEvents(partnerEvts, partnerId ?? '', couple.id, now.getFullYear(), now.getMonth() + 1);
 
     const myArchived: MonthlyScore[] = myArchiveRes.data ?? [];
     const partnerArchived: MonthlyScore[] = (partnerArchiveRes as any).data ?? [];
 
-    const myAllRows = [...myArchived, myCurrentStats];
-    const partnerAllRows = [...partnerArchived, partnerCurrentStats];
+    // For all-time, exclude the current month's monthly_scores row (if it exists prematurely)
+    // to avoid double-counting — use point_events for current month instead
+    const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
+    const myArchivedPrior = myArchived.filter(r => `${r.year}-${r.month}` !== currentMonthKey);
+    const partnerArchivedPrior = partnerArchived.filter(r => `${r.year}-${r.month}` !== currentMonthKey);
+
+    const myAllRows = [...myArchivedPrior, myCurrent.monthly];
+    const partnerAllRows = [...partnerArchivedPrior, partnerCurrent.monthly];
 
     setMyStats(sumMonthlyScores(myAllRows));
     setPartnerStats(sumMonthlyScores(partnerAllRows));
-    setCurrentMonthPoints({
-      me: (myScoreRes.data?.points ?? 0) + (sumMonthlyScores(myArchived)?.points ?? 0),
-      partner: ((partnerScoreRes as any).data?.points ?? 0) + (sumMonthlyScores(partnerArchived)?.points ?? 0),
+    // For all-time view, don't show per-category pts (mix of counts and points)
+    setMyCatPts(null);
+    setPartnerCatPts(null);
+
+    setDebugInfo({
+      couple_id: couple.id,
+      points_month_start: periodStart,
+      points_month_end: periodEnd,
+      points_total_source: 'monthly_scores (archived) + point_events (current month)',
+      my_event_count: myEvts.length,
+      partner_event_count: partnerEvts.length,
+      my_raw_events: myEvts,
+      partner_raw_events: partnerEvts,
+      my_cat_pts: myCurrent.catPts,
+      partner_cat_pts: partnerCurrent.catPts,
     });
 
     setLoading(false);
     setRefreshing(false);
-  }, [couple?.id, user, buildStatsFromEvents, loadStreak]);
+  }, [couple?.id, user, loadStreak]);
 
   const load = useCallback(async () => {
     if (!couple?.id || !user) return;
@@ -182,22 +270,38 @@ export default function MyStatsScreen() {
 
     if (isCurrentMonth) {
       const periodStart = new Date(year, month - 1, 1).toISOString();
+      const periodEnd = new Date(year, month, 0, 23, 59, 59).toISOString();
 
-      const [myScoreRes, partnerScoreRes, myEventsRes, partnerEventsRes] = await Promise.all([
-        supabase.from('scores').select('points').eq('couple_id', couple.id).eq('user_id', user.id).maybeSingle(),
-        partnerId ? supabase.from('scores').select('points').eq('couple_id', couple.id).eq('user_id', partnerId).maybeSingle() : Promise.resolve({ data: null }),
-        supabase.from('point_events').select('reason, points').eq('couple_id', couple.id).eq('user_id', user.id).gte('created_at', periodStart),
-        partnerId ? supabase.from('point_events').select('reason, points').eq('couple_id', couple.id).eq('user_id', partnerId).gte('created_at', periodStart) : Promise.resolve({ data: [] }),
+      const [myEventsRes, partnerEventsRes] = await Promise.all([
+        supabase.from('point_events').select('reason, points, created_at').eq('couple_id', couple.id).eq('user_id', user.id).gte('created_at', periodStart),
+        partnerId ? supabase.from('point_events').select('reason, points, created_at').eq('couple_id', couple.id).eq('user_id', partnerId).gte('created_at', periodStart) : Promise.resolve({ data: [] }),
         loadStreak(),
       ]);
 
-      setCurrentMonthPoints({
-        me: myScoreRes.data?.points ?? 0,
-        partner: (partnerScoreRes as any).data?.points ?? 0,
-      });
+      const myEvts = myEventsRes.data ?? [];
+      const partnerEvts = (partnerEventsRes as any).data ?? [];
 
-      setMyStats(buildStatsFromEvents(myEventsRes.data ?? [], user.id));
-      setPartnerStats(buildStatsFromEvents((partnerEventsRes as any).data ?? [], partnerId ?? ''));
+      const myResult = buildStatsFromEvents(myEvts, user.id, couple.id, year, month);
+      const partnerResult = buildStatsFromEvents(partnerEvts, partnerId ?? '', couple.id, year, month);
+
+      // Top total comes directly from point_events sum — guaranteed to match category breakdown
+      setMyStats(myResult.monthly);
+      setPartnerStats(partnerResult.monthly);
+      setMyCatPts(myResult.catPts);
+      setPartnerCatPts(partnerResult.catPts);
+
+      setDebugInfo({
+        couple_id: couple.id,
+        points_month_start: periodStart,
+        points_month_end: periodEnd,
+        points_total_source: 'point_events (current month sum)',
+        my_event_count: myEvts.length,
+        partner_event_count: partnerEvts.length,
+        my_raw_events: myEvts,
+        partner_raw_events: partnerEvts,
+        my_cat_pts: myResult.catPts,
+        partner_cat_pts: partnerResult.catPts,
+      });
     } else {
       const [myRes, partnerRes] = await Promise.all([
         supabase.from('monthly_scores').select('*').eq('couple_id', couple.id).eq('user_id', user.id).eq('year', year).eq('month', month).maybeSingle(),
@@ -206,12 +310,27 @@ export default function MyStatsScreen() {
       ]);
       setMyStats(myRes.data);
       setPartnerStats((partnerRes as any).data);
-      setCurrentMonthPoints(null);
+      // Historical months: no per-category point sums available (only counts in monthly_scores)
+      setMyCatPts(null);
+      setPartnerCatPts(null);
+
+      setDebugInfo({
+        couple_id: couple.id,
+        points_month_start: new Date(year, month - 1, 1).toISOString(),
+        points_month_end: new Date(year, month, 0, 23, 59, 59).toISOString(),
+        points_total_source: 'monthly_scores (archived row)',
+        my_event_count: 0,
+        partner_event_count: 0,
+        my_raw_events: [],
+        partner_raw_events: [],
+        my_cat_pts: null,
+        partner_cat_pts: null,
+      });
     }
 
     setLoading(false);
     setRefreshing(false);
-  }, [couple?.id, user, year, month, isCurrentMonth, buildStatsFromEvents, loadStreak]);
+  }, [couple?.id, user, year, month, isCurrentMonth, loadStreak]);
 
   useEffect(() => {
     if (allTime) {
@@ -233,49 +352,70 @@ export default function MyStatsScreen() {
   };
   const isAtPresent = year === now.getFullYear() && month === now.getMonth() + 1;
 
-  const myPts = allTime
-    ? (myStats?.points ?? 0)
-    : isCurrentMonth ? (currentMonthPoints?.me ?? 0) : (myStats?.points ?? 0);
-  const partnerPts = allTime
-    ? (partnerStats?.points ?? 0)
-    : isCurrentMonth ? (currentMonthPoints?.partner ?? 0) : (partnerStats?.points ?? 0);
+  // For current month and all-time, top total comes from myStats.points (point_events sum).
+  // For historical months, comes from monthly_scores.points.
+  const myPts = myStats?.points ?? 0;
+  const partnerPts = partnerStats?.points ?? 0;
   const totalPts = myPts + partnerPts;
+
+  // Category breakdown values:
+  // - Current month: show points earned per category (sums to top total)
+  // - Historical/all-time: show interaction counts (pts fields are null)
+  const showPts = myCatPts !== null;
 
   const categories = [
     {
-      label: 'Dares', icon: <Zap color="#FF2E8A" size={18} strokeWidth={2} />,
+      label: 'Dares',
+      icon: <Zap color="#FF2E8A" size={18} strokeWidth={2} />,
       bg: 'rgba(255,46,138,0.12)', border: 'rgba(255,46,138,0.25)',
-      myVal: (myStats?.dares_accepted ?? 0) + (myStats?.dares_completed ?? 0),
-      partnerVal: (partnerStats?.dares_accepted ?? 0) + (partnerStats?.dares_completed ?? 0),
-      extra: `${myStats?.dares_skipped ?? 0} skipped`,
+      myVal: showPts ? (myCatPts!.pts_dares ?? 0) : (myStats?.dares_accepted ?? 0) + (myStats?.dares_completed ?? 0),
+      partnerVal: showPts ? (partnerCatPts?.pts_dares ?? 0) : (partnerStats?.dares_accepted ?? 0) + (partnerStats?.dares_completed ?? 0),
+      unit: showPts ? 'pts' : 'done',
+      extra: showPts
+        ? `${(myStats?.dares_accepted ?? 0) + (myStats?.dares_completed ?? 0)} accepted/completed · ${myStats?.dares_skipped ?? 0} skipped`
+        : `${myStats?.dares_skipped ?? 0} skipped`,
     },
     {
-      label: 'Dice Rolls', icon: <Star color="#FFB347" size={18} strokeWidth={2} />,
+      label: 'Dice Rolls',
+      icon: <Star color="#FFB347" size={18} strokeWidth={2} />,
       bg: 'rgba(255,179,71,0.12)', border: 'rgba(255,179,71,0.25)',
-      myVal: (myStats?.dice_accepted ?? 0) + (myStats?.dice_completed ?? 0),
-      partnerVal: (partnerStats?.dice_accepted ?? 0) + (partnerStats?.dice_completed ?? 0),
-      extra: `${myStats?.dice_skipped ?? 0} skipped`,
+      myVal: showPts ? (myCatPts!.pts_dice ?? 0) : (myStats?.dice_accepted ?? 0) + (myStats?.dice_completed ?? 0),
+      partnerVal: showPts ? (partnerCatPts?.pts_dice ?? 0) : (partnerStats?.dice_accepted ?? 0) + (partnerStats?.dice_completed ?? 0),
+      unit: showPts ? 'pts' : 'done',
+      extra: showPts
+        ? `${(myStats?.dice_accepted ?? 0) + (myStats?.dice_completed ?? 0)} accepted/completed · ${myStats?.dice_skipped ?? 0} skipped`
+        : `${myStats?.dice_skipped ?? 0} skipped`,
     },
     {
-      label: 'Wish', icon: <MessageCircle color="#FF8A3D" size={18} strokeWidth={2} />,
+      label: 'Wishes & Asks',
+      icon: <MessageCircle color="#FF8A3D" size={18} strokeWidth={2} />,
       bg: 'rgba(255,138,61,0.12)', border: 'rgba(255,138,61,0.25)',
-      myVal: (myStats?.asks_sent ?? 0) + (myStats?.asks_replied ?? 0),
-      partnerVal: (partnerStats?.asks_sent ?? 0) + (partnerStats?.asks_replied ?? 0),
-      extra: `${myStats?.asks_sent ?? 0} asked · ${myStats?.asks_replied ?? 0} replied`,
+      myVal: showPts ? (myCatPts!.pts_wish ?? 0) : (myStats?.wishes_sent ?? 0) + (myStats?.wishes_fulfilled ?? 0) + (myStats?.asks_sent ?? 0) + (myStats?.asks_replied ?? 0),
+      partnerVal: showPts ? (partnerCatPts?.pts_wish ?? 0) : (partnerStats?.wishes_sent ?? 0) + (partnerStats?.wishes_fulfilled ?? 0) + (partnerStats?.asks_sent ?? 0) + (partnerStats?.asks_replied ?? 0),
+      unit: showPts ? 'pts' : 'done',
+      extra: showPts
+        ? `${myStats?.wishes_sent ?? 0} wished · ${myStats?.wishes_fulfilled ?? 0} granted · ${myStats?.asks_sent ?? 0} asked`
+        : `${myStats?.wishes_sent ?? 0} wished · ${myStats?.asks_sent ?? 0} asked`,
     },
     {
-      label: 'Chat', icon: <MessageCircle color="#69A7FF" size={18} strokeWidth={2} />,
+      label: 'Chat Messages',
+      icon: <MessageCircle color="#69A7FF" size={18} strokeWidth={2} />,
       bg: 'rgba(105,167,255,0.12)', border: 'rgba(105,167,255,0.25)',
-      myVal: myStats?.chat_messages_sent ?? 0,
-      partnerVal: partnerStats?.chat_messages_sent ?? 0,
-      extra: `${myStats?.media_sent ?? 0} media sent`,
+      myVal: showPts ? (myCatPts!.pts_chat ?? 0) : (myStats?.chat_messages_sent ?? 0) + (myStats?.media_sent ?? 0),
+      partnerVal: showPts ? (partnerCatPts?.pts_chat ?? 0) : (partnerStats?.chat_messages_sent ?? 0) + (partnerStats?.media_sent ?? 0),
+      unit: showPts ? 'pts' : 'sent',
+      extra: showPts
+        ? `${myStats?.chat_messages_sent ?? 0} messages · ${myStats?.media_sent ?? 0} media`
+        : `${myStats?.media_sent ?? 0} media sent`,
     },
     {
-      label: 'Vault Uploads', icon: <Vault color="#A78BFA" size={18} strokeWidth={2} />,
-      bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.25)',
-      myVal: myStats?.vault_uploads ?? 0,
-      partnerVal: partnerStats?.vault_uploads ?? 0,
-      extra: '',
+      label: 'Vault Uploads',
+      icon: <Vault color="#33D17A" size={18} strokeWidth={2} />,
+      bg: 'rgba(51,209,122,0.12)', border: 'rgba(51,209,122,0.25)',
+      myVal: showPts ? (myCatPts!.pts_vault ?? 0) : (myStats?.vault_uploads ?? 0),
+      partnerVal: showPts ? (partnerCatPts?.pts_vault ?? 0) : (partnerStats?.vault_uploads ?? 0),
+      unit: showPts ? 'pts' : 'uploads',
+      extra: showPts ? `${myStats?.vault_uploads ?? 0} uploads` : '',
     },
   ];
 
@@ -412,7 +552,12 @@ export default function MyStatsScreen() {
           </View>
 
           {/* Category breakdown */}
-          <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>YOUR BREAKDOWN</AppText>
+          <View style={styles.sectionLabelRow}>
+            <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>YOUR BREAKDOWN</AppText>
+            {showPts && (
+              <AppText style={[styles.sectionLabelSub, { color: colors.textMuted }]}>points earned</AppText>
+            )}
+          </View>
           {categories.map(cat => (
             <View key={cat.label} style={[styles.catCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
               <View style={[styles.catIcon, { backgroundColor: cat.bg, borderColor: cat.border }]}>
@@ -442,9 +587,111 @@ export default function MyStatsScreen() {
               <AppText style={[styles.emptySub, { color: colors.textSecondary }]}>Stats are saved at the end of each month.</AppText>
             </View>
           )}
+
+          {/* Debug panel */}
+          {debugInfo && (
+            <View style={styles.debugWrap}>
+              <TouchableOpacity
+                onPress={() => setShowDebug(v => !v)}
+                style={[styles.debugToggle, { borderColor: 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)' }]}
+                activeOpacity={0.7}
+              >
+                <Bug color="rgba(255,255,255,0.35)" size={14} strokeWidth={2} />
+                <AppText style={styles.debugToggleText}>Debug Info</AppText>
+                <AppText style={styles.debugToggleChevron}>{showDebug ? '▲' : '▼'}</AppText>
+              </TouchableOpacity>
+              {showDebug && (
+                <View style={[styles.debugPanel, { borderColor: 'rgba(255,255,255,0.10)', backgroundColor: 'rgba(0,0,0,0.3)' }]}>
+                  <DebugRow label="couple_id" value={debugInfo.couple_id} />
+                  <DebugRow label="points_month_start" value={debugInfo.points_month_start} />
+                  <DebugRow label="points_month_end" value={debugInfo.points_month_end} />
+                  <DebugRow label="points_total_source" value={debugInfo.points_total_source} />
+                  <DebugRow label="my_event_count" value={String(debugInfo.my_event_count)} />
+                  <DebugRow label="partner_event_count" value={String(debugInfo.partner_event_count)} />
+
+                  {debugInfo.my_cat_pts && (
+                    <>
+                      <AppText style={styles.debugSection}>{myName} category pts</AppText>
+                      <DebugRow label="  pts_dares" value={String(debugInfo.my_cat_pts.pts_dares)} />
+                      <DebugRow label="  pts_dice" value={String(debugInfo.my_cat_pts.pts_dice)} />
+                      <DebugRow label="  pts_wish" value={String(debugInfo.my_cat_pts.pts_wish)} />
+                      <DebugRow label="  pts_chat" value={String(debugInfo.my_cat_pts.pts_chat)} />
+                      <DebugRow label="  pts_vault" value={String(debugInfo.my_cat_pts.pts_vault)} />
+                      <DebugRow
+                        label="  sum"
+                        value={String(
+                          (debugInfo.my_cat_pts.pts_dares ?? 0) +
+                          (debugInfo.my_cat_pts.pts_dice ?? 0) +
+                          (debugInfo.my_cat_pts.pts_wish ?? 0) +
+                          (debugInfo.my_cat_pts.pts_chat ?? 0) +
+                          (debugInfo.my_cat_pts.pts_vault ?? 0)
+                        )}
+                      />
+                    </>
+                  )}
+
+                  {debugInfo.partner_cat_pts && (
+                    <>
+                      <AppText style={styles.debugSection}>{partnerName} category pts</AppText>
+                      <DebugRow label="  pts_dares" value={String(debugInfo.partner_cat_pts.pts_dares)} />
+                      <DebugRow label="  pts_dice" value={String(debugInfo.partner_cat_pts.pts_dice)} />
+                      <DebugRow label="  pts_wish" value={String(debugInfo.partner_cat_pts.pts_wish)} />
+                      <DebugRow label="  pts_chat" value={String(debugInfo.partner_cat_pts.pts_chat)} />
+                      <DebugRow label="  pts_vault" value={String(debugInfo.partner_cat_pts.pts_vault)} />
+                      <DebugRow
+                        label="  sum"
+                        value={String(
+                          (debugInfo.partner_cat_pts.pts_dares ?? 0) +
+                          (debugInfo.partner_cat_pts.pts_dice ?? 0) +
+                          (debugInfo.partner_cat_pts.pts_wish ?? 0) +
+                          (debugInfo.partner_cat_pts.pts_chat ?? 0) +
+                          (debugInfo.partner_cat_pts.pts_vault ?? 0)
+                        )}
+                      />
+                    </>
+                  )}
+
+                  {debugInfo.my_raw_events.length > 0 && (
+                    <>
+                      <AppText style={styles.debugSection}>{myName} raw events</AppText>
+                      {debugInfo.my_raw_events.map((ev, i) => (
+                        <DebugRow
+                          key={i}
+                          label={`  [${i + 1}] ${ev.reason}`}
+                          value={`+${ev.points} · ${new Date(ev.created_at ?? '').toLocaleDateString()}`}
+                        />
+                      ))}
+                    </>
+                  )}
+
+                  {debugInfo.partner_raw_events.length > 0 && (
+                    <>
+                      <AppText style={styles.debugSection}>{partnerName} raw events</AppText>
+                      {debugInfo.partner_raw_events.map((ev, i) => (
+                        <DebugRow
+                          key={i}
+                          label={`  [${i + 1}] ${ev.reason}`}
+                          value={`+${ev.points} · ${new Date(ev.created_at ?? '').toLocaleDateString()}`}
+                        />
+                      ))}
+                    </>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
         </ScrollView>
       )}
     </AppShell>
+  );
+}
+
+function DebugRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.debugRow}>
+      <AppText style={styles.debugKey} numberOfLines={1}>{label}</AppText>
+      <AppText style={styles.debugVal} numberOfLines={2}>{value}</AppText>
+    </View>
   );
 }
 
@@ -481,7 +728,9 @@ const styles = StyleSheet.create({
   braveSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   braveSectionTitle: { fontSize: FontSize.body, fontFamily: 'Inter-Bold' },
   braveDivider: { height: 1 },
-  sectionLabel: { fontSize: 11, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2, marginBottom: Spacing.sm },
+  sectionLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.sm },
+  sectionLabel: { fontSize: 11, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2 },
+  sectionLabelSub: { fontSize: 10, fontFamily: 'Inter-Regular', letterSpacing: 0.5 },
   catCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.sm },
   catIcon: { width: 40, height: 40, borderRadius: Radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   catLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
@@ -496,4 +745,14 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20 },
   hiddenBanner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.md },
   hiddenBannerText: { flex: 1, fontSize: FontSize.xs, fontFamily: 'Inter-Regular', lineHeight: 17 },
+  // Debug panel
+  debugWrap: { marginTop: Spacing.lg },
+  debugToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: Radius.sm, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, alignSelf: 'flex-start' },
+  debugToggleText: { fontSize: 11, fontFamily: 'Inter-Medium', color: 'rgba(255,255,255,0.35)' },
+  debugToggleChevron: { fontSize: 9, color: 'rgba(255,255,255,0.25)', marginLeft: 2 },
+  debugPanel: { marginTop: 6, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, gap: 3 },
+  debugSection: { fontSize: 10, fontFamily: 'Inter-SemiBold', color: 'rgba(255,179,71,0.7)', marginTop: 6, letterSpacing: 0.5 },
+  debugRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  debugKey: { fontSize: 10, fontFamily: 'Inter-Regular', color: 'rgba(255,255,255,0.4)', flex: 1 },
+  debugVal: { fontSize: 10, fontFamily: 'Inter-Medium', color: 'rgba(255,255,255,0.65)', flexShrink: 0, maxWidth: '55%', textAlign: 'right' },
 });
