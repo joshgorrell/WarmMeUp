@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useMemo } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,11 +12,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-// Artwork was designed for iPhone 14 (390 × 844 pt portrait).
-// These are the logical design dimensions — used only for tap-zone proportions.
-const ART_W = 390;
-const ART_H = 844;
-
 export type OnboardingMode = 'preview' | 'post-auth';
 export type OnboardingFinishAction = 'get-started' | 'invite-partner';
 
@@ -25,7 +20,7 @@ interface Props {
   onComplete: (action?: OnboardingFinishAction) => void;
 }
 
-// ─── Slide image assets ───────────────────────────────────────────────────────
+// ─── Slide assets ─────────────────────────────────────────────────────────────
 const SLIDE_IMAGES = [
   require('@/assets/onboarding/Intro_Step_1.png'),
   require('@/assets/onboarding/Intro_Step_2.png'),
@@ -42,19 +37,11 @@ const SLIDE_IMAGES = [
 
 const LAST_INDEX = SLIDE_IMAGES.length - 1; // 10
 
-// ─── Image-relative tap zone positions ───────────────────────────────────────
-// Expressed as fractions of the artwork's design frame (ART_W × ART_H).
-// At runtime we multiply by the contain-scale and add the letterbox offset
-// so zones always track the visible button positions regardless of device.
+// ─── Tap zone fractions (relative to image canvas) ───────────────────────────
+// Applied to the *rendered* image rectangle once real dimensions are known.
 //
-// Reference: iPhone 14 (390 × 844) artwork
-//   "Next →" / "Get Started →" pill:  y ≈ 91.5 % of ART_H
-//   "Join Now →" pill (slide 11):      y ≈ 87.2 %
-//   "Invite a Partner" (slide 11):     y ≈ 92.5 %
-//   Skip zone: top-right corner        y = 0 %, right edge
-//
-//   All horizontal zones: left ≈ 6 %, right ≈ 6 % margins (= 88 % wide)
-
+// Slides 1-10: "Next →" pill + top-right "Skip"
+// Slide 11 (upsell): "Join Now" + "Invite a Partner"
 const ZONES = {
   next:   { topFrac: 0.915, hFrac: 0.069, lFrac: 0.06, rFrac: 0.06 },
   join:   { topFrac: 0.872, hFrac: 0.069, lFrac: 0.06, rFrac: 0.06 },
@@ -62,97 +49,112 @@ const ZONES = {
   skip:   { topFrac: 0.0,   hFrac: 0.11,  lFrac: 0.70, rFrac: 0.0  },
 } as const;
 
-// ─── Helper: compute contain layout ──────────────────────────────────────────
-function useContainLayout(insetTop: number) {
-  return useMemo(() => {
-    const scale = Math.min(SW / ART_W, SH / ART_H);
-    const renderedW = ART_W * scale;
-    const renderedH = ART_H * scale;
-    const offsetX = (SW - renderedW) / 2;
-    // Centre vertically but respect safe-area so artwork never hides under status bar
-    const rawOffsetY = (SH - renderedH) / 2;
-    const offsetY = Math.max(rawOffsetY, insetTop);
+// ─── Runtime image size hook ──────────────────────────────────────────────────
+function useImageSize(asset: ReturnType<typeof require>) {
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 
-    // Convert a design-space fraction to a real screen coordinate
-    const toScreenY  = (frac: number) => offsetY + frac * renderedH;
-    const toScreenH  = (frac: number) => frac * renderedH;
-    const toScreenX  = (frac: number) => offsetX + frac * renderedW;
-    const toScreenW  = (frac: number) => frac * renderedW;
+  useEffect(() => {
+    const uri = Image.resolveAssetSource(asset).uri;
+    Image.getSize(
+      uri,
+      (w, h) => {
+        console.log(`[useImageSize] source image: ${w}x${h}px`);
+        setSize({ w, h });
+      },
+      (err) => {
+        console.warn('[useImageSize] getSize failed:', err);
+      },
+    );
+  }, []);
 
-    return { offsetX, offsetY, renderedW, renderedH, toScreenY, toScreenH, toScreenX, toScreenW };
-  }, [insetTop]);
+  return size;
+}
+
+// ─── Contain layout calculator ────────────────────────────────────────────────
+function computeContainLayout(
+  imgW: number,
+  imgH: number,
+  screenW: number,
+  screenH: number,
+  minOffsetY: number,
+  label: string,
+) {
+  const scale = Math.min(screenW / imgW, screenH / imgH);
+  const renderedW = imgW * scale;
+  const renderedH = imgH * scale;
+  const offsetX = (screenW - renderedW) / 2;
+  const offsetY = Math.max((screenH - renderedH) / 2, minOffsetY);
+
+  console.log(
+    `[ContainLayout:${label}] screen: ${screenW}x${screenH}` +
+    ` | image: ${imgW}x${imgH}` +
+    ` | rendered: ${renderedW.toFixed(1)}x${renderedH.toFixed(1)}` +
+    ` | offset: (${offsetX.toFixed(1)}, ${offsetY.toFixed(1)})`,
+  );
+
+  const toZone = (
+    topFrac: number,
+    hFrac: number,
+    lFrac: number,
+    rFrac: number,
+    zoneName: string,
+  ) => {
+    const top    = offsetY + topFrac * renderedH;
+    const height = hFrac * renderedH;
+    const left   = offsetX + lFrac  * renderedW;
+    const right  = screenW - (offsetX + (1 - rFrac) * renderedW);
+    console.log(
+      `[ContainLayout:${label}] zone "${zoneName}":` +
+      ` top=${top.toFixed(1)} h=${height.toFixed(1)} left=${left.toFixed(1)} right=${right.toFixed(1)}`,
+    );
+    return { top, height, left, right } as const;
+  };
+
+  return { scale, renderedW, renderedH, offsetX, offsetY, toZone };
 }
 
 // ─── Slide component ──────────────────────────────────────────────────────────
-function Slide({
-  item,
-  index,
-  onNext,
-  onSkip,
-  onComplete,
-}: {
-  item: ReturnType<typeof require>;
+interface SlideProps {
+  asset: ReturnType<typeof require>;
   index: number;
+  imgW: number;
+  imgH: number;
   onNext: () => void;
   onSkip: () => void;
   onComplete: (action: OnboardingFinishAction) => void;
-}) {
+}
+
+function Slide({ asset, index, imgW, imgH, onNext, onSkip, onComplete }: SlideProps) {
   const { top: insetTop } = useSafeAreaInsets();
-  const layout = useContainLayout(insetTop);
 
-  const isUpsell    = index === LAST_INDEX;
+  const layout = useMemo(
+    () => computeContainLayout(imgW, imgH, SW, SH, insetTop, `slide-${index}`),
+    [imgW, imgH, insetTop, index],
+  );
 
-  const nextZone = {
-    top:    layout.toScreenY(ZONES.next.topFrac),
-    height: layout.toScreenH(ZONES.next.hFrac),
-    left:   layout.toScreenX(ZONES.next.lFrac),
-    right:  layout.offsetX + layout.renderedW * ZONES.next.rFrac,
-  };
-
-  const joinZone = {
-    top:    layout.toScreenY(ZONES.join.topFrac),
-    height: layout.toScreenH(ZONES.join.hFrac),
-    left:   layout.toScreenX(ZONES.join.lFrac),
-    right:  layout.offsetX + layout.renderedW * ZONES.join.rFrac,
-  };
-
-  const inviteZone = {
-    top:    layout.toScreenY(ZONES.invite.topFrac),
-    height: layout.toScreenH(ZONES.invite.hFrac),
-    left:   layout.toScreenX(ZONES.invite.lFrac),
-    right:  layout.offsetX + layout.renderedW * ZONES.invite.rFrac,
-  };
-
-  const skipZone = {
-    top:    layout.toScreenY(ZONES.skip.topFrac),
-    height: layout.toScreenH(ZONES.skip.hFrac),
-    left:   layout.toScreenX(ZONES.skip.lFrac),
-    right:  layout.offsetX,
-  };
+  const isUpsell = index === LAST_INDEX;
 
   return (
     <View style={s.slide}>
-      {/* Contained artwork — black letterbox bars on mismatch devices */}
       <Image
-        source={item}
+        source={asset}
         style={StyleSheet.absoluteFill}
         resizeMode="contain"
         accessibilityLabel={`Onboarding step ${index + 1}`}
       />
 
-      {/* Invisible tap zones — positioned relative to rendered image bounds */}
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
         {isUpsell ? (
           <>
             <TouchableOpacity
-              style={[s.zone, joinZone]}
+              style={[s.zone, layout.toZone(ZONES.join.topFrac,   ZONES.join.hFrac,   ZONES.join.lFrac,   ZONES.join.rFrac,   'join')]}
               onPress={() => onComplete('get-started')}
               activeOpacity={1}
               accessibilityLabel="Join Now"
               accessibilityRole="button"
             />
             <TouchableOpacity
-              style={[s.zone, inviteZone]}
+              style={[s.zone, layout.toZone(ZONES.invite.topFrac, ZONES.invite.hFrac, ZONES.invite.lFrac, ZONES.invite.rFrac, 'invite')]}
               onPress={() => onComplete('invite-partner')}
               activeOpacity={1}
               accessibilityLabel="Invite a Partner"
@@ -162,14 +164,14 @@ function Slide({
         ) : (
           <>
             <TouchableOpacity
-              style={[s.zone, nextZone]}
+              style={[s.zone, layout.toZone(ZONES.next.topFrac, ZONES.next.hFrac, ZONES.next.lFrac, ZONES.next.rFrac, 'next')]}
               onPress={onNext}
               activeOpacity={1}
               accessibilityLabel={index === LAST_INDEX - 1 ? 'Get Started' : 'Next'}
               accessibilityRole="button"
             />
             <TouchableOpacity
-              style={[s.zone, skipZone]}
+              style={[s.zone, layout.toZone(ZONES.skip.topFrac, ZONES.skip.hFrac, ZONES.skip.lFrac, ZONES.skip.rFrac, 'skip')]}
               onPress={onSkip}
               activeOpacity={1}
               accessibilityLabel="Skip"
@@ -182,10 +184,31 @@ function Slide({
   );
 }
 
-// ─── Main carousel ────────────────────────────────────────────────────────────
+// ─── Main carousel ─────────────────────────────────────────────────────────────
 export default function OnboardingCarousel({ onComplete }: Props) {
-  const flatRef = useRef<FlatList>(null);
+  const flatRef  = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Measure slide 0 — all slides should share the same canvas.
+  const slide0Size = useImageSize(SLIDE_IMAGES[0]);
+
+  // Cross-check every other slide when slide 0 is measured.
+  useEffect(() => {
+    if (!slide0Size) return;
+    SLIDE_IMAGES.slice(1).forEach((asset, i) => {
+      const uri = Image.resolveAssetSource(asset).uri;
+      Image.getSize(uri, (w, h) => {
+        if (w !== slide0Size.w || h !== slide0Size.h) {
+          console.warn(
+            `[OnboardingCarousel] slide ${i + 1} dimensions ${w}x${h}` +
+            ` differ from slide 0 (${slide0Size.w}x${slide0Size.h})`,
+          );
+        } else {
+          console.log(`[OnboardingCarousel] slide ${i + 1}: ${w}x${h} ✓`);
+        }
+      });
+    });
+  }, [slide0Size]);
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
@@ -207,10 +230,14 @@ export default function OnboardingCarousel({ onComplete }: Props) {
     }
   }, [currentIndex, onComplete]);
 
-  // Skip jumps directly to the upsell slide (slide 11, index 10)
   const handleSkip = useCallback(() => {
     flatRef.current?.scrollToIndex({ index: LAST_INDEX, animated: true });
   }, []);
+
+  // Hold off rendering until we have real image dimensions.
+  if (!slide0Size) {
+    return <View style={s.root} />;
+  }
 
   return (
     <View style={s.root}>
@@ -220,8 +247,10 @@ export default function OnboardingCarousel({ onComplete }: Props) {
         keyExtractor={(_, i) => String(i)}
         renderItem={({ item, index }) => (
           <Slide
-            item={item}
+            asset={item}
             index={index}
+            imgW={slide0Size.w}
+            imgH={slide0Size.h}
             onNext={handleNext}
             onSkip={handleSkip}
             onComplete={onComplete}

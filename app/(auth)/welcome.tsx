@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,18 +12,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-// Artwork design dimensions (iPhone 14, 390 × 844 pt).
-const ART_W = 390;
-const ART_H = 844;
+const LOGIN_BG = require('@/assets/onboarding/New_Login_page_6.2.26.png');
 
-// Button positions in the artwork, expressed as fractions of ART_H / ART_W.
-// At runtime we multiply by the contain-scale and add the letterbox offset.
+// ─── Tap zone positions expressed as fractions of the image canvas ─────────
+// These fractions are applied to the *rendered* image rectangle at runtime,
+// so they are correct regardless of the actual image pixel dimensions.
 //
-//   "Get Started" pill:              y ≈ 82.2 %
-//   "Already have a code? Enter":   y ≈ 87.5 %
-//   "Sign In" link row:              y ≈ 91.2 %
-//   "See how it works →":            y ≈ 95.0 %
-//   All: left ≈ 6 %, right ≈ 6 %
+// Reference: artwork designed for iPhone 14 (390 × 844 pt).
+// Adjust these if the console logs show zones are off.
 const ZONES = {
   getStarted: { topFrac: 0.822, hFrac: 0.069, lFrac: 0.06, rFrac: 0.06 },
   enter:      { topFrac: 0.875, hFrac: 0.048, lFrac: 0.06, rFrac: 0.06 },
@@ -31,8 +27,65 @@ const ZONES = {
   seeHow:     { topFrac: 0.950, hFrac: 0.043, lFrac: 0.06, rFrac: 0.06 },
 } as const;
 
-const LOGIN_BG = require('@/assets/onboarding/New_Login_page_6.2.26.png');
+// ─── Runtime image size hook ─────────────────────────────────────────────────
+function useImageSize(asset: ReturnType<typeof require>) {
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 
+  useEffect(() => {
+    const uri = Image.resolveAssetSource(asset).uri;
+    Image.getSize(
+      uri,
+      (w, h) => {
+        console.log(`[useImageSize] source image: ${w}x${h}px`);
+        setSize({ w, h });
+      },
+      (err) => {
+        console.warn('[useImageSize] getSize failed:', err);
+      },
+    );
+  }, []);
+
+  return size;
+}
+
+// ─── Contain layout calculator ───────────────────────────────────────────────
+function computeContainLayout(
+  imgW: number,
+  imgH: number,
+  screenW: number,
+  screenH: number,
+  minOffsetY: number,
+) {
+  const scale = Math.min(screenW / imgW, screenH / imgH);
+  const renderedW = imgW * scale;
+  const renderedH = imgH * scale;
+  const offsetX = (screenW - renderedW) / 2;
+  const offsetY = Math.max((screenH - renderedH) / 2, minOffsetY);
+
+  console.log(
+    `[ContainLayout] screen: ${screenW}x${screenH} | image: ${imgW}x${imgH}` +
+    ` | rendered: ${renderedW.toFixed(1)}x${renderedH.toFixed(1)}` +
+    ` | offset: (${offsetX.toFixed(1)}, ${offsetY.toFixed(1)})`,
+  );
+
+  // Convert a zone definition into absolute screen-space style values.
+  const toZone = (topFrac: number, hFrac: number, lFrac: number, rFrac: number) => {
+    const zoneTop    = offsetY + topFrac  * renderedH;
+    const zoneHeight = hFrac * renderedH;
+    const zoneLeft   = offsetX + lFrac   * renderedW;
+    // rFrac is the fraction from the image's RIGHT edge inward
+    const zoneRight  = screenW - (offsetX + (1 - rFrac) * renderedW);
+    console.log(
+      `[ContainLayout] zone top=${zoneTop.toFixed(1)} h=${zoneHeight.toFixed(1)}` +
+      ` left=${zoneLeft.toFixed(1)} right=${zoneRight.toFixed(1)}`,
+    );
+    return { top: zoneTop, height: zoneHeight, left: zoneLeft, right: zoneRight };
+  };
+
+  return { scale, renderedW, renderedH, offsetX, offsetY, toZone };
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -44,106 +97,88 @@ export default function WelcomeScreen() {
   }>();
   const codeToPreserve = (pendingCode || prefilledCode || code || '').toUpperCase().trim();
 
-  // Forward deep-link codes straight to pair screen.
   useEffect(() => {
     if (codeToPreserve) {
       router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } });
     }
   }, [codeToPreserve]);
 
-  // Compute contain-scale layout so tap zones track the visible artwork.
+  const imageSize = useImageSize(LOGIN_BG);
+
   const layout = useMemo(() => {
-    const scale = Math.min(SW / ART_W, SH / ART_H);
-    const renderedW = ART_W * scale;
-    const renderedH = ART_H * scale;
-    const offsetX = (SW - renderedW) / 2;
-    const rawOffsetY = (SH - renderedH) / 2;
-    // Never let artwork start above the status bar
-    const offsetY = Math.max(rawOffsetY, insets.top);
-
-    const toScreenY = (frac: number) => offsetY + frac * renderedH;
-    const toScreenH = (frac: number) => frac * renderedH;
-    const toScreenLeft  = (frac: number) => offsetX + frac * renderedW;
-    const toScreenRight = (frac: number) => offsetX + frac * renderedW;
-
-    return { toScreenY, toScreenH, toScreenLeft, toScreenRight };
-  }, [insets.top]);
-
-  const zone = (key: keyof typeof ZONES) => {
-    const z = ZONES[key];
-    return {
-      top:    layout.toScreenY(z.topFrac),
-      height: layout.toScreenH(z.hFrac),
-      left:   layout.toScreenLeft(z.lFrac),
-      right:  layout.toScreenRight(z.rFrac),
-    };
-  };
+    if (!imageSize) return null;
+    return computeContainLayout(imageSize.w, imageSize.h, SW, SH, insets.top);
+  }, [imageSize, insets.top]);
 
   return (
     <View style={s.root}>
       <StatusBar style="light" />
 
-      {/* Contained artwork — no horizontal crop on any device */}
-      <Image
-        source={LOGIN_BG}
-        style={StyleSheet.absoluteFill}
-        resizeMode="contain"
-        accessibilityLabel="Warm Me Up – Stay Playful"
-      />
-
-      {/* Invisible hit areas aligned to the rendered image bounds */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-
-        <TouchableOpacity
-          style={[s.zone, zone('getStarted')]}
-          onPress={() =>
-            router.push(
-              codeToPreserve
-                ? { pathname: '/(auth)/register', params: { pendingCode: codeToPreserve } }
-                : '/(auth)/register',
-            )
-          }
-          activeOpacity={1}
-          accessibilityLabel="Get Started"
-          accessibilityRole="button"
+      {/* Artwork — rendered only once dimensions are known so layout is correct */}
+      {layout && (
+        <Image
+          source={LOGIN_BG}
+          style={StyleSheet.absoluteFill}
+          resizeMode="contain"
+          accessibilityLabel="Warm Me Up – Stay Playful"
         />
+      )}
 
-        <TouchableOpacity
-          style={[s.zone, zone('enter')]}
-          onPress={() =>
-            router.push(
-              codeToPreserve
-                ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
-                : '/(auth)/pair',
-            )
-          }
-          activeOpacity={1}
-          accessibilityLabel="Already have a code? Enter"
-          accessibilityRole="button"
-        />
+      {/* Invisible tap zones — only mounted once layout is computed */}
+      {layout && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
 
-        <TouchableOpacity
-          style={[s.zone, zone('signIn')]}
-          onPress={() =>
-            router.push(
-              codeToPreserve
-                ? { pathname: '/(auth)/login', params: { pendingCode: codeToPreserve } }
-                : '/(auth)/login',
-            )
-          }
-          activeOpacity={1}
-          accessibilityLabel="Already have an account? Sign In"
-          accessibilityRole="button"
-        />
+          <TouchableOpacity
+            style={[s.zone, layout.toZone(...Object.values(ZONES.getStarted) as [number, number, number, number])]}
+            onPress={() =>
+              router.push(
+                codeToPreserve
+                  ? { pathname: '/(auth)/register', params: { pendingCode: codeToPreserve } }
+                  : '/(auth)/register',
+              )
+            }
+            activeOpacity={1}
+            accessibilityLabel="Get Started"
+            accessibilityRole="button"
+          />
 
-        <TouchableOpacity
-          style={[s.zone, zone('seeHow')]}
-          onPress={() => router.push('/(auth)/onboarding-preview')}
-          activeOpacity={1}
-          accessibilityLabel="See how it works"
-          accessibilityRole="button"
-        />
-      </View>
+          <TouchableOpacity
+            style={[s.zone, layout.toZone(...Object.values(ZONES.enter) as [number, number, number, number])]}
+            onPress={() =>
+              router.push(
+                codeToPreserve
+                  ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
+                  : '/(auth)/pair',
+              )
+            }
+            activeOpacity={1}
+            accessibilityLabel="Already have a code? Enter"
+            accessibilityRole="button"
+          />
+
+          <TouchableOpacity
+            style={[s.zone, layout.toZone(...Object.values(ZONES.signIn) as [number, number, number, number])]}
+            onPress={() =>
+              router.push(
+                codeToPreserve
+                  ? { pathname: '/(auth)/login', params: { pendingCode: codeToPreserve } }
+                  : '/(auth)/login',
+              )
+            }
+            activeOpacity={1}
+            accessibilityLabel="Already have an account? Sign In"
+            accessibilityRole="button"
+          />
+
+          <TouchableOpacity
+            style={[s.zone, layout.toZone(...Object.values(ZONES.seeHow) as [number, number, number, number])]}
+            onPress={() => router.push('/(auth)/onboarding-preview')}
+            activeOpacity={1}
+            accessibilityLabel="See how it works"
+            accessibilityRole="button"
+          />
+        </View>
+      )}
     </View>
   );
 }
