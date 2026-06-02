@@ -25,6 +25,7 @@ import { useLayout } from '@/hooks/useLayout';
 import {
   validateCodeFormat,
   savePendingCode,
+  sanitizeInviteCode,
 } from '@/lib/inviteCode';
 import { logDebugEvent } from '@/lib/debugLog';
 
@@ -87,7 +88,7 @@ export default function PairScreen() {
   const [myCode, setMyCode] = useState('');
   const [inviteError, setInviteError] = useState('');
   const displayCode = myCode || couple?.invite_code || '';
-  const [joinCode, setJoinCode] = useState(prefilledCode ?? '');
+  const [joinCode, setJoinCode] = useState(sanitizeInviteCode(prefilledCode ?? ''));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -109,8 +110,7 @@ export default function PairScreen() {
 
   // Auto-submit when a full 6-character code is entered
   useEffect(() => {
-    const normalized = joinCode.toUpperCase().trim();
-    if (normalized.length !== 6) return;
+    if (joinCode.length !== 6) return;
     if (user) {
       handleJoin();
     } else {
@@ -219,7 +219,7 @@ export default function PairScreen() {
   };
 
   const handleJoin = async () => {
-    const normalized = joinCode.toUpperCase().trim();
+    const normalized = sanitizeInviteCode(joinCode);
     if (!normalized || !user) return;
 
     if (!validateCodeFormat(normalized)) {
@@ -343,7 +343,7 @@ export default function PairScreen() {
   };
 
   const handlePreAuthJoin = async () => {
-    const normalized = joinCode.toUpperCase().trim();
+    const normalized = sanitizeInviteCode(joinCode);
     if (!normalized) {
       setError('Please enter the code your partner sent you.');
       return;
@@ -443,10 +443,13 @@ export default function PairScreen() {
                 <AppTextInput
                   style={[styles.codeInput, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}
                   value={joinCode}
-                  onChangeText={(t) => { setJoinCode(t); setError(''); }}
+                  onChangeText={(t) => { setJoinCode(sanitizeInviteCode(t)); setError(''); }}
                   placeholder="e.g. AB12CD"
                   placeholderTextColor="rgba(255,255,255,0.20)"
                   autoCapitalize="characters"
+                  autoCorrect={false}
+                  autoComplete="off"
+                  textContentType="none"
                   maxLength={6}
                 />
 
@@ -702,10 +705,13 @@ export default function PairScreen() {
               <AppTextInput
                 style={[styles.codeInput, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}
                 value={joinCode}
-                onChangeText={(t) => { setJoinCode(t); setError(''); }}
+                onChangeText={(t) => { setJoinCode(sanitizeInviteCode(t)); setError(''); }}
                 placeholder="e.g. AB12CD"
                 placeholderTextColor="rgba(255,255,255,0.20)"
                 autoCapitalize="characters"
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="none"
                 maxLength={6}
                 autoFocus
               />

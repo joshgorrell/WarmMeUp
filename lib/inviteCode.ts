@@ -18,6 +18,17 @@ export function validateCodeFormat(code: string): boolean {
   return code.split('').every(c => CODE_ALPHABET.includes(c));
 }
 
+/**
+ * Strips quote characters (straight, smart/curly, guillemets), trims whitespace,
+ * and uppercases. Apply to any user-supplied invite code before validation or storage.
+ */
+export function sanitizeInviteCode(raw: string): string {
+  return raw
+    .trim()
+    .replace(/['"'\u2018\u2019\u201C\u201D\u201E\u201F\u2039\u203A\u00AB\u00BB]/g, '')
+    .toUpperCase();
+}
+
 // ─── Pending code persistence ────────────────────────────────────────────────
 // Stored in SecureStore/localStorage so it survives OAuth redirects and app restarts.
 
