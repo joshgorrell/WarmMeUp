@@ -99,6 +99,7 @@ export interface ChatMessage {
   vault_item_id: string | null;
   created_at: string;
   edited_at: string | null;
+  deleted_at: string | null;
 }
 
 export interface VaultItem {
@@ -118,6 +119,7 @@ export interface VaultItem {
   chat_message_id: string | null;
   created_at: string;
   expires_at: string | null;
+  deleted_at: string | null;
 }
 
 export interface Score {

@@ -266,6 +266,7 @@ export default function ChatTab() {
         .from('chat_messages')
         .select('*')
         .eq('couple_id', couple.id)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(PAGE_SIZE);
       if (data) {
@@ -288,6 +289,7 @@ export default function ChatTab() {
         .from('chat_messages')
         .select('*')
         .eq('couple_id', couple.id)
+        .is('deleted_at', null)
         .lt('created_at', oldestCreatedAtRef.current)
         .order('created_at', { ascending: false })
         .limit(PAGE_SIZE);
@@ -331,6 +333,11 @@ export default function ChatTab() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
         (payload) => {
           const updated = payload.new as ChatMessage;
+          // Soft-delete propagation: remove from local state when deleted_at is set
+          if (updated.deleted_at) {
+            setMessages(prev => prev.filter(m => m.id !== updated.id));
+            return;
+          }
           setMessages(prev => prev.map(m => m.id === updated.id ? updated : m));
         }
       )
@@ -560,55 +567,158 @@ export default function ChatTab() {
 
   const handleDeleteMessage = (msg: ChatMessage) => {
     handleDismissMenu();
-    const doDelete = async () => {
-      // Optimistic removal
-      setMessages(prev => prev.filter(m => m.id !== msg.id));
+    const hasMedia = !!msg.media_storage_path;
+    const autoSaveOn = settings?.chat_auto_save_to_vault ?? true;
 
-      const ops: Promise<void>[] = [];
+    // Soft-delete the chat message row. Storage cleanup depends on the chosen option.
+    const softDeleteChat = async () => {
+      const deletedAt = new Date().toISOString();
+      const { error } = await supabase
+        .from('chat_messages')
+        .update({ deleted_at: deletedAt })
+        .eq('id', msg.id)
+        .eq('sender_id', user!.id);
+      return error;
+    };
 
-      // Delete chat media storage file
-      if (msg.media_storage_path) {
-        const bucket = msg.media_storage_bucket ?? 'chat_media';
-        ops.push(Promise.resolve(supabase.storage.from(bucket).remove([msg.media_storage_path])).then(() => {}));
+    // Delete the vault item linked to this message (soft-delete), then remove its storage file.
+    const deleteVaultItem = async (): Promise<string | null> => {
+      if (!msg.vault_item_id) return null;
+      const { data: vi, error: fetchErr } = await supabase
+        .from('vault_items')
+        .select('storage_path, storage_bucket')
+        .eq('id', msg.vault_item_id)
+        .maybeSingle();
+      if (fetchErr) return fetchErr.message;
+      const deletedAt = new Date().toISOString();
+      const { error: updateErr } = await supabase
+        .from('vault_items')
+        .update({ deleted_at: deletedAt })
+        .eq('id', msg.vault_item_id);
+      if (updateErr) return updateErr.message;
+      // Best-effort storage cleanup for the vault copy
+      if (vi?.storage_path) {
+        supabase.storage.from(vi.storage_bucket ?? 'vault').remove([vi.storage_path]).catch(() => {});
       }
+      return null;
+    };
 
-      // Fetch vault item storage path then delete storage + DB record
-      if (msg.vault_item_id) {
-        const vaultItemId = msg.vault_item_id;
-        ops.push(
-          (async () => {
-            const { data: vi } = await supabase
-              .from('vault_items')
-              .select('storage_path, storage_bucket')
-              .eq('id', vaultItemId)
-              .maybeSingle();
-            await Promise.all([
-              Promise.resolve(supabase.from('vault_items').delete().eq('id', vaultItemId)),
-              vi?.storage_path
-                ? Promise.resolve(supabase.storage.from(vi.storage_bucket ?? 'vault').remove([vi.storage_path]))
-                : Promise.resolve(null),
-            ]);
-          })()
+    if (!hasMedia) {
+      // Text-only message — simple confirmation, no vault branch needed
+      const doDelete = async () => {
+        setMessages(prev => prev.filter(m => m.id !== msg.id));
+        await softDeleteChat();
+      };
+      if (Platform.OS === 'web') {
+        if (window.confirm('Delete this message? This cannot be undone.')) doDelete();
+      } else {
+        Alert.alert(
+          'Delete message',
+          'This will permanently remove the message.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: doDelete },
+          ]
         );
       }
+      return;
+    }
 
-      ops.push(
-        Promise.resolve(supabase.from('chat_messages').delete().eq('id', msg.id).eq('sender_id', user!.id)).then(() => {})
-      );
-      await Promise.all(ops);
+    if (!autoSaveOn || !msg.vault_item_id) {
+      // Case B — auto-save OFF (or media was never linked to vault):
+      // Simple confirm; remove from chat and delete chat_media storage file only.
+      const doDelete = async () => {
+        setMessages(prev => prev.filter(m => m.id !== msg.id));
+        const chatErr = await softDeleteChat();
+        if (chatErr) {
+          Alert.alert('Delete Failed', 'Could not remove the message. Please try again.');
+          return;
+        }
+        // Delete chat_media storage file since it was never copied to vault
+        if (msg.media_storage_path) {
+          const bucket = msg.media_storage_bucket ?? 'chat_media';
+          supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
+        }
+      };
+      if (Platform.OS === 'web') {
+        if (window.confirm('Delete from chat? This will remove the photo/video from this chat.')) doDelete();
+      } else {
+        Alert.alert(
+          'Delete from chat?',
+          'This will remove the photo/video from this chat.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: doDelete },
+          ]
+        );
+      }
+      return;
+    }
+
+    // Case A — auto-save ON and message has a linked vault item: 3-option sheet
+    const doChatOnly = async () => {
+      setMessages(prev => prev.filter(m => m.id !== msg.id));
+      const chatErr = await softDeleteChat();
+      if (chatErr) {
+        // Re-add message to state since the DB update failed
+        setMessages(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev;
+          return [...prev, msg].sort((a, b) => a.created_at.localeCompare(b.created_at));
+        });
+        Alert.alert('Delete Failed', 'Could not remove the message. Please try again.');
+      }
+      // Vault item is kept intact — do not touch it
+    };
+
+    const doChatAndVault = async () => {
+      // Delete vault item first — if this fails we bail out and show an error
+      const vaultErr = await deleteVaultItem();
+      if (vaultErr) {
+        Alert.alert('Delete Failed', `Could not remove from Vault: ${vaultErr}\n\nNo changes were made.`);
+        return;
+      }
+      setMessages(prev => prev.filter(m => m.id !== msg.id));
+      const chatErr = await softDeleteChat();
+      if (chatErr) {
+        // Vault is already soft-deleted; best effort to inform user
+        Alert.alert('Partial Delete', 'Removed from Vault but could not remove from Chat. Pull to refresh.');
+        return;
+      }
+      // Delete chat_media storage file (vault has its own copy, chat copy is now orphaned)
+      if (msg.media_storage_path) {
+        const bucket = msg.media_storage_bucket ?? 'chat_media';
+        supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
+      }
     };
 
     if (Platform.OS === 'web') {
-      if (window.confirm('Delete this message? This cannot be undone.')) {
-        doDelete();
+      const choice = window.confirm(
+        'Delete media?\n\nOK = Delete from Chat and Vault\nCancel = keep in Vault'
+      );
+      if (choice) {
+        doChatAndVault();
+      } else {
+        if (window.confirm('Delete from Chat only? (Vault copy will be kept)')) {
+          doChatOnly();
+        }
       }
     } else {
       Alert.alert(
-        'Delete message',
-        'This will permanently remove the message. This cannot be undone.',
+        'Delete media?',
+        msg.vault_item_id
+          ? 'This photo/video is saved in your Vault. Choose what to delete.'
+          : 'Remove this media from the chat.',
         [
+          {
+            text: 'Delete from Chat only',
+            onPress: doChatOnly,
+          },
+          {
+            text: 'Delete from Chat and Vault',
+            style: 'destructive',
+            onPress: doChatAndVault,
+          },
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: doDelete },
         ]
       );
     }

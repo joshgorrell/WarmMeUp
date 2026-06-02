@@ -122,7 +122,7 @@ export default function HomeScreen() {
     const partnerName = partnerProfile?.display_name ?? 'Partner';
     const [{ data: interactions }, { data: chatMsgs }, { data: activityEvts }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
-      supabase.from('chat_messages').select('id, sender_id, content_text, created_at').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('chat_messages').select('id, sender_id, content_text, created_at').eq('couple_id', couple.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(10),
       supabase.from('activity_events').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(20),
     ]);
 

@@ -115,13 +115,23 @@ export default function VaultScreen() {
     load();
     const ch = supabase.channel(`vault_${couple.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault_items', filter: `couple_id=eq.${couple.id}` }, load)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vault_items', filter: `couple_id=eq.${couple.id}` },
+        (payload) => {
+          const updated = payload.new as VaultItem;
+          // Soft-delete propagation: remove from local state when deleted_at is set
+          if (updated.deleted_at) {
+            setItems(prev => prev.filter(i => i.id !== updated.id));
+            setSignedUrls(prev => { const n = { ...prev }; delete n[updated.id]; return n; });
+          }
+        }
+      )
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id]);
 
   const load = async () => {
     if (!couple?.id) return;
-    const { data } = await supabase.from('vault_items').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false });
+    const { data } = await supabase.from('vault_items').select('*').eq('couple_id', couple.id).is('deleted_at', null).order('created_at', { ascending: false });
     if (data) {
       setItems(data);
       // Batch-fetch signed URLs grouped by bucket (one API call per bucket).
@@ -216,44 +226,47 @@ export default function VaultScreen() {
   };
 
   const handleDeleteItem = (item: VaultItem) => {
-    const msg = item.chat_message_id
-      ? '\n\nThis item was sent from Chat — it will also be deleted from your Chat history.'
+    const linkedChatNote = item.chat_message_id
+      ? '\n\nThis item was sent from Chat — it will also be hidden from your Chat history.'
       : '';
     Alert.alert(
       'Delete from Vault',
-      `This will permanently remove this item for both you and your partner.${msg}`,
+      `This will permanently remove this item for both you and your partner.${linkedChatNote}`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            // DB deletes first — if storage cleanup fails the file is orphaned
-            // but the user won't see a broken tile. Reverse order risks a dangling
-            // DB row pointing to a deleted file on every future load.
+            const deletedAt = new Date().toISOString();
+            // Soft-delete the vault item first — if this fails, abort so the user sees an error
             const { error: dbError } = await supabase
               .from('vault_items')
-              .delete()
+              .update({ deleted_at: deletedAt })
               .eq('id', item.id);
             if (dbError) {
               Alert.alert('Delete Failed', 'Could not delete this item. Please try again.');
               return;
             }
-            // Remove from local state only after DB confirms deletion
+            // Remove from local state only after DB confirms
             setItems(prev => prev.filter(i => i.id !== item.id));
             setSignedUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
-            // Best-effort storage cleanup (fire-and-forget)
+            // Best-effort storage cleanup for the vault file
             const bucket = item.storage_bucket ?? 'vault';
             const path = item.storage_path ?? item.file_path;
             if (path) supabase.storage.from(bucket).remove([path]).catch(() => {});
-            // Delete linked chat message + its storage file
+            // Soft-delete linked chat message if present
             if (item.chat_message_id) {
               const { data: chatMsg } = await supabase
                 .from('chat_messages')
                 .select('media_storage_path, media_storage_bucket')
                 .eq('id', item.chat_message_id)
                 .maybeSingle();
-              await supabase.from('chat_messages').delete().eq('id', item.chat_message_id);
+              await supabase
+                .from('chat_messages')
+                .update({ deleted_at: deletedAt })
+                .eq('id', item.chat_message_id);
+              // Best-effort storage cleanup for the chat_media copy
               if (chatMsg?.media_storage_path) {
                 const chatBucket = chatMsg.media_storage_bucket ?? 'chat_media';
                 supabase.storage.from(chatBucket).remove([chatMsg.media_storage_path]).catch(() => {});
