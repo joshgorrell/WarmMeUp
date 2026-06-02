@@ -21,9 +21,10 @@ const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 30;
 
-// Module-level flag persists across remounts. Without this, every navigation to /unlock
-// (e.g. from BackgroundLockManager) resets the ref and auto-fires a new Face ID prompt,
-// creating an infinite biometric loop. Reset only on successful unlock or manual PIN switch.
+// Module-level flag persists across remounts of the unlock screen within the same JS session.
+// Set to true the moment the biometric prompt is triggered; only reset to false in proceed()
+// after a successful unlock. This prevents BackgroundLockManager from navigating to /unlock
+// and causing a re-mount that would auto-fire a second Face ID prompt.
 let biometricAlreadyPrompted = false;
 
 export default function UnlockScreen() {
@@ -36,7 +37,12 @@ export default function UnlockScreen() {
   const loginMethod = settings?.login_method ?? 'password';
 
   const [mode, setMode] = useState<'biometric' | 'pin' | null>(null);
+  // True once the mode has been set for this mount — prevents the settings useEffect
+  // from re-running mode-init logic if settings state updates after initial load.
   const modeInitialised = useRef(false);
+  // True once tryBiometric() has been called on this mount — prevents the mode useEffect
+  // from auto-firing a second prompt if mode changes while still on the same screen mount.
+  const biometricAttemptedThisMount = useRef(false);
 
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
@@ -90,6 +96,8 @@ export default function UnlockScreen() {
       loginMethod: settings?.login_method,
       timestamp: Date.now(),
     });
+    // Reset the module-level flag so the NEXT time unlock is required, Face ID auto-prompts correctly.
+    biometricAlreadyPrompted = false;
     // Block BackgroundLockManager from racing the navigation to /transition.
     isAuthenticatingRef.current = true;
     unlockApp();
@@ -102,14 +110,18 @@ export default function UnlockScreen() {
       setMode('pin');
       return;
     }
+    // Mark as attempted — both flags must be set before the async call so that any
+    // re-render triggered during the prompt does not fire a second prompt.
     biometricAlreadyPrompted = true;
+    biometricAttemptedThisMount.current = true;
     isAuthenticatingRef.current = true;
     try {
       const result = await authenticate(`Unlock Warm Me Up`);
       if (result.success) {
-        biometricAlreadyPrompted = false;
-        proceed(); // proceed() manages isAuthenticatingRef itself
+        proceed(); // proceed() resets biometricAlreadyPrompted for the next lock cycle
       } else {
+        // User cancelled or failed — fall through to PIN.
+        // Do NOT reset biometricAlreadyPrompted: require an explicit tap to retry.
         isAuthenticatingRef.current = false;
         setMode('pin');
       }
@@ -119,11 +131,19 @@ export default function UnlockScreen() {
     }
   }, [bioAvailable, authenticate, proceed, isAuthenticatingRef]);
 
+  // One-shot: set the initial mode when settings first become available.
   useEffect(() => {
     if (modeInitialised.current || !settings) return;
     modeInitialised.current = true;
     const method = settings.login_method ?? 'password';
-    console.log('[unlock] settings loaded, login_method:', method, 'lock_after_seconds:', settings.lock_after_seconds);
+    const lockAfter = settings.lock_after_seconds ?? null;
+    console.log('[unlock] settings loaded, login_method:', method, 'lock_after_seconds:', lockAfter);
+
+    // lock_after_seconds = -1 means "never lock" — proceed immediately if we land here.
+    if (lockAfter !== null && lockAfter < 0) {
+      proceed();
+      return;
+    }
     if (method === 'password') {
       // Should never land here for password users, but if we do, proceed immediately.
       proceed();
@@ -132,9 +152,16 @@ export default function UnlockScreen() {
     setMode(method === 'biometric' ? 'biometric' : 'pin');
   }, [settings]);
 
+  // Auto-trigger biometric prompt exactly once per screen mount.
+  // Three guards must all pass:
+  //   1. mode === 'biometric'
+  //   2. biometricAlreadyPrompted === false (module-level: guards against re-mounts)
+  //   3. biometricAttemptedThisMount.current === false (mount-level: guards against
+  //      this effect re-running within the same mount if dependencies update)
   useEffect(() => {
     if (mode !== 'biometric') return;
     if (biometricAlreadyPrompted) return;
+    if (biometricAttemptedThisMount.current) return;
     tryBiometric();
   }, [mode, tryBiometric]);
 
@@ -207,6 +234,13 @@ export default function UnlockScreen() {
     router.replace('/(auth)/login');
   };
 
+  // Allow the user to manually retry biometric after a cancel or failure.
+  const handleBiometricRetry = useCallback(() => {
+    biometricAlreadyPrompted = false;
+    biometricAttemptedThisMount.current = false;
+    tryBiometric();
+  }, [tryBiometric]);
+
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canAccessDebug = useMemo(
@@ -254,12 +288,20 @@ export default function UnlockScreen() {
             </View>
           ) : mode === null ? null : mode === 'biometric' && bioAvailable ? (
             <View style={[styles.bioWrap, { gap: vSm }]}>
-              <TouchableOpacity style={styles.bioButton} onPress={tryBiometric} activeOpacity={0.75}>
+              <TouchableOpacity style={styles.bioButton} onPress={handleBiometricRetry} activeOpacity={0.75}>
                 <BiometricIcon color="#FF2E8A" size={52} strokeWidth={1.5} />
               </TouchableOpacity>
               <AppText style={styles.title}>Unlock with {biometricLabel}</AppText>
               <AppText style={styles.sub}>Tap to authenticate</AppText>
-              <TouchableOpacity style={styles.altLink} onPress={() => { biometricAlreadyPrompted = false; setMode('pin'); }} activeOpacity={0.7}>
+              <TouchableOpacity
+                style={styles.altLink}
+                onPress={() => {
+                  biometricAlreadyPrompted = false;
+                  biometricAttemptedThisMount.current = false;
+                  setMode('pin');
+                }}
+                activeOpacity={0.7}
+              >
                 <KeyRound color="rgba(255,255,255,0.4)" size={14} />
                 <AppText style={styles.altLinkText}>Use PIN instead</AppText>
               </TouchableOpacity>
@@ -300,7 +342,7 @@ export default function UnlockScreen() {
 
               <View style={[styles.footerLinks, { marginTop: vSm }]}>
                 {loginMethod === 'biometric' && bioAvailable && (
-                  <TouchableOpacity style={styles.altLink} onPress={tryBiometric} activeOpacity={0.7}>
+                  <TouchableOpacity style={styles.altLink} onPress={handleBiometricRetry} activeOpacity={0.7}>
                     <BiometricIcon color="rgba(255,255,255,0.4)" size={14} />
                     <AppText style={styles.altLinkText}>Use {biometricLabel}</AppText>
                   </TouchableOpacity>

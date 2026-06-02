@@ -648,6 +648,7 @@ export default function ChatTab() {
         couple_id: couple.id,
         uploaded_by_user_id: user.id,
         media_type: msg.media_type ?? 'photo',
+        file_path: destPath,
         storage_path: destPath,
         storage_bucket: 'vault',
         allow_screenshot: msg.allow_screenshot,

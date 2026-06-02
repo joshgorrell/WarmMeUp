@@ -312,15 +312,19 @@ export default function VaultScreen() {
         startSpin();
         try {
           await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct), user.id, rpcResult.couple_id);
-          const { error: dbError } = await supabase.from('vault_items').insert({
+          logDebugEvent('vault_lastUploadSuccessPath', { storagePath, coupleId: rpcResult.couple_id, userId: user.id });
+          const insertPayload = {
             couple_id: rpcResult.couple_id, uploaded_by_user_id: user.id, media_type: mediaType,
-            storage_path: storagePath, storage_bucket: 'vault',
+            file_path: storagePath, storage_path: storagePath, storage_bucket: 'vault',
             allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
             allow_save: settings?.vault_allow_save_default ?? false,
             allow_share: settings?.vault_allow_share_default ?? false,
             chat_message_id: null,
-          });
+          };
+          logDebugEvent('vault_lastDbInsertPayload', insertPayload);
+          const { error: dbError } = await supabase.from('vault_items').insert(insertPayload);
           if (dbError) {
+            logDebugEvent('vault_lastDbInsertError', { message: dbError.message, code: dbError.code, details: dbError.details, storagePath });
             supabase.storage.from('vault').remove([storagePath]).catch(() => {});
             throw new Error(`Media uploaded but failed to save — ${dbError.message}`);
           }
@@ -354,21 +358,26 @@ export default function VaultScreen() {
       const ext = mimeToExtension(mimeType);
       const storagePath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
       await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct), user.id, couple.id);
+      logDebugEvent('vault_lastUploadSuccessPath', { storagePath, coupleId: couple.id, userId: user.id });
 
-      const { error: dbError } = await supabase.from('vault_items').insert({
+      const insertPayload = {
         couple_id: couple.id,
         uploaded_by_user_id: user.id,
         media_type: mediaType,
+        file_path: storagePath,
         storage_path: storagePath,
         storage_bucket: 'vault',
         allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
         allow_save: settings?.vault_allow_save_default ?? false,
         allow_share: settings?.vault_allow_share_default ?? false,
         chat_message_id: null,
-      });
+      };
+      logDebugEvent('vault_lastDbInsertPayload', insertPayload);
+      const { error: dbError } = await supabase.from('vault_items').insert(insertPayload);
       if (dbError) {
         // Clean up the already-uploaded storage file so it doesn't become an orphan
         supabase.storage.from('vault').remove([storagePath]).catch(() => {});
+        logDebugEvent('vault_lastDbInsertError', { message: dbError.message, code: dbError.code, details: dbError.details, storagePath });
         logDebugEvent('VAULT UPLOAD ERROR', {
           reason: 'DB insert failed after storage upload',
           dbError: dbError.message,
