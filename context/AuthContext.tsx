@@ -159,7 +159,9 @@ async function writeUnlockedAt(userId: string, ts: number): Promise<void> {
     } else if (typeof window !== 'undefined') {
       window.sessionStorage.setItem(unlockedAtKey(userId), String(ts));
     }
-  } catch {}
+  } catch (err: any) {
+    console.warn('[Auth] writeUnlockedAt failed — lock timer will reset on next restart:', err?.message);
+  }
 }
 
 async function clearUnlockedAt(userId: string): Promise<void> {

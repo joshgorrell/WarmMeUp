@@ -21,12 +21,6 @@ const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 30;
 
-// Module-level flag persists across remounts of the unlock screen within the same JS session.
-// Set to true the moment the biometric prompt is triggered; only reset to false in proceed()
-// after a successful unlock. This prevents BackgroundLockManager from navigating to /unlock
-// and causing a re-mount that would auto-fire a second Face ID prompt.
-let biometricAlreadyPrompted = false;
-
 export default function UnlockScreen() {
   const router = useRouter();
   const { user, profile, settings, unlockApp, isAuthenticatingRef, debugModeEnabled } = useAuth();
@@ -40,6 +34,9 @@ export default function UnlockScreen() {
   // True once the mode has been set for this mount — prevents the settings useEffect
   // from re-running mode-init logic if settings state updates after initial load.
   const modeInitialised = useRef(false);
+  // True once the biometric prompt has been triggered on this mount. Replaces the old
+  // module-level flag so the guard resets correctly on each screen mount/unmount cycle.
+  const biometricAlreadyPrompted = useRef(false);
   // True once tryBiometric() has been called on this mount — prevents the mode useEffect
   // from auto-firing a second prompt if mode changes while still on the same screen mount.
   const biometricAttemptedThisMount = useRef(false);
@@ -96,8 +93,8 @@ export default function UnlockScreen() {
       loginMethod: settings?.login_method,
       timestamp: Date.now(),
     });
-    // Reset the module-level flag so the NEXT time unlock is required, Face ID auto-prompts correctly.
-    biometricAlreadyPrompted = false;
+    // Reset so the NEXT time the unlock screen mounts, Face ID auto-prompts correctly.
+    biometricAlreadyPrompted.current = false;
     // Block BackgroundLockManager from racing the navigation to /transition.
     isAuthenticatingRef.current = true;
     unlockApp();
@@ -112,7 +109,7 @@ export default function UnlockScreen() {
     }
     // Mark as attempted — both flags must be set before the async call so that any
     // re-render triggered during the prompt does not fire a second prompt.
-    biometricAlreadyPrompted = true;
+    biometricAlreadyPrompted.current = true;
     biometricAttemptedThisMount.current = true;
     isAuthenticatingRef.current = true;
     try {
@@ -155,12 +152,11 @@ export default function UnlockScreen() {
   // Auto-trigger biometric prompt exactly once per screen mount.
   // Three guards must all pass:
   //   1. mode === 'biometric'
-  //   2. biometricAlreadyPrompted === false (module-level: guards against re-mounts)
-  //   3. biometricAttemptedThisMount.current === false (mount-level: guards against
-  //      this effect re-running within the same mount if dependencies update)
+  //   2. biometricAlreadyPrompted.current === false (mount-scoped ref: guards against re-mounts and re-renders)
+  //   3. biometricAttemptedThisMount.current === false (extra guard within same mount)
   useEffect(() => {
     if (mode !== 'biometric') return;
-    if (biometricAlreadyPrompted) return;
+    if (biometricAlreadyPrompted.current) return;
     if (biometricAttemptedThisMount.current) return;
     tryBiometric();
   }, [mode, tryBiometric]);
@@ -236,7 +232,7 @@ export default function UnlockScreen() {
 
   // Allow the user to manually retry biometric after a cancel or failure.
   const handleBiometricRetry = useCallback(() => {
-    biometricAlreadyPrompted = false;
+    biometricAlreadyPrompted.current = false;
     biometricAttemptedThisMount.current = false;
     tryBiometric();
   }, [tryBiometric]);
@@ -296,7 +292,7 @@ export default function UnlockScreen() {
               <TouchableOpacity
                 style={styles.altLink}
                 onPress={() => {
-                  biometricAlreadyPrompted = false;
+                  biometricAlreadyPrompted.current = false;
                   biometricAttemptedThisMount.current = false;
                   setMode('pin');
                 }}

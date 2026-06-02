@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, Platform, ScrollView,
 } from 'react-native';
-import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
@@ -100,6 +99,7 @@ export default function SetupPinScreen() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <LinearGradient colors={['#07070A', '#0D0D12', '#151018']} style={StyleSheet.absoluteFill} />
       <View style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
         <View style={[{ marginBottom: vMd }, centerStyle]}>
