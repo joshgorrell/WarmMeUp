@@ -17,6 +17,30 @@ import CurrentMomentCard from '@/components/CurrentMomentCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+const kv = {
+  get: (key: string) => {
+    if (Platform.OS === 'web') {
+      return Promise.resolve(typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null);
+    }
+    return SecureStore.getItemAsync(key);
+  },
+  set: (key: string, value: string) => {
+    if (Platform.OS === 'web') {
+      try { localStorage.setItem(key, value); } catch {}
+      return Promise.resolve();
+    }
+    return SecureStore.setItemAsync(key, value);
+  },
+  del: (key: string) => {
+    if (Platform.OS === 'web') {
+      try { localStorage.removeItem(key); } catch {}
+      return Promise.resolve();
+    }
+    return SecureStore.deleteItemAsync(key);
+  },
+};
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -81,7 +105,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!user?.id) return;
-    SecureStore.getItemAsync(`seen_activity_${user.id}`).then(raw => {
+    kv.get(`seen_activity_${user.id}`).then(raw => {
       if (!raw) return;
       try {
         const ids: string[] = JSON.parse(raw);
@@ -280,7 +304,7 @@ export default function HomeScreen() {
 
   const saveSeen = useCallback((ids: Set<string>) => {
     if (!user?.id) return;
-    SecureStore.setItemAsync(`seen_activity_${user.id}`, JSON.stringify([...ids])).catch(() => {});
+    kv.set(`seen_activity_${user.id}`, JSON.stringify([...ids])).catch(() => {});
   }, [user?.id]);
 
   useFocusEffect(useCallback(() => {
@@ -303,7 +327,7 @@ export default function HomeScreen() {
     seenIdsRef.current = new Set();
     setSeenIds(new Set());
     if (user?.id) {
-      SecureStore.deleteItemAsync(`seen_activity_${user.id}`).catch(() => {});
+      kv.del(`seen_activity_${user.id}`).catch(() => {});
     }
     setRecentActivity(prev => prev.map(item => ({ ...item, seen: false })));
   }, [user?.id]);
