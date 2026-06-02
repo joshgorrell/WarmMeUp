@@ -34,13 +34,23 @@ const SLIDE_IMAGES = [
   require('@/assets/onboarding/Intro_Step_11.png'),
 ];
 
+const SLIDE_NAMES = [
+  'Intro_Step_1',
+  'Intro_Step_2',
+  'Intro_Step_3',
+  'Intro_Step_4',
+  'Intro_Step_5',
+  'Intro_Step_6',
+  'Intro_Step_7',
+  'Intro_Step_8',
+  'Intro_Step_9',
+  'Intro_Step_10',
+  'Intro_Step_11',
+];
+
 const LAST_INDEX = SLIDE_IMAGES.length - 1; // 10
 
 // ─── Tap zone fractions (relative to image canvas) ───────────────────────────
-// Applied to the *rendered* image rectangle once real dimensions are known.
-//
-// Slides 1-10: "Next →" pill + top-right "Skip"
-// Slide 11 (upsell): "Join Now" + "Invite a Partner"
 const ZONES = {
   next:   { topFrac: 0.915, hFrac: 0.069, lFrac: 0.06, rFrac: 0.06 },
   join:   { topFrac: 0.872, hFrac: 0.069, lFrac: 0.06, rFrac: 0.06 },
@@ -48,74 +58,68 @@ const ZONES = {
   skip:   { topFrac: 0.0,   hFrac: 0.11,  lFrac: 0.70, rFrac: 0.0  },
 } as const;
 
-// ─── Runtime image size hook ──────────────────────────────────────────────────
-// Stage 1: Image.resolveAssetSource + Image.getSize (fast path)
-// Stage 2: expo-asset Asset.fromModule (reliable bundled-asset fallback)
-// Stage 3: hardcoded 390x844 (last resort — always logged loudly)
-function useImageSize(asset: ReturnType<typeof require>, screenW: number, screenH: number) {
-  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+type ImageSize = { w: number; h: number };
+
+// ─── Per-asset probe (three stages) ──────────────────────────────────────────
+async function probeAssetSize(
+  asset: ReturnType<typeof require>,
+  index: number,
+): Promise<ImageSize> {
+  // Stage 1: resolveAssetSource + getSize
+  try {
+    const uri = Image.resolveAssetSource(asset).uri;
+    const size = await new Promise<ImageSize>((ok, fail) => {
+      Image.getSize(uri, (w, h) => ok({ w, h }), fail);
+    });
+    console.log(`[probeAssetSize] slide ${index} via resolveAssetSource: ${size.w}x${size.h}px`);
+    return size;
+  } catch (e) {
+    console.warn(`[probeAssetSize] slide ${index} resolveAssetSource/getSize failed – trying expo-asset:`, e);
+  }
+
+  // Stage 2: expo-asset Asset.fromModule
+  try {
+    const a = Asset.fromModule(asset);
+    await a.downloadAsync();
+    if (a.width && a.height) {
+      console.log(`[probeAssetSize] slide ${index} via expo-asset: ${a.width}x${a.height}px`);
+      return { w: a.width, h: a.height };
+    }
+    console.warn(`[probeAssetSize] slide ${index} expo-asset width/height null`);
+  } catch (e2) {
+    console.warn(`[probeAssetSize] slide ${index} expo-asset failed:`, e2);
+  }
+
+  // Stage 3: hardcoded fallback
+  console.warn(`[probeAssetSize] slide ${index} ALL probes failed – using fallback 390x844`);
+  return { w: 390, h: 844 };
+}
+
+// ─── Multi-asset size hook ────────────────────────────────────────────────────
+function useSlideImageSizes(assets: ReturnType<typeof require>[]): Array<ImageSize | null> {
+  const [sizes, setSizes] = useState<Array<ImageSize | null>>(
+    () => assets.map(() => null),
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    async function resolve() {
-      // Stage 1
-      try {
-        const uri = Image.resolveAssetSource(asset).uri;
-        await new Promise<void>((ok, fail) => {
-          Image.getSize(
-            uri,
-            (w, h) => {
-              if (!cancelled) {
-                console.log(`[useImageSize] source image via resolveAssetSource: ${w}x${h}px`);
-                setSize({ w, h });
-              }
-              ok();
-            },
-            fail,
-          );
-        });
-        return;
-      } catch (e) {
-        console.warn(
-          `[useImageSize] resolveAssetSource/getSize failed – screen: ${screenW}x${screenH} – trying expo-asset:`,
-          e,
-        );
-      }
-
-      // Stage 2
-      try {
-        const a = Asset.fromModule(asset);
-        await a.downloadAsync();
-        console.log(
-          `[useImageSize] expo-asset metadata: width=${a.width} height=${a.height} localUri=${a.localUri}`,
-        );
-        if (a.width && a.height) {
-          if (!cancelled) {
-            console.log(`[useImageSize] source image via expo-asset: ${a.width}x${a.height}px`);
-            setSize({ w: a.width, h: a.height });
-          }
-          return;
+    assets.forEach((asset, i) => {
+      probeAssetSize(asset, i).then((size) => {
+        if (!cancelled) {
+          setSizes((prev) => {
+            const next = [...prev];
+            next[i] = size;
+            return next;
+          });
         }
-        console.warn('[useImageSize] expo-asset resolved but width/height are null');
-      } catch (e2) {
-        console.warn('[useImageSize] expo-asset failed:', e2);
-      }
+      });
+    });
 
-      // Stage 3
-      if (!cancelled) {
-        console.warn(
-          `[useImageSize] ALL dimension probes failed – screen: ${screenW}x${screenH} – using fallback 390x844`,
-        );
-        setSize({ w: 390, h: 844 });
-      }
-    }
-
-    resolve();
     return () => { cancelled = true; };
   }, []);
 
-  return size;
+  return sizes;
 }
 
 // ─── Contain layout calculator ────────────────────────────────────────────────
@@ -186,7 +190,6 @@ function Slide({ asset, index, imgW, imgH, screenW, screenH, onNext, onSkip, onC
 
   return (
     <View style={{ width: screenW, height: screenH, backgroundColor: '#000' }}>
-      {/* Artwork — positioned at exact coordinates computed by layout math */}
       <Image
         source={asset}
         style={{
@@ -247,32 +250,44 @@ export default function OnboardingCarousel({ onComplete }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const { width: SW, height: SH } = useWindowDimensions();
 
-  // Measure slide 0 — all slides should share the same canvas.
-  const slide0Size = useImageSize(SLIDE_IMAGES[0], SW, SH);
+  const slideSizes = useSlideImageSizes(SLIDE_IMAGES);
 
-  // Cross-check every other slide when slide 0 is measured.
+  // ── Audit log — fires once all 11 probes are complete ──────────────────────
   useEffect(() => {
-    if (!slide0Size) return;
-    SLIDE_IMAGES.slice(1).forEach((asset, i) => {
-      let uri: string;
-      try {
-        uri = Image.resolveAssetSource(asset).uri;
-      } catch {
-        console.warn(`[OnboardingCarousel] resolveAssetSource threw for slide ${i + 1}`);
-        return;
-      }
-      Image.getSize(uri, (w, h) => {
-        if (w !== slide0Size.w || h !== slide0Size.h) {
+    const allDone = slideSizes.every((s) => s !== null);
+    if (!allDone) return;
+
+    const sizes = slideSizes as ImageSize[];
+    const baseline = sizes[0];
+
+    console.log('[SlideAudit] ── dimension audit ──────────────────────────────');
+    sizes.forEach((size, i) => {
+      const layout = computeContainLayout(size.w, size.h, SW, SH, 0, `audit-slide-${i}`);
+      console.log(
+        `[SlideAudit] slide ${String(i).padStart(2, ' ')} (${SLIDE_NAMES[i]}):` +
+        `  source=${size.w}x${size.h}` +
+        `  rendered=${layout.renderedW.toFixed(1)}x${layout.renderedH.toFixed(1)}`,
+      );
+    });
+
+    const mismatches = sizes.filter((s, i) => i > 0 && (s.w !== baseline.w || s.h !== baseline.h));
+    if (mismatches.length === 0) {
+      console.log(
+        `[SlideAudit] all 11 slides share source dimensions ${baseline.w}x${baseline.h}` +
+        ' — any rendering differences are due to internal artwork padding, not canvas size',
+      );
+    } else {
+      sizes.forEach((s, i) => {
+        if (i > 0 && (s.w !== baseline.w || s.h !== baseline.h)) {
           console.warn(
-            `[OnboardingCarousel] slide ${i + 1} dimensions ${w}x${h}` +
-            ` differ from slide 0 (${slide0Size.w}x${slide0Size.h})`,
+            `[SlideAudit] MISMATCH slide ${i} (${SLIDE_NAMES[i]}): ${s.w}x${s.h}` +
+            `  (baseline from slide 0: ${baseline.w}x${baseline.h})`,
           );
-        } else {
-          console.log(`[OnboardingCarousel] slide ${i + 1}: ${w}x${h} ok`);
         }
       });
-    });
-  }, [slide0Size]);
+    }
+    console.log('[SlideAudit] ──────────────────────────────────────────────────');
+  }, [slideSizes, SW, SH]);
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
@@ -298,8 +313,9 @@ export default function OnboardingCarousel({ onComplete }: Props) {
     flatRef.current?.scrollToIndex({ index: LAST_INDEX, animated: true });
   }, []);
 
-  // Hold off rendering until we have real image dimensions.
-  if (!slide0Size) {
+  // Hold off rendering until all 11 probes are done so the audit log fires first.
+  const allReady = slideSizes.every((s) => s !== null);
+  if (!allReady) {
     return <View style={s.root} />;
   }
 
@@ -309,19 +325,22 @@ export default function OnboardingCarousel({ onComplete }: Props) {
         ref={flatRef}
         data={SLIDE_IMAGES}
         keyExtractor={(_, i) => String(i)}
-        renderItem={({ item, index }) => (
-          <Slide
-            asset={item}
-            index={index}
-            imgW={slide0Size.w}
-            imgH={slide0Size.h}
-            screenW={SW}
-            screenH={SH}
-            onNext={handleNext}
-            onSkip={handleSkip}
-            onComplete={onComplete}
-          />
-        )}
+        renderItem={({ item, index }) => {
+          const size = slideSizes[index] as ImageSize;
+          return (
+            <Slide
+              asset={item}
+              index={index}
+              imgW={size.w}
+              imgH={size.h}
+              screenW={SW}
+              screenH={SH}
+              onNext={handleNext}
+              onSkip={handleSkip}
+              onComplete={onComplete}
+            />
+          );
+        }}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
