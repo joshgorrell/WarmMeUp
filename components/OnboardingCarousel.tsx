@@ -54,7 +54,14 @@ function useImageSize(asset: ReturnType<typeof require>) {
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
-    const uri = Image.resolveAssetSource(asset).uri;
+    let uri: string;
+    try {
+      uri = Image.resolveAssetSource(asset).uri;
+    } catch (e) {
+      console.warn('[useImageSize] resolveAssetSource threw, using fallback 390x844:', e);
+      setSize({ w: 390, h: 844 });
+      return;
+    }
     Image.getSize(
       uri,
       (w, h) => {
@@ -62,7 +69,8 @@ function useImageSize(asset: ReturnType<typeof require>) {
         setSize({ w, h });
       },
       (err) => {
-        console.warn('[useImageSize] getSize failed:', err);
+        console.warn('[useImageSize] getSize failed, using fallback 390x844:', err);
+        setSize({ w: 390, h: 844 });
       },
     );
   }, []);
@@ -196,7 +204,13 @@ export default function OnboardingCarousel({ onComplete }: Props) {
   useEffect(() => {
     if (!slide0Size) return;
     SLIDE_IMAGES.slice(1).forEach((asset, i) => {
-      const uri = Image.resolveAssetSource(asset).uri;
+      let uri: string;
+      try {
+        uri = Image.resolveAssetSource(asset).uri;
+      } catch {
+        console.warn(`[OnboardingCarousel] resolveAssetSource threw for slide ${i + 1}`);
+        return;
+      }
       Image.getSize(uri, (w, h) => {
         if (w !== slide0Size.w || h !== slide0Size.h) {
           console.warn(
