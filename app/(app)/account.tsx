@@ -415,6 +415,12 @@ export default function AccountScreen() {
   // Cancel pending invite
   const [showCancelInviteSheet, setShowCancelInviteSheet] = useState(false);
   const [cancellingInvite, setCancellingInvite] = useState(false);
+
+  // Enter partner's code (solo users joining a partner's couple)
+  const [showEnterCodeSheet, setShowEnterCodeSheet] = useState(false);
+  const [enterCode, setEnterCode] = useState('');
+  const [enterCodeLoading, setEnterCodeLoading] = useState(false);
+  const [enterCodeError, setEnterCodeError] = useState<string | null>(null);
   const [deleteAccountStep, setDeleteAccountStep] = useState<1 | 2>(1);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
@@ -599,6 +605,42 @@ export default function AccountScreen() {
     }
     setCancellingInvite(false);
     setShowCancelInviteSheet(false);
+  };
+
+  const handleJoinWithCode = async () => {
+    const code = enterCode.trim().toUpperCase();
+    if (!code || !user) return;
+    setEnterCodeLoading(true);
+    setEnterCodeError(null);
+    const { completePendingJoin } = await import('@/lib/coupleJoin');
+    const result = await completePendingJoin(user.id, code, refreshSubscription);
+    if (result.ok) {
+      setShowEnterCodeSheet(false);
+      setEnterCode('');
+      await refreshCouple();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (token) {
+        fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
+        }).catch(() => {});
+      }
+      router.replace({
+        pathname: '/(auth)/paired-celebration',
+        params: { partnerName: result.partnerName || '' },
+      });
+    } else {
+      const msg =
+        result.reason === 'self' ? "You can't use your own invite code." :
+        result.reason === 'already_connected' ? "You're already connected to a partner." :
+        result.reason === 'not_found' ? "Invite code not found. Please check and try again." :
+        result.reason === 'already_full' ? 'That code has already been used.' :
+        'Something went wrong. Please try again.';
+      setEnterCodeError(msg);
+    }
+    setEnterCodeLoading(false);
   };
 
   const handleInviteCardPress = () => {
@@ -1236,6 +1278,21 @@ export default function AccountScreen() {
           ) : null}
         </TouchableOpacity>
       ) : null}
+
+      {/* Enter a partner's code — always visible for solo users */}
+      {!couple?.user_b_id && (
+        <TouchableOpacity
+          style={[styles.enterCodeRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+          onPress={() => { setEnterCode(''); setEnterCodeError(null); setShowEnterCodeSheet(true); }}
+          activeOpacity={0.75}
+        >
+          <View style={[styles.enterCodeIcon, { backgroundColor: 'rgba(255,122,69,0.10)' }]}>
+            <UserPlus color="#FF7A45" size={16} strokeWidth={2} />
+          </View>
+          <AppText style={[styles.enterCodeText, { color: colors.textSecondary }]}>Have a partner's code? Enter it here</AppText>
+          <ChevronRight color={colors.textMuted} size={15} strokeWidth={2} />
+        </TouchableOpacity>
+      )}
 
       {/* Profile menu */}
       <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
@@ -2066,6 +2123,48 @@ export default function AccountScreen() {
         </View>
       </BottomSheet>
 
+      {/* Enter partner's code sheet */}
+      <BottomSheet
+        visible={showEnterCodeSheet}
+        onClose={() => { if (!enterCodeLoading) { setShowEnterCodeSheet(false); setEnterCode(''); setEnterCodeError(null); } }}
+        title="Enter Partner's Code"
+        subtitle="Ask your partner for their 6-character invite code"
+      >
+        <View style={styles.enterCodeSheet}>
+          <AppTextInput
+            style={[styles.enterCodeInput, { color: colors.text, borderColor: enterCodeError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card }]}
+            value={enterCode}
+            onChangeText={t => { setEnterCode(t.toUpperCase()); setEnterCodeError(null); }}
+            placeholder="e.g. T9RRG6"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={6}
+          />
+          {enterCodeError ? (
+            <AppText style={styles.enterCodeError}>{enterCodeError}</AppText>
+          ) : null}
+          <TouchableOpacity
+            style={[styles.enterCodeBtn, (!enterCode.trim() || enterCodeLoading) && { opacity: 0.5 }]}
+            onPress={handleJoinWithCode}
+            activeOpacity={0.85}
+            disabled={!enterCode.trim() || enterCodeLoading}
+          >
+            <LinearGradient
+              colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.enterCodeBtnGrad}
+            >
+              {enterCodeLoading
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <AppText style={styles.enterCodeBtnText}>Connect</AppText>
+              }
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </BottomSheet>
+
       {/* ── Delete Account Modal ───────────────────────────────────── */}
       <Modal
         visible={deleteAccountOpen}
@@ -2424,6 +2523,66 @@ const styles = StyleSheet.create({
   cancelInviteKeepText: {
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
+  },
+  enterCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  enterCodeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  enterCodeText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Medium',
+  },
+  enterCodeSheet: {
+    gap: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
+  },
+  enterCodeInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.md,
+    fontSize: 22,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: 6,
+    textAlign: 'center',
+  },
+  enterCodeError: {
+    color: '#FF5A5F',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+  },
+  enterCodeBtn: {
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  enterCodeBtnGrad: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderRadius: Radius.pill,
+  },
+  enterCodeBtnText: {
+    color: '#fff',
+    fontSize: FontSize.lg,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: 0.3,
   },
   debugRow: {
     flexDirection: 'row',

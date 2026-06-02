@@ -21,8 +21,10 @@ import GoogleIcon from '@/components/icons/GoogleIcon';
 import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import { useLayout } from '@/hooks/useLayout';
-import { savePendingCode } from '@/lib/inviteCode';
+import { savePendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
+import { completePendingJoin } from '@/lib/coupleJoin';
+import { useAuth } from '@/context/AuthContext';
 
 function getAge(dob: Date): number {
   const today = new Date();
@@ -47,6 +49,7 @@ export default function RegisterScreen() {
   const { pendingCode } = useLocalSearchParams<{ pendingCode?: string }>();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
+  const { refreshSubscription } = useAuth();
 
   const vXs = Math.round(height * 0.01);
   const vSm = Math.round(height * 0.016);
@@ -132,6 +135,36 @@ export default function RegisterScreen() {
           .from('profiles')
           .update({ display_name: displayName.trim(), tos_accepted_at: tosAcceptedAt })
           .eq('id', data.user.id);
+
+        // When Supabase has email confirmation disabled, the user is confirmed
+        // immediately and there is no email to verify. Skip verify-email and
+        // run the pending join inline so the pair is completed right away.
+        if (data.user.email_confirmed_at) {
+          if (pendingCode) {
+            const result = await completePendingJoin(data.user.id, pendingCode, refreshSubscription);
+            await clearPendingCode();
+            if (result.ok) {
+              const { data: sessionData } = await supabase.auth.getSession();
+              const token = sessionData?.session?.access_token;
+              if (token) {
+                fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
+                }).catch(() => {});
+              }
+              router.replace({
+                pathname: '/(auth)/paired-celebration',
+                params: { partnerName: result.partnerName || '' },
+              });
+              return;
+            }
+          }
+          router.replace('/(auth)/onboarding');
+          return;
+        }
+
+        // Normal path: email confirmation required
         const params: Record<string, string> = { email };
         if (pendingCode) params.pendingCode = pendingCode;
         router.replace({ pathname: '/(auth)/verify-email', params });
@@ -174,14 +207,28 @@ export default function RegisterScreen() {
         // updatedProfile is non-null only when we actually wrote — meaning new user
         const isNewUser = !!updatedProfile;
         if (isNewUser) {
-          // OAuth providers verify email automatically — go straight to onboarding.
-          // If there's a pending invite code, it will be handled by verify-email
-          // or directly here since OAuth emails are pre-verified.
-          if (pendingCode) {
-            router.replace({ pathname: '/(auth)/verify-email', params: { pendingCode } });
-          } else {
-            router.replace('/(auth)/onboarding');
+          // OAuth providers always verify email — run join inline if there's a pending code.
+          if (pendingCode && session.user?.id) {
+            const result = await completePendingJoin(session.user.id, pendingCode, refreshSubscription);
+            await clearPendingCode();
+            if (result.ok) {
+              const { data: sessionData } = await supabase.auth.getSession();
+              const token = sessionData?.session?.access_token;
+              if (token) {
+                fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
+                }).catch(() => {});
+              }
+              router.replace({
+                pathname: '/(auth)/paired-celebration',
+                params: { partnerName: result.partnerName || '' },
+              });
+              return;
+            }
           }
+          router.replace('/(auth)/onboarding');
         } else {
           router.replace('/transition');
         }

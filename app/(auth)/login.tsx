@@ -9,8 +9,9 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { signInWithProvider, isOAuthSupported } from '@/lib/oauth';
-import { savePendingCode } from '@/lib/inviteCode';
+import { savePendingCode, loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
+import { completePendingJoin } from '@/lib/coupleJoin';
 import WarmupBrand from '@/components/WarmupBrand';
 import PrimaryButton from '@/components/PrimaryButton';
 import AppleIcon from '@/components/icons/AppleIcon';
@@ -58,13 +59,37 @@ export default function LoginScreen() {
     setError('');
     setLoading(true);
     try {
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) throw err;
-      if (codeToPreserve) {
-        router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } });
-      } else {
-        router.replace('/transition');
+
+      // After sign-in, check for a stored pending invite code (survives app restarts).
+      // Route-param code takes priority over stored code.
+      const storedCode = await loadPendingCode();
+      const codeToRedeem = codeToPreserve || storedCode || '';
+
+      if (codeToRedeem && data.user) {
+        const result = await completePendingJoin(data.user.id, codeToRedeem);
+        await clearPendingCode();
+        if (result.ok) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          if (token) {
+            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
+            }).catch(() => {});
+          }
+          router.replace({
+            pathname: '/(auth)/paired-celebration',
+            params: { partnerName: result.partnerName || '' },
+          });
+          return;
+        }
+        // Join failed — fall through to normal transition; user can pair from account screen
       }
+
+      router.replace('/transition');
     } catch (e: unknown) {
       setError(friendlyAuthError(e));
     } finally {
@@ -89,17 +114,33 @@ export default function LoginScreen() {
           .eq('id', userId)
           .maybeSingle();
         if (!existing) {
-          // New OAuth user — route through the same post-auth funnel as email signup.
-          // With a pending invite code, verify-email handles code redemption before onboarding.
-          router.replace(codeToPreserve
-            ? { pathname: '/(auth)/verify-email', params: { pendingCode: codeToPreserve } }
-            : '/(auth)/onboarding'
-          );
+          // New OAuth user — route through onboarding; register.tsx now handles code inline.
+          router.replace('/(auth)/onboarding');
         } else {
-          router.replace(codeToPreserve
-            ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
-            : '/transition'
-          );
+          // Existing user signing in — check for stored or param code to redeem.
+          const storedCode = await loadPendingCode();
+          const codeToRedeem = codeToPreserve || storedCode || '';
+          if (codeToRedeem) {
+            const result = await completePendingJoin(userId, codeToRedeem);
+            await clearPendingCode();
+            if (result.ok) {
+              const { data: sessionData } = await supabase.auth.getSession();
+              const token = sessionData?.session?.access_token;
+              if (token) {
+                fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
+                }).catch(() => {});
+              }
+              router.replace({
+                pathname: '/(auth)/paired-celebration',
+                params: { partnerName: result.partnerName || '' },
+              });
+              return;
+            }
+          }
+          router.replace('/transition');
         }
       }
     } catch (e: unknown) {
