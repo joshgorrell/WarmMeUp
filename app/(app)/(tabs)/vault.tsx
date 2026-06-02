@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
   Image, RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated,
@@ -19,6 +19,8 @@ import { logDebugEvent } from '@/lib/debugLog';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLayout } from '@/hooks/useLayout';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
+import { useMediaReactions } from '@/hooks/useMediaReactions';
+import MediaActionRow from '@/components/MediaActionRow';
 import SecondaryButton from '@/components/SecondaryButton';
 import BottomSheet from '@/components/BottomSheet';
 import TabHeader from '@/components/TabHeader';
@@ -65,6 +67,20 @@ export default function VaultScreen() {
 
   // Whether thumbnails are currently visible (blur off, or user has tapped to reveal)
   const thumbnailsVisible = !blurEnabled || pageRevealed;
+
+  // Long-press state for MediaActionRow
+  const [activeVaultItemId, setActiveVaultItemId] = useState<string | null>(null);
+  const [vaultMenuAnchor, setVaultMenuAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const tileRefs = useRef<Record<string, View | null>>({});
+
+  // Reactions
+  const vaultItemIds = useMemo(() => items.map(i => i.id), [items]);
+  const { reactionsMap: vaultReactionsMap, react: reactOnVaultItem } = useMediaReactions(
+    couple?.id,
+    user?.id,
+    'vault_items',
+    vaultItemIds,
+  );
 
   // Unlock the vault via biometrics
   const unlockVault = useCallback(async () => {
@@ -244,7 +260,6 @@ export default function VaultScreen() {
           style: 'destructive',
           onPress: async () => {
             const deletedAt = new Date().toISOString();
-            // Soft-delete the vault item first — if this fails, abort so the user sees an error
             const { error: dbError } = await supabase
               .from('vault_items')
               .update({ deleted_at: deletedAt })
@@ -253,14 +268,11 @@ export default function VaultScreen() {
               Alert.alert('Delete Failed', 'Could not delete this item. Please try again.');
               return;
             }
-            // Remove from local state only after DB confirms
             setItems(prev => prev.filter(i => i.id !== item.id));
             setSignedUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
-            // Best-effort storage cleanup for the vault file
             const bucket = item.storage_bucket ?? 'vault';
             const path = item.storage_path ?? item.file_path;
             if (path) supabase.storage.from(bucket).remove([path]).catch(() => {});
-            // Soft-delete linked chat message if present
             if (item.chat_message_id) {
               const { data: chatMsg } = await supabase
                 .from('chat_messages')
@@ -271,7 +283,6 @@ export default function VaultScreen() {
                 .from('chat_messages')
                 .update({ deleted_at: deletedAt })
                 .eq('id', item.chat_message_id);
-              // Best-effort storage cleanup for the chat_media copy
               if (chatMsg?.media_storage_path) {
                 const chatBucket = chatMsg.media_storage_bucket ?? 'chat_media';
                 supabase.storage.from(chatBucket).remove([chatMsg.media_storage_path]).catch(() => {});
@@ -281,6 +292,24 @@ export default function VaultScreen() {
         },
       ]
     );
+  };
+
+  const handleVaultLongPress = (item: VaultItem) => {
+    const ref = tileRefs.current[item.id];
+    if (!ref) {
+      setActiveVaultItemId(item.id);
+      setVaultMenuAnchor({ x: 20, y: 200, width: ITEM_SIZE, height: ITEM_SIZE });
+      return;
+    }
+    ref.measureInWindow((x, y, width, height) => {
+      if (Platform.OS !== 'web') {
+        import('expo-haptics').then(Haptics => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        });
+      }
+      setVaultMenuAnchor({ x, y, width, height });
+      setActiveVaultItemId(item.id);
+    });
   };
 
   // Spin animation for the progress overlay
@@ -605,71 +634,124 @@ export default function VaultScreen() {
             {items.map(item => {
               const isNew = item.uploaded_by_user_id !== user?.id && !item.viewed_by_partner;
               const url = signedUrls[item.id];
+              const itemReactions = vaultReactionsMap[item.id] ?? [];
+              // Show up to 2 unique emojis on the tile
+              const uniqueEmojis = [...new Set(itemReactions.map(r => r.emoji))].slice(0, 2);
               return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.gridItem, { width: ITEM_SIZE, height: ITEM_SIZE }]}
-                  onPress={() => handleTilePress(item)}
-                  onLongPress={() => handleDeleteItem(item)}
-                  delayLongPress={500}
-                  activeOpacity={0.85}
-                >
-                  {/* Thumbnail — photo uses Image, video uses Video (first frame) */}
-                  {url ? (
-                    item.media_type === 'video' ? (
-                      <Video
-                        source={{ uri: url }}
-                        style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
-                        resizeMode={ResizeMode.COVER}
-                        shouldPlay={false}
-                        isMuted
-                        positionMillis={0}
-                        isLooping={false}
-                      />
+                <View key={item.id} style={{ position: 'relative' }}>
+                  <TouchableOpacity
+                    ref={ref => { tileRefs.current[item.id] = ref as any; }}
+                    style={[styles.gridItem, { width: ITEM_SIZE, height: ITEM_SIZE }]}
+                    onPress={() => handleTilePress(item)}
+                    onLongPress={() => handleVaultLongPress(item)}
+                    delayLongPress={400}
+                    activeOpacity={0.85}
+                  >
+                    {/* Thumbnail */}
+                    {url ? (
+                      item.media_type === 'video' ? (
+                        <>
+                          <Image
+                            source={{ uri: url }}
+                            style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
+                            resizeMode="cover"
+                            blurRadius={thumbnailsVisible ? 0 : 6}
+                          />
+                        </>
+                      ) : (
+                        <Image
+                          source={{ uri: url }}
+                          style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
+                          blurRadius={thumbnailsVisible ? 0 : 6}
+                        />
+                      )
                     ) : (
-                      <Image
-                        source={{ uri: url }}
-                        style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
-                        blurRadius={thumbnailsVisible ? 0 : 6}
-                      />
-                    )
-                  ) : (
-                    <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center' }]}>
-                      <ActivityIndicator color="rgba(255,255,255,0.25)" size="small" />
-                    </View>
-                  )}
+                      <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center' }]}>
+                        <ActivityIndicator color="rgba(255,255,255,0.25)" size="small" />
+                      </View>
+                    )}
 
-                  {/* Blur overlay for videos (Video component has no blurRadius prop) */}
-                  {!thumbnailsVisible && item.media_type === 'video' && url && (
-                    <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, backgroundColor: 'rgba(0,0,0,0.75)' }]} />
-                  )}
+                    {/* Blur overlay + eye icon — shown for all items while blurred */}
+                    {!thumbnailsVisible && (
+                      <View style={styles.blurOverlay}>
+                        <EyeOff color="rgba(255,255,255,0.7)" size={20} strokeWidth={2} />
+                      </View>
+                    )}
 
-                  {/* Blur overlay + eye icon — shown for all items while blurred */}
-                  {!thumbnailsVisible && (
-                    <View style={styles.blurOverlay}>
-                      <EyeOff color="rgba(255,255,255,0.7)" size={20} strokeWidth={2} />
-                    </View>
-                  )}
+                    {/* Play badge for videos when thumbnails are visible */}
+                    {thumbnailsVisible && item.media_type === 'video' && (
+                      <View style={styles.videoBadge}>
+                        <Play color="#fff" size={10} fill="#fff" strokeWidth={1.5} />
+                      </View>
+                    )}
 
-                  {/* Play badge for videos when thumbnails are visible */}
-                  {thumbnailsVisible && item.media_type === 'video' && (
-                    <View style={styles.videoBadge}>
-                      <Play color="#fff" size={10} fill="#fff" strokeWidth={1.5} />
-                    </View>
-                  )}
+                    {isNew && <View style={[styles.newDot, { borderColor: '#050507' }]} />}
+                    {!item.allow_screenshot && (
+                      <View style={styles.shieldBadge}>
+                        <Shield color="rgba(255,255,255,0.8)" size={10} />
+                      </View>
+                    )}
 
-                  {isNew && <View style={[styles.newDot, { borderColor: '#050507' }]} />}
-                  {!item.allow_screenshot && (
-                    <View style={styles.shieldBadge}>
-                      <Shield color="rgba(255,255,255,0.8)" size={10} />
-                    </View>
-                  )}
-                </TouchableOpacity>
+                    {/* Reaction pills overlay — bottom-left when thumbnails visible */}
+                    {thumbnailsVisible && uniqueEmojis.length > 0 && (
+                      <View style={styles.tileReactionRow}>
+                        {uniqueEmojis.map(emoji => (
+                          <View key={emoji} style={styles.tileReactionPill}>
+                            <AppText style={styles.tileReactionEmoji}>{emoji}</AppText>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
               );
             })}
           </View>
         )}
       </ScrollView>
+
+      {/* Vault long-press MediaActionRow */}
+      {activeVaultItemId && vaultMenuAnchor && (() => {
+        const activeItem = items.find(i => i.id === activeVaultItemId);
+        if (!activeItem) return null;
+        const activeReactions = vaultReactionsMap[activeVaultItemId] ?? [];
+        const PILL_HEIGHT = 54;
+        const PILL_WIDTH = 468;
+        const left = Math.max(8, Math.min(vaultMenuAnchor.x + vaultMenuAnchor.width / 2 - PILL_WIDTH / 2, 8));
+        const top = Math.max(8, vaultMenuAnchor.y - PILL_HEIGHT - 10);
+        return (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 9998 }]} pointerEvents="box-none">
+            <View style={{ position: 'absolute', left, top }}>
+              <MediaActionRow
+                reactions={activeReactions}
+                myUserId={user?.id}
+                isMedia={true}
+                isInVault={true}
+                isMine={activeItem.uploaded_by_user_id === user?.id}
+                onReact={(emoji) => {
+                  setActiveVaultItemId(null);
+                  setVaultMenuAnchor(null);
+                  reactOnVaultItem(activeItem.id, emoji, activeItem.uploaded_by_user_id, activeItem.id);
+                }}
+                onAlreadyInVault={() => {
+                  setActiveVaultItemId(null);
+                  setVaultMenuAnchor(null);
+                  // Brief visual feedback — already in vault, no popup needed
+                }}
+                onDelete={() => {
+                  setActiveVaultItemId(null);
+                  setVaultMenuAnchor(null);
+                  handleDeleteItem(activeItem);
+                }}
+                onDismiss={() => {
+                  setActiveVaultItemId(null);
+                  setVaultMenuAnchor(null);
+                }}
+              />
+            </View>
+          </View>
+        );
+      })()}
 
       {/* Upload progress overlay */}
       {uploading && (
@@ -799,6 +881,9 @@ const styles = StyleSheet.create({
   videoBadge: { position: 'absolute', bottom: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, padding: 4 },
   newDot: { position: 'absolute', top: 6, right: 6, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF2E8A', borderWidth: 2 },
   shieldBadge: { position: 'absolute', bottom: 6, left: 6, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: 3 },
+  tileReactionRow: { position: 'absolute', bottom: 4, left: 4, flexDirection: 'row', gap: 2 },
+  tileReactionPill: { backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, paddingHorizontal: 5, paddingVertical: 2 },
+  tileReactionEmoji: { fontSize: 12, lineHeight: 16 },
   empty: { alignItems: 'center', paddingTop: 80, gap: Spacing.lg },
   emptyIconWrap: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: FontSize.xl, fontFamily: 'Inter-Bold' },

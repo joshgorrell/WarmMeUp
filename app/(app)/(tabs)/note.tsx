@@ -2,12 +2,12 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Pressable, Image, ActivityIndicator, TextInput, Alert,
-  AppState, AppStateStatus, Keyboard,
+  AppState, AppStateStatus, Keyboard, Share,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
-import { Image as ImageIcon, Camera, X, Lock, Send, Vault, Pencil, Trash2, EyeOff, Eye, Check } from 'lucide-react-native';
+import { Image as ImageIcon, Camera, X, Lock, Send, EyeOff, Pencil } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -17,6 +17,8 @@ import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension,
 import { ChatMessage } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
+import MediaActionRow from '@/components/MediaActionRow';
+import { useMediaReactions } from '@/hooks/useMediaReactions';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -61,91 +63,6 @@ type MenuAnchor = {
   width: number;
   height: number;
 };
-
-// Floating action menu rendered at root level so it appears above all other UI
-function BubbleMenu({
-  anchor,
-  onEdit,
-  onDelete,
-  onDismiss,
-  onViewMedia,
-  onSaveToVault,
-  alreadyInVault,
-  hasMedia,
-  isMine,
-}: {
-  anchor: MenuAnchor;
-  onEdit: () => void;
-  onDelete: () => void;
-  onDismiss: () => void;
-  onViewMedia?: () => void;
-  onSaveToVault?: () => void;
-  alreadyInVault?: boolean;
-  hasMedia?: boolean;
-  isMine?: boolean;
-}) {
-  const { colors } = useTheme();
-  const menuWidth = 160;
-  // Count rows: view (if media), save to vault (if media), edit (if mine + text), delete (if mine)
-  const rowCount = (hasMedia ? 2 : 0) + (isMine && !hasMedia ? 1 : 0) + (isMine ? 1 : 0);
-  const menuHeight = rowCount * 44 + (rowCount - 1);
-  const left = Math.max(8, anchor.x + anchor.width - menuWidth);
-  const top = anchor.y - menuHeight - 8;
-
-  return (
-    <>
-      {/* Full-screen tap-away backdrop */}
-      <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onDismiss} activeOpacity={1} />
-      <View style={[
-        styles.menuCard,
-        { backgroundColor: '#1c1c28', borderColor: 'rgba(255,255,255,0.12)', left, top, width: menuWidth },
-      ]}>
-        {hasMedia && onViewMedia && (
-          <>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { onDismiss(); onViewMedia(); }} activeOpacity={0.75}>
-              <Eye color="#4DA6FF" size={14} strokeWidth={2} />
-              <AppText style={[styles.menuText, { color: colors.text }]}>View</AppText>
-            </TouchableOpacity>
-            <View style={[styles.menuDivider, { backgroundColor: 'rgba(255,255,255,0.10)' }]} />
-          </>
-        )}
-        {hasMedia && onSaveToVault && (
-          <>
-            <TouchableOpacity
-              style={[styles.menuItem, alreadyInVault && styles.menuItemDisabled]}
-              onPress={alreadyInVault ? onDismiss : () => { onDismiss(); onSaveToVault(); }}
-              activeOpacity={alreadyInVault ? 1 : 0.75}
-            >
-              {alreadyInVault
-                ? <Check color="#4CAF50" size={14} strokeWidth={2} />
-                : <Vault color="#FFB347" size={14} strokeWidth={2} />
-              }
-              <AppText style={[styles.menuText, { color: alreadyInVault ? '#4CAF50' : colors.text }]}>
-                {alreadyInVault ? 'In Vault' : 'Save to Vault'}
-              </AppText>
-            </TouchableOpacity>
-            {isMine && <View style={[styles.menuDivider, { backgroundColor: 'rgba(255,255,255,0.10)' }]} />}
-          </>
-        )}
-        {isMine && !hasMedia && (
-          <>
-            <TouchableOpacity style={styles.menuItem} onPress={onEdit} activeOpacity={0.75}>
-              <Pencil color="#FF8A3D" size={14} strokeWidth={2} />
-              <AppText style={[styles.menuText, { color: colors.text }]}>Edit</AppText>
-            </TouchableOpacity>
-            <View style={[styles.menuDivider, { backgroundColor: 'rgba(255,255,255,0.10)' }]} />
-          </>
-        )}
-        {isMine && (
-          <TouchableOpacity style={styles.menuItem} onPress={onDelete} activeOpacity={0.75}>
-            <Trash2 color="#FF4444" size={14} strokeWidth={2} />
-            <AppText style={[styles.menuText, { color: '#FF4444' }]}>Delete</AppText>
-          </TouchableOpacity>
-        )}
-      </View>
-    </>
-  );
-}
 
 function MediaBubble({
   msg,
@@ -245,6 +162,15 @@ export default function ChatTab() {
   const prevMsgCountRef = useRef(0);
 
   const blurEnabled = settings?.blur_media ?? true;
+
+  // Derive message IDs for reactions subscription
+  const messageIds = useMemo(() => messages.map(m => m.id), [messages]);
+  const { reactionsMap, react: reactOnMessage } = useMediaReactions(
+    couple?.id,
+    user?.id,
+    'chat_messages',
+    messageIds,
+  );
   const { width: screenWidth } = useLayout();
   const mediaBubbleWidth = Math.min(Math.round(screenWidth * 0.55), 260);
   const mediaBubbleHeight = Math.round(mediaBubbleWidth * 0.8);
@@ -812,11 +738,21 @@ export default function ChatTab() {
     setRevealedMedia(prev => new Set([...prev, id]));
   }, []);
 
+  const handleCopy = useCallback((msg: ChatMessage) => {
+    if (!msg.content_text) return;
+    if (Platform.OS === 'web') {
+      navigator.clipboard?.writeText(msg.content_text).catch(() => {});
+    } else {
+      Share.share({ message: msg.content_text }).catch(() => {});
+    }
+  }, []);
+
   const renderItem = useCallback(({ item, index }: { item: ChatMessage; index: number }) => {
     const isMine = item.sender_id === user?.id;
     const name = isMine ? (profile?.display_name ?? 'You') : (partnerProfile?.display_name ?? 'Partner');
     const hasMedia = !!item.media_storage_path;
     const isMenuOpen = activeMenuId === item.id;
+    const itemReactions = reactionsMap[item.id] ?? [];
 
     return (
       <MessageRow
@@ -828,6 +764,8 @@ export default function ChatTab() {
         blurEnabled={blurEnabled && !isMine}
         revealed={revealedMedia.has(item.id)}
         signedUrl={hasMedia ? signedUrls[item.id] : undefined}
+        reactions={itemReactions}
+        myUserId={user?.id}
         colors={colors}
         bubbleRefs={bubbleRefs}
         mediaBubbleWidth={mediaBubbleWidth}
@@ -835,10 +773,11 @@ export default function ChatTab() {
         onReveal={handleRevealMedia}
         onOpen={handleOpenMedia}
         onLongPress={handleLongPress}
+        onReactQuick={(emoji) => reactOnMessage(item.id, emoji, item.sender_id)}
         prevCreatedAt={index > 0 ? (item as any).__prevCreatedAt : undefined}
       />
     );
-  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight]);
+  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, reactOnMessage]);
 
   // Attach prev date to each item so renderItem doesn't need the full messages array
   const messagesWithPrev = useMemo(() =>
@@ -993,20 +932,37 @@ export default function ChatTab() {
         </AppShell>
       </KeyboardAvoidingView>
 
-      {/* Floating menu — rendered outside AppShell/FlatList so it draws above header */}
-      {activeMenuId && menuAnchor && activeMsg && (
-        <BubbleMenu
-          anchor={menuAnchor}
-          onEdit={() => handleStartEdit(activeMsg)}
-          onDelete={() => handleDeleteMessage(activeMsg)}
-          onDismiss={handleDismissMenu}
-          onViewMedia={activeMsg.media_storage_path ? () => handleOpenMedia(activeMsg) : undefined}
-          onSaveToVault={activeMsg.media_storage_path ? () => handleSaveToVault(activeMsg) : undefined}
-          alreadyInVault={!!activeMsg.vault_item_id}
-          hasMedia={!!activeMsg.media_storage_path}
-          isMine={activeMsg.sender_id === user?.id}
-        />
-      )}
+      {/* Floating MediaActionRow — rendered outside AppShell so it draws above all content */}
+      {activeMenuId && menuAnchor && activeMsg && (() => {
+        const hasMedia = !!activeMsg.media_storage_path;
+        const isMine = activeMsg.sender_id === user?.id;
+        const activeReactions = reactionsMap[activeMsg.id] ?? [];
+        // Position: centered horizontally, above the bubble
+        const PILL_HEIGHT = 54;
+        const PILL_WIDTH = hasMedia ? 468 : 360;
+        const left = Math.max(8, Math.min(menuAnchor.x + menuAnchor.width / 2 - PILL_WIDTH / 2, 8));
+        const top = Math.max(8, menuAnchor.y - PILL_HEIGHT - 10);
+        return (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 9998 }]} pointerEvents="box-none">
+            <View style={{ position: 'absolute', left, top }}>
+              <MediaActionRow
+                reactions={activeReactions}
+                myUserId={user?.id}
+                isMedia={hasMedia}
+                isInVault={hasMedia ? !!activeMsg.vault_item_id : undefined}
+                isMine={isMine}
+                onReact={(emoji) => reactOnMessage(activeMsg.id, emoji, activeMsg.sender_id)}
+                onSaveToVault={hasMedia ? () => handleSaveToVault(activeMsg) : undefined}
+                onAlreadyInVault={() => {/* already saved — no-op, lock shows as active */}}
+                onDelete={() => handleDeleteMessage(activeMsg)}
+                onEdit={!hasMedia ? () => handleStartEdit(activeMsg) : undefined}
+                onCopy={!hasMedia ? () => handleCopy(activeMsg) : undefined}
+                onDismiss={handleDismissMenu}
+              />
+            </View>
+          </View>
+        );
+      })()}
     </View>
   );
 }
@@ -1021,6 +977,8 @@ const MessageRow = React.memo(function MessageRow({
   blurEnabled,
   revealed,
   signedUrl,
+  reactions,
+  myUserId,
   colors,
   bubbleRefs,
   mediaBubbleWidth,
@@ -1028,6 +986,7 @@ const MessageRow = React.memo(function MessageRow({
   onReveal,
   onOpen,
   onLongPress,
+  onReactQuick,
   prevCreatedAt,
 }: {
   item: ChatMessage & { __prevCreatedAt?: string | null };
@@ -1038,6 +997,8 @@ const MessageRow = React.memo(function MessageRow({
   blurEnabled: boolean;
   revealed: boolean;
   signedUrl: string | null | undefined;
+  reactions: import('@/lib/types').MediaReaction[];
+  myUserId: string | undefined;
   colors: any;
   bubbleRefs: React.MutableRefObject<Record<string, View | null>>;
   mediaBubbleWidth: number;
@@ -1045,10 +1006,20 @@ const MessageRow = React.memo(function MessageRow({
   onReveal: (id: string) => void;
   onOpen: (m: ChatMessage) => void;
   onLongPress: (m: ChatMessage) => void;
+  onReactQuick: (emoji: string) => void;
   prevCreatedAt?: string | null;
 }) {
   const showDivider = !prevCreatedAt ||
     new Date(prevCreatedAt).toDateString() !== new Date(item.created_at).toDateString();
+
+  // Aggregate reaction counts
+  const reactionCounts = reactions.reduce<Record<string, { count: number; mine: boolean }>>((acc, r) => {
+    if (!acc[r.emoji]) acc[r.emoji] = { count: 0, mine: false };
+    acc[r.emoji].count++;
+    if (r.user_id === myUserId) acc[r.emoji].mine = true;
+    return acc;
+  }, {});
+  const reactionEntries = Object.entries(reactionCounts);
 
   return (
     <>
@@ -1067,7 +1038,7 @@ const MessageRow = React.memo(function MessageRow({
         )}
         <TouchableOpacity
           ref={ref => { bubbleRefs.current[item.id] = ref as any; }}
-          onLongPress={(isMine || hasMedia) ? () => onLongPress(item) : undefined}
+          onLongPress={() => onLongPress(item)}
           delayLongPress={350}
           activeOpacity={1}
         >
@@ -1105,6 +1076,28 @@ const MessageRow = React.memo(function MessageRow({
             </View>
           </View>
         </TouchableOpacity>
+
+        {/* Reaction pills below the bubble */}
+        {reactionEntries.length > 0 && (
+          <View style={[styles.reactionRow, isMine ? styles.reactionRowRight : styles.reactionRowLeft]}>
+            {reactionEntries.map(([emoji, { count, mine }]) => (
+              <TouchableOpacity
+                key={emoji}
+                style={[styles.reactionPill, mine && styles.reactionPillMine]}
+                onPress={() => onReactQuick(emoji)}
+                activeOpacity={0.75}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              >
+                <AppText style={styles.reactionPillEmoji}>{emoji}</AppText>
+                {count > 1 && (
+                  <AppText style={[styles.reactionPillCount, { color: mine ? '#FF2E8A' : 'rgba(255,255,255,0.65)' }]}>
+                    {count}
+                  </AppText>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     </>
   );
@@ -1130,24 +1123,22 @@ const styles = StyleSheet.create({
   bubbleMeta: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-end' },
   bubbleTime: { fontSize: 10, fontFamily: 'Inter-Regular' },
   editedLabel: { fontSize: 10, fontFamily: 'Inter-Regular', fontStyle: 'italic' },
-  // Floating action menu
-  menuCard: {
-    position: 'absolute',
-    zIndex: 9999,
-    elevation: 20,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-    minWidth: 130,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
+  // Reaction pills
+  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2, marginBottom: 4, paddingLeft: 36 },
+  reactionRowRight: { justifyContent: 'flex-end', paddingLeft: 0, paddingRight: 0 },
+  reactionRowLeft: { justifyContent: 'flex-start' },
+  reactionPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 8, paddingVertical: 4,
   },
-  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 11 },
-  menuItemDisabled: { opacity: 0.6 },
-  menuText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
-  menuDivider: { height: 1, marginHorizontal: 8 },
+  reactionPillMine: {
+    backgroundColor: 'rgba(255,46,138,0.12)',
+    borderColor: 'rgba(255,46,138,0.35)',
+  },
+  reactionPillEmoji: { fontSize: 15, lineHeight: 20 },
+  reactionPillCount: { fontSize: 11, fontFamily: 'Inter-SemiBold' },
   // Edit banner
   editBanner: {
     flexDirection: 'row',

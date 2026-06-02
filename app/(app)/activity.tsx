@@ -194,6 +194,28 @@ export default function ActivityScreen() {
         return;
       }
 
+      if (ev.event_type === 'media_reaction') {
+        const emoji = ev.metadata?.emoji ?? '❤️';
+        const mediaType = ev.metadata?.media_type ?? 'photo';
+        const sourceTable = ev.metadata?.source_table;
+        const label = isMine
+          ? `You reacted ${emoji} to a ${mediaType}`
+          : `${partnerName} reacted ${emoji} to your ${mediaType}`;
+        mapped.push({
+          id: `reaction_${ev.id}`,
+          sourceTable: 'activity_events',
+          sourceId: ev.id,
+          _type: sourceTable === 'vault_items' ? 'dare' : 'chat',
+          label,
+          sub: '',
+          time: timeAgo(ev.created_at),
+          icon: <AppText style={{ fontSize: 18, lineHeight: 22 }}>{emoji}</AppText>,
+          color: '#FF2E8A',
+          _rawTime: ev.created_at,
+        });
+        return;
+      }
+
       let label = '';
       let sub = '';
       switch (ev.event_type) {

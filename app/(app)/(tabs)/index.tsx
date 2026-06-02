@@ -252,6 +252,26 @@ export default function HomeScreen() {
         return;
       }
 
+      if (ev.event_type === 'media_reaction') {
+        const emoji = ev.metadata?.emoji ?? '❤️';
+        const sourceTable = ev.metadata?.source_table;
+        const mediaType = ev.metadata?.media_type ?? 'photo';
+        const route = sourceTable === 'vault_items' ? '/(app)/(tabs)/vault' : '/(app)/(tabs)/note';
+        items.push({
+          id: `reaction_${ev.id}`,
+          sourceTable: 'activity_events',
+          sourceId: ev.id,
+          label: `${partnerName} reacted ${emoji} to your ${mediaType}`,
+          sub: '',
+          time: timeAgo(ev.created_at),
+          icon: <AppText style={{ fontSize: 16, lineHeight: 20 }}>{emoji}</AppText>,
+          color: '#FF2E8A',
+          route,
+          _rawTime: ev.created_at,
+        });
+        return;
+      }
+
       let label = '';
       let routeParams: Record<string, string> | undefined;
       switch (ev.event_type) {

@@ -292,3 +292,13 @@ export interface WishReaction {
   emoji: string;
   created_at: string;
 }
+
+export interface MediaReaction {
+  id: string;
+  couple_id: string;
+  user_id: string;
+  source_table: 'chat_messages' | 'vault_items';
+  source_id: string;
+  emoji: string;
+  created_at: string;
+}
