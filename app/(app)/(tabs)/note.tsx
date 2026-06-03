@@ -166,6 +166,7 @@ export default function ChatTab() {
   const prevMsgCountRef = useRef(0);
 
   const blurEnabled = settings?.blur_media ?? true;
+  const chatFontScale = settings?.chat_font_scale ?? 1.0;
 
   // Derive message IDs for reactions subscription
   const messageIds = useMemo(() => messages.map(m => m.id), [messages]);
@@ -795,6 +796,7 @@ export default function ChatTab() {
         bubbleRefs={bubbleRefs}
         mediaBubbleWidth={mediaBubbleWidth}
         mediaBubbleHeight={mediaBubbleHeight}
+        chatFontScale={chatFontScale}
         onReveal={handleRevealMedia}
         onOpen={handleOpenMedia}
         onLongPress={handleLongPress}
@@ -803,7 +805,7 @@ export default function ChatTab() {
         highlighted={item.id === highlightedId}
       />
     );
-  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, reactOnMessage, highlightedId]);
+  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, chatFontScale, reactOnMessage, highlightedId]);
 
   // Attach prev date to each item so renderItem doesn't need the full messages array
   const messagesWithPrev = useMemo(() =>
@@ -1036,6 +1038,7 @@ const MessageRow = React.memo(function MessageRow({
   bubbleRefs,
   mediaBubbleWidth,
   mediaBubbleHeight,
+  chatFontScale,
   onReveal,
   onOpen,
   onLongPress,
@@ -1057,6 +1060,7 @@ const MessageRow = React.memo(function MessageRow({
   bubbleRefs: React.MutableRefObject<Record<string, View | null>>;
   mediaBubbleWidth: number;
   mediaBubbleHeight: number;
+  chatFontScale: number;
   onReveal: (id: string) => void;
   onOpen: (m: ChatMessage) => void;
   onLongPress: (m: ChatMessage) => void;
@@ -1133,14 +1137,14 @@ const MessageRow = React.memo(function MessageRow({
               />
             )}
             {item.content_text ? (
-              <AppText style={[styles.bubbleText, { color: colors.text }]}>{item.content_text}</AppText>
+              <AppText style={[styles.bubbleText, { color: colors.text, fontSize: Math.round(14 * chatFontScale), lineHeight: Math.round(14 * chatFontScale * 1.5) }]}>{item.content_text}</AppText>
             ) : null}
             <View style={styles.bubbleMeta}>
-              <AppText style={[styles.bubbleTime, { color: isMine ? 'rgba(255,255,255,0.45)' : colors.textMuted }]}>
+              <AppText style={[styles.bubbleTime, { color: isMine ? 'rgba(255,255,255,0.45)' : colors.textMuted, fontSize: Math.round(10 * chatFontScale) }]}>
                 {formatTime(item.created_at)}
               </AppText>
               {item.edited_at && (
-                <AppText style={[styles.editedLabel, { color: isMine ? 'rgba(255,255,255,0.35)' : colors.textMuted }]}>
+                <AppText style={[styles.editedLabel, { color: isMine ? 'rgba(255,255,255,0.35)' : colors.textMuted, fontSize: Math.round(10 * chatFontScale) }]}>
                   edited
                 </AppText>
               )}
@@ -1161,7 +1165,7 @@ const MessageRow = React.memo(function MessageRow({
               >
                 <AppText style={styles.reactionPillEmoji}>{emoji}</AppText>
                 {count > 1 && (
-                  <AppText style={[styles.reactionPillCount, { color: mine ? '#FF2E8A' : 'rgba(255,255,255,0.65)' }]}>
+                  <AppText style={[styles.reactionPillCount, { color: mine ? '#FF2E8A' : 'rgba(255,255,255,0.65)', fontSize: Math.round(11 * chatFontScale) }]}>
                     {count}
                   </AppText>
                 )}
