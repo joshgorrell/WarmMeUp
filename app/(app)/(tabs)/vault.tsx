@@ -7,7 +7,7 @@ import { ResizeMode, Video } from 'expo-av';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Video as VideoIcon, Eye } from 'lucide-react-native';
+import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Video as VideoIcon } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -628,25 +628,13 @@ export default function VaultScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
       >
-        {/* Privacy notice */}
-        <View style={[styles.privNotice, { backgroundColor: 'rgba(255,46,138,0.07)', borderColor: 'rgba(255,46,138,0.18)' }]}>
+        {/* Vault header */}
+        <View style={styles.vaultHeader}>
           <Shield color="#FF2E8A" size={14} strokeWidth={2} />
-          <AppText style={[styles.privText, { color: colors.textSecondary }]}>
-            Protected media. Privacy defaults are set in your Profile.
+          <AppText style={[styles.vaultHeaderText, { color: colors.textSecondary }]}>
+            Protected Media{items.length > 0 ? '  ·  Tap any item to view.' : ''}
           </AppText>
         </View>
-
-        {/* Tap-to-reveal banner — shown when blur is on and grid hasn't been revealed yet */}
-        {blurEnabled && !pageRevealed && items.length > 0 && (
-          <TouchableOpacity
-            style={[styles.revealBanner, { backgroundColor: 'rgba(255,46,138,0.10)', borderColor: 'rgba(255,46,138,0.28)' }]}
-            onPress={handleRevealPage}
-            activeOpacity={0.75}
-          >
-            <Eye color="#FF2E8A" size={18} strokeWidth={2} />
-            <AppText style={[styles.revealBannerText, { color: '#FF2E8A' }]}>Tap to reveal your Vault</AppText>
-          </TouchableOpacity>
-        )}
 
         {items.length === 0 ? (
           <View style={styles.empty}>
@@ -916,14 +904,8 @@ export default function VaultScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 40 },
-  privNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.sm },
-  privText: { flex: 1, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18 },
-  revealBanner: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, borderRadius: Radius.md, borderWidth: 1,
-    padding: Spacing.md, marginBottom: Spacing.lg,
-  },
-  revealBannerText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  vaultHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.md },
+  vaultHeaderText: { flex: 1, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   gridItem: { borderRadius: Radius.sm, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
   blurOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)' },
