@@ -102,7 +102,7 @@ function MediaBubble({
       onLongPress={() => onLongPress(msg)}
       delayLongPress={350}
       android_ripple={null}
-      style={[styles.mediaTap, { width: bubbleWidth, height: bubbleHeight }]}
+      style={[styles.mediaTap, { width: bubbleWidth, height: bubbleHeight, backgroundColor: 'rgba(17,16,24,0.95)', borderRadius: Radius.lg }]}
     >
       {!loaded ? (
         <View style={styles.mediaPlaceholder}>
@@ -1117,6 +1117,7 @@ const MessageRow = React.memo(function MessageRow({
             isMine
               ? { backgroundColor: 'rgba(255,90,61,0.20)', borderColor: isMenuOpen ? 'rgba(255,90,61,0.7)' : 'rgba(255,90,61,0.35)', borderTopRightRadius: 4 }
               : { backgroundColor: colors.card, borderColor: colors.borderSubtle, borderTopLeftRadius: 4 },
+            hasMedia && !item.content_text ? { padding: 0, paddingHorizontal: 0, gap: 0 } : undefined,
           ]}>
             {hasMedia && (
               <MediaBubble
