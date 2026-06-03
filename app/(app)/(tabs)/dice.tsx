@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, Animated, ScrollView,
+  View, StyleSheet, TouchableOpacity, Animated, ScrollView, Alert,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
@@ -10,7 +10,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { awardPoints, deactivatePreviousEphemeral, getPointValue, verifyCompletion, incrementMonthlyCounter } from '@/lib/points';
+import { awardPoints, deactivatePreviousEphemeral, getPointValue, verifyCompletion, incrementMonthlyCounter, reversePoints } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { Interaction } from '@/lib/types';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -91,6 +91,9 @@ export default function DiceTab() {
   const [sentDice, setSentDice] = useState<Interaction | null>(null);
   const senderCountdown = useSenderCountdown(sentDice?.expires_at);
 
+  // Tracks the id of the last self-roll interaction so we can delete it
+  const lastSelfRollId = useRef<string | null>(null);
+
   const diceRef = useRef<NeonDiceHandle>(null);
   const sentOpacity = useRef(new Animated.Value(0)).current;
   const sentTranslate = useRef(new Animated.Value(10)).current;
@@ -148,6 +151,7 @@ export default function DiceTab() {
       .eq('rolled_for', 'partner')
       .in('status', ['sent', 'accepted', 'pending_verification'])
       .is('completed_at', null)
+      .is('deleted_at', null)
       .maybeSingle();
 
     if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {
@@ -168,6 +172,7 @@ export default function DiceTab() {
       .eq('rolled_for', 'partner')
       .eq('status', 'pending_verification')
       .is('completed_at', null)
+      .is('deleted_at', null)
       .maybeSingle();
     setPendingVerification(pending);
 
@@ -180,6 +185,7 @@ export default function DiceTab() {
       .eq('type', 'dice')
       .eq('rolled_for', 'partner')
       .eq('status', 'sent')
+      .is('deleted_at', null)
       .maybeSingle();
     setSentDice(mySent ?? null);
   }, [couple?.id, user?.id]);
@@ -256,7 +262,10 @@ export default function DiceTab() {
               .single();
             if (insertError) throw insertError;
             if (interaction && !forPartner) {
+              lastSelfRollId.current = interaction.id;
               await awardPoints(couple.id, user.id, 1, 'Dice self-roll sent', interaction.id);
+            } else {
+              lastSelfRollId.current = null;
             }
             if (forPartner && partnerId) {
               notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
@@ -324,6 +333,48 @@ export default function DiceTab() {
     } finally {
       setVerifying(false);
     }
+  };
+
+  const confirmDeleteRoll = (onConfirm: () => void) => {
+    Alert.alert(
+      'Remove this roll?',
+      'This will remove the roll and any points earned from it.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: onConfirm },
+      ]
+    );
+  };
+
+  const handleDeleteSelfRoll = () => {
+    const id = lastSelfRollId.current;
+    if (!id || !couple?.id || !user?.id) return;
+    confirmDeleteRoll(async () => {
+      await supabase
+        .from('interactions')
+        .update({ deleted_at: new Date().toISOString(), is_active: false })
+        .eq('id', id);
+      await reversePoints(id, couple.id, user.id);
+      lastSelfRollId.current = null;
+      setResult(null);
+      setFace(5);
+      sentOpacity.setValue(0);
+      sentTranslate.setValue(10);
+    });
+  };
+
+  const handleCancelSentRoll = () => {
+    const id = sentDice?.id;
+    if (!id || !couple?.id || !user?.id) return;
+    confirmDeleteRoll(async () => {
+      await supabase
+        .from('interactions')
+        .update({ deleted_at: new Date().toISOString(), is_active: false, status: 'rejected' })
+        .eq('id', id);
+      await reversePoints(id, couple.id, user.id);
+      setSentDice(null);
+      await checkStates();
+    });
   };
 
   const onPressIn = () => {
@@ -501,7 +552,6 @@ export default function DiceTab() {
           {/* Sent subtitle fades in below the die after a roll */}
           <Animated.View
             style={[styles.sentWrap, { opacity: sentOpacity, transform: [{ translateY: sentTranslate }] }]}
-            pointerEvents="none"
           >
             <AppText style={[styles.sent, { color: colors.textMuted }]}>{sentSubtitle}</AppText>
             {senderCountdown && rolledForResult === 'partner' && (
@@ -509,6 +559,18 @@ export default function DiceTab() {
                 <Timer color={colors.textMuted} size={12} strokeWidth={2} />
                 <AppText style={[styles.expiryText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText>
               </View>
+            )}
+            {/* Remove link for self-rolls */}
+            {result && rolledForResult === 'self' && lastSelfRollId.current && (
+              <TouchableOpacity onPress={handleDeleteSelfRoll} activeOpacity={0.7} style={styles.deleteLink}>
+                <AppText style={[styles.deleteLinkText, { color: colors.textMuted }]}>Remove</AppText>
+              </TouchableOpacity>
+            )}
+            {/* Cancel link for pending partner rolls */}
+            {rolledForResult === 'partner' && sentDice && (
+              <TouchableOpacity onPress={handleCancelSentRoll} activeOpacity={0.7} style={styles.deleteLink}>
+                <AppText style={[styles.deleteLinkText, { color: colors.textMuted }]}>Cancel roll</AppText>
+              </TouchableOpacity>
             )}
           </Animated.View>
 
@@ -578,6 +640,8 @@ const styles = StyleSheet.create({
   sent: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', letterSpacing: 0.3 },
   expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   expiryText: { fontSize: 11, fontFamily: 'Inter-Regular' },
+  deleteLink: { marginTop: 2, paddingVertical: 4, paddingHorizontal: 8 },
+  deleteLinkText: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular', textDecorationLine: 'underline', opacity: 0.6 },
   errorBanner: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, width: '100%' },
   soloNotice: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: Spacing.xs },
   soloNoticeText: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular', letterSpacing: 0.2 },

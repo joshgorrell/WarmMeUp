@@ -111,6 +111,7 @@ export default function HomeScreen() {
       .select('*')
       .eq('couple_id', couple.id)
       .eq('is_active', true)
+      .is('deleted_at', null)
       .in('type', ['dice', 'dare', 'wish', 'tell_me'])
       .order('created_at', { ascending: false })
       .limit(1)

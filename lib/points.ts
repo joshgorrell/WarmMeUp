@@ -141,6 +141,46 @@ export async function incrementMonthlyCounter(
   }
 }
 
+export async function reversePoints(
+  interactionId: string,
+  coupleId: string,
+  userId: string
+) {
+  const { data: events } = await supabase
+    .from('point_events')
+    .select('points')
+    .eq('interaction_id', interactionId)
+    .eq('user_id', userId);
+
+  if (!events?.length) return;
+
+  const total = events.reduce((sum, e) => sum + (e.points ?? 0), 0);
+  if (total === 0) return;
+
+  const { data: existing } = await supabase
+    .from('scores')
+    .select('points')
+    .eq('couple_id', coupleId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase
+      .from('scores')
+      .update({ points: Math.max(0, existing.points - total), updated_at: new Date().toISOString() })
+      .eq('couple_id', coupleId)
+      .eq('user_id', userId);
+  }
+
+  await supabase.from('point_events').insert({
+    couple_id: coupleId,
+    user_id: userId,
+    interaction_id: interactionId,
+    points: -total,
+    reason: 'Points reversed — roll deleted',
+  });
+}
+
 export async function deactivatePreviousEphemeral(coupleId: string) {
   await supabase
     .from('interactions')
