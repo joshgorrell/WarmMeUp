@@ -3,12 +3,10 @@ import {
   View, StyleSheet, TouchableOpacity, Platform, Animated,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { Trash2, Pencil, Copy } from 'lucide-react-native';
+import { Trash2, Pencil, Copy, Lock } from 'lucide-react-native';
 import { MediaReaction } from '@/lib/types';
 
 export const REACTION_EMOJIS = ['❤️', '🔥', '🌶️', '😍', '🤩', '😈', '🫠', '😂'] as const;
-
-const COMPACT_THRESHOLD = 380;
 
 type Props = {
   reactions: MediaReaction[];
@@ -50,7 +48,6 @@ export default function MediaActionRow({
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       });
     }
-    // Faster, snappier spring — closer to iOS tapback feel
     Animated.parallel([
       Animated.spring(scaleAnim, {
         toValue: 1,
@@ -67,52 +64,7 @@ export default function MediaActionRow({
   }, []);
 
   const myReaction = reactions.find(r => r.user_id === myUserId)?.emoji ?? null;
-  const isCompact = screenWidth < COMPACT_THRESHOLD;
-  // Larger touch targets — 40/44 instead of 32/36
-  const btnSize = isCompact ? 40 : 44;
-
-  const renderEmojis = () => {
-    if (isCompact) {
-      const row1 = REACTION_EMOJIS.slice(0, 4);
-      const row2 = REACTION_EMOJIS.slice(4);
-      return (
-        <View style={styles.emojiCompactWrap}>
-          <View style={styles.emojiRow}>
-            {row1.map(emoji => renderEmojiBtn(emoji, btnSize))}
-          </View>
-          <View style={styles.emojiRow}>
-            {row2.map(emoji => renderEmojiBtn(emoji, btnSize))}
-          </View>
-        </View>
-      );
-    }
-    return (
-      <View style={styles.reactionGroup}>
-        {REACTION_EMOJIS.map(emoji => renderEmojiBtn(emoji, btnSize))}
-      </View>
-    );
-  };
-
-  const renderEmojiBtn = (emoji: string, size: number) => {
-    const isActive = myReaction === emoji;
-    return (
-      <TouchableOpacity
-        key={emoji}
-        style={[
-          styles.emojiBtn,
-          { width: size, height: size, borderRadius: size / 2 },
-          isActive && styles.emojiBtnActive,
-        ]}
-        onPress={() => { onDismiss(); onReact(emoji); }}
-        activeOpacity={0.65}
-        hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
-      >
-        <AppText style={[styles.emojiText, isCompact && styles.emojiTextCompact]}>
-          {emoji}
-        </AppText>
-      </TouchableOpacity>
-    );
-  };
+  const cardWidth = Math.min(Math.max(screenWidth - 32, 280), 360);
 
   return (
     <>
@@ -123,139 +75,148 @@ export default function MediaActionRow({
         activeOpacity={1}
       />
 
-      {/* Floating pill */}
+      {/* Floating card */}
       <Animated.View
         style={[
-          styles.pill,
-          { transform: [{ scale: scaleAnim }], opacity: opacityAnim },
+          styles.card,
+          { width: cardWidth, transform: [{ scale: scaleAnim }], opacity: opacityAnim },
         ]}
         pointerEvents="box-none"
       >
-        {renderEmojis()}
+        {/* Row 1 — Reactions */}
+        <View style={styles.reactionRow}>
+          {REACTION_EMOJIS.map(emoji => {
+            const isActive = myReaction === emoji;
+            return (
+              <TouchableOpacity
+                key={emoji}
+                style={[styles.emojiBtn, isActive && styles.emojiBtnActive]}
+                onPress={() => { onDismiss(); onReact(emoji); }}
+                activeOpacity={0.65}
+                hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+              >
+                <AppText style={styles.emojiText}>{emoji}</AppText>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
-        <View style={styles.divider} />
+        {/* Separator */}
+        <View style={styles.separator} />
 
-        {isMedia ? (
-          <View style={[styles.actionGroup, { gap: isCompact ? 2 : 4 }]}>
-            <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                { width: btnSize, height: btnSize, borderRadius: btnSize / 2 },
-                isInVault && styles.actionBtnActive,
-              ]}
-              onPress={() => {
-                onDismiss();
-                if (isInVault) {
-                  onAlreadyInVault?.();
-                } else {
-                  onSaveToVault?.();
-                }
-              }}
-              activeOpacity={0.65}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <AppText style={[styles.actionEmoji, !isInVault && styles.actionEmojiDim]}>🔒</AppText>
-            </TouchableOpacity>
+        {/* Row 2 — Actions */}
+        <View style={styles.actionRow}>
+          {isMedia ? (
+            <>
+              <TouchableOpacity
+                style={[styles.actionBtn, isInVault && styles.actionBtnActive]}
+                onPress={() => {
+                  onDismiss();
+                  if (isInVault) onAlreadyInVault?.();
+                  else onSaveToVault?.();
+                }}
+                activeOpacity={0.65}
+              >
+                <Lock
+                  color={isInVault ? '#FF2E8A' : 'rgba(255,255,255,0.70)'}
+                  size={15}
+                  strokeWidth={2}
+                />
+                <AppText style={[styles.actionLabel, isInVault && styles.actionLabelActive]}>
+                  Vault
+                </AppText>
+              </TouchableOpacity>
 
-            {isMine && (
-              <TouchableOpacity
-                style={[
-                  styles.actionBtn,
-                  { width: btnSize, height: btnSize, borderRadius: btnSize / 2 },
-                ]}
-                onPress={() => { onDismiss(); onDelete?.(); }}
-                activeOpacity={0.65}
-                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-              >
-                <AppText style={styles.actionEmoji}>🗑️</AppText>
-              </TouchableOpacity>
-            )}
-          </View>
-        ) : (
-          <View style={[styles.actionGroup, { gap: isCompact ? 2 : 4 }]}>
-            {onCopy && (
-              <TouchableOpacity
-                style={[
-                  styles.actionBtn,
-                  { width: btnSize, height: btnSize, borderRadius: btnSize / 2 },
-                ]}
-                onPress={() => { onDismiss(); onCopy(); }}
-                activeOpacity={0.65}
-                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-              >
-                <Copy color="rgba(255,255,255,0.80)" size={16} strokeWidth={2} />
-              </TouchableOpacity>
-            )}
-            {isMine && onEdit && (
-              <TouchableOpacity
-                style={[
-                  styles.actionBtn,
-                  { width: btnSize, height: btnSize, borderRadius: btnSize / 2 },
-                ]}
-                onPress={() => { onDismiss(); onEdit(); }}
-                activeOpacity={0.65}
-                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-              >
-                <Pencil color="rgba(255,255,255,0.80)" size={16} strokeWidth={2} />
-              </TouchableOpacity>
-            )}
-            {isMine && onDelete && (
-              <TouchableOpacity
-                style={[
-                  styles.actionBtn,
-                  { width: btnSize, height: btnSize, borderRadius: btnSize / 2 },
-                ]}
-                onPress={() => { onDismiss(); onDelete(); }}
-                activeOpacity={0.65}
-                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-              >
-                <Trash2 color="#FF4444" size={16} strokeWidth={2} />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+              {isMine && (
+                <>
+                  <View style={styles.actionDivider} />
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => { onDismiss(); onDelete?.(); }}
+                    activeOpacity={0.65}
+                  >
+                    <Trash2 color="#FF4444" size={15} strokeWidth={2} />
+                    <AppText style={styles.actionLabelDanger}>Delete</AppText>
+                  </TouchableOpacity>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {onCopy && (
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => { onDismiss(); onCopy(); }}
+                  activeOpacity={0.65}
+                >
+                  <Copy color="rgba(255,255,255,0.70)" size={15} strokeWidth={2} />
+                  <AppText style={styles.actionLabel}>Copy</AppText>
+                </TouchableOpacity>
+              )}
+
+              {isMine && onEdit && (
+                <>
+                  {onCopy && <View style={styles.actionDivider} />}
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => { onDismiss(); onEdit(); }}
+                    activeOpacity={0.65}
+                  >
+                    <Pencil color="rgba(255,255,255,0.70)" size={15} strokeWidth={2} />
+                    <AppText style={styles.actionLabel}>Edit</AppText>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {isMine && onDelete && (
+                <>
+                  {(onCopy || onEdit) && <View style={styles.actionDivider} />}
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => { onDismiss(); onDelete(); }}
+                    activeOpacity={0.65}
+                  >
+                    <Trash2 color="#FF4444" size={15} strokeWidth={2} />
+                    <AppText style={styles.actionLabelDanger}>Delete</AppText>
+                  </TouchableOpacity>
+                </>
+              )}
+            </>
+          )}
+        </View>
       </Animated.View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  pill: {
+  card: {
     alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: 'rgba(16, 14, 24, 0.97)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.45,
     shadowRadius: 14,
     elevation: 20,
-    gap: 1,
+    gap: 8,
   },
-  reactionGroup: {
+  reactionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 1,
-  },
-  emojiCompactWrap: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 1,
-    paddingVertical: 2,
-  },
-  emojiRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 1,
+    justifyContent: 'space-between',
   },
   emojiBtn: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   emojiBtnActive: {
     backgroundColor: 'rgba(255,46,138,0.20)',
@@ -264,32 +225,46 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 28,
   },
-  emojiTextCompact: {
-    fontSize: 20,
-    lineHeight: 26,
+  separator: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    marginHorizontal: -12,
   },
-  divider: {
-    width: 1,
-    height: 28,
-    backgroundColor: 'rgba(255,255,255,0.13)',
-    marginHorizontal: 8,
-  },
-  actionGroup: {
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 2,
   },
   actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 10,
   },
   actionBtnActive: {
-    backgroundColor: 'rgba(255,46,138,0.18)',
+    backgroundColor: 'rgba(255,46,138,0.15)',
   },
-  actionEmoji: {
-    fontSize: 20,
-    lineHeight: 26,
+  actionLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: 'rgba(255,255,255,0.70)',
   },
-  actionEmojiDim: {
-    opacity: 0.38,
+  actionLabelActive: {
+    color: '#FF2E8A',
+  },
+  actionLabelDanger: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#FF4444',
+  },
+  actionDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
 });
