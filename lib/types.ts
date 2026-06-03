@@ -32,13 +32,11 @@ export interface UserSettings {
   stealth_bypass_until: string | null;
   vault_face_id_required: boolean;
   /**
-   * 'none'            — no app unlock (default for new users)
-   * 'biometric'       — Face ID / Touch ID only
-   * 'pin'             — 4-digit PIN only
-   * 'biometric_or_pin'— Face ID first, PIN as fallback
-   * 'password'        — legacy value migrated to 'none'; treated as 'none' in code
+   * 'none'      — no app unlock (default for new users)
+   * 'biometric' — Face ID / Touch ID; email/password as fallback
+   * 'password'  — legacy value treated as 'none' in code
    */
-  login_method: 'none' | 'pin' | 'biometric' | 'biometric_or_pin' | 'password';
+  login_method: 'none' | 'biometric' | 'password';
   blur_on_background: boolean;
   blur_media: boolean;
   discreet_notifications: boolean;

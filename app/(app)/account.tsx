@@ -8,9 +8,7 @@ import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, ShieldOff, Mail, KeyRound, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders, RefreshCw } from 'lucide-react-native';
-import * as SecureStore from 'expo-secure-store';
-import { secureKey } from '@/lib/secureKey';
+import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, ShieldOff, Mail, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders, RefreshCw } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -31,8 +29,6 @@ import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
 
-const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
-type PinStep = 'current' | 'new' | 'confirm' | 'recover-password';
 type AccountTab = 'profile' | 'settings';
 
 // ─── Section wrapper ──────────────────────────────────────────────
@@ -119,39 +115,10 @@ function InlineField({
   );
 }
 
-// ─── PIN dots ─────────────────────────────────────────────────────
-function PinDots({ length }: { length: number }) {
-  return (
-    <View style={styles.pinDots}>
-      {Array.from({ length: 4 }).map((_, i) => (
-        <View key={i} style={[styles.pinDot, { backgroundColor: i < length ? '#FF2E8A' : 'rgba(255,255,255,0.15)' }]} />
-      ))}
-    </View>
-  );
-}
-
-// ─── Numpad ───────────────────────────────────────────────────────
-function Numpad({ onKey }: { onKey: (k: string) => void }) {
-  return (
-    <View style={styles.numpad}>
-      {PAD.map((k, i) => (
-        <TouchableOpacity
-          key={i}
-          style={[styles.numKey, k === '' && styles.numKeyEmpty]}
-          onPress={() => k !== '' && onKey(k)}
-          activeOpacity={k === '' ? 1 : 0.6}
-          disabled={k === ''}
-        >
-          <AppText style={[styles.numKeyText, k === '⌫' && styles.numKeyDelete]}>{k}</AppText>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
 
 // ─── Security section components (shared with settings.tsx) ──────
 
-type UnlockMethod = 'none' | 'biometric' | 'pin' | 'biometric_or_pin';
+type UnlockMethod = 'none' | 'biometric';
 
 const slm = StyleSheet.create({
   wrap: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.md, borderBottomWidth: 1 },
@@ -229,23 +196,12 @@ function RequireUnlockRow({
       icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={16} strokeWidth={1.8} />,
       disabled: !bioAvailable,
     },
-    {
-      key: 'pin',
-      label: 'PIN',
-      icon: <KeyRound color={current === 'pin' ? '#FFB347' : colors.textMuted} size={16} strokeWidth={1.8} />,
-    },
-    {
-      key: 'biometric_or_pin',
-      label: `${biometricLabel} or PIN`,
-      icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={16} strokeWidth={1.8} />,
-      disabled: !bioAvailable,
-    },
   ];
 
   return (
     <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
-      <AppText style={[slm.label, { color: colors.text }]}>Require Unlock</AppText>
-      <AppText style={[slm.sub, { color: colors.textMuted }]}>How you unlock Warm Me Up each time</AppText>
+      <AppText style={[slm.label, { color: colors.text }]}>App Lock</AppText>
+      <AppText style={[slm.sub, { color: colors.textMuted }]}>Require biometrics to open Warm Me Up</AppText>
       <View style={slm.row}>
         {options.map((opt) => {
           const sel = current === opt.key;
@@ -329,33 +285,40 @@ function RequireUnlockAfterRow({
 
 function VaultProtectionRow({
   isAdditional,
+  bioAvailable,
+  biometricLabel,
   colors,
   onSelect,
 }: {
   isAdditional: boolean;
+  bioAvailable: boolean;
+  biometricLabel: string;
   colors: any;
   onSelect: (additional: boolean) => void;
 }) {
-  type VaultOpt = { key: boolean; label: string; sub: string; icon: React.ReactNode };
+  const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
+
+  type VaultOpt = { key: boolean; label: string; sub: string; icon: React.ReactNode; disabled?: boolean };
   const opts: VaultOpt[] = [
     {
       key: false,
-      label: 'App Security',
-      sub: 'Use the same unlock as the app',
-      icon: <Shield color={!isAdditional ? '#FF2E8A' : colors.textMuted} size={15} strokeWidth={1.8} />,
+      label: 'No',
+      sub: 'No extra step for Vault',
+      icon: <ShieldOff color={!isAdditional ? '#FF2E8A' : colors.textMuted} size={15} strokeWidth={1.8} />,
     },
     {
       key: true,
-      label: 'Extra Face ID',
-      sub: 'Second biometric step for Vault only',
-      icon: <ScanFace color={isAdditional ? '#FF8A3D' : colors.textMuted} size={15} strokeWidth={1.8} />,
+      label: biometricLabel,
+      sub: 'Biometric step to open Vault',
+      icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={15} strokeWidth={1.8} />,
+      disabled: !bioAvailable,
     },
   ];
 
   return (
     <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
       <AppText style={[slm.label, { color: colors.text }]}>Vault Protection</AppText>
-      <AppText style={[slm.sub, { color: colors.textMuted }]}>How the Vault is protected when you open it</AppText>
+      <AppText style={[slm.sub, { color: colors.textMuted }]}>Require biometrics each time you open the Vault</AppText>
       <View style={[slm.row, { gap: 10 }]}>
         {opts.map((opt) => {
           const sel = isAdditional === opt.key;
@@ -365,13 +328,15 @@ function VaultProtectionRow({
               style={[
                 slm.chip,
                 sel && slm.chipSelected,
+                opt.disabled && slm.chipDisabled,
                 { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle, flex: 1, paddingVertical: 12, gap: 5 },
               ]}
-              onPress={() => onSelect(opt.key)}
-              activeOpacity={0.72}
+              onPress={() => !opt.disabled && onSelect(opt.key)}
+              activeOpacity={opt.disabled ? 1 : 0.72}
+              disabled={opt.disabled}
             >
               {opt.icon}
-              <AppText style={[slm.chipLabel, { color: sel ? '#fff' : colors.textSecondary, fontSize: 12 }]}>{opt.label}</AppText>
+              <AppText style={[slm.chipLabel, { color: opt.disabled ? colors.textDisabled : sel ? '#fff' : colors.textSecondary, fontSize: 12 }]}>{opt.label}</AppText>
               <AppText style={[slm.chipLabel, { color: sel ? 'rgba(255,255,255,0.55)' : colors.textMuted, fontSize: 10 }]}>{opt.sub}</AppText>
               {sel && <Check color="#FF2E8A" size={10} strokeWidth={2.5} />}
             </TouchableOpacity>
@@ -518,17 +483,6 @@ export default function AccountScreen() {
   const [deleteAccountStep, setDeleteAccountStep] = useState<1 | 2>(1);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
-
-  // Change PIN modal
-  const [pinModalOpen, setPinModalOpen] = useState(false);
-  const [pinStep, setPinStep] = useState<PinStep>('current');
-  const [pinCurrent, setPinCurrent] = useState('');
-  const [pinNew, setPinNew] = useState('');
-  const [pinConfirm, setPinConfirm] = useState('');
-  const [pinRecoverPw, setPinRecoverPw] = useState('');
-  const [pinError, setPinError] = useState('');
-  const [pinSaving, setPinSaving] = useState(false);
-  const [pinDone, setPinDone] = useState(false);
 
   const cancelingNameRef = useRef(false);
   const nameWrapRef = useRef<View | null>(null);
@@ -990,92 +944,6 @@ export default function AccountScreen() {
       setEmailSuccess(true);
       setTimeout(() => { setShowChangeEmail(false); setEmailSuccess(false); }, 3500);
     } finally { setSavingEmail(false); }
-  };
-
-  // ── Change PIN ───────────────────────────────────────────────────
-  const openPinModal = () => {
-    setPinStep('current');
-    setPinCurrent(''); setPinNew(''); setPinConfirm(''); setPinRecoverPw('');
-    setPinError(''); setPinSaving(false); setPinDone(false);
-    setPinModalOpen(true);
-  };
-
-  const closePinModal = () => { if (!pinSaving) setPinModalOpen(false); };
-
-  const getPinValue = () => {
-    if (pinStep === 'current') return pinCurrent;
-    if (pinStep === 'new') return pinNew;
-    if (pinStep === 'confirm') return pinConfirm;
-    return '';
-  };
-
-  const handlePinKey = async (k: string) => {
-    if (pinStep === 'recover-password') return;
-    const cur = getPinValue();
-    let next: string;
-    if (k === '⌫') { next = cur.slice(0, -1); }
-    else { if (cur.length >= 4) return; next = cur + k; }
-
-    if (pinStep === 'current') {
-      setPinCurrent(next);
-      if (next.length === 4) {
-        let stored: string | null = null;
-        if (Platform.OS !== 'web' && user) {
-          stored = await SecureStore.getItemAsync(secureKey('warmup_pin', user.id));
-        } else if (Platform.OS === 'web' && user && typeof window !== 'undefined') {
-          stored = window.localStorage.getItem(secureKey('warmup_pin', user.id));
-        }
-        if (stored !== null && stored !== next) {
-          setPinError('Incorrect PIN. Try again.');
-          setTimeout(() => { setPinCurrent(''); setPinError(''); }, 1000);
-          return;
-        }
-        setPinError('');
-        setPinStep('new');
-        setPinNew('');
-      }
-    } else if (pinStep === 'new') {
-      setPinNew(next);
-      if (next.length === 4) { setPinStep('confirm'); setPinConfirm(''); }
-    } else if (pinStep === 'confirm') {
-      setPinConfirm(next);
-      if (next.length === 4) {
-        if (next !== pinNew) {
-          setPinError('PINs do not match. Try again.');
-          setTimeout(() => { setPinConfirm(''); setPinNew(''); setPinStep('new'); setPinError(''); }, 1200);
-          return;
-        }
-        setPinSaving(true);
-        try {
-          if (Platform.OS !== 'web' && user) {
-            await SecureStore.setItemAsync(secureKey('warmup_pin', user.id), next);
-          } else if (Platform.OS === 'web' && user && typeof window !== 'undefined') {
-            window.localStorage.setItem(secureKey('warmup_pin', user.id), next);
-          }
-          setPinDone(true);
-          setTimeout(() => { setPinModalOpen(false); setPinDone(false); }, 1800);
-        } finally { setPinSaving(false); }
-      }
-    }
-  };
-
-  const handleForgotPin = () => {
-    setPinStep('recover-password');
-    setPinRecoverPw('');
-    setPinError('');
-  };
-
-  const handlePinRecoverVerify = async () => {
-    if (!user?.email || !pinRecoverPw) { setPinError('Enter your app password.'); return; }
-    setPinSaving(true);
-    setPinError('');
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email: user.email, password: pinRecoverPw });
-      if (error) { setPinError('Incorrect password. Try again.'); return; }
-      setPinStep('new');
-      setPinNew('');
-      setPinError('');
-    } finally { setPinSaving(false); }
   };
 
   // ── Delete History ───────────────────────────────────────────────
@@ -1586,18 +1454,17 @@ export default function AccountScreen() {
           </View>
         )}
 
-        <SettingsRow label="Change PIN" sub="Update your 4-digit app lock PIN" onPress={openPinModal} last />
       </Section>
 
       <Section title="MY DEVICE PRIVACY" note="These settings only affect your device. Your partner manages their own independently.">
         <SettingsRow label="Privacy Mode" sub="Show Weather Lock Screen when you open the app" toggle value={s?.stealth_mode_enabled ?? true} onChange={v => update({ stealth_mode_enabled: v })} />
         <RequireUnlockRow
-          current={(s?.login_method ?? 'none') as UnlockMethod}
+          current={(s?.login_method === 'biometric' ? 'biometric' : 'none') as UnlockMethod}
           bioAvailable={bioAvailable}
           biometricLabel={biometricLabel}
           colors={colors}
           onSelect={async (method) => {
-            if (method === 'biometric' || method === 'biometric_or_pin') {
+            if (method === 'biometric') {
               const result = await bioAuthenticate('Confirm biometrics to enable this method');
               if (!result.success) return;
             }
@@ -1613,6 +1480,8 @@ export default function AccountScreen() {
         )}
         <VaultProtectionRow
           isAdditional={s?.vault_face_id_required ?? false}
+          bioAvailable={bioAvailable}
+          biometricLabel={biometricLabel}
           colors={colors}
           onSelect={async (additional) => {
             if (additional) {
@@ -2029,91 +1898,6 @@ export default function AccountScreen() {
         </View>
       </Modal>
 
-      {/* ── Change PIN Modal ───────────────────────────────────────── */}
-      <Modal visible={pinModalOpen} transparent animationType="fade" onRequestClose={closePinModal}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.pinModalCard, { backgroundColor: colors.modalBg }]}>
-
-            {pinDone ? (
-              <>
-                <View style={[styles.pinModalIcon, { backgroundColor: 'rgba(51,209,122,0.12)' }]}>
-                  <Check color="#33D17A" size={28} strokeWidth={2} />
-                </View>
-                <AppText style={[styles.pinModalTitle, { color: colors.text }]}>PIN Updated</AppText>
-                <AppText style={[styles.pinModalSub, { color: colors.textSecondary }]}>
-                  Your new PIN is saved securely on this device.
-                </AppText>
-                <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: Spacing.sm, alignSelf: 'stretch' }]} onPress={closePinModal} activeOpacity={0.7}>
-                  <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</AppText>
-                </TouchableOpacity>
-              </>
-            ) : pinStep === 'recover-password' ? (
-              <>
-                <TouchableOpacity style={styles.pinModalClose} onPress={closePinModal} activeOpacity={0.7}>
-                  <X color={colors.textMuted} size={20} />
-                </TouchableOpacity>
-                <View style={[styles.pinModalIcon, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
-                  <Lock color="#FF2E8A" size={26} strokeWidth={1.5} />
-                </View>
-                <AppText style={[styles.pinModalTitle, { color: colors.text }]}>Verify Identity</AppText>
-                <AppText style={[styles.pinModalSub, { color: colors.textSecondary }]}>
-                  Enter your app password to reset your PIN.
-                </AppText>
-                <View style={[styles.pinRecoverField, { borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}>
-                  <AppTextInput
-                    style={[styles.pinRecoverInput, { color: colors.text }]}
-                    value={pinRecoverPw}
-                    onChangeText={setPinRecoverPw}
-                    secureTextEntry
-                    placeholder="App password"
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoFocus
-                  />
-                </View>
-                {pinError ? <AppText style={[styles.pinError, { color: colors.danger }]}>{pinError}</AppText> : null}
-                <TouchableOpacity
-                  style={[styles.pinRecoverBtn, { backgroundColor: '#FF2E8A', opacity: pinSaving ? 0.6 : 1 }]}
-                  onPress={handlePinRecoverVerify}
-                  disabled={pinSaving}
-                  activeOpacity={0.8}
-                >
-                  {pinSaving
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <AppText style={styles.pinRecoverBtnText}>Verify & Continue</AppText>
-                  }
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <TouchableOpacity style={styles.pinModalClose} onPress={closePinModal} activeOpacity={0.7}>
-                  <X color={colors.textMuted} size={20} />
-                </TouchableOpacity>
-                <View style={[styles.pinModalIcon, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
-                  <KeyRound color="#FF2E8A" size={26} strokeWidth={1.5} />
-                </View>
-                <AppText style={[styles.pinModalTitle, { color: colors.text }]}>
-                  {pinStep === 'current' ? 'Enter Current PIN' : pinStep === 'new' ? 'Enter New PIN' : 'Confirm New PIN'}
-                </AppText>
-                <AppText style={[styles.pinModalSub, { color: colors.textSecondary }]}>
-                  {pinStep === 'current' ? 'Enter your current 4-digit PIN to continue' : pinStep === 'new' ? 'Choose a new 4-digit PIN' : 'Re-enter your new PIN to confirm'}
-                </AppText>
-                <PinDots length={getPinValue().length} />
-                {pinError ? <AppText style={[styles.pinError, { color: colors.danger }]}>{pinError}</AppText> : null}
-                <Numpad onKey={handlePinKey} />
-                {pinStep === 'current' && (
-                  <TouchableOpacity onPress={handleForgotPin} activeOpacity={0.7} style={styles.forgotPinBtn}>
-                    <AppText style={[styles.forgotPinText, { color: colors.textMuted }]}>Forgot PIN?</AppText>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-
-          </View>
-        </View>
-      </Modal>
-
       <BottomSheet
         visible={showVaultSecurityInfo}
         onClose={() => setShowVaultSecurityInfo(false)}
@@ -2150,7 +1934,7 @@ export default function AccountScreen() {
             {
               icon: <ScanFace color="#FFB347" size={20} strokeWidth={1.8} />,
               bg: 'rgba(255,179,71,0.10)',
-              title: 'Face ID & PIN Lock',
+              title: 'Face ID Lock',
               desc: 'You can require biometric verification (Face ID or fingerprint) before the vault even opens. Turn this on in your Account settings for an extra layer of protection.',
             },
             {

@@ -1,25 +1,19 @@
-import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity,
-  Platform, Animated,
+  View, StyleSheet, TouchableOpacity, ActivityIndicator,
+  TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as SecureStore from 'expo-secure-store';
-import { ScanFace, FingerprintPattern as Fingerprint, KeyRound } from 'lucide-react-native';
+import { ScanFace, FingerprintPattern as Fingerprint, Mail } from 'lucide-react-native';
 import WarmupBrand from '@/components/WarmupBrand';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
-import { secureKey } from '@/lib/secureKey';
 import { supabase } from '@/lib/supabase';
 import { useLayout } from '@/hooks/useLayout';
-
-const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_SECONDS = 30;
 
 export default function UnlockScreen() {
   const router = useRouter();
@@ -28,64 +22,22 @@ export default function UnlockScreen() {
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
 
-  const loginMethod = settings?.login_method ?? 'none';
-
-  const [mode, setMode] = useState<'biometric' | 'pin' | null>(null);
-  // True once the mode has been set for this mount — prevents the settings useEffect
-  // from re-running mode-init logic if settings state updates after initial load.
+  // True once the mode has been set for this mount
   const modeInitialised = useRef(false);
-  // True once the biometric prompt has been triggered on this mount. Replaces the old
-  // module-level flag so the guard resets correctly on each screen mount/unmount cycle.
+  // True once the biometric prompt has been triggered on this mount
   const biometricAlreadyPrompted = useRef(false);
-  // True once tryBiometric() has been called on this mount — prevents the mode useEffect
-  // from auto-firing a second prompt if mode changes while still on the same screen mount.
   const biometricAttemptedThisMount = useRef(false);
 
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState('');
-  const [attempts, setAttempts] = useState(0);
-  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
-  const [countdown, setCountdown] = useState(0);
-  const [pinMissing, setPinMissing] = useState(false);
-
-  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const [showEmailFallback, setShowEmailFallback] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
 
   const vXs = Math.round(height * 0.012);
   const vSm = Math.round(height * 0.02);
   const vMd = Math.round(height * 0.03);
   const logoSize = Math.min(Math.round(width * 0.16), 64);
-
-  const padWidth = Math.min(width - Spacing.xl * 2, 300);
-  const keyGap = Spacing.sm;
-  const keySize = (padWidth - keyGap * 2) / 3;
-  const keyHeight = Math.min(Math.round(keySize * 0.78), Math.round(height * 0.075));
-
-  useEffect(() => {
-    if (!lockedUntil) return;
-    const tick = setInterval(() => {
-      const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
-      if (remaining <= 0) {
-        setLockedUntil(null);
-        setCountdown(0);
-        setAttempts(0);
-        clearInterval(tick);
-      } else {
-        setCountdown(remaining);
-      }
-    }, 500);
-    return () => clearInterval(tick);
-  }, [lockedUntil]);
-
-  const shake = useCallback(() => {
-    shakeAnim.setValue(0);
-    Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 8, duration: 60, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -8, duration: 60, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 6, duration: 60, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -6, duration: 60, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
-    ]).start();
-  }, [shakeAnim]);
 
   const proceed = useCallback(() => {
     console.log('[UNLOCK SUCCESS]', {
@@ -93,9 +45,7 @@ export default function UnlockScreen() {
       loginMethod: settings?.login_method,
       timestamp: Date.now(),
     });
-    // Reset so the NEXT time the unlock screen mounts, Face ID auto-prompts correctly.
     biometricAlreadyPrompted.current = false;
-    // Block BackgroundLockManager from racing the navigation to /transition.
     isAuthenticatingRef.current = true;
     unlockApp();
     router.replace('/transition');
@@ -104,11 +54,9 @@ export default function UnlockScreen() {
 
   const tryBiometric = useCallback(async () => {
     if (!bioAvailable) {
-      setMode('pin');
+      setShowEmailFallback(true);
       return;
     }
-    // Mark as attempted — both flags must be set before the async call so that any
-    // re-render triggered during the prompt does not fire a second prompt.
     biometricAlreadyPrompted.current = true;
     biometricAttemptedThisMount.current = true;
     isAuthenticatingRef.current = true;
@@ -117,18 +65,10 @@ export default function UnlockScreen() {
       if (result.success) {
         proceed();
       } else {
-        // User cancelled or failed biometric.
         isAuthenticatingRef.current = false;
-        // For biometric_or_pin: fall back to PIN automatically.
-        // For biometric-only: stay on biometric screen so user can retry manually.
-        if (loginMethod === 'biometric_or_pin') {
-          setMode('pin');
-        }
-        // Do NOT reset biometricAlreadyPrompted: require explicit tap to retry biometric.
       }
     } catch {
       isAuthenticatingRef.current = false;
-      setMode('pin');
     }
   }, [bioAvailable, authenticate, proceed, isAuthenticatingRef]);
 
@@ -140,107 +80,54 @@ export default function UnlockScreen() {
     const lockAfter = settings.lock_after_seconds ?? null;
     console.log('[unlock] settings loaded, login_method:', method, 'lock_after_seconds:', lockAfter);
 
-    // lock_after_seconds = -1 means "never lock" — proceed immediately if we land here.
     if (lockAfter !== null && lockAfter < 0) {
       proceed();
       return;
     }
     if (method === 'none' || method === 'password') {
-      // Should never land here for no-lock users, but proceed immediately if so.
       proceed();
       return;
     }
-    // For biometric_or_pin: start with biometric prompt, fall back to PIN automatically.
-    setMode(method === 'pin' ? 'pin' : 'biometric');
+    // method === 'biometric': auto-trigger biometric prompt
   }, [settings]);
 
   // Auto-trigger biometric prompt exactly once per screen mount.
-  // Three guards must all pass:
-  //   1. mode === 'biometric'
-  //   2. biometricAlreadyPrompted.current === false (mount-scoped ref: guards against re-mounts and re-renders)
-  //   3. biometricAttemptedThisMount.current === false (extra guard within same mount)
   useEffect(() => {
-    if (mode !== 'biometric') return;
+    if (!settings) return;
+    const method = settings.login_method ?? 'password';
+    if (method !== 'biometric') return;
     if (biometricAlreadyPrompted.current) return;
     if (biometricAttemptedThisMount.current) return;
     tryBiometric();
-  }, [mode, tryBiometric]);
+  }, [settings, tryBiometric]);
 
-  const checkPin = useCallback(async (entered: string) => {
-    let userId = user?.id;
-    if (!userId) {
-      const { data: { session: liveSession } } = await supabase.auth.getSession();
-      userId = liveSession?.user?.id;
-    }
-
-    if (Platform.OS === 'web') {
-      const stored = userId && typeof window !== 'undefined'
-        ? window.localStorage.getItem(secureKey('warmup_pin', userId))
-        : null;
-      if (stored === null) {
-        setPinMissing(true);
-        setPin('');
-        return;
-      }
-      if (entered === stored) { proceed(); } else { handleWrongPin(); }
-      return;
-    }
-    let stored: string | null = null;
-    try {
-      stored = userId ? await SecureStore.getItemAsync(secureKey('warmup_pin', userId)) : null;
-    } catch {
-      setPinMissing(true);
-      setPin('');
-      return;
-    }
-    if (stored === null) {
-      setPinMissing(true);
-      setPin('');
-      return;
-    }
-    if (entered === stored) { proceed(); } else { handleWrongPin(); }
-  }, [user, proceed]);
-
-  const handleWrongPin = () => {
-    const next = attempts + 1;
-    setAttempts(next);
-    shake();
-    setPin('');
-    if (next >= MAX_ATTEMPTS) {
-      const until = Date.now() + LOCKOUT_SECONDS * 1000;
-      setLockedUntil(until);
-      setError(`Too many attempts. Try again in ${LOCKOUT_SECONDS}s.`);
-    } else {
-      setError(`Incorrect PIN. ${MAX_ATTEMPTS - next} attempt${MAX_ATTEMPTS - next === 1 ? '' : 's'} remaining.`);
-      setTimeout(() => setError(''), 2500);
-    }
-  };
-
-  const handleKey = useCallback((k: string) => {
-    if (lockedUntil) return;
-    if (k === '⌫') {
-      setPin(prev => prev.slice(0, -1));
-      return;
-    }
-    if (k === '') return;
-    if (pin.length >= 4) return;
-    const next = pin + k;
-    setPin(next);
-    if (next.length === 4) {
-      setTimeout(() => checkPin(next), 80);
-    }
-  }, [pin, lockedUntil, checkPin]);
-
-  const goToPassword = () => {
-    router.replace('/(auth)/login');
-  };
-
-  // Allow the user to manually retry biometric after a cancel or failure.
   const handleBiometricRetry = useCallback(() => {
     biometricAlreadyPrompted.current = false;
     biometricAttemptedThisMount.current = false;
+    setShowEmailFallback(false);
     tryBiometric();
   }, [tryBiometric]);
+
+  const handleEmailSignIn = async () => {
+    if (!email.trim() || !password) {
+      setAuthError('Please enter your email and password.');
+      return;
+    }
+    setSigningIn(true);
+    setAuthError('');
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) {
+        setAuthError('Incorrect email or password.');
+      } else {
+        proceed();
+      }
+    } catch {
+      setAuthError('Something went wrong. Please try again.');
+    } finally {
+      setSigningIn(false);
+    }
+  };
 
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -267,7 +154,10 @@ export default function UnlockScreen() {
     : {};
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <LinearGradient colors={['#07070A', '#0D0D12', '#151018']} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
@@ -276,18 +166,65 @@ export default function UnlockScreen() {
         </TouchableOpacity>
 
         <View style={centerStyle}>
-          {pinMissing ? (
-            <View style={[styles.bioWrap, { gap: vSm }]}>
-              <KeyRound color="rgba(255,179,71,0.85)" size={48} strokeWidth={1.5} />
-              <AppText style={styles.title}>PIN Not Found</AppText>
+          {showEmailFallback ? (
+            <View style={[styles.fallbackWrap, { gap: vSm }]}>
+              <View style={styles.mailIconWrap}>
+                <Mail color="#FF2E8A" size={40} strokeWidth={1.5} />
+              </View>
+              <AppText style={styles.title}>Verify Your Identity</AppText>
               <AppText style={[styles.sub, { marginBottom: vSm, paddingHorizontal: Spacing.md }]}>
-                No PIN is saved on this device. Sign in with your password to set one up.
+                Sign in with your email and password to unlock
               </AppText>
-              <TouchableOpacity style={styles.setupPinBtn} onPress={goToPassword} activeOpacity={0.8}>
-                <AppText style={styles.setupPinBtnText}>Sign In with Password</AppText>
+
+              <View style={[styles.inputWrap, { marginBottom: vXs }]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                />
+              </View>
+              <View style={styles.inputWrap}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  autoComplete="current-password"
+                />
+              </View>
+
+              {authError ? (
+                <AppText style={[styles.error, { marginTop: vXs }]}>{authError}</AppText>
+              ) : null}
+
+              <TouchableOpacity
+                style={[styles.signInBtn, signingIn && { opacity: 0.6 }, { marginTop: vSm }]}
+                onPress={handleEmailSignIn}
+                activeOpacity={0.82}
+                disabled={signingIn}
+              >
+                {signingIn
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <AppText style={styles.signInBtnText}>Sign In</AppText>
+                }
               </TouchableOpacity>
+
+              {bioAvailable && (
+                <TouchableOpacity style={styles.altLink} onPress={handleBiometricRetry} activeOpacity={0.7}>
+                  <BiometricIcon color="rgba(255,255,255,0.4)" size={14} />
+                  <AppText style={styles.altLinkText}>Try {biometricLabel} again</AppText>
+                </TouchableOpacity>
+              )}
             </View>
-          ) : mode === null ? null : mode === 'biometric' && bioAvailable ? (
+          ) : (
             <View style={[styles.bioWrap, { gap: vSm }]}>
               <TouchableOpacity style={styles.bioButton} onPress={handleBiometricRetry} activeOpacity={0.75}>
                 <BiometricIcon color="#FF2E8A" size={52} strokeWidth={1.5} />
@@ -296,69 +233,17 @@ export default function UnlockScreen() {
               <AppText style={styles.sub}>Tap to authenticate</AppText>
               <TouchableOpacity
                 style={styles.altLink}
-                onPress={() => {
-                  biometricAlreadyPrompted.current = false;
-                  biometricAttemptedThisMount.current = false;
-                  setMode('pin');
-                }}
+                onPress={() => setShowEmailFallback(true)}
                 activeOpacity={0.7}
               >
-                <KeyRound color="rgba(255,255,255,0.4)" size={14} />
-                <AppText style={styles.altLinkText}>Use PIN instead</AppText>
+                <Mail color="rgba(255,255,255,0.4)" size={14} />
+                <AppText style={styles.altLinkText}>Use email instead</AppText>
               </TouchableOpacity>
             </View>
-          ) : (
-            <>
-              <AppText style={styles.title}>Enter PIN</AppText>
-              <AppText style={[styles.sub, { marginBottom: vSm }]}>Enter your 4-digit Warm Me Up PIN</AppText>
-
-              <Animated.View style={[styles.dots, { marginBottom: vSm, transform: [{ translateX: shakeAnim }] }]}>
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <View
-                    key={i}
-                    style={[styles.dot, { backgroundColor: i < pin.length ? '#FF2E8A' : 'rgba(255,255,255,0.15)' }]}
-                  />
-                ))}
-              </Animated.View>
-
-              {error ? (
-                <AppText style={[styles.error, { marginBottom: vXs }]}>
-                  {lockedUntil ? `Too many attempts. Try again in ${countdown}s.` : error}
-                </AppText>
-              ) : null}
-
-              <View style={[styles.pad, { width: padWidth, gap: keyGap, opacity: lockedUntil ? 0.35 : 1 }]}>
-                {PAD.map((k, i) => (
-                  <TouchableOpacity
-                    key={i}
-                    style={[styles.key, { width: keySize, height: keyHeight }, k === '' && styles.keyEmpty]}
-                    onPress={() => handleKey(k)}
-                    activeOpacity={k === '' ? 1 : 0.6}
-                    disabled={k === '' || !!lockedUntil}
-                  >
-                    <AppText style={[styles.keyText, k === '⌫' && styles.keyDelete]}>{k}</AppText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <View style={[styles.footerLinks, { marginTop: vSm }]}>
-                {(loginMethod === 'biometric' || loginMethod === 'biometric_or_pin') && bioAvailable && (
-                  <TouchableOpacity style={styles.altLink} onPress={handleBiometricRetry} activeOpacity={0.7}>
-                    <BiometricIcon color="rgba(255,255,255,0.4)" size={14} />
-                    <AppText style={styles.altLinkText}>Use {biometricLabel}</AppText>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.altLink} onPress={goToPassword} activeOpacity={0.7}>
-                  <KeyRound color="rgba(255,255,255,0.4)" size={14} />
-                  <AppText style={styles.altLinkText}>Forgot PIN? Sign in with password</AppText>
-                </TouchableOpacity>
-              </View>
-            </>
           )}
         </View>
       </View>
-
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -378,33 +263,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
   },
-  dots: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    justifyContent: 'center',
-  },
-  dot: { width: 14, height: 14, borderRadius: 7 },
   error: {
     color: '#FF5A5F',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
-  },
-  pad: { flexDirection: 'row', flexWrap: 'wrap' },
-  key: {
-    borderRadius: Radius.xl,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  keyEmpty: { backgroundColor: 'transparent', borderColor: 'transparent' },
-  keyText: { color: '#fff', fontSize: FontSize.xxl, fontFamily: 'Inter-Medium' },
-  keyDelete: { fontSize: FontSize.xl },
-  footerLinks: {
-    gap: Spacing.sm,
-    alignItems: 'center',
   },
   altLink: {
     flexDirection: 'row',
@@ -431,16 +294,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: Spacing.sm,
   },
-  setupPinBtn: {
-    borderRadius: Radius.pill,
-    backgroundColor: '#FF5A3D',
-    paddingVertical: 14,
-    paddingHorizontal: 32,
+  fallbackWrap: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  mailIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: Radius.xl,
+    backgroundColor: 'rgba(255,46,138,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,46,138,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
+    marginBottom: Spacing.sm,
   },
-  setupPinBtnText: {
+  inputWrap: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    overflow: 'hidden',
+  },
+  input: {
+    color: '#fff',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Regular',
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.md,
+  },
+  signInBtn: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: Radius.pill,
+    backgroundColor: '#FF2E8A',
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signInBtnText: {
     color: '#fff',
     fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',

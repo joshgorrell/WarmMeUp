@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import { useAuth, computeIsUnlockRequired, computeShouldShowPrivacyCover } from '@/context/AuthContext';
-import { hasPinStored } from '@/lib/secureKey';
 import { logDebugEvent } from '@/lib/debugLog';
 
 // If settings haven't arrived this many ms after loading=false, fall through to
@@ -120,16 +119,11 @@ export default function IndexScreen() {
       console.log('[INDEX ROUTE DECISION] gate', {
         loginMethod,
         mustLock,
-        destination: mustLock
-          ? (loginMethod === 'pin' ? '/unlock or setup-pin' : '/unlock')
-          : '/transition',
+        destination: mustLock ? '/unlock' : '/transition',
       });
 
       if (mustLock) {
-        // Only route to setup-pin for pure PIN users who haven't stored a PIN yet.
-        // biometric_or_pin users can still use Face ID even without a PIN.
-        const needsPinSetup = loginMethod === 'pin' && !(await hasPinStored(userId!));
-        const dest = needsPinSetup ? '/(auth)/setup-pin' : '/unlock';
+        const dest = '/unlock';
         logDebugEvent('LAUNCH ROUTE DECISION', {
           sessionHydrated: true,
           sessionValidAtLaunch: true,

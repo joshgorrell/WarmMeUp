@@ -58,7 +58,7 @@ export function useBiometricAuth(): BiometricAuth {
       const LA = await import('expo-local-authentication');
       const result = await LA.authenticateAsync({
         promptMessage: reason,
-        fallbackLabel: 'Use PIN',
+        fallbackLabel: 'Use Password',
         cancelLabel: 'Cancel',
         disableDeviceFallback: false,
       });

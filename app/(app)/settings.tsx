@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
-import { ChevronRight, Check, KeyRound, Lock, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, ShieldOff, Shield } from 'lucide-react-native';
+import { ChevronRight, Check, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, ShieldOff, Shield } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -133,7 +133,7 @@ const slm = StyleSheet.create({
   dropOptionLabel: { fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
 });
 
-type UnlockMethod = 'none' | 'biometric' | 'pin' | 'biometric_or_pin';
+type UnlockMethod = 'none' | 'biometric';
 
 function RequireUnlockRow({
   current,
@@ -163,23 +163,12 @@ function RequireUnlockRow({
       icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={16} strokeWidth={1.8} />,
       disabled: !bioAvailable,
     },
-    {
-      key: 'pin',
-      label: 'PIN',
-      icon: <KeyRound color={current === 'pin' ? '#FFB347' : colors.textMuted} size={16} strokeWidth={1.8} />,
-    },
-    {
-      key: 'biometric_or_pin',
-      label: `${biometricLabel} or PIN`,
-      icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={16} strokeWidth={1.8} />,
-      disabled: !bioAvailable,
-    },
   ];
 
   return (
     <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
-      <AppText style={[slm.label, { color: colors.text }]}>Require Unlock</AppText>
-      <AppText style={[slm.sub, { color: colors.textMuted }]}>How you unlock Warm Me Up each time</AppText>
+      <AppText style={[slm.label, { color: colors.text }]}>App Lock</AppText>
+      <AppText style={[slm.sub, { color: colors.textMuted }]}>Require biometrics to open Warm Me Up</AppText>
       <View style={slm.row}>
         {options.map((opt) => {
           const sel = current === opt.key;
@@ -211,33 +200,40 @@ function RequireUnlockRow({
 
 function VaultProtectionRow({
   isAdditional,
+  bioAvailable,
+  biometricLabel,
   colors,
   onSelect,
 }: {
   isAdditional: boolean;
+  bioAvailable: boolean;
+  biometricLabel: string;
   colors: any;
   onSelect: (additional: boolean) => void;
 }) {
-  type VaultOpt = { key: boolean; label: string; sub: string; icon: React.ReactNode };
+  const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
+
+  type VaultOpt = { key: boolean; label: string; sub: string; icon: React.ReactNode; disabled?: boolean };
   const opts: VaultOpt[] = [
     {
       key: false,
-      label: 'App Security',
-      sub: 'Use the same unlock as the app',
-      icon: <Shield color={!isAdditional ? '#FF2E8A' : colors.textMuted} size={15} strokeWidth={1.8} />,
+      label: 'No',
+      sub: 'No extra step for Vault',
+      icon: <ShieldOff color={!isAdditional ? '#FF2E8A' : colors.textMuted} size={15} strokeWidth={1.8} />,
     },
     {
       key: true,
-      label: 'Extra Face ID',
-      sub: 'Second biometric step for Vault only',
-      icon: <ScanFace color={isAdditional ? '#FF8A3D' : colors.textMuted} size={15} strokeWidth={1.8} />,
+      label: biometricLabel,
+      sub: 'Biometric step to open Vault',
+      icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={15} strokeWidth={1.8} />,
+      disabled: !bioAvailable,
     },
   ];
 
   return (
     <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
       <AppText style={[slm.label, { color: colors.text }]}>Vault Protection</AppText>
-      <AppText style={[slm.sub, { color: colors.textMuted }]}>How the Vault is protected when you open it</AppText>
+      <AppText style={[slm.sub, { color: colors.textMuted }]}>Require biometrics each time you open the Vault</AppText>
       <View style={[slm.row, { gap: 10 }]}>
         {opts.map((opt) => {
           const sel = isAdditional === opt.key;
@@ -247,13 +243,15 @@ function VaultProtectionRow({
               style={[
                 slm.chip,
                 sel && slm.chipSelected,
+                opt.disabled && slm.chipDisabled,
                 { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle, flex: 1, paddingVertical: 12, gap: 5 },
               ]}
-              onPress={() => onSelect(opt.key)}
-              activeOpacity={0.72}
+              onPress={() => !opt.disabled && onSelect(opt.key)}
+              activeOpacity={opt.disabled ? 1 : 0.72}
+              disabled={opt.disabled}
             >
               {opt.icon}
-              <AppText style={[slm.chipLabel, { color: sel ? '#fff' : colors.textSecondary, fontSize: 12 }]}>{opt.label}</AppText>
+              <AppText style={[slm.chipLabel, { color: opt.disabled ? colors.textDisabled : sel ? '#fff' : colors.textSecondary, fontSize: 12 }]}>{opt.label}</AppText>
               <AppText style={[slm.chipLabel, { color: sel ? 'rgba(255,255,255,0.55)' : colors.textMuted, fontSize: 10 }]}>{opt.sub}</AppText>
               {sel && <Check color="#FF2E8A" size={10} strokeWidth={2.5} />}
             </TouchableOpacity>
@@ -420,12 +418,10 @@ export default function SettingsScreen() {
 
 
   const currentMethod: UnlockMethod =
-    (s?.login_method === 'biometric' || s?.login_method === 'biometric_or_pin' || s?.login_method === 'pin')
-      ? s.login_method
-      : 'none';
+    s?.login_method === 'biometric' ? 'biometric' : 'none';
 
   const handleRequireUnlockSelect = async (method: UnlockMethod) => {
-    if (method === 'biometric' || method === 'biometric_or_pin') {
+    if (method === 'biometric') {
       const result = await bioAuthenticate('Confirm biometrics to enable this method');
       if (!result.success) return;
     }
@@ -473,6 +469,8 @@ export default function SettingsScreen() {
           )}
           <VaultProtectionRow
             isAdditional={s?.vault_face_id_required ?? false}
+            bioAvailable={bioAvailable}
+            biometricLabel={biometricLabel}
             colors={colors}
             onSelect={async (additional) => {
               if (additional) {
