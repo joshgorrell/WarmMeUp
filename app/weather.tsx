@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Platform, Linking,
+  Animated, Easing,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
@@ -64,6 +65,94 @@ async function cacheCoords(userId: string, lat: number, lon: number) {
 const DEBUG_TAP_TARGET = 5;
 const DEBUG_TAP_WINDOW_MS = 10000;
 
+// Shimmer skeleton block
+function SkeletonBlock({ shimmer, style }: { shimmer: Animated.Value; style?: object }) {
+  const bg = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.13)'],
+  });
+  return <Animated.View style={[styles.skeletonBlock, { backgroundColor: bg }, style]} />;
+}
+
+// Loading state: animated cloud icon + pulsing pin + skeleton cards
+function WeatherLoading({ shimmer, pinPulse, dotCount }: {
+  shimmer: Animated.Value;
+  pinPulse: Animated.Value;
+  dotCount: number;
+}) {
+  const dots = '.'.repeat(dotCount);
+
+  return (
+    <View style={styles.loadingRoot}>
+      {/* Icon cluster */}
+      <View style={styles.loadingIconCluster}>
+        <Animated.View style={{ opacity: shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.85] }) }}>
+          <Cloud color="rgba(180,210,255,0.85)" size={56} strokeWidth={1.4} />
+        </Animated.View>
+        <Animated.View style={[styles.loadingPinBadge, { opacity: pinPulse }]}>
+          <MapPin color="rgba(120,190,255,0.9)" size={18} strokeWidth={2} />
+        </Animated.View>
+      </View>
+
+      {/* Copy */}
+      <AppText style={styles.loadingHeadline}>
+        {'Locating'}<AppText style={styles.loadingDots}>{dots}</AppText>
+      </AppText>
+      <AppText style={styles.loadingSubtitle}>Checking local conditions…</AppText>
+
+      {/* Skeleton temperature block */}
+      <View style={styles.skeletonTopSection}>
+        <SkeletonBlock shimmer={shimmer} style={styles.skeletonTemp} />
+        <SkeletonBlock shimmer={shimmer} style={styles.skeletonCondition} />
+        <SkeletonBlock shimmer={shimmer} style={styles.skeletonHiLo} />
+      </View>
+
+      {/* Skeleton hourly card */}
+      <View style={styles.skeletonCard}>
+        <View style={styles.skeletonCardHeader}>
+          <SkeletonBlock shimmer={shimmer} style={styles.skeletonHeaderBar} />
+        </View>
+        <View style={styles.skeletonDivider} />
+        <View style={styles.skeletonHourlyRow}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <View key={i} style={styles.skeletonHourItem}>
+              <SkeletonBlock shimmer={shimmer} style={styles.skeletonHourTime} />
+              <SkeletonBlock shimmer={shimmer} style={styles.skeletonHourIcon} />
+              <SkeletonBlock shimmer={shimmer} style={styles.skeletonHourTemp} />
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Skeleton 5-day card */}
+      <View style={styles.skeletonCard}>
+        <View style={styles.skeletonCardHeader}>
+          <SkeletonBlock shimmer={shimmer} style={styles.skeletonHeaderBar} />
+        </View>
+        <View style={styles.skeletonDivider} />
+        {Array.from({ length: 5 }).map((_, i) => (
+          <View key={i} style={[styles.skeletonForecastRow, i < 4 && styles.skeletonForecastDivider]}>
+            <SkeletonBlock shimmer={shimmer} style={styles.skeletonForecastDay} />
+            <SkeletonBlock shimmer={shimmer} style={styles.skeletonForecastIcon} />
+            <SkeletonBlock shimmer={shimmer} style={styles.skeletonForecastCond} />
+            <SkeletonBlock shimmer={shimmer} style={styles.skeletonForecastTemp} />
+          </View>
+        ))}
+      </View>
+
+      {/* Skeleton extras row */}
+      <View style={styles.extraRow}>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <View key={i} style={styles.skeletonExtraCard}>
+            <SkeletonBlock shimmer={shimmer} style={styles.skeletonExtraLabel} />
+            <SkeletonBlock shimmer={shimmer} style={styles.skeletonExtraValue} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function WeatherScreen() {
   const router = useRouter();
   const { session, loading, user, profile, settings, unlockedAtMs, refreshSettings, unlockApp, isAuthenticatingRef, debugModeEnabled, refreshSubscription } = useAuth();
@@ -109,6 +198,62 @@ export default function WeatherScreen() {
   const gpsDone = useRef(false);
   const cancelled = useRef(false);
 
+  // --- Animation values ---
+  const shimmer = useRef(new Animated.Value(0)).current;
+  const pinPulse = useRef(new Animated.Value(0.5)).current;
+  const contentFade = useRef(new Animated.Value(0)).current;
+  const [dotCount, setDotCount] = useState(1);
+
+  // Shimmer loop
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, {
+          toValue: 1, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: false,
+        }),
+        Animated.timing(shimmer, {
+          toValue: 0, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: false,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  // Pin pulse loop (native driver safe — only opacity)
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pinPulse, {
+          toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true,
+        }),
+        Animated.timing(pinPulse, {
+          toValue: 0.3, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  // Animated dots while loading
+  useEffect(() => {
+    if (weather !== null) return;
+    const id = setInterval(() => {
+      setDotCount(c => (c % 3) + 1);
+    }, 500);
+    return () => clearInterval(id);
+  }, [weather]);
+
+  // Fade in content when weather arrives
+  useEffect(() => {
+    if (weather !== null) {
+      Animated.timing(contentFade, {
+        toValue: 1, duration: 380, easing: Easing.out(Easing.ease), useNativeDriver: true,
+      }).start();
+    }
+  }, [weather]);
+
   const canAccessDebug =
     __DEV__ ||
     profile?.is_admin === true ||
@@ -144,12 +289,11 @@ export default function WeatherScreen() {
     }
   }, []);
 
-  // Hard timeout: ensures the screen never stays permanently blank.
-  // Starts on mount and is cleared when any weather data arrives.
+  // Hard timeout: 6s fallback so the screen never stays permanently blank.
   useEffect(() => {
     const t = setTimeout(() => {
       if (!cancelled.current) setWeather(prev => prev ?? FALLBACK);
-    }, 10000);
+    }, 6000);
     return () => {
       cancelled.current = true;
       clearTimeout(t);
@@ -320,7 +464,9 @@ export default function WeatherScreen() {
       {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <View style={styles.locationRow}>
-          <MapPin color="rgba(255,255,255,0.8)" size={14} />
+          <Animated.View style={{ opacity: weather ? 1 : pinPulse }}>
+            <MapPin color="rgba(255,255,255,0.8)" size={14} />
+          </Animated.View>
           <AppText style={styles.location}>
             {weather ? weather.location : 'Locating…'}
           </AppText>
@@ -338,7 +484,7 @@ export default function WeatherScreen() {
         showsVerticalScrollIndicator={false}
       >
         {weather ? (
-          <>
+          <Animated.View style={{ opacity: contentFade }}>
             {/* Main temp — 5-tap opens debug when admin has enabled debug mode */}
             <TouchableOpacity
               onPress={handleDebugTap}
@@ -415,12 +561,9 @@ export default function WeatherScreen() {
                 </View>
               ))}
             </View>
-          </>
+          </Animated.View>
         ) : (
-          <View style={styles.loadingSection}>
-            <AppText style={styles.loadingTemp}>—°</AppText>
-            <AppText style={styles.loadingLabel}>Fetching local weather…</AppText>
-          </View>
+          <WeatherLoading shimmer={shimmer} pinPulse={pinPulse} dotCount={dotCount} />
         )}
 
         {/* Spacer so content isn't hidden under the absolute-positioned bottom button */}
@@ -543,16 +686,109 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular', marginTop: 10, textDecorationLine: 'underline',
     textAlign: 'center',
   },
-  loadingSection: {
-    alignItems: 'center', justifyContent: 'center',
-    paddingTop: Spacing.xl * 3,
+
+  // ── Loading state ──────────────────────────────────────────────────────────
+  loadingRoot: {
+    alignItems: 'center',
+    paddingTop: Spacing.lg,
   },
-  loadingTemp: {
-    color: 'rgba(255,255,255,0.2)', fontFamily: 'Inter-Bold',
-    letterSpacing: -3, fontSize: 90, lineHeight: 97,
+  loadingIconCluster: {
+    position: 'relative',
+    marginBottom: Spacing.lg,
+    width: 72,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  loadingLabel: {
-    color: 'rgba(255,255,255,0.3)', fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular', marginTop: Spacing.sm,
+  loadingPinBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -6,
   },
+  loadingHeadline: {
+    color: '#fff',
+    fontSize: FontSize.xl,
+    fontFamily: 'Inter-SemiBold',
+    letterSpacing: 0.2,
+    marginBottom: 6,
+  },
+  loadingDots: {
+    color: 'rgba(180,210,255,0.7)',
+    fontFamily: 'Inter-SemiBold',
+  },
+  loadingSubtitle: {
+    color: 'rgba(255,255,255,0.38)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    marginBottom: Spacing.xl,
+    letterSpacing: 0.1,
+  },
+
+  // Skeleton shared
+  skeletonBlock: {
+    borderRadius: 6,
+  },
+
+  // Skeleton temperature cluster
+  skeletonTopSection: {
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+    gap: 10,
+    width: '100%',
+  },
+  skeletonTemp: { width: 160, height: 80, borderRadius: 14 },
+  skeletonCondition: { width: 120, height: 18, borderRadius: 9 },
+  skeletonHiLo: { width: 90, height: 13, borderRadius: 6 },
+
+  // Skeleton card wrapper
+  skeletonCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    width: '100%',
+  },
+  skeletonCardHeader: { marginBottom: 8 },
+  skeletonHeaderBar: { width: 100, height: 11, borderRadius: 5 },
+  skeletonDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginBottom: Spacing.sm },
+
+  // Skeleton hourly row
+  skeletonHourlyRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  skeletonHourItem: { alignItems: 'center', gap: 5, minWidth: 40 },
+  skeletonHourTime: { width: 28, height: 10, borderRadius: 5 },
+  skeletonHourIcon: { width: 28, height: 28, borderRadius: 14 },
+  skeletonHourTemp: { width: 24, height: 11, borderRadius: 5 },
+
+  // Skeleton forecast rows
+  skeletonForecastRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: Spacing.sm,
+  },
+  skeletonForecastDivider: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  skeletonForecastDay: { width: 80, height: 12, borderRadius: 6 },
+  skeletonForecastIcon: { width: 22, height: 22, borderRadius: 11 },
+  skeletonForecastCond: { flex: 1, height: 12, borderRadius: 6 },
+  skeletonForecastTemp: { width: 44, height: 12, borderRadius: 6 },
+
+  // Skeleton extra cards
+  skeletonExtraCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    padding: Spacing.md,
+    alignItems: 'center',
+    gap: 8,
+  },
+  skeletonExtraLabel: { width: 48, height: 9, borderRadius: 4 },
+  skeletonExtraValue: { width: 32, height: 22, borderRadius: 6 },
 });
