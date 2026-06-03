@@ -32,7 +32,7 @@ export default function VaultScreen() {
   const router = useRouter();
   const { user, couple, partnerProfile, settings, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, subscriptionInfo, refreshCouple } = useAuth();
   const { colors } = useTheme();
-  const { width, cols } = useLayout();
+  const { width, height: screenHeight, cols } = useLayout();
   const insets = useSafeAreaInsets();
   const { available: bioAvailable, authenticate: bioAuthenticate } = useBiometricAuth();
   const NUM_COLS = cols(3, 4);
@@ -71,6 +71,7 @@ export default function VaultScreen() {
   // Long-press state for MediaActionRow
   const [activeVaultItemId, setActiveVaultItemId] = useState<string | null>(null);
   const [vaultMenuAnchor, setVaultMenuAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [vaultPillSize, setVaultPillSize] = useState<{ w: number; h: number } | null>(null);
   const tileRefs = useRef<Record<string, View | null>>({});
 
   // Reactions
@@ -715,38 +716,55 @@ export default function VaultScreen() {
         const activeItem = items.find(i => i.id === activeVaultItemId);
         if (!activeItem) return null;
         const activeReactions = vaultReactionsMap[activeVaultItemId] ?? [];
-        const PILL_HEIGHT = 54;
-        const PILL_WIDTH = 468;
-        const left = Math.max(8, Math.min(vaultMenuAnchor.x + vaultMenuAnchor.width / 2 - PILL_WIDTH / 2, 8));
-        const top = Math.max(8, vaultMenuAnchor.y - PILL_HEIGHT - 10);
+
+        const pillW = vaultPillSize?.w ?? 0;
+        const pillH = vaultPillSize?.h ?? 0;
+        const FLOAT_GAP = 16;
+        const safeTop = insets.top + 8;
+
+        const centeredLeft = vaultMenuAnchor.x + vaultMenuAnchor.width / 2 - pillW / 2;
+        const clampedLeft = Math.max(8, Math.min(centeredLeft, width - pillW - 8));
+
+        const aboveTop = vaultMenuAnchor.y - pillH - FLOAT_GAP;
+        const belowTop = vaultMenuAnchor.y + vaultMenuAnchor.height + FLOAT_GAP;
+        const isNearTop = vaultMenuAnchor.y < screenHeight * 0.25;
+        const computedTop = isNearTop ? belowTop : Math.max(safeTop, aboveTop);
+
+        const left = vaultPillSize ? clampedLeft : -9999;
+        const top = vaultPillSize ? computedTop : -9999;
+
+        const dismissAll = () => {
+          setActiveVaultItemId(null);
+          setVaultMenuAnchor(null);
+          setVaultPillSize(null);
+        };
+
         return (
           <View style={[StyleSheet.absoluteFill, { zIndex: 9998 }]} pointerEvents="box-none">
-            <View style={{ position: 'absolute', left, top }}>
+            <View
+              style={{ position: 'absolute', left, top }}
+              onLayout={e => {
+                const { width: w, height: h } = e.nativeEvent.layout;
+                if (w > 0 && h > 0) setVaultPillSize({ w, h });
+              }}
+            >
               <MediaActionRow
                 reactions={activeReactions}
                 myUserId={user?.id}
                 isMedia={true}
                 isInVault={true}
                 isMine={activeItem.uploaded_by_user_id === user?.id}
+                screenWidth={width}
                 onReact={(emoji) => {
-                  setActiveVaultItemId(null);
-                  setVaultMenuAnchor(null);
+                  dismissAll();
                   reactOnVaultItem(activeItem.id, emoji, activeItem.uploaded_by_user_id, activeItem.id);
                 }}
-                onAlreadyInVault={() => {
-                  setActiveVaultItemId(null);
-                  setVaultMenuAnchor(null);
-                  // Brief visual feedback — already in vault, no popup needed
-                }}
+                onAlreadyInVault={dismissAll}
                 onDelete={() => {
-                  setActiveVaultItemId(null);
-                  setVaultMenuAnchor(null);
+                  dismissAll();
                   handleDeleteItem(activeItem);
                 }}
-                onDismiss={() => {
-                  setActiveVaultItemId(null);
-                  setVaultMenuAnchor(null);
-                }}
+                onDismiss={dismissAll}
               />
             </View>
           </View>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Pressable, Image, ActivityIndicator, TextInput, Alert,
-  AppState, AppStateStatus, Keyboard, Share,
+  AppState, AppStateStatus, Keyboard,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -154,6 +154,7 @@ export default function ChatTab() {
   const [editingState, setEditingState] = useState<EditingState | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
+  const [pillSize, setPillSize] = useState<{ w: number; h: number } | null>(null);
   const [revealedMedia, setRevealedMedia] = useState<Set<string>>(new Set());
   const listRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -171,7 +172,7 @@ export default function ChatTab() {
     'chat_messages',
     messageIds,
   );
-  const { width: screenWidth } = useLayout();
+  const { width: screenWidth, height: screenHeight } = useLayout();
   const mediaBubbleWidth = Math.min(Math.round(screenWidth * 0.55), 260);
   const mediaBubbleHeight = Math.round(mediaBubbleWidth * 0.8);
 
@@ -518,6 +519,7 @@ export default function ChatTab() {
   const handleDismissMenu = () => {
     setActiveMenuId(null);
     setMenuAnchor(null);
+    setPillSize(null);
   };
 
   const handleStartEdit = (msg: ChatMessage) => {
@@ -743,7 +745,9 @@ export default function ChatTab() {
     if (Platform.OS === 'web') {
       navigator.clipboard?.writeText(msg.content_text).catch(() => {});
     } else {
-      Share.share({ message: msg.content_text }).catch(() => {});
+      import('expo-clipboard').then(Clipboard => {
+        Clipboard.setStringAsync(msg.content_text!).catch(() => {});
+      }).catch(() => {});
     }
   }, []);
 
@@ -937,20 +941,42 @@ export default function ChatTab() {
         const hasMedia = !!activeMsg.media_storage_path;
         const isMine = activeMsg.sender_id === user?.id;
         const activeReactions = reactionsMap[activeMsg.id] ?? [];
-        // Position: centered horizontally, above the bubble
-        const PILL_HEIGHT = 54;
-        const PILL_WIDTH = hasMedia ? 468 : 360;
-        const left = Math.max(8, Math.min(menuAnchor.x + menuAnchor.width / 2 - PILL_WIDTH / 2, 8));
-        const top = Math.max(8, menuAnchor.y - PILL_HEIGHT - 10);
+
+        // Use measured pill size once available; hide off-screen until onLayout fires
+        const pillW = pillSize?.w ?? 0;
+        const pillH = pillSize?.h ?? 0;
+        const FLOAT_GAP = 16;
+        const safeTop = insets.top + 8;
+
+        const centeredLeft = menuAnchor.x + menuAnchor.width / 2 - pillW / 2;
+        const clampedLeft = Math.max(8, Math.min(centeredLeft, screenWidth - pillW - 8));
+
+        // Flip below anchor if item is in the top quarter of the screen
+        const aboveTop = menuAnchor.y - pillH - FLOAT_GAP;
+        const belowTop = menuAnchor.y + menuAnchor.height + FLOAT_GAP;
+        const isNearTop = menuAnchor.y < screenHeight * 0.25;
+        const computedTop = isNearTop ? belowTop : Math.max(safeTop, aboveTop);
+
+        // Keep off-screen until first layout measurement
+        const left = pillSize ? clampedLeft : -9999;
+        const top = pillSize ? computedTop : -9999;
+
         return (
           <View style={[StyleSheet.absoluteFill, { zIndex: 9998 }]} pointerEvents="box-none">
-            <View style={{ position: 'absolute', left, top }}>
+            <View
+              style={{ position: 'absolute', left, top }}
+              onLayout={e => {
+                const { width: w, height: h } = e.nativeEvent.layout;
+                if (w > 0 && h > 0) setPillSize({ w, h });
+              }}
+            >
               <MediaActionRow
                 reactions={activeReactions}
                 myUserId={user?.id}
                 isMedia={hasMedia}
                 isInVault={hasMedia ? !!activeMsg.vault_item_id : undefined}
                 isMine={isMine}
+                screenWidth={screenWidth}
                 onReact={(emoji) => reactOnMessage(activeMsg.id, emoji, activeMsg.sender_id)}
                 onSaveToVault={hasMedia ? () => handleSaveToVault(activeMsg) : undefined}
                 onAlreadyInVault={() => {/* already saved — no-op, lock shows as active */}}
