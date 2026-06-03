@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
-  Image, RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated,
+  RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { ResizeMode, Video } from 'expo-av';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -32,7 +33,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 export default function VaultScreen() {
   const router = useRouter();
   const { vault_item_id: deepLinkVaultItemId } = useLocalSearchParams<{ vault_item_id?: string }>();
-  const { user, couple, partnerProfile, settings, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, subscriptionInfo, refreshCouple } = useAuth();
+  const { user, couple, partnerProfile, profile, settings, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, subscriptionInfo, refreshCouple } = useAuth();
   const { colors } = useTheme();
   const { width, height: screenHeight, cols } = useLayout();
   const insets = useSafeAreaInsets();
@@ -266,6 +267,9 @@ export default function VaultScreen() {
     // Thumbnails visible: open fullscreen viewer
     const signedUrl = await resolveSignedUrl(item);
     if (!signedUrl) return;
+    const uploaderName = item.uploaded_by_user_id === user?.id
+      ? (profile?.display_name ?? 'You')
+      : (partnerProfile?.display_name ?? 'Partner');
     router.push({
       pathname: '/(app)/vault-viewer',
       params: {
@@ -276,6 +280,8 @@ export default function VaultScreen() {
         allowScreenshot: item.allow_screenshot ? '1' : '0',
         allowSave: item.allow_save ? '1' : '0',
         allowShare: item.allow_share ? '1' : '0',
+        createdAt: item.created_at,
+        uploaderName,
       },
     });
   };
@@ -669,24 +675,15 @@ export default function VaultScreen() {
                   >
                     {/* Thumbnail */}
                     {url ? (
-                      item.media_type === 'video' ? (
-                        <>
-                          <Image
-                            source={{ uri: url }}
-                            style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
-                            resizeMode="cover"
-                            blurRadius={thumbnailsVisible ? 0 : 6}
-                          />
-                        </>
-                      ) : (
-                        <Image
-                          source={{ uri: url }}
-                          style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
-                          blurRadius={thumbnailsVisible ? 0 : 6}
-                        />
-                      )
+                      <Image
+                        source={{ uri: url }}
+                        style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        blurRadius={thumbnailsVisible ? 0 : 6}
+                      />
                     ) : (
-                      <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center' }]}>
+                      <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' }]}>
                         <ActivityIndicator color="rgba(255,255,255,0.25)" size="small" />
                       </View>
                     )}
@@ -917,7 +914,7 @@ const styles = StyleSheet.create({
   vaultHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.md },
   vaultHeaderText: { flex: 1, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  gridItem: { borderRadius: Radius.sm, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
+  gridItem: { borderRadius: Radius.sm, overflow: 'hidden', backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   blurOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)' },
   videoBadge: { position: 'absolute', bottom: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, padding: 4 },
   newDot: { position: 'absolute', top: 6, right: 6, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF2E8A', borderWidth: 2 },

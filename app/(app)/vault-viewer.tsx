@@ -50,6 +50,8 @@ export default function VaultViewerScreen() {
     allowSave,
     interactionId,
     timestamp,
+    createdAt,
+    uploaderName,
   } = useLocalSearchParams<{
     id: string;
     storagePath: string;
@@ -61,6 +63,8 @@ export default function VaultViewerScreen() {
     allowShare: string;
     interactionId?: string;
     timestamp?: string;
+    createdAt?: string;
+    uploaderName?: string;
   }>();
 
   const isVideo = mediaType === 'video';
@@ -324,16 +328,18 @@ export default function VaultViewerScreen() {
     }
   }
 
-  // Format timestamp if provided
-  const formattedTimestamp = timestamp
-    ? (() => {
-        try {
-          const d = new Date(timestamp);
-          return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' +
-            d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } catch { return null; }
-      })()
-    : null;
+  // Format timestamp — prefer createdAt + uploaderName, fall back to legacy timestamp param
+  const formattedTimestamp = (() => {
+    const raw = createdAt ?? timestamp;
+    if (!raw) return null;
+    try {
+      const d = new Date(raw);
+      const datePart = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+      const timePart = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dateTime = `${datePart} · ${timePart}`;
+      return uploaderName ? `${uploaderName} · ${dateTime}` : dateTime;
+    } catch { return null; }
+  })();
 
   // ─── Render ──────────────────────────────────────────────────────────────
   return (
