@@ -1198,33 +1198,37 @@ export default function AccountScreen() {
         <View style={{ flex: 1 }}>
           {editingName ? (
             <View ref={nameWrapRef} style={styles.nameEditRow}>
-              <AppTextInput
-                style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
-                value={firstNameInput}
-                onChangeText={setFirstNameInput}
-                autoFocus
-                returnKeyType="next"
-                placeholderTextColor={colors.textMuted}
-                placeholder="First name"
-                maxLength={20}
-              />
-              <AppTextInput
-                style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
-                value={lastNameInput}
-                onChangeText={setLastNameInput}
-                returnKeyType="done"
-                onSubmitEditing={saveName}
-                onBlur={saveName}
-                placeholderTextColor={colors.textMuted}
-                placeholder="Last name"
-                maxLength={30}
-              />
-              <TouchableOpacity onPress={saveName} disabled={savingName} style={styles.nameActionBtn} activeOpacity={0.7}>
-                <Check color="#33D17A" size={18} strokeWidth={2.5} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={cancelEditName} style={styles.nameActionBtn} activeOpacity={0.7}>
-                <X color={colors.textMuted} size={18} strokeWidth={2.5} />
-              </TouchableOpacity>
+              <View style={styles.nameInputsCol}>
+                <AppTextInput
+                  style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
+                  value={firstNameInput}
+                  onChangeText={setFirstNameInput}
+                  autoFocus
+                  returnKeyType="next"
+                  placeholderTextColor={colors.textMuted}
+                  placeholder="First name"
+                  maxLength={20}
+                />
+                <AppTextInput
+                  style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
+                  value={lastNameInput}
+                  onChangeText={setLastNameInput}
+                  returnKeyType="done"
+                  onSubmitEditing={saveName}
+                  onBlur={saveName}
+                  placeholderTextColor={colors.textMuted}
+                  placeholder="Last name"
+                  maxLength={30}
+                />
+              </View>
+              <View style={styles.nameActionBtns}>
+                <TouchableOpacity onPress={saveName} disabled={savingName} style={styles.nameActionBtn} activeOpacity={0.7}>
+                  <Check color="#33D17A" size={18} strokeWidth={2.5} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={cancelEditName} style={styles.nameActionBtn} activeOpacity={0.7}>
+                  <X color={colors.textMuted} size={18} strokeWidth={2.5} />
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
             <TouchableOpacity onPress={startEditName} style={styles.nameRow} activeOpacity={0.7}>
@@ -2418,10 +2422,12 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   name: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold' },
   nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  nameInputsCol: { flex: 1, gap: 4 },
   nameInput: {
-    flex: 1, fontSize: FontSize.body, fontFamily: 'Inter-Medium',
+    fontSize: FontSize.body, fontFamily: 'Inter-Medium',
     borderWidth: 1, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 4, height: 32,
   },
+  nameActionBtns: { flexDirection: 'column', alignItems: 'center', gap: 2 },
   nameActionBtn: { padding: 4 },
   emailText: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular', marginTop: 2 },
   statsWrap: { marginBottom: Spacing.md },
