@@ -2,12 +2,12 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Pressable, Image, ActivityIndicator, TextInput, Alert,
-  AppState, AppStateStatus, Keyboard, Animated,
+  AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Image as ImageIcon, Camera, X, Lock, Send, EyeOff, Pencil } from 'lucide-react-native';
+import { Image as ImageIcon, Camera, X, Lock, EyeOff, Pencil, ArrowUp } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -22,6 +22,11 @@ import { useMediaReactions } from '@/hooks/useMediaReactions';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 function formatTime(iso: string) {
   const d = new Date(iso);
@@ -45,6 +50,20 @@ function getDividerLabel(iso: string): string {
   return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
+// Dynamic bottom margin between messages — iMessage-style grouping rhythm
+function getMessageSpacing(
+  item: ChatMessage,
+  prevItem: ChatMessage | null,
+): number {
+  if (!prevItem) return 10;
+  const sameSender = item.sender_id === prevItem.sender_id;
+  const gap = new Date(item.created_at).getTime() - new Date(prevItem.created_at).getTime();
+  if (!sameSender) return 10;
+  if (gap < 20_000) return 2;
+  if (gap < 60_000) return 5;
+  return 10;
+}
+
 type AttachedMedia = {
   uri: string;
   type: 'photo' | 'video';
@@ -64,6 +83,56 @@ type MenuAnchor = {
   height: number;
 };
 
+// Per-message position in its sender group — controls which corners get the tail radius
+type GroupPos = 'solo' | 'first' | 'middle' | 'last';
+
+function getGroupPos(
+  item: ChatMessage,
+  prev: ChatMessage | null,
+  next: ChatMessage | null,
+): GroupPos {
+  const GAP = 60_000; // 60 seconds — same grouping threshold as iMessage
+  const samePrev = prev && prev.sender_id === item.sender_id &&
+    new Date(item.created_at).getTime() - new Date(prev.created_at).getTime() < GAP;
+  const sameNext = next && next.sender_id === item.sender_id &&
+    new Date(next.created_at).getTime() - new Date(item.created_at).getTime() < GAP;
+  if (samePrev && sameNext) return 'middle';
+  if (samePrev) return 'last';
+  if (sameNext) return 'first';
+  return 'solo';
+}
+
+// iMessage-style corner radii: full on 3 corners, small tail on the sender-side corner
+function getBubbleRadii(isMine: boolean, pos: GroupPos) {
+  const FULL = 20;
+  const TAIL = 4;
+  if (pos === 'solo') {
+    return {
+      borderTopLeftRadius: FULL,
+      borderTopRightRadius: FULL,
+      borderBottomLeftRadius: FULL,
+      borderBottomRightRadius: FULL,
+    };
+  }
+  if (isMine) {
+    // Tail = bottom-right corner for last/solo in group
+    return {
+      borderTopLeftRadius: FULL,
+      borderTopRightRadius: FULL,
+      borderBottomLeftRadius: FULL,
+      borderBottomRightRadius: pos === 'last' ? TAIL : FULL,
+    };
+  } else {
+    // Tail = bottom-left corner for last/solo in group
+    return {
+      borderTopLeftRadius: FULL,
+      borderTopRightRadius: FULL,
+      borderBottomLeftRadius: pos === 'last' ? TAIL : FULL,
+      borderBottomRightRadius: FULL,
+    };
+  }
+}
+
 function MediaBubble({
   msg,
   blurEnabled,
@@ -74,6 +143,7 @@ function MediaBubble({
   onLongPress,
   bubbleWidth,
   bubbleHeight,
+  radii,
 }: {
   msg: ChatMessage;
   blurEnabled: boolean;
@@ -84,6 +154,7 @@ function MediaBubble({
   onLongPress: (m: ChatMessage) => void;
   bubbleWidth: number;
   bubbleHeight: number;
+  radii: ReturnType<typeof getBubbleRadii>;
 }) {
   const loaded = signedUrl !== undefined;
   const isBlurred = blurEnabled && !revealed;
@@ -102,18 +173,22 @@ function MediaBubble({
       onLongPress={() => onLongPress(msg)}
       delayLongPress={350}
       android_ripple={null}
-      style={[styles.mediaTap, { width: bubbleWidth, height: bubbleHeight, borderRadius: Radius.lg }]}
+      style={[
+        styles.mediaTap,
+        { width: bubbleWidth, height: bubbleHeight },
+        radii,
+      ]}
     >
       {!loaded ? (
         <View style={styles.mediaPlaceholder}>
-          <ActivityIndicator color="#FF5A3D" size="small" />
+          <ShimmerPlaceholder />
         </View>
       ) : signedUrl ? (
         <Image
           source={{ uri: signedUrl }}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
-          blurRadius={isBlurred ? 6 : 0}
+          blurRadius={isBlurred ? 20 : 0}
         />
       ) : (
         <View style={styles.mediaPlaceholder}>
@@ -129,10 +204,28 @@ function MediaBubble({
       )}
       {isBlurred && loaded && signedUrl && (
         <View style={styles.mediaBlurOverlay}>
-          <EyeOff color="rgba(255,255,255,0.7)" size={20} strokeWidth={2} />
+          <EyeOff color="rgba(255,255,255,0.8)" size={22} strokeWidth={2} />
         </View>
       )}
     </Pressable>
+  );
+}
+
+// Animated shimmer for media loading state
+function ShimmerPlaceholder() {
+  const anim = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 0.8, duration: 800, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.06)', opacity: anim }]} />
   );
 }
 
@@ -168,7 +261,6 @@ export default function ChatTab() {
   const blurEnabled = settings?.blur_media ?? true;
   const chatFontScale = settings?.chat_font_scale ?? 1.0;
 
-  // Derive message IDs for reactions subscription
   const messageIds = useMemo(() => messages.map(m => m.id), [messages]);
   const { reactionsMap, react: reactOnMessage } = useMediaReactions(
     couple?.id,
@@ -177,8 +269,9 @@ export default function ChatTab() {
     messageIds,
   );
   const { width: screenWidth, height: screenHeight } = useLayout();
-  const mediaBubbleWidth = Math.min(Math.round(screenWidth * 0.55), 260);
-  const mediaBubbleHeight = Math.round(mediaBubbleWidth * 0.8);
+  // Larger, more natural media preview — 65% width, 4:3 aspect ratio
+  const mediaBubbleWidth = Math.min(Math.round(screenWidth * 0.65), 300);
+  const mediaBubbleHeight = Math.round(mediaBubbleWidth * 0.75);
 
   // Re-blur chat media when returning from background
   useEffect(() => {
@@ -193,12 +286,10 @@ export default function ChatTab() {
     return () => sub.remove();
   }, [blurEnabled]);
 
-  // Batch-fetch signed URLs for all media messages in one pass
   const fetchSignedUrls = useCallback(async (msgs: ChatMessage[]) => {
     const mediaMessages = msgs.filter(m => m.media_storage_path);
     if (mediaMessages.length === 0) return;
 
-    // Group by bucket so we can use createSignedUrls (batch endpoint)
     const byBucket: Record<string, ChatMessage[]> = {};
     for (const m of mediaMessages) {
       const bucket = m.media_storage_bucket ?? 'chat_media';
@@ -282,8 +373,8 @@ export default function ChatTab() {
         (payload) => {
           const newMsg = payload.new as ChatMessage;
           setMessages(prev => {
-            // Avoid duplicate if we already optimistically added it
             if (prev.some(m => m.id === newMsg.id)) return prev;
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             return [...prev, newMsg];
           });
           if (newMsg.media_storage_path) {
@@ -300,7 +391,6 @@ export default function ChatTab() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
         (payload) => {
           const updated = payload.new as ChatMessage;
-          // Soft-delete propagation: remove from local state when deleted_at is set
           if (updated.deleted_at) {
             setMessages(prev => prev.filter(m => m.id !== updated.id));
             return;
@@ -312,7 +402,6 @@ export default function ChatTab() {
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id]);
 
-  // Scroll to end only when new messages are appended (not when older messages are prepended)
   const isLoadingOlderRef = useRef(false);
   useEffect(() => {
     isLoadingOlderRef.current = loadingOlder;
@@ -325,7 +414,6 @@ export default function ChatTab() {
     prevMsgCountRef.current = messages.length;
   }, [messages.length]);
 
-  // Deep-link: scroll to a specific message and highlight it
   useEffect(() => {
     if (!deepLinkMessageId || messages.length === 0) return;
     if (handledMsgLinkRef.current === deepLinkMessageId) return;
@@ -437,26 +525,21 @@ export default function ChatTab() {
       return;
     }
 
-    // Clear UI immediately — message is in DB, realtime will update the list
     const capturedMedia = attachedMedia;
     setText('');
     setAttachedMedia(null);
     setSending(false);
 
-    // Fire background work without blocking the UI
     const coupleId = couple.id;
     const userId = user.id;
     const messageId = data.id;
 
     Promise.resolve().then(async () => {
-      // Auto-save to vault in the background — copy from already-uploaded chat_media
-      // rather than re-uploading from the local URI to avoid storing the file twice.
       if (capturedMedia && chatStoragePath && (settings?.chat_auto_save_to_vault ?? true)) {
         try {
           const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
           const ext = capturedMedia.type === 'video' ? videoExt : 'jpg';
           const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${ext}`;
-          // Fetch a short-lived signed URL for the chat file we just uploaded
           const { data: srcData } = await supabase.storage.from('chat_media').createSignedUrl(chatStoragePath, 120);
           if (!srcData?.signedUrl) throw new Error('Could not access uploaded media for vault save.');
           await uploadMediaFile(srcData.signedUrl, 'vault', vaultPath, capturedMedia.mimeType);
@@ -481,7 +564,6 @@ export default function ChatTab() {
         }
       }
 
-      // Award points
       try {
         const eventKey = capturedMedia ? 'chat_media' : 'chat_message';
         const pts = await getPointValue(eventKey);
@@ -490,7 +572,7 @@ export default function ChatTab() {
         const field = capturedMedia ? 'media_sent' : 'chat_messages_sent';
         await incrementMonthlyCounter(coupleId, userId, field, pts);
       } catch {
-        // points/stats are non-critical
+        // non-critical
       }
     });
 
@@ -513,7 +595,6 @@ export default function ChatTab() {
       Alert.alert('Edit Failed', 'Your edit could not be saved. Please try again.');
       return;
     }
-    // Update local state only after DB confirms success
     setMessages(prev => prev.map(m =>
       m.id === editingState.messageId
         ? { ...m, content_text: newText, edited_at: editedAt }
@@ -556,7 +637,6 @@ export default function ChatTab() {
     const hasMedia = !!msg.media_storage_path;
     const autoSaveOn = settings?.chat_auto_save_to_vault ?? true;
 
-    // Soft-delete the chat message row. Storage cleanup depends on the chosen option.
     const softDeleteChat = async () => {
       const deletedAt = new Date().toISOString();
       const { error } = await supabase
@@ -567,7 +647,6 @@ export default function ChatTab() {
       return error;
     };
 
-    // Delete the vault item linked to this message (soft-delete), then remove its storage file.
     const deleteVaultItem = async (): Promise<string | null> => {
       if (!msg.vault_item_id) return null;
       const { data: vi, error: fetchErr } = await supabase
@@ -582,7 +661,6 @@ export default function ChatTab() {
         .update({ deleted_at: deletedAt })
         .eq('id', msg.vault_item_id);
       if (updateErr) return updateErr.message;
-      // Best-effort storage cleanup for the vault copy
       if (vi?.storage_path) {
         supabase.storage.from(vi.storage_bucket ?? 'vault').remove([vi.storage_path]).catch(() => {});
       }
@@ -590,7 +668,6 @@ export default function ChatTab() {
     };
 
     if (!hasMedia) {
-      // Text-only message — simple confirmation, no vault branch needed
       const doDelete = async () => {
         setMessages(prev => prev.filter(m => m.id !== msg.id));
         await softDeleteChat();
@@ -611,8 +688,6 @@ export default function ChatTab() {
     }
 
     if (!autoSaveOn || !msg.vault_item_id) {
-      // Case B — auto-save OFF (or media was never linked to vault):
-      // Simple confirm; remove from chat and delete chat_media storage file only.
       const doDelete = async () => {
         setMessages(prev => prev.filter(m => m.id !== msg.id));
         const chatErr = await softDeleteChat();
@@ -620,7 +695,6 @@ export default function ChatTab() {
           Alert.alert('Delete Failed', 'Could not remove the message. Please try again.');
           return;
         }
-        // Delete chat_media storage file since it was never copied to vault
         if (msg.media_storage_path) {
           const bucket = msg.media_storage_bucket ?? 'chat_media';
           supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
@@ -641,23 +715,19 @@ export default function ChatTab() {
       return;
     }
 
-    // Case A — auto-save ON and message has a linked vault item: 3-option sheet
     const doChatOnly = async () => {
       setMessages(prev => prev.filter(m => m.id !== msg.id));
       const chatErr = await softDeleteChat();
       if (chatErr) {
-        // Re-add message to state since the DB update failed
         setMessages(prev => {
           if (prev.some(m => m.id === msg.id)) return prev;
           return [...prev, msg].sort((a, b) => a.created_at.localeCompare(b.created_at));
         });
         Alert.alert('Delete Failed', 'Could not remove the message. Please try again.');
       }
-      // Vault item is kept intact — do not touch it
     };
 
     const doChatAndVault = async () => {
-      // Delete vault item first — if this fails we bail out and show an error
       const vaultErr = await deleteVaultItem();
       if (vaultErr) {
         Alert.alert('Delete Failed', `Could not remove from Vault: ${vaultErr}\n\nNo changes were made.`);
@@ -666,11 +736,9 @@ export default function ChatTab() {
       setMessages(prev => prev.filter(m => m.id !== msg.id));
       const chatErr = await softDeleteChat();
       if (chatErr) {
-        // Vault is already soft-deleted; best effort to inform user
         Alert.alert('Partial Delete', 'Removed from Vault but could not remove from Chat. Pull to refresh.');
         return;
       }
-      // Delete chat_media storage file (vault has its own copy, chat copy is now orphaned)
       if (msg.media_storage_path) {
         const bucket = msg.media_storage_bucket ?? 'chat_media';
         supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
@@ -678,9 +746,7 @@ export default function ChatTab() {
     };
 
     if (Platform.OS === 'web') {
-      const choice = window.confirm(
-        'Delete media?\n\nOK = Delete from Chat and Vault\nCancel = keep in Vault'
-      );
+      const choice = window.confirm('Delete media?\n\nOK = Delete from Chat and Vault\nCancel = keep in Vault');
       if (choice) {
         doChatAndVault();
       } else {
@@ -695,15 +761,8 @@ export default function ChatTab() {
           ? 'This photo/video is saved in your Vault. Choose what to delete.'
           : 'Remove this media from the chat.',
         [
-          {
-            text: 'Delete from Chat only',
-            onPress: doChatOnly,
-          },
-          {
-            text: 'Delete from Chat and Vault',
-            style: 'destructive',
-            onPress: doChatAndVault,
-          },
+          { text: 'Delete from Chat only', onPress: doChatOnly },
+          { text: 'Delete from Chat and Vault', style: 'destructive', onPress: doChatAndVault },
           { text: 'Cancel', style: 'cancel' },
         ]
       );
@@ -728,7 +787,7 @@ export default function ChatTab() {
 
   const handleSaveToVault = useCallback(async (msg: ChatMessage) => {
     if (!msg.media_storage_path || !couple?.id || !user) return;
-    if (msg.vault_item_id) return; // already saved — menu shows disabled state
+    if (msg.vault_item_id) return;
     const srcBucket = msg.media_storage_bucket ?? 'chat_media';
     const srcExt = (msg.media_storage_path?.split('.').pop() ?? '').toLowerCase();
     const mimeType = extensionToMime(srcExt);
@@ -773,12 +832,17 @@ export default function ChatTab() {
     }
   }, []);
 
-  const renderItem = useCallback(({ item, index }: { item: ChatMessage; index: number }) => {
+  const renderItem = useCallback(({ item, index }: { item: ChatMessage & { __prevCreatedAt?: string | null; __nextCreatedAt?: string | null; __prevSenderId?: string | null; __nextSenderId?: string | null }; index: number }) => {
     const isMine = item.sender_id === user?.id;
     const name = isMine ? (profile?.display_name ?? 'You') : (partnerProfile?.display_name ?? 'Partner');
     const hasMedia = !!item.media_storage_path;
     const isMenuOpen = activeMenuId === item.id;
     const itemReactions = reactionsMap[item.id] ?? [];
+
+    const prevMsg = (item.__prevCreatedAt && item.__prevSenderId) ? { created_at: item.__prevCreatedAt, sender_id: item.__prevSenderId } as ChatMessage : null;
+    const nextMsg = (item.__nextCreatedAt && item.__nextSenderId) ? { created_at: item.__nextCreatedAt, sender_id: item.__nextSenderId } as ChatMessage : null;
+    const groupPos = getGroupPos(item, prevMsg, nextMsg);
+    const marginBottom = prevMsg ? getMessageSpacing(item, prevMsg) : 10;
 
     return (
       <MessageRow
@@ -797,6 +861,8 @@ export default function ChatTab() {
         mediaBubbleWidth={mediaBubbleWidth}
         mediaBubbleHeight={mediaBubbleHeight}
         chatFontScale={chatFontScale}
+        groupPos={groupPos}
+        marginBottom={marginBottom}
         onReveal={handleRevealMedia}
         onOpen={handleOpenMedia}
         onLongPress={handleLongPress}
@@ -807,9 +873,14 @@ export default function ChatTab() {
     );
   }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, chatFontScale, reactOnMessage, highlightedId]);
 
-  // Attach prev date to each item so renderItem doesn't need the full messages array
   const messagesWithPrev = useMemo(() =>
-    messages.map((m, i) => ({ ...m, __prevCreatedAt: i > 0 ? messages[i - 1].created_at : null })),
+    messages.map((m, i) => ({
+      ...m,
+      __prevCreatedAt: i > 0 ? messages[i - 1].created_at : null,
+      __prevSenderId: i > 0 ? messages[i - 1].sender_id : null,
+      __nextCreatedAt: i < messages.length - 1 ? messages[i + 1].created_at : null,
+      __nextSenderId: i < messages.length - 1 ? messages[i + 1].sender_id : null,
+    })),
     [messages]
   );
 
@@ -824,7 +895,11 @@ export default function ChatTab() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#05040A' }}>
-      <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#05040A' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: '#05040A' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
         <AppShell scrollable={false}>
           <TabHeader title="Chat" />
 
@@ -899,8 +974,12 @@ export default function ChatTab() {
             </View>
           )}
 
-          {/* Compose bar — hidden for solo users (no partner yet) */}
-          <View style={[styles.compose, { backgroundColor: colors.card, borderTopColor: colors.borderSubtle, paddingBottom: Math.max(insets.bottom, Spacing.sm) }, !hasPartner && styles.composeHidden]}>
+          {/* Compose bar */}
+          <View style={[
+            styles.compose,
+            { borderTopColor: colors.borderSubtle, paddingBottom: insets.bottom > 0 ? insets.bottom + 4 : Spacing.sm },
+            !hasPartner && styles.composeHidden,
+          ]}>
             {attachedMedia && !editingState && (
               <View style={styles.previewRow}>
                 <Image source={{ uri: attachedMedia.uri }} style={styles.previewThumb} />
@@ -926,11 +1005,11 @@ export default function ChatTab() {
             <View style={styles.inputRow}>
               {!editingState && (
                 <>
-                  <TouchableOpacity onPress={() => pickMedia('library')} style={styles.attachIcon} activeOpacity={0.7}>
+                  <TouchableOpacity onPress={() => pickMedia('library')} style={styles.attachIcon} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <ImageIcon color={colors.textMuted} size={22} strokeWidth={2} />
                   </TouchableOpacity>
                   {Platform.OS !== 'web' && (
-                    <TouchableOpacity onPress={() => pickMedia('camera')} style={styles.attachIcon} activeOpacity={0.7}>
+                    <TouchableOpacity onPress={() => pickMedia('camera')} style={styles.attachIcon} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Camera color={colors.textMuted} size={22} strokeWidth={2} />
                     </TouchableOpacity>
                   )}
@@ -952,46 +1031,53 @@ export default function ChatTab() {
               <TouchableOpacity
                 onPress={handleSend}
                 disabled={!canSend}
-                style={[styles.sendBtn, { opacity: canSend ? 1 : 0.4 }]}
-                activeOpacity={0.8}
+                style={[styles.sendBtn, { opacity: canSend ? 1 : 0.35 }]}
+                activeOpacity={0.75}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
               >
-                {sending
-                  ? <ActivityIndicator color="#FF5A3D" size="small" />
-                  : <Send color={editingState ? '#FF8A3D' : '#FF5A3D'} size={20} strokeWidth={2.2} />
-                }
+                {sending ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <View style={[styles.sendCircle, { backgroundColor: editingState ? '#FF8A3D' : '#FF5A3D' }]}>
+                    <ArrowUp color="#fff" size={16} strokeWidth={2.5} />
+                  </View>
+                )}
               </TouchableOpacity>
             </View>
           </View>
         </AppShell>
       </KeyboardAvoidingView>
 
-      {/* Floating MediaActionRow — rendered outside AppShell so it draws above all content */}
+      {/* Floating MediaActionRow — backdrop + pill above all content */}
       {activeMenuId && menuAnchor && activeMsg && (() => {
         const hasMedia = !!activeMsg.media_storage_path;
         const isMine = activeMsg.sender_id === user?.id;
         const activeReactions = reactionsMap[activeMsg.id] ?? [];
 
-        // Use measured pill size once available; hide off-screen until onLayout fires
         const pillW = pillSize?.w ?? 0;
         const pillH = pillSize?.h ?? 0;
-        const FLOAT_GAP = 16;
+        const FLOAT_GAP = 12;
         const safeTop = insets.top + 8;
 
         const centeredLeft = menuAnchor.x + menuAnchor.width / 2 - pillW / 2;
-        const clampedLeft = Math.max(8, Math.min(centeredLeft, screenWidth - pillW - 8));
+        const clampedLeft = Math.max(12, Math.min(centeredLeft, screenWidth - pillW - 12));
 
-        // Flip below anchor if item is in the top quarter of the screen
         const aboveTop = menuAnchor.y - pillH - FLOAT_GAP;
         const belowTop = menuAnchor.y + menuAnchor.height + FLOAT_GAP;
-        const isNearTop = menuAnchor.y < screenHeight * 0.25;
-        const computedTop = isNearTop ? belowTop : Math.max(safeTop, aboveTop);
+        const isNearTop = menuAnchor.y < screenHeight * 0.28;
+        const rawTop = isNearTop ? belowTop : aboveTop;
+        const computedTop = Math.max(safeTop, Math.min(rawTop, screenHeight - pillH - insets.bottom - 16));
 
-        // Keep off-screen until first layout measurement
         const left = pillSize ? clampedLeft : -9999;
         const top = pillSize ? computedTop : -9999;
 
         return (
           <View style={[StyleSheet.absoluteFill, { zIndex: 9998 }]} pointerEvents="box-none">
+            {/* Dim backdrop */}
+            <Animated.View
+              style={[StyleSheet.absoluteFill, styles.menuBackdrop]}
+              pointerEvents="none"
+            />
             <View
               style={{ position: 'absolute', left, top }}
               onLayout={e => {
@@ -1008,7 +1094,7 @@ export default function ChatTab() {
                 screenWidth={screenWidth}
                 onReact={(emoji) => reactOnMessage(activeMsg.id, emoji, activeMsg.sender_id)}
                 onSaveToVault={hasMedia ? () => handleSaveToVault(activeMsg) : undefined}
-                onAlreadyInVault={() => {/* already saved — no-op, lock shows as active */}}
+                onAlreadyInVault={() => {}}
                 onDelete={() => handleDeleteMessage(activeMsg)}
                 onEdit={!hasMedia ? () => handleStartEdit(activeMsg) : undefined}
                 onCopy={!hasMedia ? () => handleCopy(activeMsg) : undefined}
@@ -1022,7 +1108,6 @@ export default function ChatTab() {
   );
 }
 
-// Extracted into its own component so React.memo can prevent unnecessary re-renders
 const MessageRow = React.memo(function MessageRow({
   item,
   isMine,
@@ -1039,6 +1124,8 @@ const MessageRow = React.memo(function MessageRow({
   mediaBubbleWidth,
   mediaBubbleHeight,
   chatFontScale,
+  groupPos,
+  marginBottom,
   onReveal,
   onOpen,
   onLongPress,
@@ -1061,6 +1148,8 @@ const MessageRow = React.memo(function MessageRow({
   mediaBubbleWidth: number;
   mediaBubbleHeight: number;
   chatFontScale: number;
+  groupPos: GroupPos;
+  marginBottom: number;
   onReveal: (id: string) => void;
   onOpen: (m: ChatMessage) => void;
   onLongPress: (m: ChatMessage) => void;
@@ -1086,7 +1175,9 @@ const MessageRow = React.memo(function MessageRow({
   const showDivider = !prevCreatedAt ||
     new Date(prevCreatedAt).toDateString() !== new Date(item.created_at).toDateString();
 
-  // Aggregate reaction counts
+  const showAvatar = !isMine && (groupPos === 'solo' || groupPos === 'last');
+  const showSenderName = !isMine && (groupPos === 'solo' || groupPos === 'first');
+
   const reactionCounts = reactions.reduce<Record<string, { count: number; mine: boolean }>>((acc, r) => {
     if (!acc[r.emoji]) acc[r.emoji] = { count: 0, mine: false };
     acc[r.emoji].count++;
@@ -1094,6 +1185,9 @@ const MessageRow = React.memo(function MessageRow({
     return acc;
   }, {});
   const reactionEntries = Object.entries(reactionCounts);
+
+  const radii = getBubbleRadii(isMine, groupPos);
+  const mediaOnly = hasMedia && !item.content_text;
 
   return (
     <>
@@ -1104,116 +1198,239 @@ const MessageRow = React.memo(function MessageRow({
           <View style={[styles.dateLine, { backgroundColor: colors.borderSubtle }]} />
         </View>
       )}
-      <Animated.View style={[styles.msgRow, isMine ? styles.msgRowRight : styles.msgRowLeft, { backgroundColor: highlightBg }]}>
+      <Animated.View style={[
+        styles.msgRow,
+        isMine ? styles.msgRowRight : styles.msgRowLeft,
+        { backgroundColor: highlightBg, marginBottom },
+      ]}>
+        {/* Avatar placeholder — keeps layout stable for non-last receiver messages */}
         {!isMine && (
-          <View style={[styles.msgAvatar, { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
-            <AppText style={styles.msgAvatarText}>{name.charAt(0).toUpperCase()}</AppText>
+          <View style={[styles.msgAvatar, !showAvatar && styles.msgAvatarHidden, showAvatar && { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
+            {showAvatar && (
+              <AppText style={styles.msgAvatarText}>{name.charAt(0).toUpperCase()}</AppText>
+            )}
           </View>
         )}
-        <TouchableOpacity
-          ref={ref => { bubbleRefs.current[item.id] = ref as any; }}
-          onLongPress={() => onLongPress(item)}
-          delayLongPress={350}
-          activeOpacity={1}
-        >
-          <View style={[
-            styles.bubble,
-            isMine
-              ? { backgroundColor: 'rgba(255,90,61,0.20)', borderColor: isMenuOpen ? 'rgba(255,90,61,0.7)' : 'rgba(255,90,61,0.35)', borderTopRightRadius: 4 }
-              : { backgroundColor: colors.card, borderColor: colors.borderSubtle, borderTopLeftRadius: 4 },
-            hasMedia && !item.content_text ? { padding: 0, paddingHorizontal: 0, gap: 0, borderWidth: 0, borderColor: 'transparent' } : undefined,
-          ]}>
-            {hasMedia && (
-              <MediaBubble
-                msg={item}
-                blurEnabled={blurEnabled}
-                revealed={revealed}
-                onReveal={onReveal}
-                signedUrl={signedUrl}
-                onOpen={onOpen}
-                onLongPress={onLongPress}
-                bubbleWidth={mediaBubbleWidth}
-                bubbleHeight={mediaBubbleHeight}
-              />
-            )}
-            {item.content_text ? (
-              <AppText style={[styles.bubbleText, { color: colors.text, fontSize: Math.round(14 * chatFontScale), lineHeight: Math.round(14 * chatFontScale * 1.5) }]}>{item.content_text}</AppText>
-            ) : null}
-            <View style={styles.bubbleMeta}>
-              <AppText style={[styles.bubbleTime, { color: isMine ? 'rgba(255,255,255,0.45)' : colors.textMuted, fontSize: Math.round(10 * chatFontScale) }]}>
-                {formatTime(item.created_at)}
-              </AppText>
-              {item.edited_at && (
-                <AppText style={[styles.editedLabel, { color: isMine ? 'rgba(255,255,255,0.35)' : colors.textMuted, fontSize: Math.round(10 * chatFontScale) }]}>
-                  edited
-                </AppText>
-              )}
-            </View>
-          </View>
-        </TouchableOpacity>
 
-        {/* Reaction pills below the bubble */}
-        {reactionEntries.length > 0 && (
-          <View style={[styles.reactionRow, isMine ? styles.reactionRowRight : styles.reactionRowLeft]}>
-            {reactionEntries.map(([emoji, { count, mine }]) => (
-              <TouchableOpacity
-                key={emoji}
-                style={[styles.reactionPill, mine && styles.reactionPillMine]}
-                onPress={() => onReactQuick(emoji)}
-                activeOpacity={0.75}
-                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-              >
-                <AppText style={styles.reactionPillEmoji}>{emoji}</AppText>
-                {count > 1 && (
-                  <AppText style={[styles.reactionPillCount, { color: mine ? '#FF2E8A' : 'rgba(255,255,255,0.65)', fontSize: Math.round(11 * chatFontScale) }]}>
-                    {count}
+        <View style={[styles.bubbleColumn, isMine && styles.bubbleColumnRight]}>
+          {showSenderName && (
+            <AppText style={[styles.senderName, { color: 'rgba(255,138,61,0.75)' }]}>{name}</AppText>
+          )}
+          <TouchableOpacity
+            ref={ref => { bubbleRefs.current[item.id] = ref as any; }}
+            onLongPress={() => onLongPress(item)}
+            delayLongPress={350}
+            activeOpacity={1}
+          >
+            <View style={[
+              styles.bubble,
+              radii,
+              isMine
+                ? { backgroundColor: 'rgba(255,80,55,0.22)', borderColor: isMenuOpen ? 'rgba(255,90,61,0.7)' : 'rgba(255,80,55,0.32)' }
+                : { backgroundColor: colors.card, borderColor: colors.borderSubtle },
+              mediaOnly && styles.bubbleMediaOnly,
+            ]}>
+              {hasMedia && (
+                <MediaBubble
+                  msg={item}
+                  blurEnabled={blurEnabled}
+                  revealed={revealed}
+                  onReveal={onReveal}
+                  signedUrl={signedUrl}
+                  onOpen={onOpen}
+                  onLongPress={onLongPress}
+                  bubbleWidth={mediaBubbleWidth}
+                  bubbleHeight={mediaBubbleHeight}
+                  radii={mediaOnly ? radii : { borderTopLeftRadius: 14, borderTopRightRadius: 14, borderBottomLeftRadius: 10, borderBottomRightRadius: 10 }}
+                />
+              )}
+              {item.content_text ? (
+                <AppText style={[styles.bubbleText, {
+                  color: colors.text,
+                  fontSize: Math.round(15 * chatFontScale),
+                  lineHeight: Math.round(15 * chatFontScale * 1.55),
+                }]}>
+                  {item.content_text}
+                </AppText>
+              ) : null}
+              {/* Timestamp + edited — only shown inside bubble when there's text, or below media */}
+              <View style={styles.bubbleMeta}>
+                <AppText style={[styles.bubbleTime, {
+                  color: isMine ? 'rgba(255,255,255,0.55)' : colors.textMuted,
+                  fontSize: Math.round(11 * chatFontScale),
+                }]}>
+                  {formatTime(item.created_at)}
+                </AppText>
+                {item.edited_at && (
+                  <AppText style={[styles.editedLabel, {
+                    color: isMine ? 'rgba(255,255,255,0.38)' : colors.textMuted,
+                    fontSize: Math.round(10 * chatFontScale),
+                  }]}>
+                    edited
                   </AppText>
                 )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          {/* Reactions — anchored to bubble bottom corner, overlapping slightly */}
+          {reactionEntries.length > 0 && (
+            <View style={[styles.reactionRow, isMine ? styles.reactionRowRight : styles.reactionRowLeft]}>
+              {reactionEntries.map(([emoji, { count, mine }]) => (
+                <TouchableOpacity
+                  key={emoji}
+                  style={[styles.reactionPill, mine && styles.reactionPillMine]}
+                  onPress={() => onReactQuick(emoji)}
+                  activeOpacity={0.75}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <AppText style={styles.reactionPillEmoji}>{emoji}</AppText>
+                  {count > 1 && (
+                    <AppText style={[styles.reactionPillCount, {
+                      color: mine ? '#FF2E8A' : 'rgba(255,255,255,0.65)',
+                      fontSize: Math.round(10 * chatFontScale),
+                    }]}>
+                      {count}
+                    </AppText>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
       </Animated.View>
     </>
   );
 });
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: Spacing.screen, paddingVertical: Spacing.md, paddingBottom: 16 },
+  list: {
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing.md,
+    paddingBottom: 20,
+  },
   loadingOlderWrap: { alignItems: 'center', paddingVertical: Spacing.sm },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl, gap: Spacing.sm },
   emptyEmoji: { fontSize: 52, marginBottom: Spacing.sm },
   emptyTitle: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold', textAlign: 'center' },
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 22 },
-  dateDivider: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginVertical: Spacing.md },
-  dateLine: { flex: 1, height: 1 },
-  dateText: { fontSize: 11, fontFamily: 'Inter-Medium', letterSpacing: 0.5 },
-  msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 6 },
+
+  // Date separator
+  dateDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  dateLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  dateText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    letterSpacing: 0.8,
+  },
+
+  // Message row
+  msgRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 7,
+  },
   msgRowRight: { justifyContent: 'flex-end' },
   msgRowLeft: { justifyContent: 'flex-start' },
-  msgAvatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  msgAvatarText: { fontSize: 12, fontFamily: 'Inter-Bold', color: '#FF8A3D' },
-  bubble: { maxWidth: '78%', minWidth: 80, borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.sm, paddingHorizontal: 12, gap: 4 },
-  bubbleText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20 },
-  bubbleMeta: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-end' },
-  bubbleTime: { fontSize: 10, fontFamily: 'Inter-Regular' },
-  editedLabel: { fontSize: 10, fontFamily: 'Inter-Regular', fontStyle: 'italic' },
-  // Reaction pills
-  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2, marginBottom: 4, paddingLeft: 36 },
-  reactionRowRight: { justifyContent: 'flex-end', paddingLeft: 0, paddingRight: 0 },
-  reactionRowLeft: { justifyContent: 'flex-start' },
+
+  // Avatar
+  msgAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  msgAvatarHidden: {
+    backgroundColor: 'transparent',
+  },
+  msgAvatarText: { fontSize: 11, fontFamily: 'Inter-Bold', color: '#FF8A3D' },
+
+  // Column wrapper so reactions sit under the bubble
+  bubbleColumn: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    maxWidth: '75%',
+  },
+  bubbleColumnRight: {
+    alignItems: 'flex-end',
+  },
+
+  senderName: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 3,
+    marginLeft: 4,
+  },
+
+  // Bubble
+  bubble: {
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    gap: 5,
+  },
+  bubbleMediaOnly: {
+    padding: 0,
+    paddingHorizontal: 0,
+    gap: 0,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    overflow: 'hidden',
+  },
+  bubbleText: {
+    fontFamily: 'Inter-Regular',
+  },
+  bubbleMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-end',
+    marginTop: 1,
+  },
+  bubbleTime: {
+    fontFamily: 'Inter-Regular',
+  },
+  editedLabel: {
+    fontFamily: 'Inter-Regular',
+    fontStyle: 'italic',
+  },
+
+  // Reaction pills — sit just below the bubble
+  reactionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 3,
+    marginTop: -6,
+    marginBottom: 4,
+  },
+  reactionRowRight: { justifyContent: 'flex-end' },
+  reactionRowLeft: { justifyContent: 'flex-start', paddingLeft: 2 },
   reactionPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
-    paddingHorizontal: 8, paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(20,18,28,0.92)',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   reactionPillMine: {
-    backgroundColor: 'rgba(255,46,138,0.12)',
-    borderColor: 'rgba(255,46,138,0.35)',
+    backgroundColor: 'rgba(255,46,138,0.14)',
+    borderColor: 'rgba(255,46,138,0.40)',
   },
-  reactionPillEmoji: { fontSize: 15, lineHeight: 20 },
-  reactionPillCount: { fontSize: 11, fontFamily: 'Inter-SemiBold' },
+  reactionPillEmoji: { fontSize: 13, lineHeight: 18 },
+  reactionPillCount: { fontFamily: 'Inter-SemiBold' },
+
   // Edit banner
   editBanner: {
     flexDirection: 'row',
@@ -1224,25 +1441,97 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   editBannerText: { flex: 1, fontSize: 12, fontFamily: 'Inter-Medium' },
+
   // Media bubble
-  mediaTap: { borderRadius: Radius.md, overflow: 'hidden', marginBottom: 4, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.07)' },
-  mediaPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' },
-  mediaBlurOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)' },
-  playCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' },
-  playTriangle: { color: '#fff', fontSize: 14, marginLeft: 3 },
+  mediaTap: {
+    overflow: 'hidden',
+  },
+  mediaPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.20)',
+  },
+  mediaBlurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  playCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  playTriangle: { color: '#fff', fontSize: 15, marginLeft: 3 },
   uploadPctWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   uploadPctText: { color: '#FF5A3D', fontSize: 11, fontFamily: 'Inter-Bold', minWidth: 30 },
+
   // Compose
-  compose: { borderTopWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.sm },
-  previewRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: Spacing.sm, paddingHorizontal: 4 },
+  compose: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    backgroundColor: 'rgba(8,7,14,0.97)',
+  },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 4,
+  },
   previewThumb: { width: 44, height: 44, borderRadius: Radius.sm },
   previewInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
   previewLabel: { fontSize: 11, fontFamily: 'Inter-Regular' },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  attachIcon: { paddingHorizontal: 4, paddingBottom: 10 },
-  input: { flex: 1, borderRadius: Radius.xl, paddingHorizontal: 14, paddingVertical: 10, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', maxHeight: 120, minHeight: 40 },
-  sendBtn: { paddingHorizontal: 4, paddingBottom: 10 },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    paddingBottom: 2,
+  },
+  attachIcon: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  input: {
+    flex: 1,
+    borderRadius: 22,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    maxHeight: 120,
+    minHeight: 40,
+    lineHeight: 20,
+  },
+  sendBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  sendCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   composeHidden: { display: 'none' },
   inviteBtn: {
     marginTop: Spacing.md,
@@ -1252,4 +1541,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   inviteBtnText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+
+  // Menu backdrop
+  menuBackdrop: {
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
 });

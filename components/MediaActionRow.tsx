@@ -8,7 +8,6 @@ import { MediaReaction } from '@/lib/types';
 
 export const REACTION_EMOJIS = ['❤️', '🔥', '🌶️', '😍', '🤩', '😈', '🫠', '😂'] as const;
 
-// Compact threshold: screens narrower than this use two-row emoji layout
 const COMPACT_THRESHOLD = 380;
 
 type Props = {
@@ -42,7 +41,7 @@ export default function MediaActionRow({
   onCopy,
   onDismiss,
 }: Props) {
-  const scaleAnim = useRef(new Animated.Value(0.88)).current;
+  const scaleAnim = useRef(new Animated.Value(0.82)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -51,16 +50,17 @@ export default function MediaActionRow({
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       });
     }
+    // Faster, snappier spring — closer to iOS tapback feel
     Animated.parallel([
       Animated.spring(scaleAnim, {
         toValue: 1,
-        friction: 8,
-        tension: 140,
+        friction: 6,
+        tension: 180,
         useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
         toValue: 1,
-        duration: 90,
+        duration: 70,
         useNativeDriver: true,
       }),
     ]).start();
@@ -68,7 +68,8 @@ export default function MediaActionRow({
 
   const myReaction = reactions.find(r => r.user_id === myUserId)?.emoji ?? null;
   const isCompact = screenWidth < COMPACT_THRESHOLD;
-  const btnSize = isCompact ? 32 : 36;
+  // Larger touch targets — 40/44 instead of 32/36
+  const btnSize = isCompact ? 40 : 44;
 
   const renderEmojis = () => {
     if (isCompact) {
@@ -103,8 +104,8 @@ export default function MediaActionRow({
           isActive && styles.emojiBtnActive,
         ]}
         onPress={() => { onDismiss(); onReact(emoji); }}
-        activeOpacity={0.72}
-        hitSlop={{ top: 6, bottom: 6, left: 3, right: 3 }}
+        activeOpacity={0.65}
+        hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
       >
         <AppText style={[styles.emojiText, isCompact && styles.emojiTextCompact]}>
           {emoji}
@@ -150,8 +151,8 @@ export default function MediaActionRow({
                   onSaveToVault?.();
                 }
               }}
-              activeOpacity={0.72}
-              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+              activeOpacity={0.65}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <AppText style={[styles.actionEmoji, !isInVault && styles.actionEmojiDim]}>🔒</AppText>
             </TouchableOpacity>
@@ -163,8 +164,8 @@ export default function MediaActionRow({
                   { width: btnSize, height: btnSize, borderRadius: btnSize / 2 },
                 ]}
                 onPress={() => { onDismiss(); onDelete?.(); }}
-                activeOpacity={0.72}
-                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                activeOpacity={0.65}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
               >
                 <AppText style={styles.actionEmoji}>🗑️</AppText>
               </TouchableOpacity>
@@ -179,10 +180,10 @@ export default function MediaActionRow({
                   { width: btnSize, height: btnSize, borderRadius: btnSize / 2 },
                 ]}
                 onPress={() => { onDismiss(); onCopy(); }}
-                activeOpacity={0.72}
-                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                activeOpacity={0.65}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
               >
-                <Copy color="rgba(255,255,255,0.75)" size={15} strokeWidth={2} />
+                <Copy color="rgba(255,255,255,0.80)" size={16} strokeWidth={2} />
               </TouchableOpacity>
             )}
             {isMine && onEdit && (
@@ -192,10 +193,10 @@ export default function MediaActionRow({
                   { width: btnSize, height: btnSize, borderRadius: btnSize / 2 },
                 ]}
                 onPress={() => { onDismiss(); onEdit(); }}
-                activeOpacity={0.72}
-                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                activeOpacity={0.65}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
               >
-                <Pencil color="rgba(255,255,255,0.75)" size={15} strokeWidth={2} />
+                <Pencil color="rgba(255,255,255,0.80)" size={16} strokeWidth={2} />
               </TouchableOpacity>
             )}
             {isMine && onDelete && (
@@ -205,10 +206,10 @@ export default function MediaActionRow({
                   { width: btnSize, height: btnSize, borderRadius: btnSize / 2 },
                 ]}
                 onPress={() => { onDismiss(); onDelete(); }}
-                activeOpacity={0.72}
-                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                activeOpacity={0.65}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
               >
-                <Trash2 color="#FF4444" size={15} strokeWidth={2} />
+                <Trash2 color="#FF4444" size={16} strokeWidth={2} />
               </TouchableOpacity>
             )}
           </View>
@@ -223,23 +224,23 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(18, 18, 30, 0.96)',
+    backgroundColor: 'rgba(16, 14, 24, 0.97)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.11)',
+    borderColor: 'rgba(255,255,255,0.12)',
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 18,
-    gap: 2,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 20,
+    gap: 1,
   },
   reactionGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 1,
   },
   emojiCompactWrap: {
     flexDirection: 'column',
@@ -250,28 +251,28 @@ const styles = StyleSheet.create({
   emojiRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 1,
   },
   emojiBtn: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   emojiBtnActive: {
-    backgroundColor: 'rgba(255,46,138,0.18)',
+    backgroundColor: 'rgba(255,46,138,0.20)',
   },
   emojiText: {
+    fontSize: 22,
+    lineHeight: 28,
+  },
+  emojiTextCompact: {
     fontSize: 20,
     lineHeight: 26,
   },
-  emojiTextCompact: {
-    fontSize: 18,
-    lineHeight: 24,
-  },
   divider: {
     width: 1,
-    height: 26,
+    height: 28,
     backgroundColor: 'rgba(255,255,255,0.13)',
-    marginHorizontal: 10,
+    marginHorizontal: 8,
   },
   actionGroup: {
     flexDirection: 'row',
@@ -282,11 +283,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionBtnActive: {
-    backgroundColor: 'rgba(255,46,138,0.15)',
+    backgroundColor: 'rgba(255,46,138,0.18)',
   },
   actionEmoji: {
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 20,
+    lineHeight: 26,
   },
   actionEmojiDim: {
     opacity: 0.38,
