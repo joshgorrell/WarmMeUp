@@ -102,7 +102,7 @@ function MediaBubble({
       onLongPress={() => onLongPress(msg)}
       delayLongPress={350}
       android_ripple={null}
-      style={[styles.mediaTap, { width: bubbleWidth, height: bubbleHeight, backgroundColor: 'rgba(17,16,24,0.95)', borderRadius: Radius.lg }]}
+      style={[styles.mediaTap, { width: bubbleWidth, height: bubbleHeight, borderRadius: Radius.lg }]}
     >
       {!loaded ? (
         <View style={styles.mediaPlaceholder}>
