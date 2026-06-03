@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import { ScanFace, FingerprintPattern as Fingerprint, KeyRound, Lock } from 'lucide-react-native';
+import AppText from '@/components/AppText';
 import WarmupBrand from '@/components/WarmupBrand';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';

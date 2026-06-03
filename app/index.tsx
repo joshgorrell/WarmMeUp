@@ -115,7 +115,7 @@ export default function IndexScreen() {
       if (routedRef.current) return;
       routedRef.current = true;
       const userId = session.user?.id;
-      const loginMethod = settings.login_method ?? 'password';
+      const loginMethod = settings.login_method ?? 'none';
 
       console.log('[INDEX ROUTE DECISION] gate', {
         loginMethod,
@@ -126,8 +126,10 @@ export default function IndexScreen() {
       });
 
       if (mustLock) {
-        const pinExists = loginMethod === 'pin' ? await hasPinStored(userId!) : true;
-        const dest = pinExists ? '/unlock' : '/(auth)/setup-pin';
+        // Only route to setup-pin for pure PIN users who haven't stored a PIN yet.
+        // biometric_or_pin users can still use Face ID even without a PIN.
+        const needsPinSetup = loginMethod === 'pin' && !(await hasPinStored(userId!));
+        const dest = needsPinSetup ? '/(auth)/setup-pin' : '/unlock';
         logDebugEvent('LAUNCH ROUTE DECISION', {
           sessionHydrated: true,
           sessionValidAtLaunch: true,

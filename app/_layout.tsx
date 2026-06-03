@@ -200,8 +200,8 @@ function BackgroundLockManager() {
         // partner status are never stale after background/OTA transitions.
         refreshCouple();
 
-        const method = settings?.login_method ?? 'password';
-        if (!session || method === 'password') return;
+        const method = settings?.login_method ?? 'none';
+        if (!session || method === 'none' || method === 'password') return;
 
         // Don't interrupt an already-open biometric prompt. The vault or unlock
         // screen will handle the lock state themselves once the prompt resolves.

@@ -28,7 +28,7 @@ export default function UnlockScreen() {
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
 
-  const loginMethod = settings?.login_method ?? 'password';
+  const loginMethod = settings?.login_method ?? 'none';
 
   const [mode, setMode] = useState<'biometric' | 'pin' | null>(null);
   // True once the mode has been set for this mount — prevents the settings useEffect
@@ -115,12 +115,16 @@ export default function UnlockScreen() {
     try {
       const result = await authenticate(`Unlock Warm Me Up`);
       if (result.success) {
-        proceed(); // proceed() resets biometricAlreadyPrompted for the next lock cycle
+        proceed();
       } else {
-        // User cancelled or failed — fall through to PIN.
-        // Do NOT reset biometricAlreadyPrompted: require an explicit tap to retry.
+        // User cancelled or failed biometric.
         isAuthenticatingRef.current = false;
-        setMode('pin');
+        // For biometric_or_pin: fall back to PIN automatically.
+        // For biometric-only: stay on biometric screen so user can retry manually.
+        if (loginMethod === 'biometric_or_pin') {
+          setMode('pin');
+        }
+        // Do NOT reset biometricAlreadyPrompted: require explicit tap to retry biometric.
       }
     } catch {
       isAuthenticatingRef.current = false;
@@ -141,12 +145,13 @@ export default function UnlockScreen() {
       proceed();
       return;
     }
-    if (method === 'password') {
-      // Should never land here for password users, but if we do, proceed immediately.
+    if (method === 'none' || method === 'password') {
+      // Should never land here for no-lock users, but proceed immediately if so.
       proceed();
       return;
     }
-    setMode(method === 'biometric' ? 'biometric' : 'pin');
+    // For biometric_or_pin: start with biometric prompt, fall back to PIN automatically.
+    setMode(method === 'pin' ? 'pin' : 'biometric');
   }, [settings]);
 
   // Auto-trigger biometric prompt exactly once per screen mount.
@@ -337,7 +342,7 @@ export default function UnlockScreen() {
               </View>
 
               <View style={[styles.footerLinks, { marginTop: vSm }]}>
-                {loginMethod === 'biometric' && bioAvailable && (
+                {(loginMethod === 'biometric' || loginMethod === 'biometric_or_pin') && bioAvailable && (
                   <TouchableOpacity style={styles.altLink} onPress={handleBiometricRetry} activeOpacity={0.7}>
                     <BiometricIcon color="rgba(255,255,255,0.4)" size={14} />
                     <AppText style={styles.altLinkText}>Use {biometricLabel}</AppText>
@@ -345,7 +350,7 @@ export default function UnlockScreen() {
                 )}
                 <TouchableOpacity style={styles.altLink} onPress={goToPassword} activeOpacity={0.7}>
                   <KeyRound color="rgba(255,255,255,0.4)" size={14} />
-                  <AppText style={styles.altLinkText}>Forgot PIN? Use password</AppText>
+                  <AppText style={styles.altLinkText}>Forgot PIN? Sign in with password</AppText>
                 </TouchableOpacity>
               </View>
             </>

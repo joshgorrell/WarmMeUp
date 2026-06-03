@@ -8,7 +8,7 @@ import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, Mail, KeyRound, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders, RefreshCw } from 'lucide-react-native';
+import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, ShieldOff, Mail, KeyRound, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders, RefreshCw } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
 import { secureKey } from '@/lib/secureKey';
 import { useAuth } from '@/context/AuthContext';
@@ -149,37 +149,155 @@ function Numpad({ onKey }: { onKey: (k: string) => void }) {
   );
 }
 
-// ─── Require unlock after selector ───────────────────────────────
-const LOCK_TIMEOUT_OPTIONS: { label: string; value: number | null }[] = [
-  { label: 'Always', value: null },
-  { label: '5 min', value: 300 },
-  { label: '15 min', value: 900 },
+// ─── Security section components (shared with settings.tsx) ──────
+
+type UnlockMethod = 'none' | 'biometric' | 'pin' | 'biometric_or_pin';
+
+const slm = StyleSheet.create({
+  wrap: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.md, borderBottomWidth: 1 },
+  label: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', marginBottom: 2 },
+  sub: { fontSize: 11, fontFamily: 'Inter-Regular', marginBottom: Spacing.sm },
+  row: { flexDirection: 'row', gap: 8 },
+  chip: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  chipSelected: { backgroundColor: 'rgba(255,46,138,0.08)' },
+  chipDisabled: { opacity: 0.4 },
+  chipLabel: { fontSize: 11, fontFamily: 'Inter-Medium', textAlign: 'center' },
+  dropRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  valueWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  value: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
+  dropOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.sm,
+  },
+  dropOptionLabel: { fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
+});
+
+const LOCK_TIMEOUT_OPTIONS: { label: string; value: number }[] = [
+  { label: 'Immediately', value: 0 },
+  { label: '1 minute', value: 60 },
+  { label: '5 minutes', value: 300 },
+  { label: '15 minutes', value: 900 },
   { label: '1 hour', value: 3600 },
   { label: 'Never', value: -1 },
 ];
+
+function RequireUnlockRow({
+  current,
+  bioAvailable,
+  biometricLabel,
+  colors,
+  onSelect,
+}: {
+  current: UnlockMethod;
+  bioAvailable: boolean;
+  biometricLabel: string;
+  colors: any;
+  onSelect: (method: UnlockMethod) => void;
+}) {
+  const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
+
+  type Option = { key: UnlockMethod; label: string; icon: React.ReactNode; disabled?: boolean };
+  const options: Option[] = [
+    {
+      key: 'none',
+      label: 'Off',
+      icon: <ShieldOff color={current === 'none' ? '#FF2E8A' : colors.textMuted} size={16} strokeWidth={1.8} />,
+    },
+    {
+      key: 'biometric',
+      label: biometricLabel,
+      icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={16} strokeWidth={1.8} />,
+      disabled: !bioAvailable,
+    },
+    {
+      key: 'pin',
+      label: 'PIN',
+      icon: <KeyRound color={current === 'pin' ? '#FFB347' : colors.textMuted} size={16} strokeWidth={1.8} />,
+    },
+    {
+      key: 'biometric_or_pin',
+      label: `${biometricLabel} or PIN`,
+      icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={16} strokeWidth={1.8} />,
+      disabled: !bioAvailable,
+    },
+  ];
+
+  return (
+    <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
+      <AppText style={[slm.label, { color: colors.text }]}>Require Unlock</AppText>
+      <AppText style={[slm.sub, { color: colors.textMuted }]}>How you unlock Warm Me Up each time</AppText>
+      <View style={slm.row}>
+        {options.map((opt) => {
+          const sel = current === opt.key;
+          return (
+            <TouchableOpacity
+              key={opt.key}
+              style={[
+                slm.chip,
+                sel && slm.chipSelected,
+                opt.disabled && slm.chipDisabled,
+                { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle },
+              ]}
+              onPress={() => !opt.disabled && onSelect(opt.key)}
+              activeOpacity={opt.disabled ? 1 : 0.72}
+              disabled={opt.disabled}
+            >
+              {opt.icon}
+              <AppText style={[slm.chipLabel, { color: opt.disabled ? colors.textDisabled : sel ? '#fff' : colors.textSecondary }]}>
+                {opt.label}
+              </AppText>
+              {sel && <Check color="#FF2E8A" size={10} strokeWidth={2.5} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 function RequireUnlockAfterRow({
   current, colors, onSelect,
 }: {
   current: number | null;
   colors: any;
-  onSelect: (seconds: number | null) => void;
+  onSelect: (seconds: number) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = LOCK_TIMEOUT_OPTIONS.find(o => o.value === current) ?? LOCK_TIMEOUT_OPTIONS[0];
+  const effectiveCurrent = current === null ? 0 : current;
+  const selected = LOCK_TIMEOUT_OPTIONS.find(o => o.value === effectiveCurrent) ?? LOCK_TIMEOUT_OPTIONS[0];
   return (
     <>
       <TouchableOpacity
-        style={[rua.row, { borderBottomColor: colors.borderSubtle }]}
+        style={[slm.dropRow, { borderBottomColor: colors.borderSubtle }]}
         onPress={() => setOpen(true)}
         activeOpacity={0.7}
       >
         <View style={{ flex: 1 }}>
-          <AppText style={[rua.label, { color: colors.text }]}>Require Unlock After</AppText>
-          <AppText style={[rua.sub, { color: colors.textMuted }]}>How long before you need to unlock again</AppText>
+          <AppText style={[slm.label, { color: colors.text }]}>Require Unlock After</AppText>
+          <AppText style={[slm.sub, { color: colors.textMuted, marginBottom: 0 }]}>How long before the app re-locks</AppText>
         </View>
-        <View style={rua.valueWrap}>
-          <AppText style={[rua.value, { color: colors.textSecondary }]}>{selected.label}</AppText>
+        <View style={slm.valueWrap}>
+          <AppText style={[slm.value, { color: colors.textSecondary }]}>{selected.label}</AppText>
           <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
         </View>
       </TouchableOpacity>
@@ -187,19 +305,19 @@ function RequireUnlockAfterRow({
         visible={open}
         onClose={() => setOpen(false)}
         title="Require Unlock After"
-        subtitle="How long before you need to unlock again"
+        subtitle="How long before the app re-locks"
       >
         {LOCK_TIMEOUT_OPTIONS.map((opt, i) => {
-          const sel = current === opt.value;
+          const sel = effectiveCurrent === opt.value;
           const last = i === LOCK_TIMEOUT_OPTIONS.length - 1;
           return (
             <TouchableOpacity
               key={String(opt.value)}
-              style={[rua.option, !last && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}
+              style={[slm.dropOption, !last && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}
               onPress={() => { onSelect(opt.value); setOpen(false); }}
               activeOpacity={0.7}
             >
-              <AppText style={[rua.optionLabel, { color: sel ? '#FF2E8A' : colors.text }]}>{opt.label}</AppText>
+              <AppText style={[slm.dropOptionLabel, { color: sel ? '#FF2E8A' : colors.text }]}>{opt.label}</AppText>
               {sel && <Check color="#FF2E8A" size={16} strokeWidth={2.5} />}
             </TouchableOpacity>
           );
@@ -209,75 +327,53 @@ function RequireUnlockAfterRow({
   );
 }
 
-// ─── Login method selector ────────────────────────────────────────
-function LoginMethodSelector({
-  current, bioAvailable, biometricLabel, colors, inactive, onSelect,
+function VaultProtectionRow({
+  isAdditional,
+  colors,
+  onSelect,
 }: {
-  current: 'password' | 'pin' | 'biometric';
-  bioAvailable: boolean;
-  biometricLabel: string;
+  isAdditional: boolean;
   colors: any;
-  inactive: boolean;
-  onSelect: (method: 'password' | 'pin' | 'biometric') => void;
+  onSelect: (additional: boolean) => void;
 }) {
-  const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
-  const methods: { key: 'biometric' | 'pin' | 'password'; label: string; sub: string; icon: React.ReactNode; disabled?: boolean }[] = [
+  type VaultOpt = { key: boolean; label: string; sub: string; icon: React.ReactNode };
+  const opts: VaultOpt[] = [
     {
-      key: 'biometric',
-      label: biometricLabel,
-      sub: bioAvailable ? 'Instant unlock with face or fingerprint' : 'Not available on this device',
-      icon: <BiometricIcon color={bioAvailable ? '#FF2E8A' : colors.textDisabled} size={18} strokeWidth={1.8} />,
-      disabled: !bioAvailable,
+      key: false,
+      label: 'App Security',
+      sub: 'Use the same unlock as the app',
+      icon: <Shield color={!isAdditional ? '#FF2E8A' : colors.textMuted} size={15} strokeWidth={1.8} />,
     },
     {
-      key: 'pin',
-      label: 'PIN',
-      sub: '4-digit PIN — fast and secure',
-      icon: <KeyRound color="#FFB347" size={18} strokeWidth={1.8} />,
-    },
-    {
-      key: 'password',
-      label: 'Password',
-      sub: 'Account password each time',
-      icon: <Lock color={colors.textMuted} size={18} strokeWidth={1.8} />,
+      key: true,
+      label: 'Extra Face ID',
+      sub: 'Second biometric step for Vault only',
+      icon: <ScanFace color={isAdditional ? '#FF8A3D' : colors.textMuted} size={15} strokeWidth={1.8} />,
     },
   ];
 
   return (
-    <View style={[lms.wrap, { borderBottomColor: colors.borderSubtle }, inactive && lms.wrapInactive]}>
-      <AppText style={[lms.label, { color: inactive ? colors.textDisabled : colors.text }]}>Unlock Method</AppText>
-      <AppText style={[lms.sub, { color: colors.textMuted }]}>How you open Warm Me Up each time</AppText>
-      {inactive && (
-        <AppText style={[lms.inactiveNote, { color: colors.textMuted }]}>Not used — unlock is set to Never</AppText>
-      )}
-      <View style={[lms.options, inactive && lms.optionsInactive]}>
-        {methods.map((m, idx) => {
-          const selected = current === m.key;
-          const isDisabled = m.disabled || inactive;
+    <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
+      <AppText style={[slm.label, { color: colors.text }]}>Vault Protection</AppText>
+      <AppText style={[slm.sub, { color: colors.textMuted }]}>How the Vault is protected when you open it</AppText>
+      <View style={[slm.row, { gap: 10 }]}>
+        {opts.map((opt) => {
+          const sel = isAdditional === opt.key;
           return (
             <TouchableOpacity
-              key={m.key}
+              key={String(opt.key)}
               style={[
-                lms.option,
-                { borderColor: selected && !inactive ? 'rgba(255,46,138,0.45)' : colors.borderSubtle },
-                selected && !inactive && lms.optionSelected,
-                isDisabled && lms.optionDisabled,
-                idx === methods.length - 1 && lms.optionLast,
+                slm.chip,
+                sel && slm.chipSelected,
+                { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle, flex: 1, paddingVertical: 12, gap: 5 },
               ]}
-              onPress={() => !isDisabled && onSelect(m.key)}
-              activeOpacity={isDisabled ? 1 : 0.72}
-              disabled={isDisabled}
+              onPress={() => onSelect(opt.key)}
+              activeOpacity={0.72}
             >
-              <View style={lms.optionIcon}>{m.icon}</View>
-              <View style={{ flex: 1 }}>
-                <AppText style={[lms.optionLabel, { color: isDisabled ? colors.textDisabled : colors.text }]}>{m.label}</AppText>
-                <AppText style={[lms.optionSub, { color: colors.textMuted }]}>{m.sub}</AppText>
-              </View>
-              {selected && !inactive && (
-                <View style={lms.checkWrap}>
-                  <Check color="#FF2E8A" size={14} strokeWidth={2.5} />
-                </View>
-              )}
+              {opt.icon}
+              <AppText style={[slm.chipLabel, { color: sel ? '#fff' : colors.textSecondary, fontSize: 12 }]}>{opt.label}</AppText>
+              <AppText style={[slm.chipLabel, { color: sel ? 'rgba(255,255,255,0.55)' : colors.textMuted, fontSize: 10 }]}>{opt.sub}</AppText>
+              {sel && <Check color="#FF2E8A" size={10} strokeWidth={2.5} />}
             </TouchableOpacity>
           );
         })}
@@ -285,62 +381,6 @@ function LoginMethodSelector({
     </View>
   );
 }
-
-const lms = StyleSheet.create({
-  wrap: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.md, borderBottomWidth: 1 },
-  wrapInactive: { opacity: 0.5 },
-  label: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', marginBottom: 2 },
-  sub: { fontSize: 11, fontFamily: 'Inter-Regular', marginBottom: 4 },
-  inactiveNote: { fontSize: 11, fontFamily: 'Inter-Regular', fontStyle: 'italic', marginBottom: Spacing.sm },
-  options: { gap: 6 },
-  optionsInactive: { pointerEvents: 'none' },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  optionSelected: { backgroundColor: 'rgba(255,46,138,0.06)' },
-  optionDisabled: { opacity: 0.45 },
-  optionLast: {},
-  optionIcon: { width: 28, alignItems: 'center' },
-  optionLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
-  optionSub: { fontSize: 11, fontFamily: 'Inter-Regular', marginTop: 1 },
-  checkWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(255,46,138,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
-
-const rua = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    borderBottomWidth: 1,
-  },
-  label: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', marginBottom: 2 },
-  sub: { fontSize: 11, fontFamily: 'Inter-Regular' },
-  valueWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  value: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.sm,
-  },
-  optionLabel: { fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
-});
 
 // ─── Chat font size selector ──────────────────────────────────────
 const CHAT_FONT_OPTIONS: { label: string; value: number }[] = [
@@ -1527,29 +1567,40 @@ export default function AccountScreen() {
 
       <Section title="MY DEVICE PRIVACY" note="These settings only affect your device. Your partner manages their own independently.">
         <SettingsRow label="Privacy Mode" sub="Show Weather Lock Screen when you open the app" toggle value={s?.stealth_mode_enabled ?? true} onChange={v => update({ stealth_mode_enabled: v })} />
-        <RequireUnlockAfterRow
-          current={s?.lock_after_seconds ?? null}
-          colors={colors}
-          onSelect={(seconds) => update({ lock_after_seconds: seconds })}
-        />
-        <LoginMethodSelector
-          current={s?.login_method ?? 'password'}
+        <RequireUnlockRow
+          current={(s?.login_method ?? 'none') as UnlockMethod}
           bioAvailable={bioAvailable}
           biometricLabel={biometricLabel}
           colors={colors}
-          inactive={(s?.lock_after_seconds ?? null) === -1}
           onSelect={async (method) => {
-            if (method === 'biometric') {
+            if (method === 'biometric' || method === 'biometric_or_pin') {
               const result = await bioAuthenticate('Confirm biometrics to enable this method');
               if (!result.success) return;
             }
             update({ login_method: method });
           }}
         />
+        {(s?.login_method ?? 'none') !== 'none' && (
+          <RequireUnlockAfterRow
+            current={s?.lock_after_seconds ?? null}
+            colors={colors}
+            onSelect={(seconds) => update({ lock_after_seconds: seconds })}
+          />
+        )}
+        <VaultProtectionRow
+          isAdditional={s?.vault_face_id_required ?? false}
+          colors={colors}
+          onSelect={async (additional) => {
+            if (additional) {
+              const result = await bioAuthenticate('Confirm biometrics to enable Vault protection');
+              if (!result.success) return;
+            }
+            update({ vault_face_id_required: additional });
+          }}
+        />
       </Section>
 
       <Section title="VAULT PREFERENCES" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately." onInfo={() => setShowVaultSecurityInfo(true)}>
-        <SettingsRow label="Face ID to open Vault" sub="Extra protection for Vault content" toggle value={s?.vault_face_id_required ?? true} onChange={v => update({ vault_face_id_required: v })} />
         <SettingsRow label="Blur images and video until tapped" sub="Tap once to reveal in Chat and Vault; re-blurs when you leave the app" toggle value={s?.blur_media ?? true} onChange={v => update({ blur_media: v })} />
         <SettingsRow label="Allow Screenshots of My Uploads" sub="Your partner can screenshot items you've added to the Vault" toggle value={s?.vault_allow_screenshot_default ?? false} onChange={v => update({ vault_allow_screenshot_default: v })} />
         <SettingsRow label="Allow Saving My Uploads" sub="Your partner can save your uploads to their phone" toggle value={s?.vault_allow_save_default ?? false} onChange={v => update({ vault_allow_save_default: v })} />

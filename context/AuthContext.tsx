@@ -11,31 +11,41 @@ import { clearWeatherSessionCache } from '@/hooks/useWeather';
 
 /**
  * Single source of truth for whether the unlock gate must be shown.
+ *
  * Returns true only when ALL of these hold:
- *   - login_method is not 'password'
- *   - lock_after_seconds is a non-negative number (not null, not -1)
+ *   - login_method is not 'none' (or the legacy 'password' alias)
+ *   - lock_after_seconds is not null and not -1 (those mean "no re-lock timer")
  *   - elapsed time since last unlock >= lock_after_seconds
  *
- * If lock_after_seconds === -1 or null, ALWAYS returns false.
+ * Special values:
+ *   lock_after_seconds = null / -1  ("Never re-lock")
+ *     → still requires unlock on first open (unlockedAtMs === null),
+ *       but never re-locks after that.
+ *   lock_after_seconds = 0  ("Immediately")
+ *     → always requires unlock, even after a one-second background trip.
+ *   lock_after_seconds > 0  (timer)
+ *     → requires unlock once the timer has elapsed since last unlock.
  *
- * Special case: lock_after_seconds === 0 ("Immediately") — require unlock on
- * every app open. When unlockedAtMs is null the user has never unlocked this
- * session, so unlock IS required.
- *
- * For timer-based values (> 0), null unlockedAtMs means the timer hasn't
- * started yet (first install / cleared state) — treat as within grace period.
+ * When lock_after_seconds is null with a non-'none' method, the behaviour is
+ * "require on first open, never re-lock" — the same as -1.
  */
 export function computeIsUnlockRequired(
   settings: UserSettings | null,
   unlockedAtMs: number | null,
 ): boolean {
-  const method = settings?.login_method ?? 'password';
-  if (method === 'password') return false;
+  const method = settings?.login_method ?? 'none';
+  // 'none' and legacy 'password' both mean no app unlock
+  if (method === 'none' || method === 'password') return false;
+
   const lockAfter = settings?.lock_after_seconds ?? null;
-  if (lockAfter === null || lockAfter < 0) return false;
-  // "Immediately" (0s): always require unlock when no prior unlock this session.
-  if (lockAfter === 0) return unlockedAtMs === null || (Date.now() - unlockedAtMs) / 1000 >= 0;
-  // Timer-based: no prior unlock means timer hasn't started — treat as in grace period.
+
+  // null / -1 = "Never re-lock": require only if never unlocked this session
+  if (lockAfter === null || lockAfter < 0) return unlockedAtMs === null;
+
+  // 0 = "Immediately": always require
+  if (lockAfter === 0) return true;
+
+  // Timer-based: first install/cleared state → give a grace period (don't lock)
   if (unlockedAtMs === null) return false;
   return (Date.now() - unlockedAtMs) / 1000 >= lockAfter;
 }
@@ -631,7 +641,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  const lockApp = useCallback(() => setAppLocked(true), []);
+  const lockApp = useCallback(() => {
+    setAppLocked(true);
+    // Reset vault unlock so the additional Face ID prompt re-fires after an app re-lock.
+    setVaultUnlocked(false);
+  }, []);
 
   const lockIfNeeded = useCallback((): boolean => {
     const shouldLock = computeIsUnlockRequired(settings, unlockedAtRef.current);
