@@ -18,6 +18,7 @@ import { ChatMessage } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
 import MediaActionRow from '@/components/MediaActionRow';
+import ConfirmSheet, { ConfirmAction } from '@/components/ConfirmSheet';
 import { useMediaReactions } from '@/hooks/useMediaReactions';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
@@ -251,6 +252,11 @@ export default function ChatTab() {
   const [pillSize, setPillSize] = useState<{ w: number; h: number } | null>(null);
   const [revealedMedia, setRevealedMedia] = useState<Set<string>>(new Set());
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [confirmSheet, setConfirmSheet] = useState<{
+    title: string;
+    message?: string;
+    actions: ConfirmAction[];
+  } | null>(null);
   const handledMsgLinkRef = useRef<string | null>(null);
   const listRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -675,14 +681,14 @@ export default function ChatTab() {
       if (Platform.OS === 'web') {
         if (window.confirm('Delete this message? This cannot be undone.')) doDelete();
       } else {
-        Alert.alert(
-          'Delete message',
-          'This will permanently remove the message.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: doDelete },
-          ]
-        );
+        setConfirmSheet({
+          title: 'Delete message',
+          message: 'This will permanently remove the message.',
+          actions: [
+            { label: 'Delete', style: 'destructive', onPress: doDelete },
+            { label: 'Cancel', style: 'cancel', onPress: () => {} },
+          ],
+        });
       }
       return;
     }
@@ -703,14 +709,14 @@ export default function ChatTab() {
       if (Platform.OS === 'web') {
         if (window.confirm('Delete from chat? This will remove the photo/video from this chat.')) doDelete();
       } else {
-        Alert.alert(
-          'Delete from chat?',
-          'This will remove the photo/video from this chat.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: doDelete },
-          ]
-        );
+        setConfirmSheet({
+          title: 'Delete from chat?',
+          message: 'This will remove the photo/video from this chat.',
+          actions: [
+            { label: 'Delete', style: 'destructive', onPress: doDelete },
+            { label: 'Cancel', style: 'cancel', onPress: () => {} },
+          ],
+        });
       }
       return;
     }
@@ -755,17 +761,17 @@ export default function ChatTab() {
         }
       }
     } else {
-      Alert.alert(
-        'Delete media?',
-        msg.vault_item_id
+      setConfirmSheet({
+        title: 'Delete media?',
+        message: msg.vault_item_id
           ? 'This photo/video is saved in your Vault. Choose what to delete.'
           : 'Remove this media from the chat.',
-        [
-          { text: 'Delete from Chat only', onPress: doChatOnly },
-          { text: 'Delete from Chat and Vault', style: 'destructive', onPress: doChatAndVault },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
+        actions: [
+          { label: 'Delete from Chat only', style: 'default', onPress: doChatOnly },
+          { label: 'Delete from Chat and Vault', style: 'destructive', onPress: doChatAndVault },
+          { label: 'Cancel', style: 'cancel', onPress: () => {} },
+        ],
+      });
     }
   };
 
@@ -1104,6 +1110,14 @@ export default function ChatTab() {
           </View>
         );
       })()}
+
+      <ConfirmSheet
+        visible={!!confirmSheet}
+        title={confirmSheet?.title ?? ''}
+        message={confirmSheet?.message}
+        actions={confirmSheet?.actions ?? []}
+        onDismiss={() => setConfirmSheet(null)}
+      />
     </View>
   );
 }

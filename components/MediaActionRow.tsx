@@ -1,10 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, Platform, Animated,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { Trash2, Pencil, Copy, Lock } from 'lucide-react-native';
+import { Trash2, Pencil, Copy, Lock, Check } from 'lucide-react-native';
 import { MediaReaction } from '@/lib/types';
+
+type VaultFeedback = 'idle' | 'saved' | 'already';
 
 export const REACTION_EMOJIS = ['❤️', '🔥', '🌶️', '😍', '🤩', '😈', '🫠', '😂'] as const;
 
@@ -41,6 +43,9 @@ export default function MediaActionRow({
 }: Props) {
   const scaleAnim = useRef(new Animated.Value(0.82)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const [vaultFeedback, setVaultFeedback] = useState<VaultFeedback>('idle');
+  const vaultIconScale = useRef(new Animated.Value(1)).current;
+  const vaultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (Platform.OS !== 'web') {
@@ -61,7 +66,39 @@ export default function MediaActionRow({
         useNativeDriver: true,
       }),
     ]).start();
+
+    return () => {
+      if (vaultTimerRef.current) clearTimeout(vaultTimerRef.current);
+    };
   }, []);
+
+  const handleVaultPress = () => {
+    if (isInVault) {
+      pulseVaultIcon();
+      setVaultFeedback('already');
+      vaultTimerRef.current = setTimeout(() => {
+        onDismiss();
+        onAlreadyInVault?.();
+      }, 900);
+    } else {
+      pulseVaultIcon();
+      setVaultFeedback('saved');
+      vaultTimerRef.current = setTimeout(() => {
+        onDismiss();
+        onSaveToVault?.();
+      }, 900);
+    }
+  };
+
+  const pulseVaultIcon = () => {
+    vaultIconScale.setValue(0.6);
+    Animated.spring(vaultIconScale, {
+      toValue: 1,
+      friction: 5,
+      tension: 200,
+      useNativeDriver: true,
+    }).start();
+  };
 
   const myReaction = reactions.find(r => r.user_id === myUserId)?.emoji ?? null;
   const cardWidth = Math.min(Math.max(screenWidth - 32, 280), 360);
@@ -109,21 +146,39 @@ export default function MediaActionRow({
           {isMedia ? (
             <>
               <TouchableOpacity
-                style={[styles.actionBtn, isInVault && styles.actionBtnActive]}
-                onPress={() => {
-                  onDismiss();
-                  if (isInVault) onAlreadyInVault?.();
-                  else onSaveToVault?.();
-                }}
+                style={[
+                  styles.actionBtn,
+                  (isInVault || vaultFeedback !== 'idle') && styles.actionBtnActive,
+                ]}
+                onPress={handleVaultPress}
                 activeOpacity={0.65}
+                disabled={vaultFeedback !== 'idle'}
               >
-                <Lock
-                  color={isInVault ? '#FF2E8A' : 'rgba(255,255,255,0.70)'}
-                  size={15}
-                  strokeWidth={2}
-                />
-                <AppText style={[styles.actionLabel, isInVault && styles.actionLabelActive]}>
-                  Vault
+                <Animated.View style={{ transform: [{ scale: vaultIconScale }] }}>
+                  {vaultFeedback === 'saved' ? (
+                    <Check color="#33D17A" size={15} strokeWidth={2.5} />
+                  ) : vaultFeedback === 'already' ? (
+                    <Check color="#FF2E8A" size={15} strokeWidth={2.5} />
+                  ) : (
+                    <Lock
+                      color={isInVault ? '#FF2E8A' : 'rgba(255,255,255,0.70)'}
+                      size={15}
+                      strokeWidth={2}
+                    />
+                  )}
+                </Animated.View>
+                <AppText
+                  style={[
+                    styles.actionLabel,
+                    vaultFeedback === 'saved' && styles.actionLabelSuccess,
+                    (isInVault || vaultFeedback === 'already') && styles.actionLabelActive,
+                  ]}
+                >
+                  {vaultFeedback === 'saved'
+                    ? 'Saved!'
+                    : vaultFeedback === 'already'
+                    ? 'In Vault'
+                    : 'Vault'}
                 </AppText>
               </TouchableOpacity>
 
@@ -256,6 +311,9 @@ const styles = StyleSheet.create({
   },
   actionLabelActive: {
     color: '#FF2E8A',
+  },
+  actionLabelSuccess: {
+    color: '#33D17A',
   },
   actionLabelDanger: {
     fontSize: 13,

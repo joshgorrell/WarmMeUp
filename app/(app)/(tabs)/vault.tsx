@@ -21,6 +21,7 @@ import { useLayout } from '@/hooks/useLayout';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { useMediaReactions } from '@/hooks/useMediaReactions';
 import MediaActionRow from '@/components/MediaActionRow';
+import ConfirmSheet, { ConfirmAction } from '@/components/ConfirmSheet';
 import SecondaryButton from '@/components/SecondaryButton';
 import BottomSheet from '@/components/BottomSheet';
 import TabHeader from '@/components/TabHeader';
@@ -77,6 +78,11 @@ export default function VaultScreen() {
   const scrollViewRef = useRef<any>(null);
   const [highlightedVaultId, setHighlightedVaultId] = useState<string | null>(null);
   const handledVaultLinkRef = useRef<string | null>(null);
+  const [confirmSheet, setConfirmSheet] = useState<{
+    title: string;
+    message?: string;
+    actions: ConfirmAction[];
+  } | null>(null);
 
   // Reactions
   const vaultItemIds = useMemo(() => items.map(i => i.id), [items]);
@@ -278,48 +284,45 @@ export default function VaultScreen() {
     const linkedChatNote = item.chat_message_id
       ? '\n\nThis item was sent from Chat — it will also be hidden from your Chat history.'
       : '';
-    Alert.alert(
-      'Delete from Vault',
-      `This will permanently remove this item for both you and your partner.${linkedChatNote}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const deletedAt = new Date().toISOString();
-            const { error: dbError } = await supabase
-              .from('vault_items')
-              .update({ deleted_at: deletedAt })
-              .eq('id', item.id);
-            if (dbError) {
-              Alert.alert('Delete Failed', 'Could not delete this item. Please try again.');
-              return;
-            }
-            setItems(prev => prev.filter(i => i.id !== item.id));
-            setSignedUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
-            const bucket = item.storage_bucket ?? 'vault';
-            const path = item.storage_path ?? item.file_path;
-            if (path) supabase.storage.from(bucket).remove([path]).catch(() => {});
-            if (item.chat_message_id) {
-              const { data: chatMsg } = await supabase
-                .from('chat_messages')
-                .select('media_storage_path, media_storage_bucket')
-                .eq('id', item.chat_message_id)
-                .maybeSingle();
-              await supabase
-                .from('chat_messages')
-                .update({ deleted_at: deletedAt })
-                .eq('id', item.chat_message_id);
-              if (chatMsg?.media_storage_path) {
-                const chatBucket = chatMsg.media_storage_bucket ?? 'chat_media';
-                supabase.storage.from(chatBucket).remove([chatMsg.media_storage_path]).catch(() => {});
-              }
-            }
-          },
-        },
-      ]
-    );
+    const doDelete = async () => {
+      const deletedAt = new Date().toISOString();
+      const { error: dbError } = await supabase
+        .from('vault_items')
+        .update({ deleted_at: deletedAt })
+        .eq('id', item.id);
+      if (dbError) {
+        Alert.alert('Delete Failed', 'Could not delete this item. Please try again.');
+        return;
+      }
+      setItems(prev => prev.filter(i => i.id !== item.id));
+      setSignedUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+      const bucket = item.storage_bucket ?? 'vault';
+      const path = item.storage_path ?? item.file_path;
+      if (path) supabase.storage.from(bucket).remove([path]).catch(() => {});
+      if (item.chat_message_id) {
+        const { data: chatMsg } = await supabase
+          .from('chat_messages')
+          .select('media_storage_path, media_storage_bucket')
+          .eq('id', item.chat_message_id)
+          .maybeSingle();
+        await supabase
+          .from('chat_messages')
+          .update({ deleted_at: deletedAt })
+          .eq('id', item.chat_message_id);
+        if (chatMsg?.media_storage_path) {
+          const chatBucket = chatMsg.media_storage_bucket ?? 'chat_media';
+          supabase.storage.from(chatBucket).remove([chatMsg.media_storage_path]).catch(() => {});
+        }
+      }
+    };
+    setConfirmSheet({
+      title: 'Delete from Vault',
+      message: `This will permanently remove this item for both you and your partner.${linkedChatNote}`,
+      actions: [
+        { label: 'Delete', style: 'destructive', onPress: doDelete },
+        { label: 'Cancel', style: 'cancel', onPress: () => {} },
+      ],
+    });
   };
 
   const handleVaultLongPress = (item: VaultItem) => {
@@ -781,7 +784,7 @@ export default function VaultScreen() {
                 onAlreadyInVault={dismissAll}
                 onDelete={() => {
                   dismissAll();
-                  handleDeleteItem(activeItem);
+                  setTimeout(() => handleDeleteItem(activeItem), 50);
                 }}
                 onDismiss={dismissAll}
               />
@@ -825,7 +828,6 @@ export default function VaultScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* Add Sheet */}
       <BottomSheet
         visible={showAdd}
         onClose={() => setShowAdd(false)}
@@ -898,6 +900,14 @@ export default function VaultScreen() {
           <SecondaryButton label="Cancel" onPress={() => setShowAdd(false)} style={{ marginTop: Spacing.sm }} />
         </View>
       </BottomSheet>
+
+      <ConfirmSheet
+        visible={!!confirmSheet}
+        title={confirmSheet?.title ?? ''}
+        message={confirmSheet?.message}
+        actions={confirmSheet?.actions ?? []}
+        onDismiss={() => setConfirmSheet(null)}
+      />
     </AppShell>
   );
 }
