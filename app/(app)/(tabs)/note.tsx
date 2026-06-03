@@ -1117,7 +1117,7 @@ const MessageRow = React.memo(function MessageRow({
             isMine
               ? { backgroundColor: 'rgba(255,90,61,0.20)', borderColor: isMenuOpen ? 'rgba(255,90,61,0.7)' : 'rgba(255,90,61,0.35)', borderTopRightRadius: 4 }
               : { backgroundColor: colors.card, borderColor: colors.borderSubtle, borderTopLeftRadius: 4 },
-            hasMedia && !item.content_text ? { padding: 0, paddingHorizontal: 0, gap: 0 } : undefined,
+            hasMedia && !item.content_text ? { padding: 0, paddingHorizontal: 0, gap: 0, borderWidth: 0, borderColor: 'transparent' } : undefined,
           ]}>
             {hasMedia && (
               <MediaBubble
@@ -1221,7 +1221,7 @@ const styles = StyleSheet.create({
   },
   editBannerText: { flex: 1, fontSize: 12, fontFamily: 'Inter-Medium' },
   // Media bubble
-  mediaTap: { borderRadius: Radius.md, overflow: 'hidden', marginBottom: 4 },
+  mediaTap: { borderRadius: Radius.md, overflow: 'hidden', marginBottom: 4, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.07)' },
   mediaPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' },
   mediaBlurOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)' },
