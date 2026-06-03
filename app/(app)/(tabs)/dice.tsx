@@ -92,6 +92,7 @@ export default function DiceTab() {
   const [sentDice, setSentDice] = useState<Interaction | null>(null);
   const senderCountdown = useSenderCountdown(sentDice?.expires_at);
   const [highlightChallenge, setHighlightChallenge] = useState(false);
+  const handledDiceLinkRef = useRef<string | null>(null);
 
   // Tracks the id of the last self-roll interaction so we can delete it
   const lastSelfRollId = useRef<string | null>(null);
@@ -212,7 +213,8 @@ export default function DiceTab() {
   // Deep-link: when dice_id param arrives, check if the roll is still active
   useEffect(() => {
     if (!deepLinkDiceId || !couple?.id) return;
-    router.setParams({ dice_id: undefined });
+    if (handledDiceLinkRef.current === deepLinkDiceId) return;
+    handledDiceLinkRef.current = deepLinkDiceId;
     (async () => {
       const { data: roll } = await supabase
         .from('interactions')

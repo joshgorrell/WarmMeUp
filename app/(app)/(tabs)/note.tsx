@@ -158,6 +158,7 @@ export default function ChatTab() {
   const [pillSize, setPillSize] = useState<{ w: number; h: number } | null>(null);
   const [revealedMedia, setRevealedMedia] = useState<Set<string>>(new Set());
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const handledMsgLinkRef = useRef<string | null>(null);
   const listRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const bubbleRefs = useRef<Record<string, View | null>>({});
@@ -326,10 +327,10 @@ export default function ChatTab() {
   // Deep-link: scroll to a specific message and highlight it
   useEffect(() => {
     if (!deepLinkMessageId || messages.length === 0) return;
+    if (handledMsgLinkRef.current === deepLinkMessageId) return;
     const idx = messages.findIndex(m => m.id === deepLinkMessageId);
     if (idx === -1) return;
-    // Clear param so back-nav doesn't re-trigger
-    router.setParams({ message_id: undefined });
+    handledMsgLinkRef.current = deepLinkMessageId;
     setTimeout(() => {
       listRef.current?.scrollToIndex({
         index: idx,

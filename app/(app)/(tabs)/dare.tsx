@@ -79,6 +79,7 @@ export default function DareTab() {
   const [sentDare, setSentDare] = useState<Interaction | null>(null);
   const senderCountdown = useSenderCountdown(sentDare?.expires_at);
   const [highlightDare, setHighlightDare] = useState(false);
+  const handledDareLinkRef = useRef<string | null>(null);
 
   // Flip animation for sender verification card
   const flipAnim = useRef(new Animated.Value(0)).current;
@@ -124,7 +125,8 @@ export default function DareTab() {
   // Deep-link: when dare_id param arrives, check if it matches the active dare
   useEffect(() => {
     if (!deepLinkDareId || !couple?.id) return;
-    router.setParams({ dare_id: undefined });
+    if (handledDareLinkRef.current === deepLinkDareId) return;
+    handledDareLinkRef.current = deepLinkDareId;
     (async () => {
       const { data: dare } = await supabase
         .from('interactions')

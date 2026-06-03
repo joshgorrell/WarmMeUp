@@ -832,6 +832,7 @@ export default function WishTab() {
   const [editingWish, setEditingWish] = useState<WishWithReactions | null>(null);
   const [fulfillWish, setFulfillWish] = useState<WishWithReactions | null>(null);
   const tabIndicator = useRef(new Animated.Value(0)).current;
+  const handledWishLinkRef = useRef<string | null>(null);
 
   const TAB_DEFS: { key: TabKey; label: string }[] = [
     { key: 'shared',  label: 'Ours' },
@@ -883,12 +884,12 @@ export default function WishTab() {
   // Open a specific wish when deep-linked from Home activity feed
   useEffect(() => {
     if (!deepLinkWishId || wishes.length === 0) return;
+    if (handledWishLinkRef.current === deepLinkWishId) return;
     const target = wishes.find(w => w.id === deepLinkWishId);
     if (!target) return;
+    handledWishLinkRef.current = deepLinkWishId;
     setEditingWish(target);
     setShowForm(true);
-    // Clear the param so re-focusing the tab doesn't re-open the modal
-    router.setParams({ wish_id: undefined });
   }, [deepLinkWishId, wishes]);
 
   const handleTabPress = useCallback((key: TabKey, idx: number) => {

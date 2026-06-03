@@ -76,6 +76,7 @@ export default function VaultScreen() {
   const tileRefs = useRef<Record<string, View | null>>({});
   const scrollViewRef = useRef<any>(null);
   const [highlightedVaultId, setHighlightedVaultId] = useState<string | null>(null);
+  const handledVaultLinkRef = useRef<string | null>(null);
 
   // Reactions
   const vaultItemIds = useMemo(() => items.map(i => i.id), [items]);
@@ -157,9 +158,10 @@ export default function VaultScreen() {
   // Deep-link: scroll to a specific vault item and briefly highlight it
   useEffect(() => {
     if (!deepLinkVaultItemId || items.length === 0) return;
+    if (handledVaultLinkRef.current === deepLinkVaultItemId) return;
     const target = items.find(i => i.id === deepLinkVaultItemId);
     if (!target) return;
-    router.setParams({ vault_item_id: undefined });
+    handledVaultLinkRef.current = deepLinkVaultItemId;
     setTimeout(() => {
       const tileRef = tileRefs.current[deepLinkVaultItemId];
       if (tileRef && scrollViewRef.current) {
