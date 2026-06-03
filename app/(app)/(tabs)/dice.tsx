@@ -6,7 +6,7 @@ import AppText from '@/components/AppText';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CircleCheck as CheckCircle, Timer, UserPlus } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -70,6 +70,7 @@ export default function DiceTab() {
   const { user, couple, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
   const router = useRouter();
+  const { dice_id: deepLinkDiceId } = useLocalSearchParams<{ dice_id?: string }>();
   const hasPartner = !!couple?.user_b_id;
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
@@ -90,6 +91,7 @@ export default function DiceTab() {
   const [ringOffset, setRingOffset] = useState(CIRCUMFERENCE);
   const [sentDice, setSentDice] = useState<Interaction | null>(null);
   const senderCountdown = useSenderCountdown(sentDice?.expires_at);
+  const [highlightChallenge, setHighlightChallenge] = useState(false);
 
   // Tracks the id of the last self-roll interaction so we can delete it
   const lastSelfRollId = useRef<string | null>(null);
@@ -206,6 +208,29 @@ export default function DiceTab() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id, user?.id, checkStates]);
+
+  // Deep-link: when dice_id param arrives, check if the roll is still active
+  useEffect(() => {
+    if (!deepLinkDiceId || !couple?.id) return;
+    router.setParams({ dice_id: undefined });
+    (async () => {
+      const { data: roll } = await supabase
+        .from('interactions')
+        .select('id, status, deleted_at')
+        .eq('id', deepLinkDiceId)
+        .maybeSingle();
+      if (!roll || roll.deleted_at) {
+        Alert.alert('Roll not found', 'This dice roll could not be found.');
+        return;
+      }
+      if (roll.status === 'sent' && incomingChallenge?.id === deepLinkDiceId) {
+        setHighlightChallenge(true);
+        setTimeout(() => setHighlightChallenge(false), 2000);
+      } else if (!['sent'].includes(roll.status)) {
+        Alert.alert('Roll already resolved', 'This dice roll has already been accepted or has expired.');
+      }
+    })();
+  }, [deepLinkDiceId]);
 
   const showResult = useCallback((text: string, from: 'you' | 'partner') => {
     setResult(text);
@@ -431,7 +456,7 @@ export default function DiceTab() {
       >
         {/* Incoming challenge card */}
         {incomingChallenge && (
-          <View style={styles.challengeSection}>
+          <View style={[styles.challengeSection, highlightChallenge && styles.challengeHighlight]}>
             <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,179,71,0.08)', borderColor: 'rgba(255,179,71,0.25)' }]}>
               <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>
                 Accept = <AppText style={styles.pts}>+{acceptPts} pts</AppText> — Complete it = <AppText style={styles.pts}>+{completePts} pts</AppText>
@@ -602,6 +627,7 @@ export default function DiceTab() {
 const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, paddingHorizontal: Spacing.screen, paddingBottom: Spacing.xl },
   challengeSection: { gap: Spacing.sm, marginBottom: Spacing.sm },
+  challengeHighlight: { borderRadius: Radius.lg, borderWidth: 2, borderColor: 'rgba(255,179,71,0.50)', padding: Spacing.sm, backgroundColor: 'rgba(255,179,71,0.07)' },
   pointsHint: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.sm, alignItems: 'center' },
   pointsHintText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
   pts: { fontFamily: 'Inter-Bold', color: '#33D17A' },

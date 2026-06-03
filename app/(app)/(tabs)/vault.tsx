@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { ResizeMode, Video } from 'expo-av';
 import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Video as VideoIcon, Eye } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
@@ -30,6 +30,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 
 export default function VaultScreen() {
   const router = useRouter();
+  const { vault_item_id: deepLinkVaultItemId } = useLocalSearchParams<{ vault_item_id?: string }>();
   const { user, couple, partnerProfile, settings, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, subscriptionInfo, refreshCouple } = useAuth();
   const { colors } = useTheme();
   const { width, height: screenHeight, cols } = useLayout();
@@ -73,6 +74,8 @@ export default function VaultScreen() {
   const [vaultMenuAnchor, setVaultMenuAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [vaultPillSize, setVaultPillSize] = useState<{ w: number; h: number } | null>(null);
   const tileRefs = useRef<Record<string, View | null>>({});
+  const scrollViewRef = useRef<any>(null);
+  const [highlightedVaultId, setHighlightedVaultId] = useState<string | null>(null);
 
   // Reactions
   const vaultItemIds = useMemo(() => items.map(i => i.id), [items]);
@@ -150,6 +153,28 @@ export default function VaultScreen() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id]);
+
+  // Deep-link: scroll to a specific vault item and briefly highlight it
+  useEffect(() => {
+    if (!deepLinkVaultItemId || items.length === 0) return;
+    const target = items.find(i => i.id === deepLinkVaultItemId);
+    if (!target) return;
+    router.setParams({ vault_item_id: undefined });
+    setTimeout(() => {
+      const tileRef = tileRefs.current[deepLinkVaultItemId];
+      if (tileRef && scrollViewRef.current) {
+        tileRef.measureLayout(
+          scrollViewRef.current,
+          (_x: number, y: number) => {
+            scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+          },
+          () => {},
+        );
+      }
+      setHighlightedVaultId(deepLinkVaultItemId);
+      setTimeout(() => setHighlightedVaultId(null), 2000);
+    }, 200);
+  }, [deepLinkVaultItemId, items.length]);
 
   const load = async () => {
     if (!couple?.id) return;
@@ -596,6 +621,7 @@ export default function VaultScreen() {
     <AppShell scrollable={false}>
       <TabHeader title={unviewed > 0 ? `Vault  ·  ${unviewed} new` : 'Vault'} />
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
@@ -702,6 +728,9 @@ export default function VaultScreen() {
                           </View>
                         ))}
                       </View>
+                    )}
+                    {item.id === highlightedVaultId && (
+                      <View style={[StyleSheet.absoluteFill, styles.tileHighlight, { borderRadius: Radius.sm }]} pointerEvents="none" />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -902,6 +931,7 @@ const styles = StyleSheet.create({
   tileReactionRow: { position: 'absolute', bottom: 4, left: 4, flexDirection: 'row', gap: 2 },
   tileReactionPill: { backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, paddingHorizontal: 5, paddingVertical: 2 },
   tileReactionEmoji: { fontSize: 12, lineHeight: 16 },
+  tileHighlight: { backgroundColor: 'rgba(255,179,71,0.22)', borderWidth: 2, borderColor: 'rgba(255,179,71,0.60)' },
   empty: { alignItems: 'center', paddingTop: 80, gap: Spacing.lg },
   emptyIconWrap: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: FontSize.xl, fontFamily: 'Inter-Bold' },

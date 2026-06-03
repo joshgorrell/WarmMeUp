@@ -16,6 +16,7 @@ import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
+import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -166,6 +167,7 @@ export default function HomeScreen() {
       let icon: React.ReactNode;
       let color = '#FF2E8A';
       let route = '/(app)/(tabs)';
+      let routeParams: Record<string, string> | undefined;
 
       switch (i.type as string) {
         case 'dice':
@@ -173,6 +175,7 @@ export default function HomeScreen() {
           icon = <Dice6 color="#FFB347" size={16} strokeWidth={2} />;
           color = '#FFB347';
           route = '/(app)/(tabs)/dice';
+          routeParams = { dice_id: i.id };
           break;
         case 'dare':
           label = i.status === 'accepted'
@@ -181,6 +184,7 @@ export default function HomeScreen() {
           icon = <Zap color="#FF2E8A" size={16} strokeWidth={2} />;
           color = '#FF2E8A';
           route = '/(app)/(tabs)/dare';
+          routeParams = { dare_id: i.id };
           break;
         case 'wish':
         case 'tell_me':
@@ -190,12 +194,14 @@ export default function HomeScreen() {
           icon = <Star color="#FF8A3D" size={16} strokeWidth={2} />;
           color = '#FF8A3D';
           route = '/(app)/(tabs)/wish';
+          routeParams = { wish_id: i.id };
           break;
         case 'media':
           label = `${partnerName} added to Vault`;
           icon = <Lock color="#FF2E8A" size={16} strokeWidth={2} />;
           color = '#FF2E8A';
           route = '/(app)/(tabs)/vault';
+          routeParams = { vault_item_id: (i as any).vault_item_id ?? i.id };
           break;
         default:
           return;
@@ -211,6 +217,7 @@ export default function HomeScreen() {
         icon,
         color,
         route,
+        routeParams,
         _rawTime: i.created_at,
       });
     });
@@ -230,6 +237,7 @@ export default function HomeScreen() {
         icon: <MessageCircle color="#4DA6FF" size={16} strokeWidth={2} />,
         color: '#4DA6FF',
         route: '/(app)/(tabs)/note',
+        routeParams: { message_id: m.id },
         _rawTime: m.created_at,
       });
     });
@@ -258,6 +266,12 @@ export default function HomeScreen() {
         const sourceTable = ev.metadata?.source_table;
         const mediaType = ev.metadata?.media_type ?? 'photo';
         const route = sourceTable === 'vault_items' ? '/(app)/(tabs)/vault' : '/(app)/(tabs)/note';
+        const reactionRouteParams: Record<string, string> = {};
+        if (sourceTable === 'vault_items' && ev.vault_item_id) {
+          reactionRouteParams.vault_item_id = ev.vault_item_id;
+        } else if (sourceTable === 'chat_messages' && ev.metadata?.source_id) {
+          reactionRouteParams.message_id = ev.metadata.source_id;
+        }
         items.push({
           id: `reaction_${ev.id}`,
           sourceTable: 'activity_events',
@@ -268,6 +282,7 @@ export default function HomeScreen() {
           icon: <AppText style={{ fontSize: 16, lineHeight: 20 }}>{emoji}</AppText>,
           color: '#FF2E8A',
           route,
+          routeParams: Object.keys(reactionRouteParams).length ? reactionRouteParams : undefined,
           _rawTime: ev.created_at,
         });
         return;
@@ -317,12 +332,7 @@ export default function HomeScreen() {
 
   const markViewed = useCallback(async (item: ActivityItem) => {
     if (!couple?.id || !user?.id) return;
-    await supabase.from('activity_views').insert({
-      couple_id: couple.id,
-      user_id: user.id,
-      source_table: item.sourceTable,
-      source_id: item.sourceId,
-    }).then(() => {});
+    await markViewedUtil(item, couple.id, user.id);
   }, [couple?.id, user?.id]);
 
   const handleItemPress = useCallback(async (item: ActivityItem) => {
@@ -337,14 +347,8 @@ export default function HomeScreen() {
 
   const handleMarkAllViewed = useCallback(async () => {
     if (!couple?.id || !user?.id || recentActivity.length === 0) return;
-    const rows = recentActivity.map(item => ({
-      couple_id: couple.id,
-      user_id: user.id,
-      source_table: item.sourceTable,
-      source_id: item.sourceId,
-    }));
     setRecentActivity([]);
-    await supabase.from('activity_views').insert(rows).then(() => {});
+    await markAllViewedUtil(recentActivity, couple.id, user.id);
   }, [couple?.id, user?.id, recentActivity]);
 
   const onRefresh = async () => {

@@ -2,11 +2,11 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Pressable, Image, ActivityIndicator, TextInput, Alert,
-  AppState, AppStateStatus, Keyboard,
+  AppState, AppStateStatus, Keyboard, Animated,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Image as ImageIcon, Camera, X, Lock, Send, EyeOff, Pencil } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -138,6 +138,7 @@ function MediaBubble({
 
 export default function ChatTab() {
   const router = useRouter();
+  const { message_id: deepLinkMessageId } = useLocalSearchParams<{ message_id?: string }>();
   const { user, couple, profile, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -156,6 +157,7 @@ export default function ChatTab() {
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [pillSize, setPillSize] = useState<{ w: number; h: number } | null>(null);
   const [revealedMedia, setRevealedMedia] = useState<Set<string>>(new Set());
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const listRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const bubbleRefs = useRef<Record<string, View | null>>({});
@@ -320,6 +322,24 @@ export default function ChatTab() {
     }
     prevMsgCountRef.current = messages.length;
   }, [messages.length]);
+
+  // Deep-link: scroll to a specific message and highlight it
+  useEffect(() => {
+    if (!deepLinkMessageId || messages.length === 0) return;
+    const idx = messages.findIndex(m => m.id === deepLinkMessageId);
+    if (idx === -1) return;
+    // Clear param so back-nav doesn't re-trigger
+    router.setParams({ message_id: undefined });
+    setTimeout(() => {
+      listRef.current?.scrollToIndex({
+        index: idx,
+        animated: true,
+        viewPosition: 0.5,
+      });
+      setHighlightedId(deepLinkMessageId);
+      setTimeout(() => setHighlightedId(null), 2000);
+    }, 150);
+  }, [deepLinkMessageId, messages.length]);
 
   const pickMedia = async (source: 'library' | 'camera') => {
     try {
@@ -779,9 +799,10 @@ export default function ChatTab() {
         onLongPress={handleLongPress}
         onReactQuick={(emoji) => reactOnMessage(item.id, emoji, item.sender_id)}
         prevCreatedAt={index > 0 ? (item as any).__prevCreatedAt : undefined}
+        highlighted={item.id === highlightedId}
       />
     );
-  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, reactOnMessage]);
+  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, reactOnMessage, highlightedId]);
 
   // Attach prev date to each item so renderItem doesn't need the full messages array
   const messagesWithPrev = useMemo(() =>
@@ -851,6 +872,11 @@ export default function ChatTab() {
                 }
               }}
               scrollEventThrottle={200}
+              onScrollToIndexFailed={({ index }) => {
+                setTimeout(() => {
+                  listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+                }, 300);
+              }}
               ListHeaderComponent={loadingOlder ? (
                 <View style={styles.loadingOlderWrap}>
                   <ActivityIndicator color="rgba(255,255,255,0.3)" size="small" />
@@ -1014,6 +1040,7 @@ const MessageRow = React.memo(function MessageRow({
   onLongPress,
   onReactQuick,
   prevCreatedAt,
+  highlighted,
 }: {
   item: ChatMessage & { __prevCreatedAt?: string | null };
   isMine: boolean;
@@ -1034,7 +1061,23 @@ const MessageRow = React.memo(function MessageRow({
   onLongPress: (m: ChatMessage) => void;
   onReactQuick: (emoji: string) => void;
   prevCreatedAt?: string | null;
+  highlighted?: boolean;
 }) {
+  const highlightAnim = React.useRef(new Animated.Value(0)).current;
+  React.useEffect(() => {
+    if (!highlighted) return;
+    Animated.sequence([
+      Animated.timing(highlightAnim, { toValue: 1, duration: 300, useNativeDriver: false }),
+      Animated.delay(1000),
+      Animated.timing(highlightAnim, { toValue: 0, duration: 500, useNativeDriver: false }),
+    ]).start();
+  }, [highlighted]);
+
+  const highlightBg = highlightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255,179,71,0)', 'rgba(255,179,71,0.10)'],
+  });
+
   const showDivider = !prevCreatedAt ||
     new Date(prevCreatedAt).toDateString() !== new Date(item.created_at).toDateString();
 
@@ -1056,7 +1099,7 @@ const MessageRow = React.memo(function MessageRow({
           <View style={[styles.dateLine, { backgroundColor: colors.borderSubtle }]} />
         </View>
       )}
-      <View style={[styles.msgRow, isMine ? styles.msgRowRight : styles.msgRowLeft]}>
+      <Animated.View style={[styles.msgRow, isMine ? styles.msgRowRight : styles.msgRowLeft, { backgroundColor: highlightBg }]}>
         {!isMine && (
           <View style={[styles.msgAvatar, { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
             <AppText style={styles.msgAvatarText}>{name.charAt(0).toUpperCase()}</AppText>
@@ -1124,7 +1167,7 @@ const MessageRow = React.memo(function MessageRow({
             ))}
           </View>
         )}
-      </View>
+      </Animated.View>
     </>
   );
 });

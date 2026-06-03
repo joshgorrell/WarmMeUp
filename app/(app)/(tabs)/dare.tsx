@@ -3,7 +3,7 @@ import {
   View, StyleSheet, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, Animated, Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Flame, CircleCheck as CheckCircle, RotateCcw, Timer } from 'lucide-react-native';
@@ -58,6 +58,7 @@ const FALLBACK_DARES = [
 
 export default function DareTab() {
   const router = useRouter();
+  const { dare_id: deepLinkDareId } = useLocalSearchParams<{ dare_id?: string }>();
   const { user, couple, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
   const hasPartner = !!couple?.user_b_id;
@@ -77,6 +78,7 @@ export default function DareTab() {
   // Sender dare: track expires_at of the dare I sent so I can show countdown
   const [sentDare, setSentDare] = useState<Interaction | null>(null);
   const senderCountdown = useSenderCountdown(sentDare?.expires_at);
+  const [highlightDare, setHighlightDare] = useState(false);
 
   // Flip animation for sender verification card
   const flipAnim = useRef(new Animated.Value(0)).current;
@@ -118,6 +120,30 @@ export default function DareTab() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id, user]);
+
+  // Deep-link: when dare_id param arrives, check if it matches the active dare
+  useEffect(() => {
+    if (!deepLinkDareId || !couple?.id) return;
+    router.setParams({ dare_id: undefined });
+    (async () => {
+      const { data: dare } = await supabase
+        .from('interactions')
+        .select('id, status')
+        .eq('id', deepLinkDareId)
+        .maybeSingle();
+      if (!dare) {
+        Alert.alert('Dare not found', 'This dare could not be found.');
+        return;
+      }
+      if (dare.status === 'sent' &&
+        (incomingDare?.id === deepLinkDareId || pendingVerification?.id === deepLinkDareId)) {
+        setHighlightDare(true);
+        setTimeout(() => setHighlightDare(false), 2000);
+      } else if (!['sent', 'accepted', 'pending_verification'].includes(dare.status)) {
+        Alert.alert('Dare no longer active', 'This dare has already been completed or has expired.');
+      }
+    })();
+  }, [deepLinkDareId]);
 
   const checkStates = useCallback(async () => {
     if (!couple?.id || !user) return;
@@ -294,7 +320,7 @@ export default function DareTab() {
 
           {/* Incoming dare from partner */}
           {incomingDare && (
-            <View style={styles.incomingSection}>
+            <View style={[styles.incomingSection, highlightDare && styles.incomingHighlight]}>
               <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
                 <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>
                   Accept = <AppText style={styles.pts}>+{acceptPts} pts</AppText> — Complete it = <AppText style={styles.pts}>+{completePts} pts</AppText>
@@ -464,6 +490,7 @@ const styles = StyleSheet.create({
   },
   soloBtnText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   incomingSection: { gap: Spacing.sm, marginBottom: Spacing.md },
+  incomingHighlight: { borderRadius: Radius.lg, borderWidth: 2, borderColor: 'rgba(255,179,71,0.50)', padding: Spacing.sm, backgroundColor: 'rgba(255,179,71,0.07)' },
   pointsHint: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.sm, alignItems: 'center' },
   pointsHintText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
   pts: { fontFamily: 'Inter-Bold', color: '#33D17A' },

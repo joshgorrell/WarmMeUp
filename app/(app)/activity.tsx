@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Zap, Lock, MessageCircle, Dice6, Camera, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, Zap, Lock, MessageCircle, Dice6, Camera, Sparkles, ChevronRight, CheckCheck } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +11,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import WarmupLogo from '@/components/WarmupLogo';
 import WarmupWordmark from '@/components/WarmupWordmark';
+import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
 
 type FilterTab = 'all' | 'chat' | 'dare' | 'dice' | 'wish' | 'privacy';
 
@@ -34,6 +35,8 @@ type ActivityItem = {
   color: string;
   points?: number;
   _rawTime: string;
+  route: string;
+  routeParams?: Record<string, string>;
 };
 
 function timeAgo(iso: string) {
@@ -58,6 +61,8 @@ export default function ActivityScreen() {
   const items = filter === 'all'
     ? allItems
     : allItems.filter(i => i._type === filter);
+
+  const unreadCount = items.filter(i => !viewedSet.has(`${i.sourceTable}:${i.sourceId}`)).length;
 
   useEffect(() => {
     if (!couple?.id || !user?.id) return;
@@ -93,6 +98,8 @@ export default function ActivityScreen() {
       let icon: React.ReactNode;
       let color = '#FF2E8A';
       let type: FilterTab = 'dare';
+      let route = '/(app)/(tabs)';
+      let routeParams: Record<string, string> | undefined;
 
       switch (i.type) {
         case 'dice':
@@ -100,6 +107,8 @@ export default function ActivityScreen() {
           label = isMine ? 'You rolled the dice' : `${partnerName} rolled the dice`;
           icon = <Dice6 color="#FFB347" size={18} strokeWidth={2} />;
           color = '#FFB347';
+          route = '/(app)/(tabs)/dice';
+          if (!isMine) routeParams = { dice_id: i.id };
           break;
         case 'dare':
           type = 'dare';
@@ -118,6 +127,8 @@ export default function ActivityScreen() {
           }
           icon = <Zap color="#FF2E8A" size={18} strokeWidth={2} />;
           color = '#FF2E8A';
+          route = '/(app)/(tabs)/dare';
+          if (!isMine) routeParams = { dare_id: i.id };
           break;
         case 'tell_me':
           type = 'wish';
@@ -126,17 +137,22 @@ export default function ActivityScreen() {
             : (isMine ? 'You sent a Wish' : `${partnerName} sent you a Wish`);
           icon = <Sparkles color="#F0A96A" size={18} strokeWidth={2} />;
           color = '#F0A96A';
+          route = '/(app)/(tabs)/wish';
+          routeParams = { wish_id: i.id };
           break;
         case 'media':
           type = 'dare';
           label = isMine ? 'New Vault item added' : `${partnerName} added to the Vault`;
           icon = <Lock color="#FF2E8A" size={18} strokeWidth={2} />;
           color = '#FF2E8A';
+          route = '/(app)/(tabs)/vault';
+          routeParams = { vault_item_id: (i as any).vault_item_id ?? i.id };
           break;
         default:
           type = 'dare';
           label = 'Activity';
           icon = <Zap color="#FF2E8A" size={18} strokeWidth={2} />;
+          route = '/(app)/(tabs)';
       }
 
       mapped.push({
@@ -151,6 +167,8 @@ export default function ActivityScreen() {
         color,
         points: i.points_awarded > 0 ? i.points_awarded : undefined,
         _rawTime: i.created_at,
+        route,
+        routeParams,
       });
     });
 
@@ -172,6 +190,8 @@ export default function ActivityScreen() {
         icon: <MessageCircle color="#4FC3F7" size={18} strokeWidth={2} />,
         color: '#4FC3F7',
         _rawTime: msg.created_at,
+        route: '/(app)/(tabs)/note',
+        routeParams: { message_id: msg.id },
       });
     });
 
@@ -190,6 +210,8 @@ export default function ActivityScreen() {
           icon: <Camera color="#FF8A3D" size={18} strokeWidth={2} />,
           color: '#FF8A3D',
           _rawTime: ev.created_at,
+          route: '/(app)/(tabs)/vault',
+          routeParams: ev.vault_item_id ? { vault_item_id: ev.vault_item_id } : undefined,
         });
         return;
       }
@@ -201,6 +223,13 @@ export default function ActivityScreen() {
         const label = isMine
           ? `You reacted ${emoji} to a ${mediaType}`
           : `${partnerName} reacted ${emoji} to your ${mediaType}`;
+        const reactionRoute = sourceTable === 'vault_items' ? '/(app)/(tabs)/vault' : '/(app)/(tabs)/note';
+        const reactionParams: Record<string, string> = {};
+        if (sourceTable === 'vault_items' && ev.vault_item_id) {
+          reactionParams.vault_item_id = ev.vault_item_id;
+        } else if (sourceTable === 'chat_messages' && ev.metadata?.source_id) {
+          reactionParams.message_id = ev.metadata.source_id;
+        }
         mapped.push({
           id: `reaction_${ev.id}`,
           sourceTable: 'activity_events',
@@ -212,12 +241,16 @@ export default function ActivityScreen() {
           icon: <AppText style={{ fontSize: 18, lineHeight: 22 }}>{emoji}</AppText>,
           color: '#FF2E8A',
           _rawTime: ev.created_at,
+          route: reactionRoute,
+          routeParams: Object.keys(reactionParams).length ? reactionParams : undefined,
         });
         return;
       }
 
       let label = '';
       let sub = '';
+      let wishRoute = '/(app)/(tabs)/wish';
+      let wishParams: Record<string, string> | undefined;
       switch (ev.event_type) {
         case 'wish_created':
           label = isMine ? 'You created a new wish' : `${partnerName} created a new wish`;
@@ -236,6 +269,7 @@ export default function ActivityScreen() {
         default:
           return;
       }
+      if (ev.wish_id) wishParams = { wish_id: ev.wish_id };
 
       mapped.push({
         id: `activity_${ev.id}`,
@@ -248,11 +282,37 @@ export default function ActivityScreen() {
         icon: <Sparkles color="#F0A96A" size={18} strokeWidth={2} />,
         color: '#F0A96A',
         _rawTime: ev.created_at,
+        route: wishRoute,
+        routeParams: wishParams,
       });
     });
 
     mapped.sort((a, b) => b._rawTime.localeCompare(a._rawTime));
     setAllItems(mapped);
+  };
+
+  const handleItemPress = async (item: ActivityItem) => {
+    if (!couple?.id || !user?.id) return;
+    const key = `${item.sourceTable}:${item.sourceId}`;
+    if (!viewedSet.has(key)) {
+      setViewedSet(prev => new Set([...prev, key]));
+      await markViewedUtil(item, couple.id, user.id);
+    }
+    if (item.routeParams) {
+      router.push({ pathname: item.route as any, params: item.routeParams });
+    } else {
+      router.push(item.route as any);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    if (!couple?.id || !user?.id) return;
+    const unread = items.filter(i => !viewedSet.has(`${i.sourceTable}:${i.sourceId}`));
+    if (!unread.length) return;
+    const newSet = new Set(viewedSet);
+    unread.forEach(i => newSet.add(`${i.sourceTable}:${i.sourceId}`));
+    setViewedSet(newSet);
+    await markAllViewedUtil(unread, couple.id, user.id);
   };
 
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
@@ -272,7 +332,17 @@ export default function ActivityScreen() {
           <WarmupLogo size={28} />
           <WarmupWordmark size={13} />
         </View>
-        <View style={styles.headerRight} />
+        <View style={styles.headerRight}>
+          {unreadCount > 0 && (
+            <TouchableOpacity
+              onPress={handleMarkAllRead}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <CheckCheck color={colors.textMuted} size={18} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView
@@ -319,7 +389,12 @@ export default function ActivityScreen() {
           items.map(item => {
             const isUnread = !viewedSet.has(`${item.sourceTable}:${item.sourceId}`);
             return (
-              <View key={item.id} style={[styles.row, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+              <TouchableOpacity
+                key={item.id}
+                onPress={() => handleItemPress(item)}
+                activeOpacity={0.7}
+                style={[styles.row, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+              >
                 <View style={styles.unreadIndicatorWrap}>
                   {isUnread && <View style={styles.unreadDot} />}
                 </View>
@@ -338,7 +413,8 @@ export default function ActivityScreen() {
                     </View>
                   ) : null}
                 </View>
-              </View>
+                <ChevronRight color={colors.textMuted} size={14} strokeWidth={2} />
+              </TouchableOpacity>
             );
           })
         )}
@@ -374,6 +450,8 @@ const styles = StyleSheet.create({
   headerRight: {
     width: 42,
     flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 40 },
   filterScroll: { marginTop: Spacing.lg, marginBottom: Spacing.lg },
@@ -381,7 +459,7 @@ const styles = StyleSheet.create({
   filterTab: { borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 8, minWidth: 60, alignItems: 'center' },
   filterTabText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   row: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.sm,
   },
   unreadIndicatorWrap: {
