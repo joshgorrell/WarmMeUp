@@ -2,7 +2,7 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Sparkles, ChevronRight, Dice6, Zap, MessageCircle } from 'lucide-react-native';
+import { Sparkles, ChevronRight, Dice6, Zap, MessageCircle, X } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { Gradient, FontSize, Spacing, Radius } from '@/constants/theme';
 import Badge from './Badge';
@@ -11,6 +11,7 @@ import { Interaction } from '@/lib/types';
 interface CurrentMomentCardProps {
   interaction: Interaction;
   onSeeAll?: () => void;
+  onDismiss?: () => void;
 }
 
 function typeIcon(type: string) {
@@ -26,7 +27,7 @@ function typeLabel(type: string): string {
   return type;
 }
 
-export default function CurrentMomentCard({ interaction, onSeeAll }: CurrentMomentCardProps) {
+export default function CurrentMomentCard({ interaction, onSeeAll, onDismiss }: CurrentMomentCardProps) {
   const { colors } = useTheme();
 
   return (
@@ -44,12 +45,19 @@ export default function CurrentMomentCard({ interaction, onSeeAll }: CurrentMome
             <AppText style={[styles.headerTitle, { color: colors.text }]}>Current Moment</AppText>
             <Badge label="Active" variant="active" gradientBorder />
           </View>
-          {onSeeAll && (
-            <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7} style={styles.seeAll}>
-              <AppText style={[styles.seeAllText, { color: colors.textSecondary }]}>See All</AppText>
-              <ChevronRight color={colors.textMuted} size={14} />
-            </TouchableOpacity>
-          )}
+          <View style={styles.headerRight}>
+            {onSeeAll && (
+              <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7} style={styles.seeAll}>
+                <AppText style={[styles.seeAllText, { color: colors.textSecondary }]}>See All</AppText>
+                <ChevronRight color={colors.textMuted} size={14} />
+              </TouchableOpacity>
+            )}
+            {onDismiss && (
+              <TouchableOpacity onPress={onDismiss} activeOpacity={0.7} style={styles.dismissBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X color={colors.textMuted} size={16} strokeWidth={2} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Body */}
@@ -117,6 +125,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dismissBtn: {
+    padding: 2,
   },
   seeAllText: {
     fontSize: FontSize.sm,

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
+  View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -17,6 +17,7 @@ import CurrentMomentCard from '@/components/CurrentMomentCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
 import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
+import { reversePoints } from '@/lib/points';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -351,6 +352,37 @@ export default function HomeScreen() {
     await markAllViewedUtil(recentActivity, couple.id, user.id);
   }, [couple?.id, user?.id, recentActivity]);
 
+  const handleDismissInteraction = useCallback(() => {
+    if (!activeInteraction || !couple?.id || !user?.id) return;
+    const isSelfRoll = activeInteraction.type === 'dice'
+      && activeInteraction.sender_id === user.id
+      && activeInteraction.receiver_id === user.id;
+
+    const doDelete = async () => {
+      setActiveInteraction(null);
+      await supabase
+        .from('interactions')
+        .update({ deleted_at: new Date().toISOString(), is_active: false })
+        .eq('id', activeInteraction.id);
+      if (isSelfRoll) {
+        await reversePoints(activeInteraction.id, couple.id, user.id);
+      }
+    };
+
+    if (isSelfRoll) {
+      Alert.alert(
+        'Remove this roll?',
+        'This will remove the roll and any points earned from it.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Remove', style: 'destructive', onPress: doDelete },
+        ]
+      );
+    } else {
+      doDelete();
+    }
+  }, [activeInteraction, couple?.id, user?.id]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadAll();
@@ -393,6 +425,7 @@ export default function HomeScreen() {
               <CurrentMomentCard
                 interaction={activeInteraction}
                 onSeeAll={() => router.push('/(app)/activity')}
+                onDismiss={handleDismissInteraction}
               />
               <View style={{ height: Spacing.lg }} />
             </>
