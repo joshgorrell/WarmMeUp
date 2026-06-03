@@ -1158,9 +1158,7 @@ export default function AccountScreen() {
               <AppText style={[styles.connectedName, { color: colors.text }]}>
                 {partnerProfile.display_name}
               </AppText>
-              <AppText style={[styles.connectedHeart, { color: '#FF2E8A' }]}>
-                Connected to {partnerProfile.display_name} ❤️
-              </AppText>
+
             </View>
           </View>
           <TouchableOpacity
