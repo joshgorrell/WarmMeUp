@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles, CheckCheck } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
@@ -52,7 +53,7 @@ type ActivityItem = {
 export default function HomeScreen() {
   const router = useRouter();
   const { pendingTab } = useLocalSearchParams<{ pendingTab?: string }>();
-  const { user, profile, partnerProfile, couple, justPairedPartnerName, clearJustPaired } = useAuth();
+  const { user, profile, partnerProfile, couple, justPairedPartnerName, clearJustPaired, scoreResetAt } = useAuth();
   const { colors } = useTheme();
   const [myScore, setMyScore] = useState(0);
   const [partnerScore, setPartnerScore] = useState(0);
@@ -91,6 +92,17 @@ export default function HomeScreen() {
 
     return () => { supabase.removeChannel(channel); };
   }, [couple?.id, user]);
+
+  // Reload scores when returning to the Home tab so stale state is never shown.
+  useFocusEffect(useCallback(() => {
+    if (couple?.id && user) loadAll();
+  }, [couple?.id, user]));
+
+  // Reload immediately when Reset Points completes (scoreResetAt increments in AuthContext).
+  useEffect(() => {
+    if (scoreResetAt === 0) return;
+    if (couple?.id && user) loadAll();
+  }, [scoreResetAt]);
 
   const loadAll = async () => {
     if (!couple?.id || !user) return;

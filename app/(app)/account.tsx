@@ -345,7 +345,7 @@ const rua = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────
 export default function AccountScreen() {
   const router = useRouter();
-  const { profile, partnerProfile, couple, signOut, isAdmin, isSuperAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple, patchCouple, subscriptionInfo, refreshSubscription } = useAuth();
+  const { profile, partnerProfile, couple, signOut, isAdmin, isSuperAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple, patchCouple, subscriptionInfo, refreshSubscription, notifyScoreReset } = useAuth();
   const { colors } = useTheme();
   const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
 
@@ -1028,6 +1028,7 @@ export default function AccountScreen() {
       await supabase.from('point_events').delete().eq('couple_id', couple.id);
       await supabase.from('scores').update({ points: 0 }).eq('couple_id', couple.id);
       await supabase.from('monthly_scores').delete().eq('couple_id', couple.id);
+      notifyScoreReset();
       setResetDone(true);
       setTimeout(() => { setResetPointsOpen(false); setResetDone(false); loadStats(); }, 1800);
     } finally { setResetting(false); }

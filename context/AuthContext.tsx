@@ -100,6 +100,12 @@ interface AuthContextType {
   setVaultUnlocked: (unlocked: boolean) => void;
   /** True when the admin has enabled the hidden 5-tap emergency debug entry points. */
   debugModeEnabled: boolean;
+  /**
+   * Increments every time Reset Points completes. Screens subscribe via useEffect
+   * to this value and re-fetch scores when it changes.
+   */
+  scoreResetAt: number;
+  notifyScoreReset: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -128,6 +134,8 @@ const AuthContext = createContext<AuthContextType>({
   vaultUnlocked: false,
   setVaultUnlocked: () => {},
   debugModeEnabled: false,
+  scoreResetAt: 0,
+  notifyScoreReset: () => {},
   justPairedPartnerName: null,
   clearJustPaired: () => {},
 });
@@ -260,6 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo>(DEFAULT_SUBSCRIPTION_INFO);
   const [justPairedPartnerName, setJustPairedPartnerName] = useState<string | null>(null);
+  const [scoreResetAt, setScoreResetAt] = useState(0);
   // Tracks the previous user_b_id so we can detect the null→populated transition.
   // Timestamp (ms) of the last successful unlock. Persisted across restarts.
   const unlockedAtRef = useRef<number | null>(null);
@@ -646,7 +655,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled, justPairedPartnerName, clearJustPaired }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled, justPairedPartnerName, clearJustPaired, scoreResetAt, notifyScoreReset: () => setScoreResetAt(n => n + 1) }}
     >
       {children}
     </AuthContext.Provider>

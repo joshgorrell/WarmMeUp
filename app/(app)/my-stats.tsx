@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ChevronLeft, ChevronRight, Zap, MessageCircle, Star, Vault, Trophy, Flame, Clock, EyeOff, Bug } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
@@ -166,7 +167,7 @@ interface DebugInfo {
 
 export default function MyStatsScreen() {
   const router = useRouter();
-  const { user, couple, profile, partnerProfile } = useAuth();
+  const { user, couple, profile, partnerProfile, scoreResetAt } = useAuth();
   const { colors } = useTheme();
 
   const now = new Date();
@@ -339,6 +340,17 @@ export default function MyStatsScreen() {
       load();
     }
   }, [allTime, load, loadAllTime]);
+
+  // Reload when the user navigates back to this screen.
+  useFocusEffect(useCallback(() => {
+    if (allTime) { loadAllTime(); } else { load(); }
+  }, [allTime, load, loadAllTime]));
+
+  // Reload immediately when Reset Points completes.
+  useEffect(() => {
+    if (scoreResetAt === 0) return;
+    if (allTime) { loadAllTime(); } else { load(); }
+  }, [scoreResetAt]);
 
   const prevMonth = () => {
     if (month === 1) { setYear(y => y - 1); setMonth(12); }
