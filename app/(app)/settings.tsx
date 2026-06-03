@@ -190,43 +190,6 @@ const EXPIRY_OPTIONS: { label: string; value: number }[] = [
   { label: '24 hours', value: 24 },
 ];
 
-const CHAT_FONT_OPTIONS: { label: string; value: number }[] = [
-  { label: 'Small', value: 0.85 },
-  { label: 'Standard', value: 1.0 },
-  { label: 'Large', value: 1.2 },
-];
-
-function ChatFontSizeRow({
-  current, colors, onSelect,
-}: {
-  current: number;
-  colors: any;
-  onSelect: (scale: number) => void;
-}) {
-  return (
-    <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
-      <AppText style={[slm.label, { color: colors.text }]}>Chat Text Size</AppText>
-      <AppText style={[slm.sub, { color: colors.textMuted }]}>How large chat message text appears</AppText>
-      <View style={slm.row}>
-        {CHAT_FONT_OPTIONS.map((opt) => {
-          const sel = Math.abs(current - opt.value) < 0.01;
-          return (
-            <TouchableOpacity
-              key={String(opt.value)}
-              style={[slm.chip, sel && slm.chipSelected, { borderColor: sel ? 'rgba(255,90,61,0.5)' : colors.borderSubtle }]}
-              onPress={() => onSelect(opt.value)}
-              activeOpacity={0.72}
-            >
-              <AppText style={[slm.chipLabel, { color: sel ? '#fff' : colors.textSecondary }]}>{opt.label}</AppText>
-              {sel && <Check color="#FF5A3D" size={12} strokeWidth={2.5} />}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
 function ChallengeExpiryRow({
   current, colors, onSelect,
 }: {
@@ -563,14 +526,6 @@ export default function SettingsScreen() {
             current={s?.challenge_expiry_hours ?? 24}
             colors={colors}
             onSelect={(hours) => update({ challenge_expiry_hours: hours })}
-          />
-        </Section>
-
-        <Section title="CHAT">
-          <ChatFontSizeRow
-            current={s?.chat_font_scale ?? 1.0}
-            colors={colors}
-            onSelect={(scale) => update({ chat_font_scale: scale })}
           />
         </Section>
 

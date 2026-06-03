@@ -342,6 +342,59 @@ const rua = StyleSheet.create({
   optionLabel: { fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
 });
 
+// ─── Chat font size selector ──────────────────────────────────────
+const CHAT_FONT_OPTIONS: { label: string; value: number }[] = [
+  { label: 'Small', value: 0.85 },
+  { label: 'Standard', value: 1.0 },
+  { label: 'Large', value: 1.2 },
+];
+
+const cfs = StyleSheet.create({
+  wrap: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.md },
+  label: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', marginBottom: 2 },
+  sub: { fontSize: 11, fontFamily: 'Inter-Regular', marginBottom: Spacing.sm },
+  row: { flexDirection: 'row', gap: 8 },
+  chip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  chipSelected: { backgroundColor: 'rgba(255,90,61,0.08)' },
+  chipLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
+});
+
+function ChatFontSizeRow({ current, colors, onSelect }: { current: number; colors: any; onSelect: (scale: number) => void }) {
+  return (
+    <View style={cfs.wrap}>
+      <AppText style={[cfs.label, { color: colors.text }]}>Chat Text Size</AppText>
+      <AppText style={[cfs.sub, { color: colors.textMuted }]}>How large message text appears in Chat</AppText>
+      <View style={cfs.row}>
+        {CHAT_FONT_OPTIONS.map((opt) => {
+          const sel = Math.abs(current - opt.value) < 0.01;
+          return (
+            <TouchableOpacity
+              key={String(opt.value)}
+              style={[cfs.chip, sel && cfs.chipSelected, { borderColor: sel ? 'rgba(255,90,61,0.5)' : colors.borderSubtle }]}
+              onPress={() => onSelect(opt.value)}
+              activeOpacity={0.72}
+            >
+              <AppText style={[cfs.chipLabel, { color: sel ? '#fff' : colors.textSecondary }]}>{opt.label}</AppText>
+              {sel && <Check color="#FF5A3D" size={12} strokeWidth={2.5} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 // ─── Main screen ──────────────────────────────────────────────────
 export default function AccountScreen() {
   const router = useRouter();
@@ -1503,6 +1556,14 @@ export default function AccountScreen() {
         <SettingsRow label="Allow Sharing My Uploads Outside App" sub="Your partner can share your content externally" toggle value={s?.vault_allow_share_default ?? false} onChange={v => update({ vault_allow_share_default: v })} />
         <SettingsRow label="Notify Me if My Content is Screenshotted" sub="You'll be alerted when your partner screenshots something you uploaded" toggle value={s?.screenshot_notify_partner ?? true} onChange={v => update({ screenshot_notify_partner: v })} />
         <SettingsRow label="Auto-Save Chat Media to Vault" sub="Photos and videos you send in Chat are automatically saved to your Vault. Deleting from either place removes both." toggle value={s?.chat_auto_save_to_vault ?? true} onChange={v => update({ chat_auto_save_to_vault: v })} last />
+      </Section>
+
+      <Section title="CHAT">
+        <ChatFontSizeRow
+          current={s?.chat_font_scale ?? 1.0}
+          colors={colors}
+          onSelect={(scale) => update({ chat_font_scale: scale })}
+        />
       </Section>
 
       <Section title="NOTIFICATIONS">
