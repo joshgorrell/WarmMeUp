@@ -433,6 +433,8 @@ export default function MyStatsScreen() {
 
   const myName = profile?.display_name ?? 'You';
   const partnerName = partnerProfile?.display_name ?? 'Partner';
+  const myFirstName = profile?.first_name || myName.split(' ')[0];
+  const partnerFirstName = partnerProfile?.first_name || partnerName.split(' ')[0];
 
   const isFirstLoad = loading && myStats === null && partnerStats === null;
 
@@ -582,12 +584,12 @@ export default function MyStatsScreen() {
               <View style={styles.catValues}>
                 <View style={styles.catVal}>
                   <AppText style={[styles.catNum, { color: colors.text }]}>{cat.myVal}</AppText>
-                  <AppText style={[styles.catValLabel, { color: colors.textMuted }]}>{myName.split(' ')[0]}</AppText>
+                  <AppText style={[styles.catValLabel, { color: colors.textMuted }]}>{myFirstName}</AppText>
                 </View>
                 <View style={[styles.catDivider, { backgroundColor: colors.borderSubtle }]} />
                 <View style={styles.catVal}>
                   <AppText style={[styles.catNum, { color: colors.text }]}>{cat.partnerVal}</AppText>
-                  <AppText style={[styles.catValLabel, { color: colors.textMuted }]}>{partnerName.split(' ')[0]}</AppText>
+                  <AppText style={[styles.catValLabel, { color: colors.textMuted }]}>{partnerFirstName}</AppText>
                 </View>
               </View>
             </View>

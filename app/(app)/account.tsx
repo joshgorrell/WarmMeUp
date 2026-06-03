@@ -449,7 +449,8 @@ export default function AccountScreen() {
   const [codeRefreshing, setCodeRefreshing] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [editingName, setEditingName] = useState(false);
-  const [nameInput, setNameInput] = useState('');
+  const [firstNameInput, setFirstNameInput] = useState('');
+  const [lastNameInput, setLastNameInput] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [creatingCouple, setCreatingCouple] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -820,27 +821,37 @@ export default function AccountScreen() {
 
 
   // ── Name edit ────────────────────────────────────────────────────
-  const startEditName = () => { setNameInput(profile?.display_name ?? ''); setEditingName(true); };
-  const cancelEditName = () => { cancelingNameRef.current = true; setEditingName(false); setNameInput(''); };
+  const startEditName = () => {
+    setFirstNameInput(profile?.first_name ?? '');
+    setLastNameInput(profile?.last_name ?? '');
+    setEditingName(true);
+  };
+  const cancelEditName = () => { cancelingNameRef.current = true; setEditingName(false); setFirstNameInput(''); setLastNameInput(''); };
 
   const saveName = useCallback(async () => {
     if (cancelingNameRef.current) { cancelingNameRef.current = false; return; }
-    const trimmed = nameInput.trim();
+    const fn = firstNameInput.trim();
+    const ln = lastNameInput.trim();
     if (!user) { setEditingName(false); return; }
-    if (!trimmed || trimmed === profile?.display_name) { setEditingName(false); return; }
+    const unchanged = fn === (profile?.first_name ?? '') && ln === (profile?.last_name ?? '');
+    if (!fn || unchanged) { setEditingName(false); return; }
     if (savingName) return;
     setSavingName(true);
     setNameError(null);
+    const fullName = `${fn} ${ln}`.trim();
     try {
       const { data, error } = await supabase
-        .from('profiles').update({ display_name: trimmed }).eq('id', user.id)
-        .select('id, display_name').maybeSingle();
+        .from('profiles')
+        .update({ first_name: fn, last_name: ln, display_name: fullName })
+        .eq('id', user.id)
+        .select('id, first_name, last_name, display_name')
+        .maybeSingle();
       if (error) { setNameError(error.message ?? 'Could not save. Please try again.'); return; }
       if (!data) { setNameError('Update was blocked. Please sign in again.'); return; }
       await refreshProfile();
       setEditingName(false);
     } finally { setSavingName(false); }
-  }, [nameInput, user, profile?.display_name, savingName, refreshProfile]);
+  }, [firstNameInput, lastNameInput, user, profile?.first_name, profile?.last_name, savingName, refreshProfile]);
 
   useEffect(() => { saveNameRef.current = saveName; }, [saveName]);
 
@@ -1189,15 +1200,24 @@ export default function AccountScreen() {
             <View ref={nameWrapRef} style={styles.nameEditRow}>
               <AppTextInput
                 style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
-                value={nameInput}
-                onChangeText={setNameInput}
+                value={firstNameInput}
+                onChangeText={setFirstNameInput}
                 autoFocus
+                returnKeyType="next"
+                placeholderTextColor={colors.textMuted}
+                placeholder="First name"
+                maxLength={20}
+              />
+              <AppTextInput
+                style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
+                value={lastNameInput}
+                onChangeText={setLastNameInput}
                 returnKeyType="done"
                 onSubmitEditing={saveName}
                 onBlur={saveName}
                 placeholderTextColor={colors.textMuted}
-                placeholder="Display name"
-                maxLength={40}
+                placeholder="Last name"
+                maxLength={30}
               />
               <TouchableOpacity onPress={saveName} disabled={savingName} style={styles.nameActionBtn} activeOpacity={0.7}>
                 <Check color="#33D17A" size={18} strokeWidth={2.5} />
@@ -1208,7 +1228,7 @@ export default function AccountScreen() {
             </View>
           ) : (
             <TouchableOpacity onPress={startEditName} style={styles.nameRow} activeOpacity={0.7}>
-              <AppText style={[styles.name, { color: colors.text }]}>{profile?.display_name ?? 'Your Name'}</AppText>
+              <AppText style={[styles.name, { color: colors.text }]}>{profile ? `${profile.first_name} ${profile.last_name}`.trim() || profile.display_name : 'Your Name'}</AppText>
               <Pencil color={colors.textMuted} size={14} strokeWidth={2} />
             </TouchableOpacity>
           )}

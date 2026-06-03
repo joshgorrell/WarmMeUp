@@ -20,11 +20,12 @@ import { useGreeting } from '@/hooks/useGreeting';
 import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
 import { reversePoints } from '@/lib/points';
 
-function getGreeting() {
+function getTimeGreeting() {
   const h = new Date().getHours();
-  if (h < 12) return 'Good Morning';
-  if (h < 18) return 'Good Afternoon';
-  return 'Good Evening';
+  if (h >= 5 && h < 12) return 'Morning';
+  if (h >= 12 && h < 17) return 'Afternoon';
+  if (h >= 17) return 'Evening';
+  return 'Late Night';
 }
 
 function timeAgo(iso: string) {
@@ -423,8 +424,14 @@ export default function HomeScreen() {
 
           {/* Greeting */}
           <View style={styles.greeting}>
-            <AppText style={[styles.greetingTitle, { color: colors.text }]}>
-              {getGreeting()}{profile?.display_name ? `, ${profile.display_name.split(' ')[0]}` : ''}
+            <AppText
+              style={[styles.greetingTitle, { color: colors.text }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              ellipsizeMode="tail"
+            >
+              {getTimeGreeting()}{profile?.first_name ? `, ${profile.first_name}` : ''}
             </AppText>
             <AppText style={[styles.greetingSub, { color: colors.textSecondary }]}>
               {greetingSub}

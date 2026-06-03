@@ -1,6 +1,8 @@
 export interface Profile {
   id: string;
   display_name: string;
+  first_name: string;
+  last_name: string;
   avatar_url: string | null;
   push_token: string | null;
   is_admin: boolean;

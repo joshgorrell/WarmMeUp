@@ -57,7 +57,8 @@ export default function RegisterScreen() {
   const inputPad = Math.max(Math.round(height * 0.014), 10);
   const headingSize = Math.min(Math.round(width * 0.076), 30);
 
-  const [displayName, setDisplayName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -107,10 +108,13 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    if (!displayName.trim()) {
-      setError('Please enter your name.');
-      return;
-    }
+    const fn = firstName.trim();
+    const ln = lastName.trim();
+    if (!fn) { setError('Please enter your first name.'); return; }
+    if (fn.length < 2) { setError('First name must be at least 2 characters.'); return; }
+    if (!ln) { setError('Please enter your last name.'); return; }
+    if (ln.length < 2) { setError('Last name must be at least 2 characters.'); return; }
+    const fullName = `${fn} ${ln}`;
     if (!validateAge()) return;
     if (!tosAccepted) { requireTos(); return; }
     if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
@@ -133,7 +137,7 @@ export default function RegisterScreen() {
       if (data.user) {
         await supabase
           .from('profiles')
-          .update({ display_name: displayName.trim(), tos_accepted_at: tosAcceptedAt })
+          .update({ first_name: fn, last_name: ln, display_name: fullName, tos_accepted_at: tosAcceptedAt })
           .eq('id', data.user.id);
 
         // When Supabase has email confirmation disabled, the user is confirmed
@@ -177,10 +181,25 @@ export default function RegisterScreen() {
   };
 
   const handleOAuth = async (provider: 'apple' | 'google') => {
-    if (!displayName.trim()) {
-      setError('Please enter your name before continuing.');
+    if (!firstName.trim()) {
+      setError('Please enter your first name before continuing.');
       return;
     }
+    if (firstName.trim().length < 2) {
+      setError('First name must be at least 2 characters.');
+      return;
+    }
+    if (!lastName.trim()) {
+      setError('Please enter your last name before continuing.');
+      return;
+    }
+    if (lastName.trim().length < 2) {
+      setError('Last name must be at least 2 characters.');
+      return;
+    }
+    const fn = firstName.trim();
+    const ln = lastName.trim();
+    const fullName = `${fn} ${ln}`;
     if (!validateAge()) return;
     if (!tosAccepted) { requireTos(); return; }
     setError('');
@@ -194,11 +213,11 @@ export default function RegisterScreen() {
 
       const userId = session.user?.id;
       if (userId) {
-        // Only update display_name + tos if this is a new account (tos not yet accepted).
+        // Only update name + tos if this is a new account (tos not yet accepted).
         // Returns 0 rows affected for existing users, which is fine.
         const { data: updatedProfile } = await supabase
           .from('profiles')
-          .update({ display_name: displayName.trim(), tos_accepted_at: tosAcceptedAt })
+          .update({ first_name: fn, last_name: ln, display_name: fullName, tos_accepted_at: tosAcceptedAt })
           .eq('id', userId)
           .is('tos_accepted_at', null)
           .select('id')
@@ -318,18 +337,32 @@ export default function RegisterScreen() {
 
           {/* Form fields */}
           <View style={[styles.form, { gap: vXs }]}>
-            <View style={styles.inputWrap}>
-              <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-              <AppTextInput
-                style={[styles.input, { paddingVertical: inputPad }]}
-                value={displayName}
-                onChangeText={setDisplayName}
-                placeholder="Your name"
-                placeholderTextColor="rgba(255,255,255,0.24)"
-                autoCapitalize="words"
-                autoComplete="name"
-                maxLength={40}
-              />
+            <View style={styles.nameRow}>
+              <View style={[styles.inputWrap, { flex: 1 }]}>
+                <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                <AppTextInput
+                  style={[styles.input, { paddingVertical: inputPad }]}
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  placeholder="First name"
+                  placeholderTextColor="rgba(255,255,255,0.24)"
+                  autoCapitalize="words"
+                  autoComplete="given-name"
+                  maxLength={20}
+                />
+              </View>
+              <View style={[styles.inputWrap, { flex: 1 }]}>
+                <AppTextInput
+                  style={[styles.input, styles.inputNoIcon, { paddingVertical: inputPad }]}
+                  value={lastName}
+                  onChangeText={setLastName}
+                  placeholder="Last name"
+                  placeholderTextColor="rgba(255,255,255,0.24)"
+                  autoCapitalize="words"
+                  autoComplete="family-name"
+                  maxLength={30}
+                />
+              </View>
             </View>
 
             <View style={styles.inputWrap}>
@@ -569,6 +602,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   form: {},
+  nameRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -586,6 +623,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FontSize.body,
     fontFamily: 'Inter-Regular',
+  },
+  inputNoIcon: {
+    paddingLeft: 0,
   },
   eyeBtn: {
     padding: 6,
