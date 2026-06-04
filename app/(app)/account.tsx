@@ -996,13 +996,33 @@ export default function AccountScreen() {
   const handleResetPoints = async () => {
     if (!couple?.id) return;
     setResetting(true);
+    console.log('[POINTS_RESET_START]', couple.id);
     try {
-      await supabase.from('point_events').delete().eq('couple_id', couple.id);
-      await supabase.from('scores').update({ points: 0 }).eq('couple_id', couple.id);
-      await supabase.from('monthly_scores').delete().eq('couple_id', couple.id);
+      const eventsResult = await supabase.from('point_events').delete().eq('couple_id', couple.id);
+      console.log('[POINTS_RESET_RESULT] point_events delete', eventsResult);
+      if (eventsResult.error) throw eventsResult.error;
+
+      const scoresResult = await supabase.from('scores').update({ points: 0 }).eq('couple_id', couple.id);
+      console.log('[POINTS_RESET_RESULT] scores update', scoresResult);
+      if (scoresResult.error) throw scoresResult.error;
+
+      const monthlyResult = await supabase.from('monthly_scores').delete().eq('couple_id', couple.id);
+      console.log('[POINTS_RESET_RESULT] monthly_scores delete', monthlyResult);
+      if (monthlyResult.error) throw monthlyResult.error;
+
+      const { data: pointsData, error: pointsError } = await supabase
+        .from('scores')
+        .select('*')
+        .eq('couple_id', couple.id);
+      console.log('[POINTS_AFTER_RESET]', pointsError ?? pointsData);
+
       notifyScoreReset();
       setResetDone(true);
-      setTimeout(() => { setResetPointsOpen(false); setResetDone(false); loadStats(); }, 1800);
+      loadStats();
+      setTimeout(() => { setResetPointsOpen(false); setResetDone(false); }, 1800);
+    } catch (err) {
+      console.error('[POINTS_RESET_ERROR]', err);
+      Alert.alert('Reset Failed', 'Could not reset points. Please try again.');
     } finally { setResetting(false); }
   };
 
