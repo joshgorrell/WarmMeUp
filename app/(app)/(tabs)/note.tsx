@@ -378,6 +378,7 @@ export default function ChatTab() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
         (payload) => {
           const newMsg = payload.new as ChatMessage;
+          console.log('[CHAT_RECEIVED INSERT]', newMsg);
           setMessages(prev => {
             if (prev.some(m => m.id === newMsg.id)) return prev;
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -397,11 +398,30 @@ export default function ChatTab() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
         (payload) => {
           const updated = payload.new as ChatMessage;
+          console.log('[CHAT_RECEIVED UPDATE]', updated);
           if (updated.deleted_at) {
             setMessages(prev => prev.filter(m => m.id !== updated.id));
             return;
           }
-          setMessages(prev => prev.map(m => m.id === updated.id ? updated : m));
+          // Defensively merge: preserve immutable content fields from the existing
+          // record in case payload.new arrives with partial data (replica identity
+          // race). Only mutable fields (vault_item_id, edited_at, content_text on
+          // edit, deleted_at) are applied from the update payload.
+          setMessages(prev => prev.map(m => {
+            if (m.id !== updated.id) return m;
+            return {
+              ...m,
+              vault_item_id: updated.vault_item_id,
+              edited_at: updated.edited_at,
+              deleted_at: updated.deleted_at,
+              // content_text can change on edit — only overwrite if payload has it
+              content_text: updated.content_text !== undefined ? updated.content_text : m.content_text,
+              // preserve media fields from existing record as the ground truth
+              media_storage_path: m.media_storage_path ?? updated.media_storage_path,
+              media_storage_bucket: m.media_storage_bucket ?? updated.media_storage_bucket,
+              media_type: m.media_type ?? updated.media_type,
+            };
+          }));
         }
       )
       .subscribe();
@@ -512,7 +532,7 @@ export default function ChatTab() {
       }
     }
 
-    const { data, error: insertError } = await supabase.from('chat_messages').insert({
+    const payload = {
       couple_id: couple.id,
       sender_id: user.id,
       content_text: hasText ? text.trim() : null,
@@ -523,7 +543,10 @@ export default function ChatTab() {
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
-    }).select().single();
+    };
+    console.log('[CHAT_SEND]', payload);
+    const { data, error: insertError } = await supabase.from('chat_messages').insert(payload).select().single();
+    console.log('[CHAT_INSERT_RESULT]', { data, error: insertError });
 
     if (insertError || !data) {
       Alert.alert('Send failed', 'Your message could not be sent. Please try again.');
