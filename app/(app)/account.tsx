@@ -403,7 +403,7 @@ function ChatFontSizeRow({ current, colors, onSelect }: { current: number; color
 // ─── Main screen ──────────────────────────────────────────────────
 export default function AccountScreen() {
   const router = useRouter();
-  const { profile, partnerProfile, couple, signOut, isAdmin, isSuperAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple, patchCouple, subscriptionInfo, refreshSubscription, notifyScoreReset } = useAuth();
+  const { profile, partnerProfile, couple, signOut, isAdmin, isSuperAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple, patchCouple, subscriptionInfo, refreshSubscription, notifyScoreReset, scoreResetAt } = useAuth();
   const { colors } = useTheme();
   const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
 
@@ -504,7 +504,22 @@ export default function AccountScreen() {
   useEffect(() => {
     if (!couple?.id || !user) return;
     loadStats();
+
+    const channel = supabase
+      .channel(`account_scores_${couple.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `couple_id=eq.${couple.id}` }, () => {
+        loadStats();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [couple?.id, user]);
+
+  // Reload stats immediately when Reset Points fires on this device.
+  useEffect(() => {
+    if (scoreResetAt === 0) return;
+    if (couple?.id && user) loadStats();
+  }, [scoreResetAt]);
 
   useFocusEffect(useCallback(() => {
     refreshCoupleRef.current();
@@ -540,6 +555,11 @@ export default function AccountScreen() {
   useFocusEffect(useCallback(() => {
     refreshSubscription();
   }, []));
+
+  // Reload scores when this screen regains focus so stale totals are never shown.
+  useFocusEffect(useCallback(() => {
+    if (couple?.id && user) loadStats();
+  }, [couple?.id, user]));
 
   const loadStats = async () => {
     if (!couple?.id || !user) return;
@@ -1020,9 +1040,9 @@ export default function AccountScreen() {
       setResetDone(true);
       loadStats();
       setTimeout(() => { setResetPointsOpen(false); setResetDone(false); }, 1800);
-    } catch (err) {
-      console.error('[POINTS_RESET_ERROR]', err);
-      Alert.alert('Reset Failed', 'Could not reset points. Please try again.');
+    } catch (err: any) {
+      console.error('[POINTS_RESET_ERROR]', JSON.stringify(err), err);
+      Alert.alert('Reset Failed', 'Could not reset points. Please try again.\n\nDetails: ' + (err?.message ?? String(err)));
     } finally { setResetting(false); }
   };
 

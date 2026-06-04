@@ -6,6 +6,7 @@ import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
+import { useAuth } from '@/context/AuthContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
@@ -104,6 +105,7 @@ const MONTH_LIST = buildMonthList();
 export default function StatsAdmin() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { scoreResetAt } = useAuth();
 
   const [coupleStats, setCoupleStats] = useState<CoupleStats[]>([]);
   const [topScores, setTopScores] = useState<UserScore[]>([]);
@@ -256,6 +258,12 @@ export default function StatsAdmin() {
   }, []);
 
   useEffect(() => { fetchStats(dateRange); }, [dateRange]);
+
+  // Re-fetch when a Reset Points completes so the top scores leaderboard clears immediately.
+  useEffect(() => {
+    if (scoreResetAt === 0) return;
+    fetchStats(dateRange);
+  }, [scoreResetAt]);
 
   // ── Preset / custom handlers ──────────────────────────────────────────────────
 
