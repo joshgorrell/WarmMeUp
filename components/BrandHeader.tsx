@@ -49,13 +49,22 @@ export default function BrandHeader({
         <WarmupWordmark size={13} style={styles.wordmark} />
       </TouchableOpacity>
 
-      {/* Right: temp (Privacy Mode only) + avatar or custom slot */}
-      <View style={styles.right}>
+      {/* Center: temp shortcut (Privacy Mode only) — isolated from avatar */}
+      <View style={styles.center}>
         {privacyMode && (
-          <TouchableOpacity onPress={() => router.replace('/weather')} activeOpacity={0.7} style={styles.tempBtn}>
+          <TouchableOpacity
+            onPress={() => router.replace('/weather')}
+            activeOpacity={0.7}
+            style={styles.tempBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+          >
             <AppText style={styles.tempText}>{temp}</AppText>
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* Right: avatar or custom slot — no temp sibling */}
+      <View style={styles.right}>
         {rightSlot ?? (
           avatarName && onAvatarPress ? (
             <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.85}>
@@ -72,7 +81,6 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: Spacing.screen,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.md,
@@ -81,18 +89,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
   },
   wordmark: {
     marginTop: 1,
   },
-  right: {
-    flexDirection: 'row',
+  center: {
+    flex: 1,
     alignItems: 'center',
-    gap: Spacing.sm,
+    justifyContent: 'center',
+  },
+  right: {
+    flex: 1,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   tempBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tempText: {
     fontSize: 13,

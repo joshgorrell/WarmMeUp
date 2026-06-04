@@ -26,16 +26,28 @@ export default function TabHeader({ rightSlot }: TabHeaderProps) {
 
   return (
     <View style={styles.container}>
+      {/* Left: logo + wordmark */}
       <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/')} onLongPress={() => router.push('/debug')} delayLongPress={5000} activeOpacity={0.7} style={styles.brand}>
         <WarmupLogo size={28} />
         <WarmupWordmark size={13} />
       </TouchableOpacity>
-      <View style={styles.right}>
+
+      {/* Center: temp shortcut (Privacy Mode only) — isolated from avatar */}
+      <View style={styles.center}>
         {privacyMode && (
-          <TouchableOpacity onPress={() => router.replace('/weather')} activeOpacity={0.7} style={styles.tempBtn}>
+          <TouchableOpacity
+            onPress={() => router.replace('/weather')}
+            activeOpacity={0.7}
+            style={styles.tempBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+          >
             <AppText style={styles.tempText}>{temp}</AppText>
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* Right: optional slot + avatar — no temp sibling */}
+      <View style={styles.right}>
         {rightSlot}
         <TouchableOpacity onPress={() => router.push('/(app)/account')} activeOpacity={0.85}>
           <Avatar name={profile?.display_name} uri={profile?.avatar_url} size="sm" bgColor="rgba(255,46,138,0.20)" />
@@ -49,7 +61,6 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: Spacing.screen,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.md,
@@ -58,15 +69,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   right: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: Spacing.sm,
   },
   tempBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tempText: {
     fontSize: 13,
