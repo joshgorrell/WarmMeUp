@@ -69,7 +69,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    flex: 1,
   },
   center: {
     flex: 1,
@@ -77,7 +76,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   right: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
