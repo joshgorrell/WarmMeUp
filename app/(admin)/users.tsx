@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronRight, UserCog, X, ShieldCheck, ShieldOff, Crown } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -23,6 +24,7 @@ interface UserRow {
 
 export default function UsersAdmin() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const { profile: myProfile, isSuperAdmin } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -93,7 +95,7 @@ export default function UsersAdmin() {
           <ActivityIndicator color="#FF2E8A" />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + Spacing.xl }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {users.length === 0 && (
             <View style={styles.emptyWrap}>
               <UserCog color={colors.textMuted} size={36} strokeWidth={1.5} />
@@ -251,7 +253,7 @@ export default function UsersAdmin() {
 
 const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingHorizontal: Spacing.screen, paddingBottom: 60, gap: Spacing.sm },
+  list: { paddingHorizontal: Spacing.screen, gap: Spacing.sm },
   emptyWrap: { alignItems: 'center', paddingTop: 60, gap: Spacing.md },
   emptyText: { fontSize: FontSize.body, fontFamily: 'Inter-Regular' },
   userRow: {

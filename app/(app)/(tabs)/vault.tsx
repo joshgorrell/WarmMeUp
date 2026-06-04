@@ -335,7 +335,7 @@ export default function VaultScreen() {
     const ref = tileRefs.current[item.id];
     if (!ref) {
       setActiveVaultItemId(item.id);
-      setVaultMenuAnchor({ x: 20, y: 200, width: ITEM_SIZE, height: ITEM_SIZE });
+      setVaultMenuAnchor({ x: width / 2 - ITEM_SIZE / 2, y: Math.round(screenHeight * 0.3), width: ITEM_SIZE, height: ITEM_SIZE });
       return;
     }
     ref.measureInWindow((x, y, width, height) => {

@@ -1735,6 +1735,7 @@ export default function AccountScreen() {
         <ScrollView
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
 
           {/* Profile / Settings tab switcher */}

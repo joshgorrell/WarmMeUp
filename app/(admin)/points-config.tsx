@@ -192,11 +192,11 @@ const styles = StyleSheet.create({
   },
   ptsLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', width: 24 },
   saveBtn: {
-    width: 36, height: 36, borderRadius: Radius.md, borderWidth: 1,
+    width: 44, height: 44, borderRadius: Radius.md, borderWidth: 1,
     alignItems: 'center', justifyContent: 'center',
   },
   savedIndicator: {
-    width: 36, height: 36, borderRadius: Radius.md, borderWidth: 1,
+    width: 44, height: 44, borderRadius: Radius.md, borderWidth: 1,
     alignItems: 'center', justifyContent: 'center',
   },
 });

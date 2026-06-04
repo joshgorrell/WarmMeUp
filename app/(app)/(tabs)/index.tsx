@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   markAllBtn: {
-    padding: 2,
+    padding: 8,
   },
   seeAll: {
     flexDirection: 'row',

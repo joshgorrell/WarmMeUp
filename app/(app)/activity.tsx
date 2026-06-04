@@ -433,8 +433,8 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   backBtn: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: Radius.full,
     borderWidth: 1,
     alignItems: 'center',

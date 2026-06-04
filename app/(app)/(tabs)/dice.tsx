@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, Animated, ScrollView, Alert,
+  View, StyleSheet, TouchableOpacity, Animated, ScrollView, Alert, useWindowDimensions,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
@@ -59,10 +59,8 @@ const FALLBACK_PROMPTS = [
 ];
 
 const HOLD_DURATION = 2000;
-const RING_SIZE = 240;
+const RING_SIZE_MAX = 240;
 const STROKE = 6;
-const RADIUS = (RING_SIZE - STROKE) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 type RolledFor = 'self' | 'partner';
 
@@ -70,6 +68,14 @@ export default function DiceTab() {
   const { user, couple, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+
+  // Scale the ring to fit smaller screens (iPhone SE = 375pt, minus 80pt margins = 295pt max)
+  const ringSize = Math.min(RING_SIZE_MAX, screenWidth - 80);
+  const diceSize = Math.round(ringSize * (200 / 240));
+  const radius = (ringSize - STROKE) / 2;
+  const circumference = 2 * Math.PI * radius;
+
   const { dice_id: deepLinkDiceId } = useLocalSearchParams<{ dice_id?: string }>();
   const hasPartner = !!couple?.user_b_id;
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
@@ -88,7 +94,7 @@ export default function DiceTab() {
   const [verifying, setVerifying] = useState(false);
   const [acceptPts, setAcceptPts] = useState(5);
   const [completePts, setCompletePts] = useState(25);
-  const [ringOffset, setRingOffset] = useState(CIRCUMFERENCE);
+  const [ringOffset, setRingOffset] = useState(() => 2 * Math.PI * ((RING_SIZE_MAX - STROKE) / 2));
   const [sentDice, setSentDice] = useState<Interaction | null>(null);
   const senderCountdown = useSenderCountdown(sentDice?.expires_at);
   const [highlightChallenge, setHighlightChallenge] = useState(false);
@@ -107,10 +113,10 @@ export default function DiceTab() {
 
   useEffect(() => {
     const id = holdProgress.addListener(({ value }) => {
-      setRingOffset(CIRCUMFERENCE - value * CIRCUMFERENCE);
+      setRingOffset(circumference - value * circumference);
     });
     return () => holdProgress.removeListener(id);
-  }, [holdProgress]);
+  }, [holdProgress, circumference]);
 
   useEffect(() => {
     Promise.all([getPointValue('dice_accept'), getPointValue('dice_complete')]).then(([a, c]) => {
@@ -528,29 +534,28 @@ export default function DiceTab() {
           </View>
         )}
 
-        {/* Dice area */}
-        <View style={styles.diceArea}>
-          <View style={styles.diceContainer}>
-            {!rolling && (
-              <Svg width={RING_SIZE} height={RING_SIZE} style={StyleSheet.absoluteFill} pointerEvents="none">
-                <Defs>
-                  <SvgGradient id="ringGrad" x1="0" y1="0" x2="1" y2="0">
-                    <Stop offset="0" stopColor="#FFB347" />
-                    <Stop offset="0.5" stopColor="#FF5A3D" />
-                    <Stop offset="1" stopColor="#FF2E8A" />
-                  </SvgGradient>
-                </Defs>
-                <Circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RADIUS} stroke="rgba(255,255,255,0.08)" strokeWidth={STROKE} fill="none" />
-                <Circle
-                  cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RADIUS}
-                  stroke="url(#ringGrad)" strokeWidth={STROKE} fill="none"
-                  strokeDasharray={CIRCUMFERENCE} strokeDashoffset={ringOffset}
-                  strokeLinecap="round" transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-                />
-              </Svg>
-            )}
-            <Animated.View style={{ transform: [{ scale: holdScale }] }}>
-              <TouchableOpacity
+          <View style={[styles.diceArea, { paddingTop: Spacing.md }]}>
+            <View style={[styles.diceContainer, { width: ringSize, height: ringSize }]}>
+              {!rolling && (
+                <Svg width={ringSize} height={ringSize} style={StyleSheet.absoluteFill} pointerEvents="none">
+                  <Defs>
+                    <SvgGradient id="ringGrad" x1="0" y1="0" x2="1" y2="0">
+                      <Stop offset="0" stopColor="#FFB347" />
+                      <Stop offset="0.5" stopColor="#FF5A3D" />
+                      <Stop offset="1" stopColor="#FF2E8A" />
+                    </SvgGradient>
+                  </Defs>
+                  <Circle cx={ringSize / 2} cy={ringSize / 2} r={radius} stroke="rgba(255,255,255,0.08)" strokeWidth={STROKE} fill="none" />
+                  <Circle
+                    cx={ringSize / 2} cy={ringSize / 2} r={radius}
+                    stroke="url(#ringGrad)" strokeWidth={STROKE} fill="none"
+                    strokeDasharray={circumference} strokeDashoffset={ringOffset}
+                    strokeLinecap="round" transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
+                  />
+                </Svg>
+              )}
+              <Animated.View style={{ transform: [{ scale: holdScale }] }}>
+                <TouchableOpacity
                 activeOpacity={1}
                 onPressIn={onPressIn}
                 onPressOut={onPressOut}
@@ -559,11 +564,11 @@ export default function DiceTab() {
                 accessibilityLabel="Hold to roll dice"
                 accessibilityHint="Press and hold for 2 seconds to roll"
               >
-                <View style={styles.diceWrapper}>
+                <View style={[styles.diceWrapper, { width: diceSize, height: diceSize }]}>
                   <NeonDice
                     ref={diceRef}
                     face={face}
-                    size={200}
+                    size={diceSize}
                     challengeText={result}
                   />
                   {!result && !rolling && (
@@ -646,9 +651,9 @@ const styles = StyleSheet.create({
   toggleOptionActive: {},
   toggleActiveBg: { backgroundColor: 'rgba(255,179,71,0.15)', borderRadius: Radius.pill },
   toggleText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', letterSpacing: 0.2 },
-  diceArea: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.lg, paddingTop: Spacing.md },
-  diceContainer: { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
-  diceWrapper: { width: 200, height: 200 },
+  diceArea: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.lg },
+  diceContainer: { alignItems: 'center', justifyContent: 'center' },
+  diceWrapper: { alignItems: 'center', justifyContent: 'center' },
   hintOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',

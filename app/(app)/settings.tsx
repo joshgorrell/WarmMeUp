@@ -440,7 +440,7 @@ export default function SettingsScreen() {
     <AppShell scrollable={false}>
       <ScreenHeader title="Settings" onBack={() => router.back()} />
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
         <Section
           title="MY DEVICE PRIVACY"

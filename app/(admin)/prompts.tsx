@@ -241,7 +241,7 @@ export default function PromptsAdmin() {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 88 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Manage Labels section — only shown on Dice tab */}
@@ -642,7 +642,7 @@ const styles = StyleSheet.create({
   },
   tabText: { fontSize: FontSize.body, fontFamily: 'Inter-SemiBold' },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingHorizontal: Spacing.screen, paddingBottom: 120, gap: Spacing.sm },
+  list: { paddingHorizontal: Spacing.screen, gap: Spacing.sm },
   emptyWrap: { alignItems: 'center', paddingTop: 60 },
   emptyText: { fontSize: FontSize.body, fontFamily: 'Inter-Regular' },
 
@@ -721,7 +721,7 @@ const styles = StyleSheet.create({
   },
   labelBadgeText: { fontSize: 10, fontFamily: 'Inter-Bold', letterSpacing: 0.8 },
 
-  actionBtn: { width: 34, height: 34, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+  actionBtn: { width: 44, height: 44, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
   fab: {
     position: 'absolute',
     right: Spacing.screen,

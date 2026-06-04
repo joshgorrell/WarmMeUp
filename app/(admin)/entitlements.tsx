@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, ShieldCheck, X, Calendar, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import AppShell from '@/components/AppShell';
@@ -48,6 +49,7 @@ const ENTITLEMENT_TYPES: { value: string; label: string }[] = [
 
 export default function EntitlementsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { user, refreshSubscription } = useAuth();
 
@@ -307,7 +309,7 @@ export default function EntitlementsScreen() {
   return (
     <AppShell scrollable={false} noTopPadding>
       <ScreenHeader title="Entitlements" onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + Spacing.xl }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
         {/* Search */}
         <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>FIND USER</AppText>
@@ -501,7 +503,7 @@ export default function EntitlementsScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 48 },
+  scroll: { paddingHorizontal: Spacing.screen },
   sectionLabel: { fontSize: 11, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2, marginBottom: Spacing.sm },
   searchRow: {
     flexDirection: 'row',

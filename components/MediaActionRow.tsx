@@ -130,7 +130,7 @@ export default function MediaActionRow({
                 style={[styles.emojiBtn, isActive && styles.emojiBtnActive]}
                 onPress={() => { onDismiss(); onReact(emoji); }}
                 activeOpacity={0.65}
-                hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
               >
                 <AppText style={styles.emojiText}>{emoji}</AppText>
               </TouchableOpacity>
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingVertical: 8,
     borderRadius: 10,
   },
   emojiBtnActive: {
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 6,
+    paddingVertical: 10,
     paddingHorizontal: 8,
     borderRadius: 10,
   },

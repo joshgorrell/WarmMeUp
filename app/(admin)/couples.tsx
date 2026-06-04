@@ -111,7 +111,7 @@ export default function CouplesAdmin() {
           <ActivityIndicator color="#FF2E8A" />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + Spacing.xl }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {couples.length === 0 && (
             <View style={styles.emptyWrap}>
               <Users color={colors.textMuted} size={36} strokeWidth={1.5} />
@@ -243,7 +243,7 @@ export default function CouplesAdmin() {
 
 const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingHorizontal: Spacing.screen, paddingBottom: 60, gap: Spacing.sm },
+  list: { paddingHorizontal: Spacing.screen, gap: Spacing.sm },
   emptyWrap: { alignItems: 'center', paddingTop: 60, gap: Spacing.md },
   emptyText: { fontSize: FontSize.body, fontFamily: 'Inter-Regular' },
   coupleRow: {

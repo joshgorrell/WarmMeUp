@@ -121,14 +121,14 @@ function WishCard({
             ) : null}
             <AppText style={[styles.wishAge, { color: colors.textMuted }]}>{timeAgo(wish.created_at)}</AppText>
           </View>
-          <TouchableOpacity onPress={() => setShowActions(v => !v)} style={styles.moreBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => setShowActions(v => !v)} style={styles.moreBtn} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <View style={styles.dotRow}>
               {[0,1,2].map(i => <View key={i} style={[styles.dot, { backgroundColor: colors.textMuted }]} />)}
             </View>
           </TouchableOpacity>
         </View>
 
-        <AppText style={[styles.wishTitle, { color: colors.text }]}>{wish.title}</AppText>
+        <AppText style={[styles.wishTitle, { color: colors.text }]} numberOfLines={2}>{wish.title}</AppText>
         {wish.description ? (
           <AppText style={[styles.wishDesc, { color: colors.textSecondary }]} numberOfLines={3}>{wish.description}</AppText>
         ) : null}
@@ -1107,7 +1107,7 @@ const styles = StyleSheet.create({
 
   // Wish card
   wishCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
-  wishCardImg: { width: '100%', height: 100 },
+  wishCardImg: { width: '100%', aspectRatio: 16 / 9 },
   wishCardBody: { padding: Spacing.sm, gap: 4 },
   wishCardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   wishCardMeta: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
@@ -1124,7 +1124,7 @@ const styles = StyleSheet.create({
 
   // Reactions
   reactionBar: { flexDirection: 'row', gap: 6, marginTop: 2, flexWrap: 'wrap' },
-  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4 },
+  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 8 },
   reactionEmoji: { fontSize: 15 },
   reactionCount: { fontSize: 11, fontFamily: 'Inter-SemiBold' },
 
@@ -1140,7 +1140,7 @@ const styles = StyleSheet.create({
   grantedLabel: { fontSize: 11, fontFamily: 'Inter-SemiBold', letterSpacing: 0.8 },
   grantedTitle: { fontSize: FontSize.md, fontFamily: 'Inter-SemiBold', marginTop: 2 },
   grantedEmoji: { fontSize: 22 },
-  grantedMemImg: { width: '100%', height: 160, borderRadius: Radius.md },
+  grantedMemImg: { width: '100%', aspectRatio: 16 / 9, borderRadius: Radius.md },
   grantedNote: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', fontStyle: 'italic', lineHeight: 20 },
   grantedDate: { fontSize: 11, fontFamily: 'Inter-Regular' },
 
