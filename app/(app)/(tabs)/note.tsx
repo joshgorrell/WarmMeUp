@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Pressable, Image, ActivityIndicator, TextInput, Alert,
-  AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager,
+  AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager, InteractionManager,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -336,7 +336,16 @@ export default function ChatTab() {
       if (data) {
         const sorted = [...data].reverse();
         setMessages(sorted);
-        fetchSignedUrls(sorted);
+        // Pre-populate signedUrls from embedded media_url where available.
+        const withUrl = sorted.filter(m => m.media_url);
+        if (withUrl.length > 0) {
+          setSignedUrls(prev => ({
+            ...prev,
+            ...Object.fromEntries(withUrl.map(m => [m.id, m.media_url!])),
+          }));
+        }
+        const needsFetch = sorted.filter(m => m.media_storage_path && !m.media_url);
+        if (needsFetch.length > 0) fetchSignedUrls(needsFetch);
         oldestCreatedAtRef.current = sorted[0]?.created_at ?? null;
         setHasMore(data.length === PAGE_SIZE);
       }
@@ -360,7 +369,15 @@ export default function ChatTab() {
       if (data && data.length > 0) {
         const sorted = [...data].reverse();
         setMessages(prev => [...sorted, ...prev]);
-        fetchSignedUrls(sorted);
+        const withUrl = sorted.filter(m => m.media_url);
+        if (withUrl.length > 0) {
+          setSignedUrls(prev => ({
+            ...prev,
+            ...Object.fromEntries(withUrl.map(m => [m.id, m.media_url!])),
+          }));
+        }
+        const needsFetch = sorted.filter(m => m.media_storage_path && !m.media_url);
+        if (needsFetch.length > 0) fetchSignedUrls(needsFetch);
         oldestCreatedAtRef.current = sorted[0].created_at;
         setHasMore(data.length === PAGE_SIZE);
       } else {
@@ -384,7 +401,10 @@ export default function ChatTab() {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             return [...prev, newMsg];
           });
-          if (newMsg.media_storage_path) {
+          if (newMsg.media_url) {
+            // Signed URL already embedded in the row — no extra round-trip needed.
+            setSignedUrls(prev => ({ ...prev, [newMsg.id]: newMsg.media_url! }));
+          } else if (newMsg.media_storage_path) {
             fetchSignedUrls([newMsg]);
           }
         }
@@ -435,7 +455,10 @@ export default function ChatTab() {
 
   useEffect(() => {
     if (messages.length > prevMsgCountRef.current && !isLoadingOlderRef.current) {
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: prevMsgCountRef.current > 0 }), 80);
+      const animated = prevMsgCountRef.current > 0;
+      InteractionManager.runAfterInteractions(() => {
+        listRef.current?.scrollToEnd({ animated });
+      });
     }
     prevMsgCountRef.current = messages.length;
   }, [messages.length]);
@@ -532,10 +555,48 @@ export default function ChatTab() {
       }
     }
 
+    // Generate a 7-day signed URL immediately after upload so the recipient
+    // receives it inside the realtime INSERT event — no extra round-trip needed.
+    let preSignedMediaUrl: string | null = null;
+    if (chatStoragePath) {
+      const { data: signedData } = await supabase.storage
+        .from('chat_media')
+        .createSignedUrl(chatStoragePath, 7 * 24 * 3600);
+      preSignedMediaUrl = signedData?.signedUrl ?? null;
+    }
+
+    // Optimistic display — show the message in the sender's own list immediately
+    // using a temporary ID. The local file URI is used as the image source so the
+    // sender sees the image instantly without a separate signed URL fetch.
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      couple_id: couple.id,
+      sender_id: user.id,
+      content_text: hasText ? text.trim() : null,
+      media_url: preSignedMediaUrl,
+      media_storage_path: chatStoragePath,
+      media_storage_bucket: hasMedia ? 'chat_media' : null,
+      media_type: attachedMedia?.type === 'video' ? 'video' : hasMedia ? 'photo' : null,
+      allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
+      allow_save: settings?.vault_allow_save_default ?? false,
+      allow_share: settings?.vault_allow_share_default ?? false,
+      vault_item_id: null,
+      created_at: new Date().toISOString(),
+      edited_at: null,
+      deleted_at: null,
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+    // Use the local file URI immediately for the sender's own preview.
+    if (attachedMedia?.uri) {
+      setSignedUrls(prev => ({ ...prev, [tempId]: attachedMedia.uri }));
+    }
+
     const payload = {
       couple_id: couple.id,
       sender_id: user.id,
       content_text: hasText ? text.trim() : null,
+      media_url: preSignedMediaUrl,
       media_storage_path: chatStoragePath,
       media_storage_bucket: hasMedia ? 'chat_media' : null,
       media_type: attachedMedia?.type ?? null,
@@ -549,9 +610,24 @@ export default function ChatTab() {
     console.log('[CHAT_INSERT_RESULT]', { data, error: insertError });
 
     if (insertError || !data) {
+      // Roll back the optimistic message on failure.
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setSignedUrls(prev => { const next = { ...prev }; delete next[tempId]; return next; });
       Alert.alert('Send failed', 'Your message could not be sent. Please try again.');
       setSending(false);
       return;
+    }
+
+    // Replace the temporary optimistic record with the real DB row and carry
+    // the signed URL forward so the image stays visible without a re-fetch.
+    setMessages(prev => prev.map(m => m.id === tempId ? { ...data as ChatMessage } : m));
+    if (attachedMedia?.uri || preSignedMediaUrl) {
+      setSignedUrls(prev => {
+        const next = { ...prev };
+        delete next[tempId];
+        next[data.id] = preSignedMediaUrl ?? attachedMedia?.uri ?? null;
+        return next;
+      });
     }
 
     const capturedMedia = attachedMedia;

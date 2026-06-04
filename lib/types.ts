@@ -97,6 +97,7 @@ export interface ChatMessage {
   couple_id: string;
   sender_id: string;
   content_text: string | null;
+  media_url: string | null;
   media_storage_path: string | null;
   media_storage_bucket: string | null;
   media_type: 'photo' | 'video' | null;
