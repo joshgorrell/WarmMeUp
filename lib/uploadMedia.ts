@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { logDebugEvent } from './debugLog';
+import { Platform } from 'react-native';
 
 function readAsBlob(uri: string): Promise<Blob> {
   if (!uri.startsWith('file://') && !uri.startsWith('ph://') && !uri.startsWith('content://')) {
@@ -17,7 +18,46 @@ function readAsBlob(uri: string): Promise<Blob> {
 
 export type UploadResult = {
   storagePath: string;
+  thumbnailPath?: string;
 };
+
+/**
+ * Compress a local image URI to JPEG at ≤1600px on the long edge, quality 0.72.
+ * Falls back to the original URI if expo-image-manipulator is unavailable (e.g. web).
+ * Returns the compressed local URI and the resolved MIME type (always image/jpeg after compression).
+ */
+async function compressImage(uri: string, mimeType: string): Promise<{ uri: string; mimeType: string }> {
+  if (Platform.OS === 'web') return { uri, mimeType };
+  // HEIC/HEIF must be converted — they can't be read back as blobs on all devices.
+  const needsConversion = mimeType === 'image/heic' || mimeType === 'image/heif' || mimeType === 'image/heif-sequence';
+  if (!needsConversion && !mimeType.startsWith('image/')) return { uri, mimeType };
+  try {
+    const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
+    const result = await manipulateAsync(
+      uri,
+      [{ resize: { width: 1600 } }],
+      { compress: 0.72, format: SaveFormat.JPEG },
+    );
+    return { uri: result.uri, mimeType: 'image/jpeg' };
+  } catch {
+    return { uri, mimeType };
+  }
+}
+
+/**
+ * Generate a JPEG thumbnail frame from a local video URI.
+ * Returns null if expo-video-thumbnails is unavailable or fails.
+ */
+async function extractVideoThumbnail(uri: string): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    const { getThumbnailAsync } = await import('expo-video-thumbnails');
+    const result = await getThumbnailAsync(uri, { time: 0, quality: 0.6 });
+    return result.uri;
+  } catch {
+    return null;
+  }
+}
 
 function mapStorageError(
   status: number,
@@ -60,15 +100,60 @@ export async function uploadMediaFile(
 
   onProgress?.(0);
 
+  // ── Compress images before upload ────────────────────────────────────────
+  const isPhoto = mimeType.startsWith('image/');
+  const isVideo = mimeType.startsWith('video/');
+  let uploadUri = localUri;
+  let uploadMime = mimeType;
+  let uploadStoragePath = storagePath;
+  let thumbnailPath: string | undefined;
+
+  if (isPhoto) {
+    const compressed = await compressImage(localUri, mimeType);
+    uploadUri = compressed.uri;
+    uploadMime = compressed.mimeType;
+    // If MIME changed (HEIC → JPEG), update the storage path extension too.
+    if (uploadMime !== mimeType) {
+      uploadStoragePath = storagePath.replace(/\.\w+$/, '.jpg');
+    }
+  }
+
+  // ── Extract and upload video thumbnail ───────────────────────────────────
+  if (isVideo && bucket === 'vault') {
+    const thumbUri = await extractVideoThumbnail(localUri);
+    if (thumbUri) {
+      const thumbStoragePath = storagePath.replace(/\.\w+$/, '_thumb.jpg');
+      try {
+        const thumbBlob = await readAsBlob(thumbUri);
+        await fetch(
+          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/vault/${thumbStoragePath}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+              'Content-Type': 'image/jpeg',
+              'x-upsert': 'true',
+            },
+            body: thumbBlob,
+          },
+        );
+        thumbnailPath = thumbStoragePath;
+      } catch {
+        // Thumbnail upload is best-effort — don't block the main upload
+      }
+    }
+  }
+
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-  const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${storagePath}`;
+  const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${uploadStoragePath}`;
 
   // React Native's fetch() cannot open local file:// or ph:// URIs — only HTTP/HTTPS.
   // Use XMLHttpRequest with responseType='blob' for local paths (camera/library picks);
   // keep fetch for HTTP/HTTPS (e.g. signed URLs used in the auto-save flow).
   let blob: Blob;
   try {
-    blob = await readAsBlob(localUri);
+    blob = await readAsBlob(uploadUri);
   } catch (readErr: any) {
     logDebugEvent('VAULT UPLOAD ERROR', {
       reason: 'Failed to read local file',
@@ -82,8 +167,8 @@ export async function uploadMediaFile(
 
   logDebugEvent('VAULT UPLOAD START', {
     bucket,
-    storagePath,
-    mimeType,
+    storagePath: uploadStoragePath,
+    mimeType: uploadMime,
     blobSize,
     userId: userId ?? null,
     coupleId: coupleId ?? null,
@@ -98,7 +183,7 @@ export async function uploadMediaFile(
       headers: {
         'Authorization': `Bearer ${session.access_token}`,
         'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-        'Content-Type': mimeType,
+        'Content-Type': uploadMime,
         'x-upsert': 'true',
       },
       body: blob,
@@ -107,7 +192,7 @@ export async function uploadMediaFile(
     logDebugEvent('VAULT UPLOAD ERROR', {
       reason: 'Network error',
       error: networkErr?.message ?? String(networkErr),
-      bucket, storagePath, mimeType, blobSize, userId: userId ?? null, coupleId: coupleId ?? null,
+      bucket, storagePath: uploadStoragePath, mimeType: uploadMime, blobSize, userId: userId ?? null, coupleId: coupleId ?? null,
     });
     throw new Error('Network error — check your connection and try again.');
   }
@@ -122,8 +207,8 @@ export async function uploadMediaFile(
       supabaseMessage: body?.message ?? null,
       supabaseStatusCode: body?.statusCode ?? null,
       bucket,
-      storagePath,
-      mimeType,
+      storagePath: uploadStoragePath,
+      mimeType: uploadMime,
       blobSize,
       userId: userId ?? null,
       coupleId: coupleId ?? null,
@@ -136,15 +221,15 @@ export async function uploadMediaFile(
 
   logDebugEvent('VAULT UPLOAD SUCCESS', {
     bucket,
-    storagePath,
-    mimeType,
+    storagePath: uploadStoragePath,
+    mimeType: uploadMime,
     blobSize,
     userId: userId ?? null,
     coupleId: coupleId ?? null,
   });
 
   onProgress?.(100);
-  return { storagePath };
+  return { storagePath: uploadStoragePath, thumbnailPath };
 }
 
 /** Infer MIME type from a file extension (lower-case, no dot). */
@@ -179,7 +264,7 @@ export function mimeToExtension(mimeType: string): string {
 /** Picker options shared between Vault and Chat to keep quality/size consistent */
 export const PICKER_OPTIONS = {
   mediaTypes: ['images', 'videos'] as any,
-  quality: 0.8,
+  quality: 0.6,
   videoMaxDuration: 60,
   allowsEditing: false,
   exportsVideoAsCopy: true,

@@ -50,6 +50,8 @@ export default function VaultScreen() {
   const spinAnim = useRef(new Animated.Value(0)).current;
   // Cache of item.id -> short-lived signed URL (1 hour TTL)
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  // Signed URLs for thumbnail paths (used in grid; falls back to full URL)
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   // Timestamp (ms) when each URL was fetched — used to detect near-expiry
   const urlFetchedAtRef = useRef<Record<string, number>>({});
   const URL_TTL_MS = 55 * 60 * 1000; // refresh 5 min before Supabase's 1-hour expiry
@@ -147,7 +149,18 @@ export default function VaultScreen() {
     if (!couple?.id) return;
     load();
     const ch = supabase.channel(`vault_${couple.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault_items', filter: `couple_id=eq.${couple.id}` }, load)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault_items', filter: `couple_id=eq.${couple.id}` },
+        async (payload) => {
+          const newItem = payload.new as VaultItem;
+          if (!newItem?.id || newItem.deleted_at) return;
+          // Append the new item and fetch only its signed URL — avoids regenerating all URLs.
+          setItems(prev => {
+            if (prev.some(i => i.id === newItem.id)) return prev;
+            return [newItem, ...prev];
+          });
+          await fetchSignedUrlsForItems([newItem]);
+        }
+      )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vault_items', filter: `couple_id=eq.${couple.id}` },
         (payload) => {
           const updated = payload.new as VaultItem;
@@ -155,6 +168,7 @@ export default function VaultScreen() {
           if (updated.deleted_at) {
             setItems(prev => prev.filter(i => i.id !== updated.id));
             setSignedUrls(prev => { const n = { ...prev }; delete n[updated.id]; return n; });
+            setThumbUrls(prev => { const n = { ...prev }; delete n[updated.id]; return n; });
           }
         }
       )
@@ -185,45 +199,69 @@ export default function VaultScreen() {
     }, 200);
   }, [deepLinkVaultItemId, items.length]);
 
+  const fetchSignedUrlsForItems = async (itemsToFetch: VaultItem[]) => {
+    const now = Date.now();
+    const byBucket: Record<string, VaultItem[]> = {};
+    const thumbByBucket: Record<string, VaultItem[]> = {};
+
+    for (const item of itemsToFetch) {
+      const bucket = item.storage_bucket ?? 'vault';
+      const path = item.storage_path ?? item.file_path;
+      if (!path) continue;
+      const fetchedAt = urlFetchedAtRef.current[item.id] ?? 0;
+      if (now - fetchedAt < URL_TTL_MS) continue; // still fresh
+      if (!byBucket[bucket]) byBucket[bucket] = [];
+      byBucket[bucket].push(item);
+
+      if (item.blurred_thumbnail_path) {
+        if (!thumbByBucket[bucket]) thumbByBucket[bucket] = [];
+        thumbByBucket[bucket].push(item);
+      }
+    }
+
+    await Promise.all([
+      // Full-resolution URLs
+      ...Object.entries(byBucket).map(async ([bucket, bucketItems]) => {
+        const paths = bucketItems.map(i => (i.storage_path ?? i.file_path)!);
+        const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 60 * 60);
+        if (!urlData) return;
+        // O(1) Map lookup instead of O(n) find per item
+        const pathToUrl = new Map(urlData.map(d => [d.path, d.signedUrl]));
+        const urlMap: Record<string, string> = {};
+        const fetchTs: Record<string, number> = {};
+        for (const item of bucketItems) {
+          const path = item.storage_path ?? item.file_path;
+          const signed = pathToUrl.get(path ?? '');
+          if (signed) {
+            urlMap[item.id] = signed;
+            fetchTs[item.id] = Date.now();
+          }
+        }
+        urlFetchedAtRef.current = { ...urlFetchedAtRef.current, ...fetchTs };
+        setSignedUrls(prev => ({ ...prev, ...urlMap }));
+      }),
+      // Thumbnail URLs (separate paths — best-effort)
+      ...Object.entries(thumbByBucket).map(async ([bucket, bucketItems]) => {
+        const paths = bucketItems.map(i => i.blurred_thumbnail_path!);
+        const { data: thumbData } = await supabase.storage.from(bucket).createSignedUrls(paths, 60 * 60);
+        if (!thumbData) return;
+        const pathToThumb = new Map(thumbData.map(d => [d.path, d.signedUrl]));
+        const thumbMap: Record<string, string> = {};
+        for (const item of bucketItems) {
+          const signed = pathToThumb.get(item.blurred_thumbnail_path ?? '');
+          if (signed) thumbMap[item.id] = signed;
+        }
+        setThumbUrls(prev => ({ ...prev, ...thumbMap }));
+      }),
+    ]);
+  };
+
   const load = async () => {
     if (!couple?.id) return;
     const { data } = await supabase.from('vault_items').select('*').eq('couple_id', couple.id).is('deleted_at', null).order('created_at', { ascending: false });
     if (data) {
       setItems(data);
-      // Batch-fetch signed URLs grouped by bucket (one API call per bucket).
-      // Skip items whose cached URL is still fresh (< 55 min old).
-      const now = Date.now();
-      const byBucket: Record<string, typeof data> = {};
-      for (const item of data) {
-        const bucket = item.storage_bucket ?? 'vault';
-        const path = item.storage_path ?? item.file_path;
-        if (!path) continue;
-        const fetchedAt = urlFetchedAtRef.current[item.id] ?? 0;
-        if (now - fetchedAt < URL_TTL_MS) continue; // still fresh
-        if (!byBucket[bucket]) byBucket[bucket] = [];
-        byBucket[bucket].push(item);
-      }
-      if (Object.keys(byBucket).length > 0) {
-        await Promise.all(
-          Object.entries(byBucket).map(async ([bucket, bucketItems]) => {
-            const paths = bucketItems.map(i => (i.storage_path ?? i.file_path)!);
-            const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 60 * 60);
-            if (!urlData) return;
-            const urlMap: Record<string, string> = {};
-            const fetchTs: Record<string, number> = {};
-            for (const item of bucketItems) {
-              const path = item.storage_path ?? item.file_path;
-              const entry = urlData.find(d => d.path === path);
-              if (entry?.signedUrl) {
-                urlMap[item.id] = entry.signedUrl;
-                fetchTs[item.id] = Date.now();
-              }
-            }
-            urlFetchedAtRef.current = { ...urlFetchedAtRef.current, ...fetchTs };
-            setSignedUrls(prev => ({ ...prev, ...urlMap }));
-          })
-        );
-      }
+      await fetchSignedUrlsForItems(data);
     }
   };
 
@@ -282,6 +320,8 @@ export default function VaultScreen() {
         allowShare: item.allow_share ? '1' : '0',
         createdAt: item.created_at,
         uploaderName,
+        // Pass already-loaded thumbnail signed URL so viewer can show a poster immediately
+        thumbUri: thumbUrls[item.id] ?? signedUrls[item.id] ?? '',
       },
     });
   };
@@ -302,6 +342,7 @@ export default function VaultScreen() {
       }
       setItems(prev => prev.filter(i => i.id !== item.id));
       setSignedUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+      setThumbUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
       const bucket = item.storage_bucket ?? 'vault';
       const path = item.storage_path ?? item.file_path;
       if (path) supabase.storage.from(bucket).remove([path]).catch(() => {});
@@ -395,11 +436,13 @@ export default function VaultScreen() {
         setShowAdd(false);
         startSpin();
         try {
-          await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct), user.id, rpcResult.couple_id);
-          logDebugEvent('vault_lastUploadSuccessPath', { storagePath, coupleId: rpcResult.couple_id, userId: user.id });
+          const uploadResult = await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct), user.id, rpcResult.couple_id);
+          const actualPath = uploadResult.storagePath;
+          logDebugEvent('vault_lastUploadSuccessPath', { storagePath: actualPath, coupleId: rpcResult.couple_id, userId: user.id });
           const insertPayload = {
             couple_id: rpcResult.couple_id, uploaded_by_user_id: user.id, media_type: mediaType,
-            file_path: storagePath, storage_path: storagePath, storage_bucket: 'vault',
+            file_path: actualPath, storage_path: actualPath, storage_bucket: 'vault',
+            blurred_thumbnail_path: uploadResult.thumbnailPath ?? null,
             allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
             allow_save: settings?.vault_allow_save_default ?? false,
             allow_share: settings?.vault_allow_share_default ?? false,
@@ -408,8 +451,8 @@ export default function VaultScreen() {
           logDebugEvent('vault_lastDbInsertPayload', insertPayload);
           const { error: dbError } = await supabase.from('vault_items').insert(insertPayload);
           if (dbError) {
-            logDebugEvent('vault_lastDbInsertError', { message: dbError.message, code: dbError.code, details: dbError.details, storagePath });
-            supabase.storage.from('vault').remove([storagePath]).catch(() => {});
+            logDebugEvent('vault_lastDbInsertError', { message: dbError.message, code: dbError.code, details: dbError.details, storagePath: actualPath });
+            supabase.storage.from('vault').remove([actualPath]).catch(() => {});
             throw new Error(`Media uploaded but failed to save — ${dbError.message}`);
           }
           awardPoints(rpcResult.couple_id, user.id, 5, 'Vault media added');
@@ -441,16 +484,18 @@ export default function VaultScreen() {
     try {
       const ext = mimeToExtension(mimeType);
       const storagePath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
-      await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct), user.id, couple.id);
-      logDebugEvent('vault_lastUploadSuccessPath', { storagePath, coupleId: couple.id, userId: user.id });
+      const uploadResult = await uploadMediaFile(localUri, 'vault', storagePath, mimeType, (pct) => setUploadPct(pct), user.id, couple.id);
+      const actualPath = uploadResult.storagePath;
+      logDebugEvent('vault_lastUploadSuccessPath', { storagePath: actualPath, coupleId: couple.id, userId: user.id });
 
       const insertPayload = {
         couple_id: couple.id,
         uploaded_by_user_id: user.id,
         media_type: mediaType,
-        file_path: storagePath,
-        storage_path: storagePath,
+        file_path: actualPath,
+        storage_path: actualPath,
         storage_bucket: 'vault',
+        blurred_thumbnail_path: uploadResult.thumbnailPath ?? null,
         allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
         allow_save: settings?.vault_allow_save_default ?? false,
         allow_share: settings?.vault_allow_share_default ?? false,
@@ -460,13 +505,13 @@ export default function VaultScreen() {
       const { error: dbError } = await supabase.from('vault_items').insert(insertPayload);
       if (dbError) {
         // Clean up the already-uploaded storage file so it doesn't become an orphan
-        supabase.storage.from('vault').remove([storagePath]).catch(() => {});
-        logDebugEvent('vault_lastDbInsertError', { message: dbError.message, code: dbError.code, details: dbError.details, storagePath });
+        supabase.storage.from('vault').remove([actualPath]).catch(() => {});
+        logDebugEvent('vault_lastDbInsertError', { message: dbError.message, code: dbError.code, details: dbError.details, storagePath: actualPath });
         logDebugEvent('VAULT UPLOAD ERROR', {
           reason: 'DB insert failed after storage upload',
           dbError: dbError.message,
           dbCode: dbError.code,
-          storagePath,
+          storagePath: actualPath,
           userId: user.id,
           coupleId: couple.id,
         });
@@ -673,10 +718,10 @@ export default function VaultScreen() {
                     delayLongPress={400}
                     activeOpacity={0.85}
                   >
-                    {/* Thumbnail */}
-                    {url ? (
+                    {/* Thumbnail — prefer dedicated thumb path (video frames / compressed preview) */}
+                    {(thumbUrls[item.id] ?? url) ? (
                       <Image
-                        source={{ uri: url }}
+                        source={{ uri: thumbUrls[item.id] ?? url }}
                         style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
                         contentFit="cover"
                         cachePolicy="memory-disk"

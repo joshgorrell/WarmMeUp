@@ -52,6 +52,7 @@ export default function VaultViewerScreen() {
     timestamp,
     createdAt,
     uploaderName,
+    thumbUri,
   } = useLocalSearchParams<{
     id: string;
     storagePath: string;
@@ -65,6 +66,7 @@ export default function VaultViewerScreen() {
     timestamp?: string;
     createdAt?: string;
     uploaderName?: string;
+    thumbUri?: string;
   }>();
 
   const isVideo = mediaType === 'video';
@@ -350,7 +352,17 @@ export default function VaultViewerScreen() {
       {/* Centered media area */}
       <View style={styles.mediaContainer}>
         {!mediaUri ? (
-          <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
+          <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+            {thumbUri ? (
+              <Image
+                source={{ uri: thumbUri }}
+                style={{ width: screenWidth, height: screenWidth, opacity: 0.45 }}
+                resizeMode="cover"
+                blurRadius={Platform.OS === 'ios' ? 18 : 6}
+              />
+            ) : null}
+            <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" style={thumbUri ? StyleSheet.absoluteFillObject : undefined} />
+          </View>
         ) : !isVideo ? (
           <>
             {!imageLoaded && (
@@ -374,7 +386,17 @@ export default function VaultViewerScreen() {
         ) : (
           <View style={{ width: availW, height: availH, alignItems: 'center', justifyContent: 'center' }}>
             {!avLoaded && !videoError && (
-              <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
+              <>
+                {thumbUri ? (
+                  <Image
+                    source={{ uri: thumbUri }}
+                    style={[StyleSheet.absoluteFillObject, { opacity: 0.45 }]}
+                    resizeMode="cover"
+                    blurRadius={Platform.OS === 'ios' ? 14 : 5}
+                  />
+                ) : null}
+                <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
+              </>
             )}
             {videoError && (
               <AppText style={styles.videoErrorText}>Video playback unavailable</AppText>
