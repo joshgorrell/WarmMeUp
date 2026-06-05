@@ -17,6 +17,7 @@ import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
+import { useLayout } from '@/hooks/useLayout';
 import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
 import { reversePoints } from '@/lib/points';
 
@@ -56,6 +57,7 @@ export default function HomeScreen() {
   const { pendingTab } = useLocalSearchParams<{ pendingTab?: string }>();
   const { user, profile, partnerProfile, couple, justPairedPartnerName, clearJustPaired, scoreResetAt } = useAuth();
   const { colors } = useTheme();
+  const { isTabletOrLarger, contentPadding } = useLayout();
   const [myScore, setMyScore] = useState(0);
   const [partnerScore, setPartnerScore] = useState(0);
   const [activeInteraction, setActiveInteraction] = useState<Interaction | null>(null);
@@ -410,6 +412,111 @@ export default function HomeScreen() {
   const total = myScore + partnerScore;
   const myPct = total > 0 ? myScore / total : 0.5;
   const pointsEnabled = (couple?.points_enabled ?? true) && hasPartner;
+  const hPad = contentPadding;
+
+  // Shared greeting block, used in both phone and tablet layouts
+  const greetingBlock = (
+    <View style={styles.greeting}>
+      <AppText
+        style={[styles.greetingTitle, { color: colors.text }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
+        ellipsizeMode="tail"
+      >
+        {getTimeGreeting()}{profile?.first_name ? `, ${profile.first_name}` : ''}
+      </AppText>
+      <AppText style={[styles.greetingSub, { color: colors.textSecondary }]}>
+        {greetingSub}
+      </AppText>
+    </View>
+  );
+
+  // Score bar, pinned to bottom of left column on tablet
+  const scoreBar = pointsEnabled ? (
+    <View style={[styles.scoreWrap, { paddingHorizontal: hPad }]}>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => router.push('/(app)/my-stats')}
+        style={[styles.scoreCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+      >
+        <View style={styles.scoreRow}>
+          <Avatar name={myName} uri={profile?.avatar_url} size="sm" bgColor="rgba(255,46,138,0.18)" />
+          <AppText style={[styles.scoreName, { color: colors.textSecondary }]} numberOfLines={1}>{myName}</AppText>
+          <AppText style={[styles.scorePts, { color: colors.text }]}>{myScore}</AppText>
+          <View style={styles.scoreVs}>
+            <Heart color="#FF2E8A" size={11} fill="rgba(255,46,138,0.20)" strokeWidth={2} />
+          </View>
+          <AppText style={[styles.scorePts, { color: colors.text }]}>{partnerScore}</AppText>
+          <AppText style={[styles.scoreName, { color: colors.textSecondary, textAlign: 'right' }]} numberOfLines={1}>{partnerName}</AppText>
+          <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="sm" bgColor="rgba(255,138,61,0.18)" />
+        </View>
+        <View style={[styles.barTrack, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+          <LinearGradient
+            colors={Gradient.primary}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.barFill, { width: `${myPct * 100}%` }]}
+          />
+        </View>
+      </TouchableOpacity>
+    </View>
+  ) : null;
+
+  // Activity section
+  const activitySection = (
+    <View style={styles.activitySection}>
+      <View style={styles.sectionRow}>
+        <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>RECENT ACTIVITY</AppText>
+        <View style={styles.sectionActions}>
+          {recentActivity.length > 0 && (
+            <TouchableOpacity onPress={handleMarkAllViewed} activeOpacity={0.7} style={styles.markAllBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <CheckCheck color={colors.textMuted} size={13} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => router.push('/(app)/activity')} activeOpacity={0.7} style={styles.seeAll}>
+            <AppText style={[styles.seeAllText, { color: '#FF2E8A' }]}>See all</AppText>
+            <ChevronRight color="#FF2E8A" size={13} strokeWidth={2.5} />
+          </TouchableOpacity>
+        </View>
+      </View>
+      {recentActivity.length > 0 ? (
+        <View style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+          {recentActivity.map((item, i) => (
+            <TouchableOpacity
+              key={item.id}
+              onPress={() => handleItemPress(item)}
+              activeOpacity={0.7}
+              style={[
+                styles.activityRow,
+                {
+                  borderBottomColor: colors.borderSubtle,
+                  borderBottomWidth: i < recentActivity.length - 1 ? 1 : 0,
+                },
+              ]}
+            >
+              <View style={[styles.activityIcon, { backgroundColor: `${item.color}18` }]}>
+                {item.icon}
+              </View>
+              <View style={styles.activityText}>
+                <AppText style={[styles.activityLabel, { color: colors.text }]} numberOfLines={1}>{item.label}</AppText>
+                {item.sub ? (
+                  <AppText style={[styles.activitySub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sub}</AppText>
+                ) : null}
+              </View>
+              <AppText style={[styles.activityTime, { color: colors.textMuted }]}>{item.time}</AppText>
+              <ChevronRight color={colors.textMuted} size={13} strokeWidth={2} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : (
+        <View style={[styles.activityEmpty, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+          <AppText style={[styles.activityEmptyTitle, { color: colors.text }]}>You're all caught up!</AppText>
+          <AppText style={[styles.activityEmptyText, { color: colors.textMuted }]}>Send a chat, roll the dice, send a dare, or create a wish.</AppText>
+        </View>
+      )}
+    </View>
+  );
 
   return (
     <AppShell scrollable={false}>
@@ -419,127 +526,62 @@ export default function HomeScreen() {
         onAvatarPress={() => router.push('/(app)/account')}
       />
       <View style={styles.body}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.scroll, !pointsEnabled && styles.scrollNoScore]}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
-        >
-
-          {/* Greeting */}
-          <View style={styles.greeting}>
-            <AppText
-              style={[styles.greetingTitle, { color: colors.text }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}
-              ellipsizeMode="tail"
-            >
-              {getTimeGreeting()}{profile?.first_name ? `, ${profile.first_name}` : ''}
-            </AppText>
-            <AppText style={[styles.greetingSub, { color: colors.textSecondary }]}>
-              {greetingSub}
-            </AppText>
-          </View>
-
-          {/* Current Moment */}
-          {activeInteraction && (
-            <>
-              <CurrentMomentCard
-                interaction={activeInteraction}
-                onSeeAll={() => router.push('/(app)/activity')}
-                onDismiss={handleDismissInteraction}
-              />
-              <View style={{ height: Spacing.lg }} />
-            </>
-          )}
-
-          {/* Recent Activity */}
-          <View style={styles.activitySection}>
-            <View style={styles.sectionRow}>
-              <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>RECENT ACTIVITY</AppText>
-              <View style={styles.sectionActions}>
-                {recentActivity.length > 0 && (
-                  <TouchableOpacity onPress={handleMarkAllViewed} activeOpacity={0.7} style={styles.markAllBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <CheckCheck color={colors.textMuted} size={13} strokeWidth={2} />
-                  </TouchableOpacity>
+        {isTabletOrLarger ? (
+          // ── Tablet: 2-column layout ──────────────────────────────────────
+          <View style={[styles.tabletRow, { paddingHorizontal: hPad, gap: hPad }]}>
+            {/* Left column: greeting + current moment + score */}
+            <View style={styles.tabletLeft}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.tabletLeftScroll}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
+              >
+                {greetingBlock}
+                {activeInteraction && (
+                  <>
+                    <CurrentMomentCard
+                      interaction={activeInteraction}
+                      onSeeAll={() => router.push('/(app)/activity')}
+                      onDismiss={handleDismissInteraction}
+                    />
+                    <View style={{ height: Spacing.lg }} />
+                  </>
                 )}
-                <TouchableOpacity onPress={() => router.push('/(app)/activity')} activeOpacity={0.7} style={styles.seeAll}>
-                  <AppText style={[styles.seeAllText, { color: '#FF2E8A' }]}>See all</AppText>
-                  <ChevronRight color="#FF2E8A" size={13} strokeWidth={2.5} />
-                </TouchableOpacity>
+              </ScrollView>
+              <View style={styles.tabletScorePin}>
+                {scoreBar}
               </View>
             </View>
-            {recentActivity.length > 0 ? (
-              <View style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                {recentActivity.map((item, i) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    onPress={() => handleItemPress(item)}
-                    activeOpacity={0.7}
-                    style={[
-                      styles.activityRow,
-                      {
-                        borderBottomColor: colors.borderSubtle,
-                        borderBottomWidth: i < recentActivity.length - 1 ? 1 : 0,
-                      },
-                    ]}
-                  >
-                    <View style={[styles.activityIcon, { backgroundColor: `${item.color}18` }]}>
-                      {item.icon}
-                    </View>
-                    <View style={styles.activityText}>
-                      <AppText style={[styles.activityLabel, { color: colors.text }]} numberOfLines={1}>{item.label}</AppText>
-                      {item.sub ? (
-                        <AppText style={[styles.activitySub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sub}</AppText>
-                      ) : null}
-                    </View>
-                    <AppText style={[styles.activityTime, { color: colors.textMuted }]}>{item.time}</AppText>
-                    <ChevronRight color={colors.textMuted} size={13} strokeWidth={2} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <View style={[styles.activityEmpty, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                <AppText style={[styles.activityEmptyTitle, { color: colors.text }]}>You're all caught up!</AppText>
-                <AppText style={[styles.activityEmptyText, { color: colors.textMuted }]}>Send a chat, roll the dice, send a dare, or create a wish.</AppText>
-              </View>
-            )}
+            {/* Right column: activity feed */}
+            <View style={styles.tabletRight}>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.tabletRightScroll}>
+                {activitySection}
+              </ScrollView>
+            </View>
           </View>
-
-        </ScrollView>
-
-        {/* Score bar — pinned to bottom, hidden when points disabled */}
-        {pointsEnabled && (
-          <View style={styles.scoreWrap}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push('/(app)/my-stats')}
-              style={[styles.scoreCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+        ) : (
+          // ── Phone: single column ─────────────────────────────────────────
+          <>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={[styles.scroll, !pointsEnabled && styles.scrollNoScore, { paddingHorizontal: hPad }]}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
             >
-              <View style={styles.scoreRow}>
-                <Avatar name={myName} uri={profile?.avatar_url} size="sm" bgColor="rgba(255,46,138,0.18)" />
-                <AppText style={[styles.scoreName, { color: colors.textSecondary }]} numberOfLines={1}>{myName}</AppText>
-                <AppText style={[styles.scorePts, { color: colors.text }]}>{myScore}</AppText>
-
-                <View style={styles.scoreVs}>
-                  <Heart color="#FF2E8A" size={11} fill="rgba(255,46,138,0.20)" strokeWidth={2} />
-                </View>
-
-                <AppText style={[styles.scorePts, { color: colors.text }]}>{partnerScore}</AppText>
-                <AppText style={[styles.scoreName, { color: colors.textSecondary, textAlign: 'right' }]} numberOfLines={1}>{partnerName}</AppText>
-                <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="sm" bgColor="rgba(255,138,61,0.18)" />
-              </View>
-
-              <View style={[styles.barTrack, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
-                <LinearGradient
-                  colors={Gradient.primary}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.barFill, { width: `${myPct * 100}%` }]}
-                />
-              </View>
-            </TouchableOpacity>
-          </View>
+              {greetingBlock}
+              {activeInteraction && (
+                <>
+                  <CurrentMomentCard
+                    interaction={activeInteraction}
+                    onSeeAll={() => router.push('/(app)/activity')}
+                    onDismiss={handleDismissInteraction}
+                  />
+                  <View style={{ height: Spacing.lg }} />
+                </>
+              )}
+              {activitySection}
+            </ScrollView>
+            {scoreBar}
+          </>
         )}
       </View>
     </AppShell>
@@ -551,11 +593,36 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
   },
+  // Phone layout
   scroll: {
-    paddingHorizontal: Spacing.screen,
     paddingBottom: Spacing.md,
   },
   scrollNoScore: {
+    paddingBottom: Spacing.xl,
+  },
+  // Tablet layout
+  tabletRow: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingTop: Spacing.md,
+  },
+  tabletLeft: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  tabletLeftScroll: {
+    flexGrow: 1,
+    paddingBottom: Spacing.md,
+  },
+  tabletScorePin: {
+    paddingBottom: Spacing.md,
+  },
+  tabletRight: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  tabletRightScroll: {
+    flexGrow: 1,
     paddingBottom: Spacing.xl,
   },
   greeting: {
@@ -604,7 +671,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   scoreWrap: {
-    paddingHorizontal: Spacing.screen,
     paddingBottom: Spacing.md,
   },
   activityCard: {

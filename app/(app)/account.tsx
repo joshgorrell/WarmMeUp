@@ -28,6 +28,7 @@ import CommunityGuidelinesModal from '@/components/CommunityGuidelinesModal';
 import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
+import { useLayout } from '@/hooks/useLayout';
 
 type AccountTab = 'profile' | 'settings';
 
@@ -406,6 +407,7 @@ export default function AccountScreen() {
   const { profile, partnerProfile, couple, signOut, isAdmin, isSuperAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple, patchCouple, subscriptionInfo, refreshSubscription, notifyScoreReset, scoreResetAt } = useAuth();
   const { colors } = useTheme();
   const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
+  const { contentPadding } = useLayout();
 
   const [activeTab, setActiveTab] = useState<AccountTab>('profile');
 
@@ -1734,7 +1736,7 @@ export default function AccountScreen() {
 
   return (
     <>
-      <AppShell scrollable={false}>
+      <AppShell scrollable={false} constrainContent>
         <BrandHeader
           avatarName={profile?.display_name ?? ''}
           avatarUri={profile?.avatar_url ?? null}
@@ -1753,7 +1755,7 @@ export default function AccountScreen() {
           }
         />
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[styles.scroll, { paddingHorizontal: contentPadding }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -2204,7 +2206,7 @@ export default function AccountScreen() {
 
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 40 },
+  scroll: { paddingBottom: 40 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   adminBadge: {

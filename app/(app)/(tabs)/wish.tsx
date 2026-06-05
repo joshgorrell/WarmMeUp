@@ -25,6 +25,7 @@ import { Wish, WishReaction, WishCategory } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
 import { FontSize, Spacing, Radius, Gradient as GradientColors } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -824,6 +825,7 @@ export default function WishTab() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { isTabletOrLarger, contentPadding } = useLayout();
   const { wish_id: deepLinkWishId } = useLocalSearchParams<{ wish_id?: string }>();
   const [activeTab, setActiveTab] = useState<TabKey>(couple?.user_b_id ? 'shared' : 'mine');
   const [wishes, setWishes] = useState<WishWithReactions[]>([]);
@@ -964,7 +966,7 @@ export default function WishTab() {
       <TabHeader title="Wish" />
 
       {/* Segmented tabs */}
-      <View style={[styles.tabBar, { borderColor: colors.borderSubtle }]}>
+      <View style={[styles.tabBar, { borderColor: colors.borderSubtle, marginHorizontal: contentPadding }]}>
         <View style={styles.tabIndicatorTrack}>
           <Animated.View
             style={[
@@ -992,7 +994,7 @@ export default function WishTab() {
       {/* Content */}
       {loading && wishes.length === 0 ? (
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingHorizontal: contentPadding, paddingBottom: insets.bottom + 100 }]}
           showsVerticalScrollIndicator={false}
           pointerEvents="none"
         >
@@ -1006,7 +1008,7 @@ export default function WishTab() {
         </ScrollView>
       ) : (
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingHorizontal: contentPadding, paddingBottom: insets.bottom + 100 }]}
           showsVerticalScrollIndicator={false}
         >
           {displayedWishes.length === 0 ? (
@@ -1034,23 +1036,26 @@ export default function WishTab() {
               </AppText>
             </View>
           ) : (
-            displayedWishes.map(w =>
-              activeTab === 'granted' ? (
-                <GrantedCard key={w.id} wish={w} isMine={w.created_by_user_id === user?.id} />
-              ) : (
-                <WishCard
-                  key={w.id}
-                  wish={w}
-                  isMine={w.created_by_user_id === user?.id}
-                  userId={user?.id ?? ''}
-                  onReact={handleReact}
-                  onFulfill={setFulfillWish}
-                  onEdit={w => { setEditingWish(w); setShowForm(true); }}
-                  onArchive={handleArchive}
-                  onDelete={handleDelete}
-                />
-              )
-            )
+            <View style={isTabletOrLarger ? styles.tabletGrid : undefined}>
+              {displayedWishes.map(w =>
+                <View key={w.id} style={isTabletOrLarger ? styles.tabletCard : undefined}>
+                  {activeTab === 'granted' ? (
+                    <GrantedCard wish={w} isMine={w.created_by_user_id === user?.id} />
+                  ) : (
+                    <WishCard
+                      wish={w}
+                      isMine={w.created_by_user_id === user?.id}
+                      userId={user?.id ?? ''}
+                      onReact={handleReact}
+                      onFulfill={setFulfillWish}
+                      onEdit={w => { setEditingWish(w); setShowForm(true); }}
+                      onArchive={handleArchive}
+                      onDelete={handleDelete}
+                    />
+                  )}
+                </View>
+              )}
+            </View>
           )}
         </ScrollView>
       )}
@@ -1088,7 +1093,7 @@ export default function WishTab() {
 
 const styles = StyleSheet.create({
   // Tab bar
-  tabBar: { flexDirection: 'row', borderBottomWidth: 1, marginHorizontal: Spacing.screen, position: 'relative' },
+  tabBar: { flexDirection: 'row', borderBottomWidth: 1, position: 'relative' },
   tabIndicatorTrack: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2 },
   tabIndicator: { position: 'absolute', bottom: 0, height: 2, backgroundColor: WISH_ACCENT, borderRadius: 1 },
   tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 10 },
@@ -1103,7 +1108,9 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20, marginTop: 4 },
 
   // Scroll
-  scrollContent: { paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, gap: 6 },
+  scrollContent: { paddingTop: Spacing.md, gap: 6 },
+  tabletGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  tabletCard: { width: '48.5%' },
 
   // Wish card
   wishCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },

@@ -18,6 +18,7 @@ import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
 import NeonDice, { NeonDiceHandle } from '@/components/NeonDice';
 import ReceivedDiceChallengeCard from '@/components/ReceivedDiceChallengeCard';
+import { useLayout } from '@/hooks/useLayout';
 
 function useSenderCountdown(expiresAt: string | null | undefined): string | null {
   const [text, setText] = React.useState<string | null>(null);
@@ -69,9 +70,11 @@ export default function DiceTab() {
   const { colors } = useTheme();
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
+  const { isTabletOrLarger } = useLayout();
 
-  // Scale the ring to fit smaller screens (iPhone SE = 375pt, minus 80pt margins = 295pt max)
-  const ringSize = Math.min(RING_SIZE_MAX, screenWidth - 80);
+  // Scale the ring: tablet gets up to 340pt, phone stays capped at 240pt
+  const RING_MAX = isTabletOrLarger ? 340 : RING_SIZE_MAX;
+  const ringSize = Math.min(RING_MAX, screenWidth - 80);
   const diceSize = Math.round(ringSize * (200 / 240));
   const radius = (ringSize - STROKE) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -117,6 +120,9 @@ export default function DiceTab() {
     });
     return () => holdProgress.removeListener(id);
   }, [holdProgress, circumference]);
+
+  // Sync ring to full "empty" position when circumference changes (e.g. screen resize)
+  useEffect(() => { setRingOffset(circumference); }, [circumference]);
 
   useEffect(() => {
     Promise.all([getPointValue('dice_accept'), getPointValue('dice_complete')]).then(([a, c]) => {

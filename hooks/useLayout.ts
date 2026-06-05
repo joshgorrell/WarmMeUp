@@ -1,27 +1,40 @@
 import { useWindowDimensions } from 'react-native';
 
-// Phone-like canvas width used on wide desktop/tablet viewports
-const PHONE_MAX_WIDTH = 390;
-
 export function useLayout() {
   const { width, height } = useWindowDimensions();
-  const isTablet = width >= 600;
-  // Viewports wider than 768px (desktop browsers) get a phone-width column
-  const isWide = width >= 768;
 
-  // Pick a value based on phone vs tablet
-  function cols(phone: number, tablet: number): number {
-    return isTablet ? tablet : phone;
+  const isPhone = width < 768;
+  const isTablet = width >= 768 && width < 1024;
+  const isLargeTablet = width >= 1024;
+  const isTabletOrLarger = width >= 768;
+
+  // Pick a value based on breakpoint tier; largeTablet falls back to tablet if omitted
+  function cols(phone: number, tablet: number, largeTablet?: number): number {
+    if (isLargeTablet) return largeTablet ?? tablet;
+    if (isTabletOrLarger) return tablet;
+    return phone;
   }
 
-  // On desktop/wide viewports, clamp to phone width so cosmetics match a phone.
-  // On tablet, clamp to 520px. On phone, use full width.
-  const contentMaxWidth = isWide
-    ? PHONE_MAX_WIDTH
+  const contentMaxWidth = isLargeTablet
+    ? Math.min(width, 1100)
     : isTablet
-    ? Math.min(width, 520)
+    ? Math.min(width, 900)
     : width;
-  const contentPadding = isTablet ? Math.max(24, (width - contentMaxWidth) / 2) : 20;
 
-  return { width, height, isTablet, isWide, cols, contentMaxWidth, contentPadding };
+  const contentPadding = isLargeTablet ? 48 : isTablet ? 32 : 20;
+
+  return {
+    width,
+    height,
+    isPhone,
+    isTablet,
+    isLargeTablet,
+    isTabletOrLarger,
+    // kept for compatibility — callers that used isTablet meaning "anything >= 600"
+    // now get the correct ≥768 value; isWide was always an internal detail
+    isWide: isTabletOrLarger,
+    cols,
+    contentMaxWidth,
+    contentPadding,
+  };
 }

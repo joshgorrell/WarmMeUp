@@ -35,11 +35,11 @@ export default function VaultScreen() {
   const { vault_item_id: deepLinkVaultItemId } = useLocalSearchParams<{ vault_item_id?: string }>();
   const { user, couple, partnerProfile, profile, settings, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, subscriptionInfo, refreshCouple } = useAuth();
   const { colors } = useTheme();
-  const { width, height: screenHeight, cols } = useLayout();
+  const { width, height: screenHeight, cols, contentPadding } = useLayout();
   const insets = useSafeAreaInsets();
   const { available: bioAvailable, authenticate: bioAuthenticate } = useBiometricAuth();
-  const NUM_COLS = cols(3, 4);
-  const ITEM_SIZE = width > 0 ? (width - Spacing.screen * 2 - Spacing.sm * (NUM_COLS - 1)) / NUM_COLS : 100;
+  const NUM_COLS = cols(3, 5, 6);
+  const ITEM_SIZE = width > 0 ? (width - contentPadding * 2 - Spacing.sm * (NUM_COLS - 1)) / NUM_COLS : 100;
   const [items, setItems] = useState<VaultItem[]>([]);
   // Single flag: has the user tapped to reveal the whole grid this session?
   const [pageRevealed, setPageRevealed] = useState(false);
@@ -678,7 +678,7 @@ export default function VaultScreen() {
       <TabHeader title={unviewed > 0 ? `Vault  ·  ${unviewed} new` : 'Vault'} />
       <ScrollView
         ref={scrollViewRef}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingHorizontal: contentPadding }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
       >
@@ -955,7 +955,7 @@ export default function VaultScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 40 },
+  scroll: { paddingBottom: 40 },
   vaultHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.md },
   vaultHeaderText: { flex: 1, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },

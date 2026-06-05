@@ -18,6 +18,7 @@ import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { registerForPushNotifications, savePushToken, clearPushToken } from '@/lib/notifications';
 import CommunityGuidelinesModal from '@/components/CommunityGuidelinesModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
+import { useLayout } from '@/hooks/useLayout';
 
 function OwnershipNote({ text }: { text: string }) {
   const { colors } = useTheme();
@@ -367,6 +368,7 @@ export default function SettingsScreen() {
   const { user, settings, couple, partnerProfile, refreshSettings, refreshCouple, signOut, unlockApp } = useAuth();
   const { colors } = useTheme();
   const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
+  const { isTabletOrLarger, contentPadding } = useLayout();
   const [showDiscreetInfo, setShowDiscreetInfo] = useState(false);
   const [showCommunityGuidelines, setShowCommunityGuidelines] = useState(false);
   const [showLeaveSheet, setShowLeaveSheet] = useState(false);
@@ -440,193 +442,391 @@ export default function SettingsScreen() {
     <AppShell scrollable={false}>
       <ScreenHeader title="Settings" onBack={() => router.back()} />
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingHorizontal: contentPadding }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-        <Section
-          title="MY DEVICE PRIVACY"
-          note="These settings only affect how Warm Me Up behaves on your device. Your partner manages their own independently."
-        >
-          <SettingsRow
-            label="Privacy Mode"
-            sub="Show a fake Weather screen when you open the app"
-            toggle
-            value={s?.stealth_mode_enabled ?? true}
-            onChange={v => update({ stealth_mode_enabled: v })}
-          />
-          <RequireUnlockRow
-            current={currentMethod}
-            bioAvailable={bioAvailable}
-            biometricLabel={biometricLabel}
-            colors={colors}
-            onSelect={handleRequireUnlockSelect}
-          />
-          {currentMethod !== 'none' && (
-            <RequireUnlockAfterRow
-              current={s?.lock_after_seconds ?? null}
-              colors={colors}
-              onSelect={(seconds) => update({ lock_after_seconds: seconds })}
-            />
-          )}
-          <VaultProtectionRow
-            isAdditional={s?.vault_face_id_required ?? false}
-            bioAvailable={bioAvailable}
-            biometricLabel={biometricLabel}
-            colors={colors}
-            onSelect={async (additional) => {
-              if (additional) {
-                const result = await bioAuthenticate('Confirm biometrics to enable Vault protection');
-                if (!result.success) return;
-              }
-              update({ vault_face_id_required: additional });
-            }}
-          />
-          <SettingsRow
-            label="Blur App in Switcher"
-            sub="Hide Warm Me Up content when you switch apps"
-            toggle
-            value={s?.blur_on_background ?? true}
-            onChange={v => update({ blur_on_background: v })}
-          />
-          <SettingsRow
-            label="Community Guidelines"
-            sub="How we keep this space safe and respectful"
-            onPress={() => setShowCommunityGuidelines(true)}
-          />
-        </Section>
+        {isTabletOrLarger ? (
+          <View style={styles.tabletRow}>
+            {/* Left column */}
+            <View style={styles.tabletCol}>
+              <Section
+                title="MY DEVICE PRIVACY"
+                note="These settings only affect how Warm Me Up behaves on your device. Your partner manages their own independently."
+              >
+                <SettingsRow
+                  label="Privacy Mode"
+                  sub="Show a fake Weather screen when you open the app"
+                  toggle
+                  value={s?.stealth_mode_enabled ?? true}
+                  onChange={v => update({ stealth_mode_enabled: v })}
+                />
+                <RequireUnlockRow
+                  current={currentMethod}
+                  bioAvailable={bioAvailable}
+                  biometricLabel={biometricLabel}
+                  colors={colors}
+                  onSelect={handleRequireUnlockSelect}
+                />
+                {currentMethod !== 'none' && (
+                  <RequireUnlockAfterRow
+                    current={s?.lock_after_seconds ?? null}
+                    colors={colors}
+                    onSelect={(seconds) => update({ lock_after_seconds: seconds })}
+                  />
+                )}
+                <VaultProtectionRow
+                  isAdditional={s?.vault_face_id_required ?? false}
+                  bioAvailable={bioAvailable}
+                  biometricLabel={biometricLabel}
+                  colors={colors}
+                  onSelect={async (additional) => {
+                    if (additional) {
+                      const result = await bioAuthenticate('Confirm biometrics to enable Vault protection');
+                      if (!result.success) return;
+                    }
+                    update({ vault_face_id_required: additional });
+                  }}
+                />
+                <SettingsRow
+                  label="Blur App in Switcher"
+                  sub="Hide Warm Me Up content when you switch apps"
+                  toggle
+                  value={s?.blur_on_background ?? true}
+                  onChange={v => update({ blur_on_background: v })}
+                />
+                <SettingsRow
+                  label="Community Guidelines"
+                  sub="How we keep this space safe and respectful"
+                  onPress={() => setShowCommunityGuidelines(true)}
+                />
+              </Section>
 
-        <Section
-          title="MY VAULT UPLOADS"
-          note="These are your defaults for items you add to the Vault. They only apply to content you upload — your partner controls their own uploads separately."
-        >
-          <SettingsRow
-            label="Allow Screenshots of My Uploads"
-            sub="Your partner can screenshot items you've shared"
-            toggle
-            value={s?.vault_allow_screenshot_default ?? false}
-            onChange={v => update({ vault_allow_screenshot_default: v })}
-          />
-          <SettingsRow
-            label="Allow Saving My Uploads"
-            sub="Your partner can save your shared items to their phone"
-            toggle
-            value={s?.vault_allow_save_default ?? false}
-            onChange={v => update({ vault_allow_save_default: v })}
-          />
-          <SettingsRow
-            label="Allow Sharing My Uploads Outside App"
-            sub="Your partner can share your content externally"
-            toggle
-            value={s?.vault_allow_share_default ?? false}
-            onChange={v => update({ vault_allow_share_default: v })}
-          />
-          <SettingsRow
-            label="Notify Me if My Content is Screenshotted"
-            sub="You'll get an alert when your partner screenshots something you uploaded"
-            toggle
-            value={s?.screenshot_notify_partner ?? true}
-            onChange={v => update({ screenshot_notify_partner: v })}
-          />
-          <SettingsRow
-            label="Remind Me When I Screenshot Partner Content"
-            sub="A personal reminder on your device when you screenshot their uploads"
-            toggle
-            value={s?.notify_me_on_own_screenshots ?? false}
-            onChange={v => update({ notify_me_on_own_screenshots: v })}
-          />
-          <SettingsRow
-            label="Auto-Save Chat Media to Vault"
-            sub="Any photo or video you send in Chat is automatically added to your Vault. Deleting from either place removes it from both."
-            toggle
-            value={s?.chat_auto_save_to_vault ?? true}
-            onChange={v => update({ chat_auto_save_to_vault: v })}
-          />
-        </Section>
+              <Section
+                title="MY VAULT UPLOADS"
+                note="These are your defaults for items you add to the Vault. They only apply to content you upload — your partner controls their own uploads separately."
+              >
+                <SettingsRow
+                  label="Allow Screenshots of My Uploads"
+                  sub="Your partner can screenshot items you've shared"
+                  toggle
+                  value={s?.vault_allow_screenshot_default ?? false}
+                  onChange={v => update({ vault_allow_screenshot_default: v })}
+                />
+                <SettingsRow
+                  label="Allow Saving My Uploads"
+                  sub="Your partner can save your shared items to their phone"
+                  toggle
+                  value={s?.vault_allow_save_default ?? false}
+                  onChange={v => update({ vault_allow_save_default: v })}
+                />
+                <SettingsRow
+                  label="Allow Sharing My Uploads Outside App"
+                  sub="Your partner can share your content externally"
+                  toggle
+                  value={s?.vault_allow_share_default ?? false}
+                  onChange={v => update({ vault_allow_share_default: v })}
+                />
+                <SettingsRow
+                  label="Notify Me if My Content is Screenshotted"
+                  sub="You'll get an alert when your partner screenshots something you uploaded"
+                  toggle
+                  value={s?.screenshot_notify_partner ?? true}
+                  onChange={v => update({ screenshot_notify_partner: v })}
+                />
+                <SettingsRow
+                  label="Remind Me When I Screenshot Partner Content"
+                  sub="A personal reminder on your device when you screenshot their uploads"
+                  toggle
+                  value={s?.notify_me_on_own_screenshots ?? false}
+                  onChange={v => update({ notify_me_on_own_screenshots: v })}
+                />
+                <SettingsRow
+                  label="Auto-Save Chat Media to Vault"
+                  sub="Any photo or video you send in Chat is automatically added to your Vault. Deleting from either place removes it from both."
+                  toggle
+                  value={s?.chat_auto_save_to_vault ?? true}
+                  onChange={v => update({ chat_auto_save_to_vault: v })}
+                />
+              </Section>
+            </View>
 
-        <Section
-          title="MY NOTIFICATIONS"
-          note="Controls how push notifications appear on your device only."
-        >
-          <SettingsRow
-            label="Push Notifications"
-            sub="Receive alerts when your partner sends you something"
-            toggle
-            value={s?.push_notifications_enabled ?? false}
-            onChange={handleTogglePushNotifications}
-          />
-          <SettingsRow
-            label="Discreet Notifications"
-            sub="Never show content previews in your notifications"
-            toggle
-            value={s?.discreet_notifications ?? true}
-            onChange={v => update({ discreet_notifications: v })}
-            onInfo={() => setShowDiscreetInfo(true)}
-          />
-          {(['New activity', 'Something new is waiting', 'You have an update'] as const).map(copy => (
-            <TouchableOpacity
-              key={copy}
-              style={[styles.row, { borderBottomColor: colors.borderSubtle }]}
-              onPress={() => update({ notification_copy: copy })}
-              activeOpacity={0.7}
+            {/* Right column */}
+            <View style={styles.tabletCol}>
+              <Section
+                title="MY NOTIFICATIONS"
+                note="Controls how push notifications appear on your device only."
+              >
+                <SettingsRow
+                  label="Push Notifications"
+                  sub="Receive alerts when your partner sends you something"
+                  toggle
+                  value={s?.push_notifications_enabled ?? false}
+                  onChange={handleTogglePushNotifications}
+                />
+                <SettingsRow
+                  label="Discreet Notifications"
+                  sub="Never show content previews in your notifications"
+                  toggle
+                  value={s?.discreet_notifications ?? true}
+                  onChange={v => update({ discreet_notifications: v })}
+                  onInfo={() => setShowDiscreetInfo(true)}
+                />
+                {(['New activity', 'Something new is waiting', 'You have an update'] as const).map(copy => (
+                  <TouchableOpacity
+                    key={copy}
+                    style={[styles.row, { borderBottomColor: colors.borderSubtle }]}
+                    onPress={() => update({ notification_copy: copy })}
+                    activeOpacity={0.7}
+                  >
+                    <AppText style={[styles.rowLabel, { color: colors.text }]}>{copy}</AppText>
+                    <View style={[styles.radioOuter, { borderColor: s?.notification_copy === copy ? '#FF2E8A' : colors.borderSubtle }]}>
+                      {s?.notification_copy === copy && <View style={styles.radioInner} />}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </Section>
+
+              <Section
+                title="POINTS & SCORE"
+                note={
+                  couple?.user_b_id
+                    ? "This setting affects both you and your partner. Points are always tallied in the background — turning this off just hides the scores."
+                    : "Connect with a partner to enable the points system."
+                }
+              >
+                <SettingsRow
+                  label="Points System"
+                  sub={couple?.user_b_id ? "Show scores, leaderboard, and Cash In features" : "Requires an active partner connection"}
+                  toggle
+                  value={couple?.user_b_id ? (couple?.points_enabled ?? true) : false}
+                  onChange={handleTogglePoints}
+                  disabled={!couple?.user_b_id}
+                />
+              </Section>
+
+              <Section
+                title="STREAKS"
+                note={
+                  couple?.user_b_id
+                    ? "This setting affects both you and your partner. Your streak is always tracked in the background — turning this off just hides it."
+                    : "Connect with a partner to enable streaks."
+                }
+              >
+                <SettingsRow
+                  label="Day Streak"
+                  sub={couple?.user_b_id ? "Show your current consecutive-day activity streak" : "Requires an active partner connection"}
+                  toggle
+                  value={couple?.user_b_id ? (couple?.streaks_enabled ?? true) : false}
+                  onChange={handleToggleStreaks}
+                  disabled={!couple?.user_b_id}
+                />
+              </Section>
+
+              <Section
+                title="CHALLENGES"
+                note="Controls how Dare and Dice challenges you send behave. Your partner manages their own expiry window independently."
+              >
+                <ChallengeExpiryRow
+                  current={s?.challenge_expiry_hours ?? 24}
+                  colors={colors}
+                  onSelect={(hours) => update({ challenge_expiry_hours: hours })}
+                />
+              </Section>
+
+              <Section title="ACCOUNT">
+                <SettingsRow label="End Partner Connection" danger onPress={() => setShowLeaveSheet(true)} />
+                <SettingsRow label="Sign Out" danger onPress={signOut} />
+              </Section>
+            </View>
+          </View>
+        ) : (
+          <>
+            <Section
+              title="MY DEVICE PRIVACY"
+              note="These settings only affect how Warm Me Up behaves on your device. Your partner manages their own independently."
             >
-              <AppText style={[styles.rowLabel, { color: colors.text }]}>{copy}</AppText>
-              <View style={[styles.radioOuter, { borderColor: s?.notification_copy === copy ? '#FF2E8A' : colors.borderSubtle }]}>
-                {s?.notification_copy === copy && <View style={styles.radioInner} />}
-              </View>
-            </TouchableOpacity>
-          ))}
-        </Section>
+              <SettingsRow
+                label="Privacy Mode"
+                sub="Show a fake Weather screen when you open the app"
+                toggle
+                value={s?.stealth_mode_enabled ?? true}
+                onChange={v => update({ stealth_mode_enabled: v })}
+              />
+              <RequireUnlockRow
+                current={currentMethod}
+                bioAvailable={bioAvailable}
+                biometricLabel={biometricLabel}
+                colors={colors}
+                onSelect={handleRequireUnlockSelect}
+              />
+              {currentMethod !== 'none' && (
+                <RequireUnlockAfterRow
+                  current={s?.lock_after_seconds ?? null}
+                  colors={colors}
+                  onSelect={(seconds) => update({ lock_after_seconds: seconds })}
+                />
+              )}
+              <VaultProtectionRow
+                isAdditional={s?.vault_face_id_required ?? false}
+                bioAvailable={bioAvailable}
+                biometricLabel={biometricLabel}
+                colors={colors}
+                onSelect={async (additional) => {
+                  if (additional) {
+                    const result = await bioAuthenticate('Confirm biometrics to enable Vault protection');
+                    if (!result.success) return;
+                  }
+                  update({ vault_face_id_required: additional });
+                }}
+              />
+              <SettingsRow
+                label="Blur App in Switcher"
+                sub="Hide Warm Me Up content when you switch apps"
+                toggle
+                value={s?.blur_on_background ?? true}
+                onChange={v => update({ blur_on_background: v })}
+              />
+              <SettingsRow
+                label="Community Guidelines"
+                sub="How we keep this space safe and respectful"
+                onPress={() => setShowCommunityGuidelines(true)}
+              />
+            </Section>
 
-        <Section
-          title="POINTS & SCORE"
-          note={
-            couple?.user_b_id
-              ? "This setting affects both you and your partner. Points are always tallied in the background — turning this off just hides the scores."
-              : "Connect with a partner to enable the points system."
-          }
-        >
-          <SettingsRow
-            label="Points System"
-            sub={couple?.user_b_id ? "Show scores, leaderboard, and Cash In features" : "Requires an active partner connection"}
-            toggle
-            value={couple?.user_b_id ? (couple?.points_enabled ?? true) : false}
-            onChange={handleTogglePoints}
-            disabled={!couple?.user_b_id}
-          />
-        </Section>
+            <Section
+              title="MY VAULT UPLOADS"
+              note="These are your defaults for items you add to the Vault. They only apply to content you upload — your partner controls their own uploads separately."
+            >
+              <SettingsRow
+                label="Allow Screenshots of My Uploads"
+                sub="Your partner can screenshot items you've shared"
+                toggle
+                value={s?.vault_allow_screenshot_default ?? false}
+                onChange={v => update({ vault_allow_screenshot_default: v })}
+              />
+              <SettingsRow
+                label="Allow Saving My Uploads"
+                sub="Your partner can save your shared items to their phone"
+                toggle
+                value={s?.vault_allow_save_default ?? false}
+                onChange={v => update({ vault_allow_save_default: v })}
+              />
+              <SettingsRow
+                label="Allow Sharing My Uploads Outside App"
+                sub="Your partner can share your content externally"
+                toggle
+                value={s?.vault_allow_share_default ?? false}
+                onChange={v => update({ vault_allow_share_default: v })}
+              />
+              <SettingsRow
+                label="Notify Me if My Content is Screenshotted"
+                sub="You'll get an alert when your partner screenshots something you uploaded"
+                toggle
+                value={s?.screenshot_notify_partner ?? true}
+                onChange={v => update({ screenshot_notify_partner: v })}
+              />
+              <SettingsRow
+                label="Remind Me When I Screenshot Partner Content"
+                sub="A personal reminder on your device when you screenshot their uploads"
+                toggle
+                value={s?.notify_me_on_own_screenshots ?? false}
+                onChange={v => update({ notify_me_on_own_screenshots: v })}
+              />
+              <SettingsRow
+                label="Auto-Save Chat Media to Vault"
+                sub="Any photo or video you send in Chat is automatically added to your Vault. Deleting from either place removes it from both."
+                toggle
+                value={s?.chat_auto_save_to_vault ?? true}
+                onChange={v => update({ chat_auto_save_to_vault: v })}
+              />
+            </Section>
 
-        <Section
-          title="STREAKS"
-          note={
-            couple?.user_b_id
-              ? "This setting affects both you and your partner. Your streak is always tracked in the background — turning this off just hides it."
-              : "Connect with a partner to enable streaks."
-          }
-        >
-          <SettingsRow
-            label="Day Streak"
-            sub={couple?.user_b_id ? "Show your current consecutive-day activity streak" : "Requires an active partner connection"}
-            toggle
-            value={couple?.user_b_id ? (couple?.streaks_enabled ?? true) : false}
-            onChange={handleToggleStreaks}
-            disabled={!couple?.user_b_id}
-          />
-        </Section>
+            <Section
+              title="MY NOTIFICATIONS"
+              note="Controls how push notifications appear on your device only."
+            >
+              <SettingsRow
+                label="Push Notifications"
+                sub="Receive alerts when your partner sends you something"
+                toggle
+                value={s?.push_notifications_enabled ?? false}
+                onChange={handleTogglePushNotifications}
+              />
+              <SettingsRow
+                label="Discreet Notifications"
+                sub="Never show content previews in your notifications"
+                toggle
+                value={s?.discreet_notifications ?? true}
+                onChange={v => update({ discreet_notifications: v })}
+                onInfo={() => setShowDiscreetInfo(true)}
+              />
+              {(['New activity', 'Something new is waiting', 'You have an update'] as const).map(copy => (
+                <TouchableOpacity
+                  key={copy}
+                  style={[styles.row, { borderBottomColor: colors.borderSubtle }]}
+                  onPress={() => update({ notification_copy: copy })}
+                  activeOpacity={0.7}
+                >
+                  <AppText style={[styles.rowLabel, { color: colors.text }]}>{copy}</AppText>
+                  <View style={[styles.radioOuter, { borderColor: s?.notification_copy === copy ? '#FF2E8A' : colors.borderSubtle }]}>
+                    {s?.notification_copy === copy && <View style={styles.radioInner} />}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </Section>
 
-        <Section
-          title="CHALLENGES"
-          note="Controls how Dare and Dice challenges you send behave. Your partner manages their own expiry window independently."
-        >
-          <ChallengeExpiryRow
-            current={s?.challenge_expiry_hours ?? 24}
-            colors={colors}
-            onSelect={(hours) => update({ challenge_expiry_hours: hours })}
-          />
-        </Section>
+            <Section
+              title="POINTS & SCORE"
+              note={
+                couple?.user_b_id
+                  ? "This setting affects both you and your partner. Points are always tallied in the background — turning this off just hides the scores."
+                  : "Connect with a partner to enable the points system."
+              }
+            >
+              <SettingsRow
+                label="Points System"
+                sub={couple?.user_b_id ? "Show scores, leaderboard, and Cash In features" : "Requires an active partner connection"}
+                toggle
+                value={couple?.user_b_id ? (couple?.points_enabled ?? true) : false}
+                onChange={handleTogglePoints}
+                disabled={!couple?.user_b_id}
+              />
+            </Section>
 
-        <Section title="ACCOUNT">
-          <SettingsRow label="End Partner Connection" danger onPress={() => setShowLeaveSheet(true)} />
-          <SettingsRow label="Sign Out" danger onPress={signOut} />
-        </Section>
+            <Section
+              title="STREAKS"
+              note={
+                couple?.user_b_id
+                  ? "This setting affects both you and your partner. Your streak is always tracked in the background — turning this off just hides it."
+                  : "Connect with a partner to enable streaks."
+              }
+            >
+              <SettingsRow
+                label="Day Streak"
+                sub={couple?.user_b_id ? "Show your current consecutive-day activity streak" : "Requires an active partner connection"}
+                toggle
+                value={couple?.user_b_id ? (couple?.streaks_enabled ?? true) : false}
+                onChange={handleToggleStreaks}
+                disabled={!couple?.user_b_id}
+              />
+            </Section>
+
+            <Section
+              title="CHALLENGES"
+              note="Controls how Dare and Dice challenges you send behave. Your partner manages their own expiry window independently."
+            >
+              <ChallengeExpiryRow
+                current={s?.challenge_expiry_hours ?? 24}
+                colors={colors}
+                onSelect={(hours) => update({ challenge_expiry_hours: hours })}
+              />
+            </Section>
+
+            <Section title="ACCOUNT">
+              <SettingsRow label="End Partner Connection" danger onPress={() => setShowLeaveSheet(true)} />
+              <SettingsRow label="Sign Out" danger onPress={signOut} />
+            </Section>
+          </>
+        )}
 
         <View style={{ height: 60 }} />
       </ScrollView>
@@ -676,7 +876,9 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 40 },
+  scroll: { paddingBottom: 40 },
+  tabletRow: { flexDirection: 'row', gap: 20, alignItems: 'flex-start' },
+  tabletCol: { flex: 1 },
   section: { marginBottom: Spacing.lg },
   sectionTitle: { fontSize: 11, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2, marginBottom: Spacing.sm, paddingHorizontal: 4 },
   sectionCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },

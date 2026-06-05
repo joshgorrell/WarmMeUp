@@ -14,6 +14,8 @@ interface AppShellProps {
   style?: ViewStyle;
   contentStyle?: ViewStyle;
   noTopPadding?: boolean;
+  /** On tablet, center children in a max-width column. Use for text-heavy detail screens. */
+  constrainContent?: boolean;
 }
 
 export default function AppShell({
@@ -23,10 +25,17 @@ export default function AppShell({
   style,
   contentStyle,
   noTopPadding = false,
+  constrainContent = false,
 }: AppShellProps) {
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { isTablet, contentMaxWidth } = useLayout();
+  const { isTabletOrLarger, contentMaxWidth } = useLayout();
+
+  const constrainedChildren = (constrainContent && isTabletOrLarger) ? (
+    <View style={{ alignSelf: 'center', width: '100%', maxWidth: contentMaxWidth, flex: scrollable ? undefined : 1 }}>
+      {children}
+    </View>
+  ) : children;
 
   return (
     <View style={[styles.root, style]}>
@@ -79,11 +88,7 @@ export default function AppShell({
           ]}
           {...scrollProps}
         >
-          {isTablet ? (
-            <View style={{ alignSelf: 'center', width: '100%', maxWidth: contentMaxWidth }}>
-              {children}
-            </View>
-          ) : children}
+          {constrainedChildren}
         </ScrollView>
       ) : (
         <View
@@ -93,11 +98,7 @@ export default function AppShell({
             contentStyle,
           ]}
         >
-          {isTablet ? (
-            <View style={{ alignSelf: 'center', width: '100%', maxWidth: contentMaxWidth, flex: 1 }}>
-              {children}
-            </View>
-          ) : children}
+          {constrainedChildren}
         </View>
       )}
     </View>
