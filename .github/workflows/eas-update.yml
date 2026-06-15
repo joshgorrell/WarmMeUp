@@ -46,6 +46,13 @@ jobs:
       - name: Check OTA marker
         run: grep -R "V15 OTA LIVE TEST" lib/appVersion.ts
 
+      - name: Create main branch and publish update
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: eas update --branch main --message "Initialize main EAS branch / V15 OTA live test 2026-06-15" --non-interactive
+
       - name: Map production channel to main branch
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -55,10 +62,3 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas channel:view production
-
-      - name: Publish EAS Update
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-        run: eas update --channel production --message "V15 OTA live test 2026-06-15" --non-interactive
