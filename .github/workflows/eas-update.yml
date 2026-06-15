@@ -46,6 +46,16 @@ jobs:
       - name: Check OTA marker
         run: grep -R "V15 OTA LIVE TEST" lib/appVersion.ts
 
+      - name: Map production channel to main branch
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas channel:edit production --branch main --non-interactive
+
+      - name: Verify channel mapping
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas channel:view production
+
       - name: Publish EAS Update
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
