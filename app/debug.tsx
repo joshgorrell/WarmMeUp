@@ -145,14 +145,23 @@ export default function DebugScreen() {
   let isEmbeddedLaunch: boolean | null = null;
   let isEmergencyLaunch: boolean | null = null;
   let createdAt: string | null = null;
+  let updatesManifestExtra: string | null = null;
+  let updatesManifestMetadata: string | null = null;
+  let updatesCheckForUpdateUrl: string | null = null;
   try {
     updateId = Updates.updateId ?? null;
     runtimeVersion = Updates.runtimeVersion ?? null;
-    channel = (Updates as any).channel ?? null;
+    // expo-updates >=0.18 exposes channel directly; older builds may not
+    channel = (Updates as any).channel ?? (Updates as any).manifest?.metadata?.channel ?? null;
     isEmbeddedLaunch = (Updates as any).isEmbeddedLaunch ?? null;
     isEmergencyLaunch = (Updates as any).isEmergencyLaunch ?? null;
     const raw = (Updates as any).createdAt ?? (Updates as any).manifest?.createdAt ?? null;
     createdAt = raw ? new Date(raw).toISOString() : null;
+    const manifestExtra = (Updates as any).manifest?.extra;
+    updatesManifestExtra = manifestExtra !== undefined ? JSON.stringify(manifestExtra) : null;
+    const manifestMeta = (Updates as any).manifest?.metadata;
+    updatesManifestMetadata = manifestMeta !== undefined ? JSON.stringify(manifestMeta) : null;
+    updatesCheckForUpdateUrl = (Updates as any).checkForUpdateUrl ?? null;
   } catch {}
 
   const appVersion = Constants.default?.expoConfig?.version ?? null;
@@ -502,6 +511,7 @@ export default function DebugScreen() {
         <Row label="anonKeyPrefix (12)" value={process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 12) ?? null} />
         <Row label="anonKeyJwtPayloadRef" value={anonKeyProjectRefDecoded} />
         <Row label="channel" value={channel} />
+        <Row label="manifest.metadata.channel" value={(() => { try { return (Updates as any).manifest?.metadata?.channel ?? null; } catch { return null; } })()} />
         <Row label="isEmbeddedLaunch" value={isEmbeddedLaunch} />
         <Row label="updateId" value={updateId} />
         <Row label="createdAt" value={createdAt} />
@@ -644,6 +654,11 @@ export default function DebugScreen() {
         <Row label="nativeAppVersion" value={nativeVersion} />
         <Row label="nativeBuildVersion" value={buildVersion} />
         <Row label="currentRoute" value={pathname} />
+        <Row label="manifest.extra" value={updatesManifestExtra} />
+        <Row label="manifest.metadata" value={updatesManifestMetadata} />
+        <Row label="checkForUpdateUrl" value={updatesCheckForUpdateUrl} />
+        <Row label="expoConfig.projectId" value={Constants.default?.expoConfig?.extra?.eas?.projectId ?? null} />
+        <Row label="updates.url (config)" value={(Constants.default?.expoConfig as any)?.updates?.url ?? null} />
 
         {/* ── 6. Recent Debug Events ── */}
         <Section title="Recent Debug Events" />
