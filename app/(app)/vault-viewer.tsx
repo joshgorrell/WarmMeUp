@@ -38,6 +38,8 @@ export default function VaultViewerScreen() {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useLayout();
   const { user, couple, settings } = useAuth();
+  const isMountedRef = useRef(true);
+  useEffect(() => { return () => { isMountedRef.current = false; }; }, []);
 
   const {
     id: itemId,
@@ -203,7 +205,7 @@ export default function VaultViewerScreen() {
     if (!storagePath) return;
     const bucket = storageBucket ?? 'vault';
     supabase.storage.from(bucket).createSignedUrl(storagePath, 60 * 60).then(({ data }) => {
-      if (data?.signedUrl) setMediaUri(data.signedUrl);
+      if (isMountedRef.current && data?.signedUrl) setMediaUri(data.signedUrl);
     });
   }, [storagePath, storageBucket]);
 
@@ -296,10 +298,10 @@ export default function VaultViewerScreen() {
       }).select().single();
       if (data) {
         await awardPoints(couple.id, user.id, 5, 'Saved chat media to Vault', data.id);
-        setSavedToVault(true);
+        if (isMountedRef.current) setSavedToVault(true);
       }
     } catch {}
-    setSavingToVault(false);
+    if (isMountedRef.current) setSavingToVault(false);
   }, [couple?.id, user?.id, storagePath, mediaUri, isVideo, canScreenshot, canSave, canShare, savingToVault, savedToVault]);
 
   const togglePlayPause = () => {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter, useSegments } from 'expo-router';
+import { useRouter } from 'expo-router';
 import WarmupLogo from './WarmupLogo';
 import WarmupWordmark from './WarmupWordmark';
 import Avatar from './Avatar';
@@ -23,7 +23,6 @@ export default function BrandHeader({
   onAvatarPress,
 }: BrandHeaderProps) {
   const router = useRouter();
-  const segments = useSegments();
   const { profile, settings } = useAuth();
   const privacyMode = settings?.stealth_mode_enabled ?? false;
   const temp = useWeather(
@@ -32,19 +31,10 @@ export default function BrandHeader({
     privacyMode ? profile?.id : undefined,
   );
 
-  const handleLogoPress = () => {
-    const insideTabs = segments.includes('(tabs)' as never);
-    if (insideTabs) {
-      router.navigate('/(app)/(tabs)/');
-    } else {
-      router.back();
-    }
-  };
-
   return (
     <View style={styles.container}>
       {/* Left: logo + wordmark */}
-      <TouchableOpacity onPress={handleLogoPress} onLongPress={() => router.push('/debug')} delayLongPress={5000} activeOpacity={0.7} style={styles.left}>
+      <TouchableOpacity onPress={() => router.navigate('/(app)/(tabs)/')} onLongPress={() => router.push('/debug')} delayLongPress={5000} activeOpacity={0.7} style={styles.left}>
         <WarmupLogo size={28} />
         <WarmupWordmark size={13} style={styles.wordmark} />
       </TouchableOpacity>

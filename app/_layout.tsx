@@ -1,5 +1,5 @@
 import React, { Component, useEffect, useRef, useState } from 'react';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, router as expoRouter } from 'expo-router';
 import { DarkTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
@@ -41,7 +41,10 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
             Something went wrong.
           </AppText>
           <TouchableOpacity
-            onPress={() => this.setState({ hasError: false })}
+            onPress={() => {
+              this.setState({ hasError: false });
+              try { expoRouter.replace('/(app)/(tabs)/'); } catch {}
+            }}
             style={{ backgroundColor: '#FF2E8A', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24 }}
             activeOpacity={0.8}
           >
