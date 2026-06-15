@@ -3,6 +3,9 @@ name: EAS Update
 on:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   update:
     name: EAS Update
@@ -15,7 +18,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup EAS
         uses: expo/expo-github-action@v8
@@ -26,16 +29,28 @@ jobs:
           eas-cache: false
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: List EAS channels
-        run: eas channel:list --non-interactive
+      - name: Print environment info
+        run: |
+          echo "=== Node / npm ==="
+          node --version
+          npm --version
+          echo "=== EAS CLI ==="
+          npx eas --version
+          echo "=== Expo CLI ==="
+          npx expo --version
+          echo "=== Git ref ==="
+          echo "GITHUB_REF=$GITHUB_REF"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "=== OTA marker in source ==="
+          grep -r "OTA_MARKER" lib/appVersion.ts || true
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
-      - name: List EAS branches
-        run: eas branch:list --non-interactive
+      - name: List EAS channels
+        run: eas channel:list --non-interactive
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
@@ -48,7 +63,7 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Publish update
-        run: eas update --channel production --message "production ota from github" --non-interactive
+        run: eas update --channel production --message "V15 OTA live test" --non-interactive
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
