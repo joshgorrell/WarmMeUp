@@ -31,39 +31,34 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Print environment info
+      - name: Debug environment
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
-          echo "=== Node / npm ==="
+          echo "=== Runtime versions ==="
           node --version
           npm --version
-          echo "=== EAS CLI ==="
           npx eas --version
-          echo "=== Expo CLI ==="
           npx expo --version
-          echo "=== Git ref ==="
-          echo "GITHUB_REF=$GITHUB_REF"
-          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "=== Git context ==="
+          echo "GITHUB_REF=${GITHUB_REF}"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
+          echo "=== Workspace files ==="
+          ls -la
+          echo "=== eas.json update block ==="
+          cat eas.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d.get('update', 'NOT FOUND'), indent=2))"
           echo "=== OTA marker in source ==="
-          grep -r "OTA_MARKER" lib/appVersion.ts || true
-        env:
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          grep -r "V15 OTA LIVE TEST" lib/appVersion.ts || echo "MARKER NOT FOUND"
+          echo "=== EXPO_PUBLIC_SUPABASE_URL present? ==="
+          [ -n "${EXPO_PUBLIC_SUPABASE_URL}" ] && echo "YES (${#EXPO_PUBLIC_SUPABASE_URL} chars)" || echo "NO - MISSING"
+          echo "=== EAS auth check ==="
+          npx eas whoami
 
-      - name: List EAS channels
-        run: eas channel:list --non-interactive
+      - name: Publish EAS Update
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-
-      - name: List recent updates on channel production
-        run: eas update:list --branch production --limit 3 --non-interactive
-        continue-on-error: true
-        env:
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-
-      - name: Publish update
-        run: eas update --channel production --message "V15 OTA live test" --non-interactive
-        env:
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          set -euxo pipefail
+          npx eas update --channel production --message "V15 OTA live test 2026-06-15" --non-interactive
