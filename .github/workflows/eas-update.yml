@@ -23,6 +23,27 @@ jobs:
       - name: Install EAS CLI
         run: npm install -g eas-cli
 
+      - name: Validate anon key
+        env:
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          node -e "
+            const k = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+            console.log('anon len', k.length);
+            console.log('anon prefix', k.slice(0, 24));
+            try {
+              const ref = JSON.parse(Buffer.from(k.split('.')[1], 'base64url').toString()).ref;
+              console.log('payload ref', ref);
+              if (ref !== 'vdhrcbaggplcktjamwcj') {
+                console.error('ERROR: payload ref does not match expected project');
+                process.exit(1);
+              }
+            } catch(e) {
+              console.error('decode failed', e.message);
+              process.exit(1);
+            }
+          "
+
       - name: Check OTA marker
         run: grep -R "OTA_MARKER" lib/appVersion.ts
 
