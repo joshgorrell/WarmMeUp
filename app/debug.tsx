@@ -658,7 +658,10 @@ export default function DebugScreen() {
         <Row label="manifest.metadata" value={updatesManifestMetadata} />
         <Row label="checkForUpdateUrl" value={updatesCheckForUpdateUrl} />
         <Row label="expoConfig.projectId" value={Constants.default?.expoConfig?.extra?.eas?.projectId ?? null} />
+        <Row label="easConfig.projectId" value={(Constants.default as any)?.easConfig?.projectId ?? null} />
         <Row label="updates.url (config)" value={(Constants.default?.expoConfig as any)?.updates?.url ?? null} />
+        <Row label="runtimeVersion (config)" value={(Constants.default?.expoConfig as any)?.runtimeVersion ?? null} />
+        <Row label="extra.eas.projectId (config)" value={Constants.default?.expoConfig?.extra?.eas?.projectId ?? null} />
 
         {/* ── 6. Recent Debug Events ── */}
         <Section title="Recent Debug Events" />
