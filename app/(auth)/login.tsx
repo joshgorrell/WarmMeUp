@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView,
@@ -37,6 +37,14 @@ export default function LoginScreen() {
   const [oauthLoading, setOauthLoading] = useState<'apple' | 'google' | null>(null);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'MISSING';
+    const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'MISSING';
+    console.log('[LoginScreen] SUPABASE_URL:', url);
+    console.log('[LoginScreen] ANON_KEY_PREFIX_25:', key.slice(0, 25));
+    console.log('[LoginScreen] ANON_KEY_LENGTH:', key.length);
+  }, []);
+
   // Hidden 5-tap logo trigger — opens debug screen without auth
   const logoTapCount = useRef(0);
   const logoTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,7 +68,15 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) throw err;
+      if (err) {
+        console.error('[Login] signInWithPassword error:', JSON.stringify({
+          message: err.message,
+          status: (err as any).status,
+          code: (err as any).code,
+          name: err.name,
+        }));
+        throw err;
+      }
 
       // After sign-in, check for a stored pending invite code (survives app restarts).
       // Route-param code takes priority over stored code.

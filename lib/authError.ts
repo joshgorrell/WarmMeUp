@@ -6,6 +6,8 @@ export function friendlyAuthError(e: unknown): string {
       ? (e as any).message
       : String(e);
 
+  console.error('[friendlyAuthError] raw:', raw, 'status:', (e as any)?.status, 'code:', (e as any)?.code);
+
   const lower = raw.toLowerCase();
 
   if (
@@ -21,6 +23,9 @@ export function friendlyAuthError(e: unknown): string {
   }
   if (lower.includes('invalid login') || lower.includes('invalid credentials') || lower.includes('wrong password')) {
     return 'Incorrect email or password.';
+  }
+  if (lower.includes('invalid api key') || lower.includes('apikey') || lower.includes('api key')) {
+    return 'Configuration error — please reinstall the app or contact support. (api_key_mismatch)';
   }
   if (lower.includes('email not confirmed')) {
     return 'Please confirm your email before signing in.';

@@ -51,7 +51,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // Boot-time diagnostics — appear in Metro / device logs before any login attempt.
 const _supabaseUrlHost = supabaseUrl ? (() => { try { return new URL(supabaseUrl).hostname; } catch { return null; } })() : null;
 const _dbProjectRef = _supabaseUrlHost ? _supabaseUrlHost.replace(/\.supabase\.co$/, '') : null;
-console.log('Supabase URL host:', _supabaseUrlHost);
-console.log('Supabase project ref:', _dbProjectRef);
-console.log('Anon key present:', Boolean(supabaseAnonKey));
-console.log('Anon key prefix:', supabaseAnonKey?.slice(0, 12) ?? null);
+console.log('[Supabase] URL:', supabaseUrl ?? 'MISSING');
+console.log('[Supabase] URL host:', _supabaseUrlHost);
+console.log('[Supabase] project ref:', _dbProjectRef);
+console.log('[Supabase] anon key present:', Boolean(supabaseAnonKey));
+console.log('[Supabase] anon key prefix (25):', supabaseAnonKey?.slice(0, 25) ?? 'MISSING');
+console.log('[Supabase] anon key length:', supabaseAnonKey?.length ?? 0);
