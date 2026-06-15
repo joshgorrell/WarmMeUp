@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
@@ -57,6 +57,11 @@ export default function ActivityScreen() {
   const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<FilterTab>('all');
   const [refreshing, setRefreshing] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   const items = filter === 'all'
     ? allItems
@@ -87,7 +92,7 @@ export default function ActivityScreen() {
     const viewed = new Set<string>(
       (viewedRows ?? []).map((v: any) => `${v.source_table}:${v.source_id}`)
     );
-    setViewedSet(viewed);
+    if (isMountedRef.current) setViewedSet(viewed);
 
     const mapped: ActivityItem[] = [];
     const partnerName = partnerProfile?.display_name ?? 'Partner';
@@ -288,15 +293,15 @@ export default function ActivityScreen() {
     });
 
     mapped.sort((a, b) => b._rawTime.localeCompare(a._rawTime));
-    setAllItems(mapped);
+    if (isMountedRef.current) setAllItems(mapped);
   };
 
-  const handleItemPress = async (item: ActivityItem) => {
+  const handleItemPress = (item: ActivityItem) => {
     if (!couple?.id || !user?.id) return;
     const key = `${item.sourceTable}:${item.sourceId}`;
     if (!viewedSet.has(key)) {
       setViewedSet(prev => new Set([...prev, key]));
-      await markViewedUtil(item, couple.id, user.id);
+      markViewedUtil(item, couple.id, user.id);
     }
     if (item.routeParams) {
       router.push({ pathname: item.route as any, params: item.routeParams });

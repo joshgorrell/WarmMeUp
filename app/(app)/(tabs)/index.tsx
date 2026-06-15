@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert,
 } from 'react-native';
@@ -65,6 +65,11 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (justPairedPartnerName === null) return;
@@ -118,7 +123,7 @@ export default function HomeScreen() {
   const loadScores = async () => {
     if (!couple?.id || !user) return;
     const { data } = await supabase.from('scores').select('*').eq('couple_id', couple.id);
-    if (data) {
+    if (data && isMountedRef.current) {
       setMyScore(data.find(s => s.user_id === user.id)?.points ?? 0);
       setPartnerScore(data.find(s => s.user_id !== user.id)?.points ?? 0);
     }
@@ -136,7 +141,7 @@ export default function HomeScreen() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    setActiveInteraction(data);
+    if (isMountedRef.current) setActiveInteraction(data);
   };
 
   const loadRecentActivity = async () => {
@@ -346,7 +351,7 @@ export default function HomeScreen() {
     });
 
     items.sort((a, b) => b._rawTime.localeCompare(a._rawTime));
-    setRecentActivity(items.slice(0, 5));
+    if (isMountedRef.current) setRecentActivity(items.slice(0, 5));
   };
 
   const markViewed = useCallback(async (item: ActivityItem) => {
