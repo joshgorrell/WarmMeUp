@@ -224,7 +224,9 @@ export default function DebugScreen() {
       if (!key) return null;
       const payload = key.split('.')[1];
       if (!payload) return null;
-      const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+      // JWT uses base64url — replace url-safe chars before decoding
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
       const decoded = atob(padded);
       const json = JSON.parse(decoded);
       return json?.ref ?? null;
