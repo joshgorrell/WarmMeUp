@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'pre-login-debug-2026-06-02-v13';
-export const OTA_MARKER = 'V13 INVITE DEBUG FIX';
+export const APP_CODE_VERSION = 'ota-pipeline-fix-2026-06-15-v14';
+export const OTA_MARKER = 'V14 OTA PIPELINE VERIFIED 2026-06-15';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.
