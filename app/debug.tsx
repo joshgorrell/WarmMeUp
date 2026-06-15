@@ -162,6 +162,11 @@ export default function DebugScreen() {
     const manifestMeta = (Updates as any).manifest?.metadata;
     updatesManifestMetadata = manifestMeta !== undefined ? JSON.stringify(manifestMeta) : null;
     updatesCheckForUpdateUrl = (Updates as any).checkForUpdateUrl ?? null;
+    // expo-updates >=0.26 exposes native request headers (includes expo-channel-name)
+    const nativeHeaders = (Updates as any).requestHeaders ?? (Updates as any).nativeDebug?.requestHeaders ?? null;
+    if (nativeHeaders) {
+      channel = channel ?? nativeHeaders['expo-channel-name'] ?? null;
+    }
   } catch {}
 
   const appVersion = Constants.default?.expoConfig?.version ?? null;
@@ -657,6 +662,7 @@ export default function DebugScreen() {
         <Row label="manifest.extra" value={updatesManifestExtra} />
         <Row label="manifest.metadata" value={updatesManifestMetadata} />
         <Row label="checkForUpdateUrl" value={updatesCheckForUpdateUrl} />
+        <Row label="requestHeaders" value={(() => { try { const h = (Updates as any).requestHeaders; return h ? JSON.stringify(h) : null; } catch { return null; } })()} />
         <Row label="expoConfig.projectId" value={Constants.default?.expoConfig?.extra?.eas?.projectId ?? null} />
         <Row label="easConfig.projectId" value={(Constants.default as any)?.easConfig?.projectId ?? null} />
         <Row label="updates.url (config)" value={(Constants.default?.expoConfig as any)?.updates?.url ?? null} />
