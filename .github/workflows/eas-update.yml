@@ -6,10 +6,6 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
-    env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
     steps:
       - name: Checkout
@@ -24,19 +20,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Debug environment
-        run: |
-          set -euxo pipefail
-          node --version
-          npm --version
-          npx eas --version
-          npx expo --version
-          echo "GITHUB_REF=$GITHUB_REF"
-          echo "GITHUB_SHA=$GITHUB_SHA"
-          grep -R "V15 OTA LIVE TEST" lib/appVersion.ts || echo "MARKER NOT FOUND IN lib/appVersion.ts"
+      - name: Check Node
+        run: node --version
+
+      - name: Check npm
+        run: npm --version
+
+      - name: Check EAS CLI
+        run: npx eas --version
+
+      - name: Check Expo auth
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas whoami
+
+      - name: Check Expo config
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npx expo config --type public
+
+      - name: Check OTA marker
+        run: grep -R "V15 OTA LIVE TEST" lib/appVersion.ts
 
       - name: Publish EAS Update
-        run: |
-          set -euxo pipefail
-          npx eas whoami
-          npx eas update --channel production --message "V15 OTA live test 2026-06-15" --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npx eas update --channel production --message "V15 OTA live test 2026-06-15" --non-interactive
