@@ -100,6 +100,13 @@ export default function DebugScreen() {
     result: any | null;
     error: { code: string | null; message: string | null; details: string | null; hint: string | null } | null;
   }>({ status: 'idle', ranAt: null, result: null, error: null });
+  const [checkUpdate, setCheckUpdate] = useState<{
+    status: 'idle' | 'loading' | 'success' | 'error';
+    ranAt: string | null;
+    isAvailable: boolean | null;
+    manifest: string | null;
+    error: string | null;
+  }>({ status: 'idle', ranAt: null, isAvailable: null, manifest: null, error: null });
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -148,20 +155,44 @@ export default function DebugScreen() {
   let updatesManifestExtra: string | null = null;
   let updatesManifestMetadata: string | null = null;
   let updatesCheckForUpdateUrl: string | null = null;
+  // currentlyRunning fields (expo-updates >= 0.26 / SDK 52)
+  let cr_isEmbeddedLaunch: boolean | null = null;
+  let cr_updateId: string | null = null;
+  let cr_channel: string | null = null;
+  let cr_runtimeVersion: string | null = null;
+  let cr_createdAt: string | null = null;
+  let cr_isEmergencyLaunch: boolean | null = null;
+  let cr_manifestId: string | null = null;
+  let launchDuration: number | null = null;
   try {
-    updateId = Updates.updateId ?? null;
-    runtimeVersion = Updates.runtimeVersion ?? null;
-    // expo-updates >=0.18 exposes channel directly; older builds may not
-    channel = (Updates as any).channel ?? (Updates as any).manifest?.metadata?.channel ?? null;
-    isEmbeddedLaunch = (Updates as any).isEmbeddedLaunch ?? null;
-    isEmergencyLaunch = (Updates as any).isEmergencyLaunch ?? null;
+    // --- currentlyRunning (authoritative in SDK 52 / expo-updates 0.26+) ---
+    const cr = (Updates as any).currentlyRunning ?? null;
+    if (cr) {
+      cr_isEmbeddedLaunch = cr.isEmbeddedLaunch ?? null;
+      cr_updateId = cr.updateId ?? null;
+      cr_channel = cr.channel ?? null;
+      cr_runtimeVersion = cr.runtimeVersion ?? null;
+      cr_isEmergencyLaunch = cr.isEmergencyLaunch ?? null;
+      const crRaw = cr.createdAt ?? null;
+      cr_createdAt = crRaw ? new Date(crRaw).toISOString() : null;
+      cr_manifestId = cr.manifest?.id ?? null;
+    }
+
+    // --- legacy / top-level fields (may be undefined in newer SDK) ---
+    updateId = Updates.updateId ?? cr_updateId ?? null;
+    runtimeVersion = Updates.runtimeVersion ?? cr_runtimeVersion ?? null;
+    channel = (Updates as any).channel ?? (Updates as any).manifest?.metadata?.channel ?? cr_channel ?? null;
+    isEmbeddedLaunch = (Updates as any).isEmbeddedLaunch ?? cr_isEmbeddedLaunch ?? null;
+    isEmergencyLaunch = (Updates as any).isEmergencyLaunch ?? cr_isEmergencyLaunch ?? null;
     const raw = (Updates as any).createdAt ?? (Updates as any).manifest?.createdAt ?? null;
-    createdAt = raw ? new Date(raw).toISOString() : null;
+    createdAt = raw ? new Date(raw).toISOString() : (cr_createdAt ?? null);
     const manifestExtra = (Updates as any).manifest?.extra;
     updatesManifestExtra = manifestExtra !== undefined ? JSON.stringify(manifestExtra) : null;
     const manifestMeta = (Updates as any).manifest?.metadata;
     updatesManifestMetadata = manifestMeta !== undefined ? JSON.stringify(manifestMeta) : null;
     updatesCheckForUpdateUrl = (Updates as any).checkForUpdateUrl ?? null;
+    launchDuration = (Updates as any).launchDuration ?? null;
+
     // expo-updates >=0.26 exposes native request headers (includes expo-channel-name)
     const nativeHeaders = (Updates as any).requestHeaders ?? (Updates as any).nativeDebug?.requestHeaders ?? null;
     if (nativeHeaders) {
@@ -314,6 +345,31 @@ export default function DebugScreen() {
         ranAt: new Date().toISOString(),
         result: null,
         error: { code: null, message: e?.message ?? String(e), details: null, hint: null },
+      });
+    }
+  };
+
+  // --- Action: Check for OTA update ---
+  const handleCheckUpdate = async () => {
+    setCheckUpdate({ status: 'loading', ranAt: new Date().toISOString(), isAvailable: null, manifest: null, error: null });
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      setCheckUpdate({
+        status: 'success',
+        ranAt: new Date().toISOString(),
+        isAvailable: result.isAvailable,
+        manifest: result.isAvailable && (result as any).manifest
+          ? JSON.stringify((result as any).manifest, null, 2)
+          : null,
+        error: null,
+      });
+    } catch (e: any) {
+      setCheckUpdate({
+        status: 'error',
+        ranAt: new Date().toISOString(),
+        isAvailable: null,
+        manifest: null,
+        error: e?.message ?? String(e),
       });
     }
   };
@@ -516,8 +572,10 @@ export default function DebugScreen() {
         <Row label="anonKeyPrefix (12)" value={process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 12) ?? null} />
         <Row label="anonKeyJwtPayloadRef" value={anonKeyProjectRefDecoded} />
         <Row label="channel" value={channel} />
+        <Row label="cr.channel" value={cr_channel} />
         <Row label="manifest.metadata.channel" value={(() => { try { return (Updates as any).manifest?.metadata?.channel ?? null; } catch { return null; } })()} />
-        <Row label="isEmbeddedLaunch" value={isEmbeddedLaunch} />
+        <Row label="isEmbeddedLaunch (legacy)" value={isEmbeddedLaunch} />
+        <Row label="cr.isEmbeddedLaunch" value={cr_isEmbeddedLaunch} />
         <Row label="updateId" value={updateId} />
         <Row label="createdAt" value={createdAt} />
 
@@ -648,13 +706,26 @@ export default function DebugScreen() {
         <Row label="DEBUG_ALWAYS_ON" value={process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON ?? null} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
-        <Section title="EAS / OTA Runtime Info" />
+        <Section title="EAS / OTA Runtime Info (legacy top-level)" />
         <Row label="updateId" value={updateId} />
         <Row label="runtimeVersion" value={runtimeVersion} />
         <Row label="channel" value={channel} />
-        <Row label="isEmbeddedLaunch" value={isEmbeddedLaunch} />
-        <Row label="isEmergencyLaunch" value={isEmergencyLaunch} />
-        <Row label="createdAt" value={createdAt} />
+        <Row label="isEmbeddedLaunch (legacy)" value={isEmbeddedLaunch} />
+        <Row label="isEmergencyLaunch (legacy)" value={isEmergencyLaunch} />
+        <Row label="createdAt (legacy)" value={createdAt} />
+        <Row label="launchDuration (ms)" value={launchDuration} />
+
+        <Section title="currentlyRunning (SDK 52 authoritative)" />
+        <Row label="cr.isEmbeddedLaunch" value={cr_isEmbeddedLaunch} />
+        <Row label="cr.updateId" value={cr_updateId} />
+        <Row label="cr.channel" value={cr_channel} />
+        <Row label="cr.runtimeVersion" value={cr_runtimeVersion} />
+        <Row label="cr.createdAt" value={cr_createdAt} />
+        <Row label="cr.isEmergencyLaunch" value={cr_isEmergencyLaunch} />
+        <Row label="cr.manifest.id" value={cr_manifestId} />
+        <Row label="requestHeaders" value={(() => { try { const h = (Updates as any).requestHeaders; return h ? JSON.stringify(h) : null; } catch { return null; } })()} />
+
+        <Section title="App / Build Info" />
         <Row label="appVersion (app.json)" value={appVersion} />
         <Row label="nativeAppVersion" value={nativeVersion} />
         <Row label="nativeBuildVersion" value={buildVersion} />
@@ -662,12 +733,10 @@ export default function DebugScreen() {
         <Row label="manifest.extra" value={updatesManifestExtra} />
         <Row label="manifest.metadata" value={updatesManifestMetadata} />
         <Row label="checkForUpdateUrl" value={updatesCheckForUpdateUrl} />
-        <Row label="requestHeaders" value={(() => { try { const h = (Updates as any).requestHeaders; return h ? JSON.stringify(h) : null; } catch { return null; } })()} />
         <Row label="expoConfig.projectId" value={Constants.default?.expoConfig?.extra?.eas?.projectId ?? null} />
         <Row label="easConfig.projectId" value={(Constants.default as any)?.easConfig?.projectId ?? null} />
         <Row label="updates.url (config)" value={(Constants.default?.expoConfig as any)?.updates?.url ?? null} />
         <Row label="runtimeVersion (config)" value={(Constants.default?.expoConfig as any)?.runtimeVersion ?? null} />
-        <Row label="extra.eas.projectId (config)" value={Constants.default?.expoConfig?.extra?.eas?.projectId ?? null} />
 
         {/* ── 6. Recent Debug Events ── */}
         <Section title="Recent Debug Events" />
@@ -885,6 +954,61 @@ export default function DebugScreen() {
 
           <AppText style={styles.btnNote}>
             Confirms which Supabase project the app is connected to.
+          </AppText>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#0d1a2b' }, checkUpdate.status === 'loading' && styles.btnDisabled]}
+            onPress={handleCheckUpdate}
+            disabled={checkUpdate.status === 'loading'}
+            activeOpacity={0.8}
+          >
+            {checkUpdate.status === 'loading'
+              ? <ActivityIndicator size="small" color="#60C8FF" />
+              : <RefreshCw size={15} color="#60C8FF" />
+            }
+            <AppText style={[styles.actionBtnLabel, { color: '#60C8FF' }]}>
+              {checkUpdate.status === 'loading' ? 'Checking for update…' : 'checkForUpdateAsync()'}
+            </AppText>
+          </TouchableOpacity>
+
+          {checkUpdate.status !== 'idle' && (
+            <View style={[
+              styles.rpcCard,
+              checkUpdate.status === 'loading' && styles.rpcCardLoading,
+              checkUpdate.status === 'success' && (checkUpdate.isAvailable ? styles.rpcCardSuccess : { backgroundColor: '#0d2b0d', borderColor: '#2d6a2d' }),
+              checkUpdate.status === 'error' && styles.rpcCardError,
+            ]}>
+              <View style={styles.rpcCardHeader}>
+                <AppText style={[
+                  styles.rpcCardStatus,
+                  checkUpdate.status === 'success' && { color: checkUpdate.isAvailable ? '#FFA040' : '#4CAF50' },
+                  checkUpdate.status === 'error' && { color: '#FF6B6B' },
+                  checkUpdate.status === 'loading' && { color: '#FFA040' },
+                ]}>
+                  {checkUpdate.status === 'success'
+                    ? (checkUpdate.isAvailable ? 'UPDATE AVAILABLE' : 'UP TO DATE')
+                    : checkUpdate.status.toUpperCase()}
+                </AppText>
+                {checkUpdate.ranAt && (
+                  <AppText style={styles.rpcCardTs} selectable>{checkUpdate.ranAt.substring(11, 19)}</AppText>
+                )}
+              </View>
+              {checkUpdate.status === 'success' && checkUpdate.manifest && (
+                <View style={styles.rpcCardField}>
+                  <AppText style={styles.rpcCardFieldLabel}>manifest</AppText>
+                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{checkUpdate.manifest}</AppText>
+                </View>
+              )}
+              {checkUpdate.status === 'error' && checkUpdate.error && (
+                <View style={styles.rpcCardField}>
+                  <AppText style={styles.rpcCardFieldLabel}>error</AppText>
+                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{checkUpdate.error}</AppText>
+                </View>
+              )}
+            </View>
+          )}
+          <AppText style={styles.btnNote}>
+            Calls Updates.checkForUpdateAsync() — shows whether a newer OTA is available.
           </AppText>
 
           <TouchableOpacity
