@@ -119,6 +119,7 @@ export default function DebugScreen() {
     result: string | null;
     error: string | null;
   }>({ status: 'idle', ranAt: null, result: null, error: null });
+  const [authLastError, setAuthLastError] = useState<string | null>(null);
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -151,6 +152,8 @@ export default function DebugScreen() {
           else setInactiveCoupleCount(count ?? 0);
         });
     }
+    // Load persisted last auth error (written by login screen on failure)
+    SecureStore.getItemAsync('debug_last_auth_error').then(v => setAuthLastError(v ?? null)).catch(() => {});
   }, [userId]);
 
   useEffect(() => {
@@ -230,22 +233,39 @@ export default function DebugScreen() {
   const dbProjectRef = supabaseUrlHost
     ? supabaseUrlHost.replace(/\.supabase\.co$/, '')
     : null;
-  const anonKeyProjectRefDecoded: string | null = (() => {
+  const supabaseKeyLength = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.length ?? 0;
+  const jwtDecodeDebug: {
+    parts: number | null;
+    payloadDecodes: boolean;
+    role: string | null;
+    ref: string | null;
+    iss: string | null;
+    exp: string | null;
+  } = (() => {
     try {
       const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-      if (!key) return null;
-      const payload = key.split('.')[1];
-      if (!payload) return null;
-      // JWT uses base64url — replace url-safe chars before decoding
-      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      if (!key) return { parts: null, payloadDecodes: false, role: null, ref: null, iss: null, exp: null };
+      const parts = key.split('.');
+      const partCount = parts.length;
+      const rawPayload = parts[1];
+      if (!rawPayload) return { parts: partCount, payloadDecodes: false, role: null, ref: null, iss: null, exp: null };
+      const base64 = rawPayload.replace(/-/g, '+').replace(/_/g, '/');
       const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-      const decoded = atob(padded);
-      const json = JSON.parse(decoded);
-      return json?.ref ?? null;
+      const json = JSON.parse(atob(padded));
+      return {
+        parts: partCount,
+        payloadDecodes: true,
+        role: json?.role ?? null,
+        ref: json?.ref ?? null,
+        iss: json?.iss ?? null,
+        exp: json?.exp ? new Date(json.exp * 1000).toISOString() : null,
+      };
     } catch {
-      return null;
+      return { parts: null, payloadDecodes: false, role: null, ref: null, iss: null, exp: null };
     }
   })();
+  // Keep a compat alias used by the share payload
+  const anonKeyProjectRefDecoded = jwtDecodeDebug.ref;
 
   // Boot timing from event log
   const lastBootEvent = events.find(e => e.tag === 'LAUNCH BOOT');
@@ -420,7 +440,7 @@ export default function DebugScreen() {
   const handleTestDb = async () => {
     setDbTest({ status: 'loading', ranAt: new Date().toISOString(), result: null, error: null });
     try {
-      const { data, error: err } = await supabase.from('profiles').select('*').limit(1);
+      const { data, error: err } = await supabase.from('profiles').select('id').limit(1);
       const ranAt = new Date().toISOString();
       console.log('[DebugScreen] DB TEST', JSON.stringify({ data, error: err }, null, 2));
       if (err) {
@@ -629,8 +649,10 @@ export default function DebugScreen() {
         <Row label="supabaseUrlHost" value={supabaseUrlHost} />
         <Row label="dbProjectRef" value={dbProjectRef} />
         <Row label="anonKeyPresent" value={Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)} />
-        <Row label="anonKeyPrefix (12)" value={process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 12) ?? null} />
-        <Row label="anonKeyJwtPayloadRef" value={anonKeyProjectRefDecoded} />
+        <Row label="supabaseKeyLength" value={supabaseKeyLength} />
+        <Row label="jwt.role" value={jwtDecodeDebug.role} />
+        <Row label="jwt.ref" value={jwtDecodeDebug.ref} />
+        <Row label="jwt.payloadDecodes" value={jwtDecodeDebug.payloadDecodes} />
         <Row label="channel" value={channel} />
         <Row label="cr.channel" value={cr_channel} />
         <Row label="manifest.metadata.channel" value={(() => { try { return (Updates as any).manifest?.metadata?.channel ?? null; } catch { return null; } })()} />
@@ -761,9 +783,18 @@ export default function DebugScreen() {
         {/* ── 4b. Environment / Build-time Config ── */}
         <Section title="Environment / Build-time Config" />
         <Row label="SUPABASE_URL (full)" value={process.env.EXPO_PUBLIC_SUPABASE_URL ?? null} />
-        <Row label="ANON_KEY prefix (first 24)" value={process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 24) ?? null} />
-        <Row label="anonKeyProjectRefDecoded" value={anonKeyProjectRefDecoded} />
+        <Row label="supabaseKeyLength" value={supabaseKeyLength} />
+        <Row label="jwt.parts" value={jwtDecodeDebug.parts} />
+        <Row label="jwt.payloadDecodes" value={jwtDecodeDebug.payloadDecodes} />
+        <Row label="jwt.role" value={jwtDecodeDebug.role} />
+        <Row label="jwt.ref" value={jwtDecodeDebug.ref} />
+        <Row label="jwt.iss" value={jwtDecodeDebug.iss} />
+        <Row label="jwt.exp" value={jwtDecodeDebug.exp} />
         <Row label="DEBUG_ALWAYS_ON" value={process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON ?? null} />
+
+        {/* ── 4c. Auth Last Error ── */}
+        <Section title="Auth Last Error" />
+        <Row label="supabaseAuthLastError" value={authLastError ?? '(none recorded)'} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />
