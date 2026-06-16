@@ -969,7 +969,7 @@ export default function ChatTab() {
         name={name}
         hasMedia={hasMedia}
         isMenuOpen={isMenuOpen}
-        blurEnabled={blurEnabled && !isMine}
+        blurEnabled={blurEnabled}
         revealed={revealedMedia.has(item.id)}
         signedUrl={hasMedia ? signedUrls[item.id] : undefined}
         reactions={itemReactions}
