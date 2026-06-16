@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'login-client-source-fix-2026-06-16-v22';
-export const OTA_MARKER = 'V22 LOGIN CLIENT SOURCE FIX 2026-06-16';
+export const APP_CODE_VERSION = 'auth-error-persist-debug-2026-06-16-v23';
+export const OTA_MARKER = 'V23 AUTH ERROR PERSIST DEBUG 2026-06-16';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.

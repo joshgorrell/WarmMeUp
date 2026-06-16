@@ -860,8 +860,28 @@ export default function DebugScreen() {
         })()}
 
         {/* ── 4d. Auth Last Error ── */}
-        <Section title="Auth Last Error" />
-        <Row label="supabaseAuthLastError" value={authLastError ?? '(none recorded)'} />
+        {(() => {
+          let parsed: Record<string, unknown> | null = null;
+          try { if (authLastError) parsed = JSON.parse(authLastError); } catch {}
+          const str = (key: string) => {
+            const v = parsed?.[key];
+            return v == null ? null : String(v);
+          };
+          const clientDiag = parsed?.clientDiag as Record<string, unknown> | undefined;
+          return (
+            <>
+              <Section title="Auth Last Error" />
+              <Row label="authLastErrorMessage"     value={str('message') ?? '(none recorded)'} />
+              <Row label="authLastErrorStatus"      value={str('status')} />
+              <Row label="authLastErrorCode"        value={str('code')} />
+              <Row label="authLastErrorName"        value={str('name')} />
+              <Row label="authLastErrorHttpBody"    value={str('httpBody')} />
+              <Row label="authLastError.clientDiag.clientHasAnonKey"    value={clientDiag ? String(clientDiag.clientHasAnonKey ?? 'n/a') : null} />
+              <Row label="authLastError.clientDiag.sourcesMatch"        value={clientDiag ? String(clientDiag.sourcesMatch ?? 'n/a') : null} />
+              <Row label="authLastErrorFullJson"    value={authLastError ?? '(none recorded)'} />
+            </>
+          );
+        })()}
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />

@@ -85,6 +85,10 @@ export default function LoginScreen() {
           status: (err as any).status ?? null,
           name: err.name ?? null,
           code: (err as any).code ?? null,
+          // auth-js sometimes attaches the raw server response body
+          httpBody: (err as any).__isAuthError
+            ? ((err as any).status + ' ' + err.message)
+            : ((err as any).body ?? (err as any).details ?? null),
           stack: (err as any).stack ?? null,
           clientDiag: getSupabaseDiagnostics(),
         });
