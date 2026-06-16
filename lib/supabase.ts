@@ -3,8 +3,16 @@ import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+
+// Hard crash guard — if either value is missing the client will silently fail
+// on every request with "No API key found". Surface this immediately.
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('[Supabase] FATAL: missing env vars at createClient time');
+  console.error('[Supabase] EXPO_PUBLIC_SUPABASE_URL:', supabaseUrl || 'EMPTY');
+  console.error('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY length:', supabaseAnonKey.length);
+}
 
 // Web uses localStorage so the session actually persists between reloads and
 // token refreshes are written back. Native uses expo-secure-store. The previous
@@ -48,7 +56,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: { fetch: fetchWithTimeout as typeof fetch },
 });
 
-// Boot-time diagnostics — appear in Metro / device logs before any login attempt.
+// Exportable diagnostic — call from login screen to verify key state at sign-in time.
+export function getSupabaseDiagnostics() {
+  return {
+    clientUrl: supabaseUrl || 'EMPTY',
+    hasAnonKey: supabaseAnonKey.length > 0,
+    anonKeyLength: supabaseAnonKey.length,
+    anonKeyPrefix: supabaseAnonKey.slice(0, 20) || 'EMPTY',
+  };
+}
+
+
 const _supabaseUrlHost = supabaseUrl ? (() => { try { return new URL(supabaseUrl).hostname; } catch { return null; } })() : null;
 const _dbProjectRef = _supabaseUrlHost ? _supabaseUrlHost.replace(/\.supabase\.co$/, '') : null;
 console.log('[Supabase] URL:', supabaseUrl ?? 'MISSING');

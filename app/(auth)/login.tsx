@@ -8,7 +8,7 @@ import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase } from '@/lib/supabase';
+import { supabase, getSupabaseDiagnostics } from '@/lib/supabase';
 import { signInWithProvider, isOAuthSupported } from '@/lib/oauth';
 import { savePendingCode, loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
@@ -68,6 +68,8 @@ export default function LoginScreen() {
     setError('');
     setLoading(true);
     try {
+      const diag = getSupabaseDiagnostics();
+      console.log('[Login] client diagnostics at sign-in time', JSON.stringify(diag));
       console.log('[Login] signInWithPassword attempt', { email: email.trim(), url: process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'MISSING', keyLen: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').length });
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) {
@@ -77,6 +79,7 @@ export default function LoginScreen() {
           name: err.name ?? null,
           code: (err as any).code ?? null,
           stack: (err as any).stack ?? null,
+          clientDiag: getSupabaseDiagnostics(),
         });
         console.error('[Login] AUTH ERROR FULL', JSON.stringify(err, null, 2));
         console.error('[Login] AUTH ERROR extra', errPayload);
