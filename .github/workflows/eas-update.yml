@@ -68,4 +68,4 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
           MARKER=$(grep OTA_MARKER lib/appVersion.ts | head -1)
-          eas update --branch production --message "$MARKER" --non-interactive
+          eas update --channel production --message "$MARKER" --non-interactive
