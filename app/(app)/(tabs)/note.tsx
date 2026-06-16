@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Pressable, Image, ActivityIndicator, TextInput, Alert,
-  AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager, InteractionManager,
+  AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager, InteractionManager, BackHandler,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -730,6 +730,16 @@ export default function ChatTab() {
     setPillSize(null);
   };
 
+  // Android back button closes the popover instead of navigating away
+  useEffect(() => {
+    if (!activeMenuId) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleDismissMenu();
+      return true;
+    });
+    return () => sub.remove();
+  }, [activeMenuId]);
+
   const handleStartEdit = (msg: ChatMessage) => {
     handleDismissMenu();
     setEditingState({ messageId: msg.id, originalText: msg.content_text ?? '' });
@@ -1055,6 +1065,7 @@ export default function ChatTab() {
                 }
               }}
               scrollEventThrottle={200}
+              onScrollBeginDrag={handleDismissMenu}
               onScrollToIndexFailed={({ index }) => {
                 setTimeout(() => {
                   listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
@@ -1132,6 +1143,7 @@ export default function ChatTab() {
                 returnKeyType="send"
                 blurOnSubmit={false}
                 onSubmitEditing={handleSend}
+                onFocus={handleDismissMenu}
               />
               <TouchableOpacity
                 onPress={handleSend}
@@ -1178,13 +1190,14 @@ export default function ChatTab() {
 
         return (
           <View style={[StyleSheet.absoluteFill, { zIndex: 9998 }]} pointerEvents="box-none">
-            {/* Dim backdrop */}
-            <Animated.View
+            {/* Tappable backdrop — closes popover on outside tap */}
+            <Pressable
               style={[StyleSheet.absoluteFill, styles.menuBackdrop]}
-              pointerEvents="none"
+              onPress={handleDismissMenu}
             />
-            <View
+            <Pressable
               style={{ position: 'absolute', left, top }}
+              onPress={e => e.stopPropagation()}
               onLayout={e => {
                 const { width: w, height: h } = e.nativeEvent.layout;
                 if (w > 0 && h > 0) setPillSize({ w, h });
@@ -1205,7 +1218,7 @@ export default function ChatTab() {
                 onCopy={!hasMedia ? () => handleCopy(activeMsg) : undefined}
                 onDismiss={handleDismissMenu}
               />
-            </View>
+            </Pressable>
           </View>
         );
       })()}
