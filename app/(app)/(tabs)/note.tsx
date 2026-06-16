@@ -4,7 +4,6 @@ import {
   TouchableOpacity, TouchableWithoutFeedback, Pressable, Image, ActivityIndicator, TextInput, Alert,
   AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager, InteractionManager, BackHandler,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -188,8 +187,12 @@ function MediaBubble({
       ) : signedUrl ? (
         <Image
           source={{ uri: signedUrl }}
-          style={StyleSheet.absoluteFill}
+          style={[
+            StyleSheet.absoluteFill,
+            isBlurred && Platform.OS === 'web' ? { filter: 'blur(20px)', transform: 'scale(1.1)' } as any : undefined,
+          ]}
           resizeMode="cover"
+          blurRadius={isBlurred && Platform.OS !== 'web' ? 20 : 0}
         />
       ) : (
         <View style={styles.mediaPlaceholder}>
@@ -204,13 +207,9 @@ function MediaBubble({
         </View>
       )}
       {isBlurred && loaded && signedUrl && (
-        <BlurView
-          intensity={80}
-          tint="dark"
-          style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay]}
-        >
+        <View style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay]}>
           <EyeOff color="rgba(255,255,255,0.8)" size={22} strokeWidth={2} />
-        </BlurView>
+        </View>
       )}
     </Pressable>
   );
@@ -1591,6 +1590,7 @@ const styles = StyleSheet.create({
   mediaBlurOverlay: {
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
   },
   playCircle: {
     width: 48,
