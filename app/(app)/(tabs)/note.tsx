@@ -278,9 +278,9 @@ export default function ChatTab() {
     messageIds,
   );
   const { width: screenWidth, height: screenHeight } = useLayout();
-  // Larger, more natural media preview — 65% width, 4:3 aspect ratio
-  const mediaBubbleWidth = Math.min(Math.round(screenWidth * 0.65), 300);
-  const mediaBubbleHeight = Math.round(mediaBubbleWidth * 0.75);
+  // Larger, more natural media preview — 72% width, square-ish ratio
+  const mediaBubbleWidth = Math.min(Math.round(screenWidth * 0.72), 320);
+  const mediaBubbleHeight = Math.round(mediaBubbleWidth * 1.0);
 
   // Re-blur chat media when returning from background
   useEffect(() => {
@@ -1357,7 +1357,7 @@ const MessageRow = React.memo(function MessageRow({
               isMine
                 ? { backgroundColor: 'rgba(255,80,55,0.22)', borderColor: isMenuOpen ? 'rgba(255,90,61,0.7)' : 'rgba(255,80,55,0.32)' }
                 : { backgroundColor: colors.card, borderColor: colors.borderSubtle },
-              mediaOnly && styles.bubbleMediaOnly,
+              hasMedia && styles.bubbleMediaOnly,
             ]}>
               {hasMedia && (
                 <MediaBubble
@@ -1370,20 +1370,20 @@ const MessageRow = React.memo(function MessageRow({
                   onLongPress={onLongPress}
                   bubbleWidth={mediaBubbleWidth}
                   bubbleHeight={mediaBubbleHeight}
-                  radii={mediaOnly ? radii : { borderTopLeftRadius: 14, borderTopRightRadius: 14, borderBottomLeftRadius: 10, borderBottomRightRadius: 10 }}
+                  radii={item.content_text ? { ...radii, borderBottomLeftRadius: 6, borderBottomRightRadius: 6 } : radii}
                 />
               )}
               {item.content_text ? (
-                <AppText style={[styles.bubbleText, {
+                <AppText style={[styles.bubbleText, styles.mediaCaption, {
                   color: colors.text,
-                  fontSize: Math.round(15 * chatFontScale),
-                  lineHeight: Math.round(15 * chatFontScale * 1.55),
+                  fontSize: Math.round(14 * chatFontScale),
+                  lineHeight: Math.round(14 * chatFontScale * 1.5),
                 }]}>
                   {item.content_text}
                 </AppText>
               ) : null}
               {/* Timestamp + edited — only shown inside bubble when there's text, or below media */}
-              <View style={styles.bubbleMeta}>
+              <View style={[styles.bubbleMeta, hasMedia && styles.bubbleMetaMedia]}>
                 <AppText style={[styles.bubbleTime, {
                   color: isMine ? 'rgba(255,255,255,0.55)' : colors.textMuted,
                   fontSize: Math.round(11 * chatFontScale),
@@ -1513,6 +1513,16 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     borderColor: 'transparent',
     overflow: 'hidden',
+  },
+  mediaCaption: {
+    paddingHorizontal: 10,
+    paddingTop: 7,
+    paddingBottom: 2,
+  },
+  bubbleMetaMedia: {
+    paddingHorizontal: 10,
+    paddingBottom: 6,
+    marginTop: 0,
   },
   bubbleText: {
     fontFamily: 'Inter-Regular',
