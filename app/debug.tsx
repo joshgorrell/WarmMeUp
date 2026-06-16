@@ -838,7 +838,7 @@ export default function DebugScreen() {
           const authClientUrl = authUrl;
           return (
             <>
-              <Section title="Env vs Client Source Comparison (V22)" />
+              <Section title="Env vs Client Source Comparison (V24)" />
               <Row label="env.urlHost"                   value={diag.envUrlHost} />
               <Row label="client.url"                    value={diag.clientUrl} />
               <Row label="env.anonKeyLength"             value={diag.envAnonKeyLength} />
@@ -849,8 +849,9 @@ export default function DebugScreen() {
               <Row label="client.anonKeyProjectRef"      value={diag.clientAnonKeyProjectRefDecoded} />
               <Row label="client.hasAnonKey"             value={diag.clientHasAnonKey} />
               <Row label="sourcesMatch"                  value={diag.sourcesMatch} />
-              <Section title="Auth Client Internals (V22)" />
-              <Row label="authClientSource"              value="supabase.auth (shared lib/supabase.ts)" />
+              <Row label="fetchWrapper"                  value={(diag as any).fetchWrapper ?? 'unknown'} />
+              <Section title="Auth Client Internals (V24)" />
+              <Row label="authClientSource"              value="supabase.auth (shared lib/supabase.ts, no custom fetch)" />
               <Row label="authClientUrl"                 value={authClientUrl} />
               <Row label="authClientHasApiKey"           value={authClientHasApiKey} />
               <Row label="authClientAnonKeyLength"       value={authClientAnonKeyLength} />

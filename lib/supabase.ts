@@ -6,18 +6,12 @@ import { Platform } from 'react-native';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
-// Hard crash guard — if either value is missing the client will silently fail
-// on every request with "No API key found". Surface this immediately.
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('[Supabase] FATAL: missing env vars at createClient time');
   console.error('[Supabase] EXPO_PUBLIC_SUPABASE_URL:', supabaseUrl || 'EMPTY');
   console.error('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY length:', supabaseAnonKey.length);
 }
 
-// Web uses localStorage so the session actually persists between reloads and
-// token refreshes are written back. Native uses expo-secure-store. The previous
-// adapter no-opped on web, which silently broke session persistence and any
-// subsequent write that depended on a refreshed token.
 const webStorage = {
   getItem: (key: string) => {
     try { return window.localStorage.getItem(key); } catch { return null; }
@@ -38,43 +32,11 @@ const nativeStorage = {
 
 const storage = Platform.OS === 'web' ? webStorage : nativeStorage;
 
-const FETCH_TIMEOUT_MS = 15_000;
-
-// Normalize any headers value (Headers instance, string[][], or plain object)
-// to a plain Record<string,string> so React Native's fetch polyfill handles them correctly.
-// fetchWithAuth (supabase-js) builds a Headers instance and passes it in init.headers.
-// Spreading a Headers instance into a plain object loses its entries in RN's fetch polyfill,
-// which is why the apikey header was silently dropped and Supabase returned "No API key found".
-function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
-  if (!headers) return {};
-  if (headers instanceof Headers) {
-    const out: Record<string, string> = {};
-    headers.forEach((value, key) => { out[key] = value; });
-    return out;
-  }
-  if (Array.isArray(headers)) {
-    const out: Record<string, string> = {};
-    for (const [k, v] of headers) out[k] = v;
-    return out;
-  }
-  return headers as Record<string, string>;
-}
-
-function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  const normalizedInit: RequestInit = {
-    ...init,
-    headers: normalizeHeaders(init?.headers),
-    signal: controller.signal,
-  };
-  if (__DEV__) {
-    const h = normalizedInit.headers as Record<string, string>;
-    console.log('[fetchWithTimeout] apikey present:', Boolean(h?.apikey), 'Authorization present:', Boolean(h?.Authorization));
-  }
-  return fetch(input, normalizedInit).finally(() => clearTimeout(timer));
-}
-
+// Do NOT pass a custom global.fetch. Every wrapper we have tried (fetchWithTimeout,
+// normalizeHeaders) has been the only non-default variable in the call chain and is
+// the prime suspect for the persistent "No API key found in request" error on iOS/Android.
+// React Native's built-in fetch handles supabase-js Header objects correctly without help.
+// Timeout is intentionally removed to eliminate the wrapper as a variable.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: storage as any,
@@ -82,10 +44,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',
   },
-  global: { fetch: fetchWithTimeout as typeof fetch },
 });
 
-// Decode the ref claim from a JWT — same logic debug.tsx uses on the env var.
+// Decode the ref claim from a JWT.
 function _decodeJwtRef(jwt: string): string | null {
   try {
     const parts = jwt.split('.');
@@ -99,17 +60,13 @@ function _decodeJwtRef(jwt: string): string | null {
   }
 }
 
-// Exportable diagnostic — captures client values at createClient time (module scope).
-// These are compared against process.env values read at render time in debug.tsx.
 export function getSupabaseDiagnostics() {
   return {
-    // Values captured when createClient was called (module init time)
     clientUrl: supabaseUrl || 'EMPTY',
     clientHasAnonKey: supabaseAnonKey.length > 0,
     clientAnonKeyLength: supabaseAnonKey.length,
     clientAnonKeyPrefix24: supabaseAnonKey.slice(0, 24) || 'EMPTY',
     clientAnonKeyProjectRefDecoded: _decodeJwtRef(supabaseAnonKey),
-    // Values read from process.env right now (call time) for comparison
     envAnonKeyLength: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').length,
     envAnonKeyPrefix24: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').slice(0, 24) || 'EMPTY',
     envAnonKeyProjectRefDecoded: _decodeJwtRef(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''),
@@ -117,9 +74,10 @@ export function getSupabaseDiagnostics() {
     sourcesMatch:
       supabaseAnonKey === (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '') &&
       supabaseUrl === (process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''),
+    // V24: no custom global.fetch — using RN's native fetch directly
+    fetchWrapper: 'none',
   };
 }
-
 
 const _supabaseUrlHost = supabaseUrl ? (() => { try { return new URL(supabaseUrl).hostname; } catch { return null; } })() : null;
 const _dbProjectRef = _supabaseUrlHost ? _supabaseUrlHost.replace(/\.supabase\.co$/, '') : null;
