@@ -6,6 +6,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -26,6 +27,13 @@ import { friendlyAuthError } from '@/lib/authError';
 import { completePendingJoin } from '@/lib/coupleJoin';
 import { useAuth } from '@/context/AuthContext';
 
+// Only loaded on native — web falls back to text input
+let DateTimePicker: React.ComponentType<any> | null = null;
+if (Platform.OS !== 'web') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
+
 function getAge(dob: Date): number {
   const today = new Date();
   let age = today.getFullYear() - dob.getFullYear();
@@ -34,6 +42,20 @@ function getAge(dob: Date): number {
   return age;
 }
 
+function formatDate(date: Date): string {
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  const y = date.getFullYear();
+  return `${m}/${d}/${y}`;
+}
+
+function getMaxDate(): Date {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 18);
+  return d;
+}
+
+// Web-only: parse MM/DD/YYYY text input
 function parseDateInput(value: string): Date | null {
   const parts = value.split('/');
   if (parts.length !== 3) return null;
@@ -57,6 +79,7 @@ export default function RegisterScreen() {
   const inputPad = Math.max(Math.round(height * 0.014), 10);
   const headingSize = Math.min(Math.round(width * 0.076), 30);
 
+  // Form values
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -64,148 +87,109 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // DOB — native picker on iOS/Android, text on web
+  const [dobDate, setDobDate] = useState<Date | null>(null);
+  const [showDobPicker, setShowDobPicker] = useState(false);
+  const [dobText, setDobText] = useState('');
+
+  // Touched flags — errors only appear after a field is touched or submit attempted
+  const [firstNameTouched, setFirstNameTouched] = useState(false);
+  const [lastNameTouched, setLastNameTouched] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [confirmPasswordTouched, setConfirmPasswordTouched] = useState(false);
+  const [dobTouched, setDobTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'apple' | 'google' | null>(null);
-  const [error, setError] = useState('');
+  const [apiError, setApiError] = useState('');
+
   const [tosAccepted, setTosAccepted] = useState(false);
   const [termsVisible, setTermsVisible] = useState(false);
   const [privacyVisible, setPrivacyVisible] = useState(false);
-  const [dob, setDob] = useState('');
-  const [dobError, setDobError] = useState('');
+
+  // OAuth ToS consent modal
+  const [tosConsentVisible, setTosConsentVisible] = useState(false);
+  const [pendingOAuthProvider, setPendingOAuthProvider] = useState<'apple' | 'google' | null>(null);
 
   const tosAcceptedAt = new Date().toISOString();
+  const maxDate = getMaxDate();
 
-  const validateAge = (): boolean => {
-    if (!dob.trim()) {
-      setDobError('Please enter your date of birth.');
-      return false;
-    }
-    const parsed = parseDateInput(dob);
-    if (!parsed) {
-      setDobError('Enter a valid date in MM/DD/YYYY format.');
-      return false;
-    }
-    if (getAge(parsed) < 18) {
-      setDobError('You must be 18 or older to use Warm Me Up.');
-      return false;
-    }
-    setDobError('');
-    return true;
-  };
+  // --- Derived: DOB validity ---
+  const dobValid: boolean = Platform.OS === 'web'
+    ? (() => {
+        const parsed = parseDateInput(dobText);
+        return parsed !== null && getAge(parsed) >= 18;
+      })()
+    : dobDate !== null && getAge(dobDate) >= 18;
 
-  const handleDobChange = (text: string) => {
+  // --- Per-field inline errors ---
+  const firstNameError = firstName.trim().length === 0
+    ? 'First name is required'
+    : firstName.trim().length < 2 ? 'Must be at least 2 characters' : null;
+  const lastNameError = lastName.trim().length === 0
+    ? 'Last name is required'
+    : lastName.trim().length < 2 ? 'Must be at least 2 characters' : null;
+  const emailError = email.trim().length === 0 ? 'Email is required' : null;
+  const passwordError = password.length === 0
+    ? 'Password is required'
+    : password.length < 8 ? 'Must be at least 8 characters' : null;
+  const confirmPasswordError = confirmPassword.length === 0
+    ? 'Please confirm your password'
+    : password !== confirmPassword ? 'Passwords do not match' : null;
+  const dobFieldError = !dobValid
+    ? (dobDate !== null || dobText.length > 0 ? 'You must be 18 or older to use Warm Me Up' : 'Date of birth is required')
+    : null;
+
+  const showFirstNameError = (firstNameTouched || submitAttempted) && !!firstNameError;
+  const showLastNameError = (lastNameTouched || submitAttempted) && !!lastNameError;
+  const showEmailError = (emailTouched || submitAttempted) && !!emailError;
+  const showPasswordError = (passwordTouched || submitAttempted) && !!passwordError;
+  const showConfirmPasswordError = (confirmPasswordTouched || submitAttempted) && !!confirmPasswordError;
+  const showDobError = (dobTouched || submitAttempted) && !!dobFieldError;
+
+  // Password hint (not red) while typing but not yet erroring
+  const showPasswordHint = !showPasswordError;
+
+  // --- Create Account disabled until all fields valid ---
+  const formReady =
+    !firstNameError &&
+    !lastNameError &&
+    !emailError &&
+    !passwordError &&
+    !confirmPasswordError &&
+    dobValid &&
+    tosAccepted;
+
+  // --- Web DOB text change ---
+  const handleDobTextChange = (text: string) => {
     let cleaned = text.replace(/[^0-9]/g, '');
     if (cleaned.length > 2) cleaned = cleaned.slice(0, 2) + '/' + cleaned.slice(2);
     if (cleaned.length > 5) cleaned = cleaned.slice(0, 5) + '/' + cleaned.slice(5);
     if (cleaned.length > 10) return;
-    setDob(cleaned);
-    setDobError('');
+    setDobText(cleaned);
+    setDobTouched(true);
   };
 
-  const requireTos = () => {
-    setError('Please agree to the Terms of Service and Privacy Policy to continue.');
-    return false;
-  };
-
-  const handleRegister = async () => {
+  // --- Shared OAuth body (called after consent guaranteed) ---
+  const runOAuth = async (provider: 'apple' | 'google') => {
     const fn = firstName.trim();
     const ln = lastName.trim();
-    if (!fn) { setError('Please enter your first name.'); return; }
-    if (fn.length < 2) { setError('First name must be at least 2 characters.'); return; }
-    if (!ln) { setError('Please enter your last name.'); return; }
-    if (ln.length < 2) { setError('Last name must be at least 2 characters.'); return; }
+    if (!fn || fn.length < 2) {
+      setFirstNameTouched(true);
+      setApiError('Please enter your first name before continuing.');
+      return;
+    }
+    if (!ln || ln.length < 2) {
+      setLastNameTouched(true);
+      setApiError('Please enter your last name before continuing.');
+      return;
+    }
     const fullName = `${fn} ${ln}`;
-    if (!validateAge()) return;
-    if (!tosAccepted) { requireTos(); return; }
-    if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
-      setError('Please fill in all fields.');
-      return;
-    }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-    setError('');
-    setLoading(true);
-    try {
-      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
-      if (signUpError) throw signUpError;
-      if (data.user) {
-        await supabase
-          .from('profiles')
-          .update({ first_name: fn, last_name: ln, display_name: fullName, tos_accepted_at: tosAcceptedAt })
-          .eq('id', data.user.id);
-
-        // When Supabase has email confirmation disabled, the user is confirmed
-        // immediately and there is no email to verify. Skip verify-email and
-        // run the pending join inline so the pair is completed right away.
-        if (data.user.email_confirmed_at) {
-          if (pendingCode) {
-            const result = await completePendingJoin(data.user.id, pendingCode, refreshSubscription);
-            await clearPendingCode();
-            if (result.ok) {
-              const { data: sessionData } = await supabase.auth.getSession();
-              const token = sessionData?.session?.access_token;
-              if (token) {
-                fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                  body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
-                }).catch(() => {});
-              }
-              router.replace({
-                pathname: '/(auth)/paired-celebration',
-                params: { partnerName: result.partnerName || '' },
-              });
-              return;
-            }
-          }
-          router.replace('/(auth)/onboarding');
-          return;
-        }
-
-        // Normal path: email confirmation required
-        const params: Record<string, string> = { email };
-        if (pendingCode) params.pendingCode = pendingCode;
-        router.replace({ pathname: '/(auth)/verify-email', params });
-      }
-    } catch (e: unknown) {
-      setError(friendlyAuthError(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOAuth = async (provider: 'apple' | 'google') => {
-    if (!firstName.trim()) {
-      setError('Please enter your first name before continuing.');
-      return;
-    }
-    if (firstName.trim().length < 2) {
-      setError('First name must be at least 2 characters.');
-      return;
-    }
-    if (!lastName.trim()) {
-      setError('Please enter your last name before continuing.');
-      return;
-    }
-    if (lastName.trim().length < 2) {
-      setError('Last name must be at least 2 characters.');
-      return;
-    }
-    const fn = firstName.trim();
-    const ln = lastName.trim();
-    const fullName = `${fn} ${ln}`;
-    if (!validateAge()) return;
-    if (!tosAccepted) { requireTos(); return; }
-    setError('');
+    setApiError('');
     setOauthLoading(provider);
-    // Persist pendingCode before the OAuth redirect — the app may restart during
-    // the OAuth flow and route params won't survive.
     if (pendingCode) await savePendingCode(pendingCode);
     try {
       const session = await signInWithProvider(provider);
@@ -213,8 +197,6 @@ export default function RegisterScreen() {
 
       const userId = session.user?.id;
       if (userId) {
-        // Only update name + tos if this is a new account (tos not yet accepted).
-        // Returns 0 rows affected for existing users, which is fine.
         const { data: updatedProfile } = await supabase
           .from('profiles')
           .update({ first_name: fn, last_name: ln, display_name: fullName, tos_accepted_at: tosAcceptedAt })
@@ -223,10 +205,8 @@ export default function RegisterScreen() {
           .select('id')
           .maybeSingle();
 
-        // updatedProfile is non-null only when we actually wrote — meaning new user
         const isNewUser = !!updatedProfile;
         if (isNewUser) {
-          // OAuth providers always verify email — run join inline if there's a pending code.
           if (pendingCode && session.user?.id) {
             const result = await completePendingJoin(session.user.id, pendingCode, refreshSubscription);
             await clearPendingCode();
@@ -253,14 +233,90 @@ export default function RegisterScreen() {
         }
       }
     } catch (e: unknown) {
-      setError(friendlyAuthError(e));
+      setApiError(friendlyAuthError(e));
     } finally {
       setOauthLoading(null);
     }
   };
 
-  const handlePrivacyPolicy = () => {
-    setPrivacyVisible(true);
+  // --- Create Account ---
+  const handleRegister = async () => {
+    setSubmitAttempted(true);
+    setApiError('');
+
+    const fn = firstName.trim();
+    const ln = lastName.trim();
+    if (!fn || fn.length < 2 || !ln || ln.length < 2) return;
+    if (!email.trim() || !password || password.length < 8 || password !== confirmPassword) return;
+    if (!dobValid) return;
+    if (!tosAccepted) return;
+
+    const fullName = `${fn} ${ln}`;
+    setLoading(true);
+    try {
+      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+      if (signUpError) throw signUpError;
+      if (data.user) {
+        await supabase
+          .from('profiles')
+          .update({ first_name: fn, last_name: ln, display_name: fullName, tos_accepted_at: tosAcceptedAt })
+          .eq('id', data.user.id);
+
+        if (data.user.email_confirmed_at) {
+          if (pendingCode) {
+            const result = await completePendingJoin(data.user.id, pendingCode, refreshSubscription);
+            await clearPendingCode();
+            if (result.ok) {
+              const { data: sessionData } = await supabase.auth.getSession();
+              const token = sessionData?.session?.access_token;
+              if (token) {
+                fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
+                }).catch(() => {});
+              }
+              router.replace({
+                pathname: '/(auth)/paired-celebration',
+                params: { partnerName: result.partnerName || '' },
+              });
+              return;
+            }
+          }
+          router.replace('/(auth)/onboarding');
+          return;
+        }
+
+        const params: Record<string, string> = { email };
+        if (pendingCode) params.pendingCode = pendingCode;
+        router.replace({ pathname: '/(auth)/verify-email', params });
+      }
+    } catch (e: unknown) {
+      setApiError(friendlyAuthError(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- OAuth tap ---
+  const handleOAuth = (provider: 'apple' | 'google') => {
+    if (!tosAccepted) {
+      setPendingOAuthProvider(provider);
+      setTosConsentVisible(true);
+      return;
+    }
+    runOAuth(provider);
+  };
+
+  const handleTosConsentAgree = () => {
+    setTosAccepted(true);
+    setTosConsentVisible(false);
+    const provider = pendingOAuthProvider;
+    setPendingOAuthProvider(null);
+    if (provider) {
+      // setTimeout lets state settle before running OAuth
+      setTimeout(() => runOAuth(provider), 0);
+    }
   };
 
   const showGoogle = isOAuthSupported('google');
@@ -279,6 +335,100 @@ export default function RegisterScreen() {
       <TermsModal visible={termsVisible} onClose={() => setTermsVisible(false)} />
       <PrivacyPolicyModal visible={privacyVisible} onClose={() => setPrivacyVisible(false)} />
 
+      {/* ToS consent modal for OAuth */}
+      <Modal
+        visible={tosConsentVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTosConsentVisible(false)}
+      >
+        <View style={styles.consentOverlay}>
+          <View style={styles.consentCard}>
+            <AppText style={styles.consentTitle}>Before you continue</AppText>
+            <AppText style={styles.consentBody}>
+              By continuing, you agree to the{' '}
+              <AppText style={styles.consentLink} onPress={() => setTermsVisible(true)}>
+                Terms of Service
+              </AppText>
+              {' '}and{' '}
+              <AppText style={styles.consentLink} onPress={() => setPrivacyVisible(true)}>
+                Privacy Policy
+              </AppText>
+              .
+            </AppText>
+            <View style={styles.consentActions}>
+              <TouchableOpacity
+                style={styles.consentCancel}
+                onPress={() => { setTosConsentVisible(false); setPendingOAuthProvider(null); }}
+                activeOpacity={0.75}
+              >
+                <AppText style={styles.consentCancelText}>Cancel</AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.consentAgreeBtn}
+                onPress={handleTosConsentAgree}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.consentAgreeGrad}
+                >
+                  <AppText style={styles.consentAgreeText}>Agree & Continue</AppText>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* iOS DOB picker in bottom sheet */}
+      {Platform.OS === 'ios' && DateTimePicker && (
+        <Modal
+          visible={showDobPicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowDobPicker(false)}
+        >
+          <View style={styles.pickerOverlay}>
+            <View style={styles.pickerSheet}>
+              <View style={styles.pickerHeader}>
+                <TouchableOpacity onPress={() => setShowDobPicker(false)} activeOpacity={0.7}>
+                  <AppText style={styles.pickerDone}>Done</AppText>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={dobDate || maxDate}
+                mode="date"
+                display="spinner"
+                maximumDate={maxDate}
+                minimumDate={new Date(1900, 0, 1)}
+                onChange={(_event: any, date?: Date) => {
+                  if (date) setDobDate(date);
+                }}
+                textColor="#fff"
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Android DOB picker — native dialog */}
+      {Platform.OS === 'android' && showDobPicker && DateTimePicker && (
+        <DateTimePicker
+          value={dobDate || maxDate}
+          mode="date"
+          display="spinner"
+          maximumDate={maxDate}
+          minimumDate={new Date(1900, 0, 1)}
+          onChange={(event: any, date?: Date) => {
+            setShowDobPicker(false);
+            if (event.type === 'set' && date) setDobDate(date);
+          }}
+        />
+      )}
+
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: vMd + insets.top, paddingBottom: Math.max(insets.bottom, vMd) + vMd }]}
         keyboardShouldPersistTaps="handled"
@@ -293,21 +443,21 @@ export default function RegisterScreen() {
           </View>
 
           {/* Title */}
-          <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your space</AppText>
-          <AppText style={[styles.sub, { marginBottom: vSm }]}>Just for you and your partner.</AppText>
+          <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your account</AppText>
+          <AppText style={[styles.sub, { marginBottom: vSm }]}>Private. Playful. Just for you and your partner.</AppText>
 
-          {/* OAuth buttons */}
+          {/* OAuth buttons — always enabled */}
           {(showGoogle || showApple) && (
             <View style={[styles.oauthBlock, { gap: vXs, marginBottom: vSm }]}>
               {showApple && (
                 <TouchableOpacity
-                  style={[styles.oauthBtn, styles.appleBtn, { paddingVertical: inputPad }, !tosAccepted && styles.btnDisabled]}
+                  style={[styles.oauthBtn, styles.appleBtn, { paddingVertical: inputPad }]}
                   onPress={() => handleOAuth('apple')}
                   activeOpacity={0.88}
                   disabled={oauthLoading !== null || loading}
                 >
-                  <AppleIcon color={tosAccepted ? '#fff' : 'rgba(255,255,255,0.35)'} size={18} />
-                  <AppText style={[styles.appleBtnText, !tosAccepted && styles.textDisabled]}>
+                  <AppleIcon color="#fff" size={18} />
+                  <AppText style={styles.appleBtnText}>
                     {oauthLoading === 'apple' ? 'Signing in…' : 'Continue with Apple'}
                   </AppText>
                 </TouchableOpacity>
@@ -315,13 +465,13 @@ export default function RegisterScreen() {
 
               {showGoogle && (
                 <TouchableOpacity
-                  style={[styles.oauthBtn, styles.googleBtn, { paddingVertical: inputPad }, !tosAccepted && styles.googleBtnDisabled]}
+                  style={[styles.oauthBtn, styles.googleBtn, { paddingVertical: inputPad }]}
                   onPress={() => handleOAuth('google')}
                   activeOpacity={0.88}
                   disabled={oauthLoading !== null || loading}
                 >
                   <GoogleIcon size={18} />
-                  <AppText style={[styles.googleBtnText, !tosAccepted && styles.googleTextDisabled]}>
+                  <AppText style={styles.googleBtnText}>
                     {oauthLoading === 'google' ? 'Signing in…' : 'Continue with Google'}
                   </AppText>
                 </TouchableOpacity>
@@ -337,106 +487,166 @@ export default function RegisterScreen() {
 
           {/* Form fields */}
           <View style={[styles.form, { gap: vXs }]}>
-            <View style={styles.nameRow}>
-              <View style={[styles.inputWrap, { flex: 1 }]}>
-                <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-                <AppTextInput
-                  style={[styles.input, { paddingVertical: inputPad }]}
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  placeholder="First name"
-                  placeholderTextColor="rgba(255,255,255,0.24)"
-                  autoCapitalize="words"
-                  autoComplete="given-name"
-                  maxLength={20}
-                />
-              </View>
-              <View style={[styles.inputWrap, { flex: 1 }]}>
-                <AppTextInput
-                  style={[styles.input, styles.inputNoIcon, { paddingVertical: inputPad }]}
-                  value={lastName}
-                  onChangeText={setLastName}
-                  placeholder="Last name"
-                  placeholderTextColor="rgba(255,255,255,0.24)"
-                  autoCapitalize="words"
-                  autoComplete="family-name"
-                  maxLength={30}
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputWrap}>
-              <Mail color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-              <AppTextInput
-                style={[styles.input, { paddingVertical: inputPad }]}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Email"
-                placeholderTextColor="rgba(255,255,255,0.24)"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-              />
-            </View>
-
-            <View style={styles.inputWrap}>
-              <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-              <AppTextInput
-                style={[styles.input, { paddingVertical: inputPad }]}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                placeholderTextColor="rgba(255,255,255,0.24)"
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                {showPassword
-                  ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
-                  : <Eye color="rgba(255,255,255,0.30)" size={16} />
-                }
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.inputWrap}>
-              <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-              <AppTextInput
-                style={[styles.input, { paddingVertical: inputPad }]}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="Confirm Password"
-                placeholderTextColor="rgba(255,255,255,0.24)"
-                secureTextEntry={!showConfirm}
-              />
-              <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeBtn}>
-                {showConfirm
-                  ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
-                  : <Eye color="rgba(255,255,255,0.30)" size={16} />
-                }
-              </TouchableOpacity>
-            </View>
-
-            {/* Date of birth — 18+ age gate */}
+            {/* Name row */}
             <View>
-              <View style={[styles.inputWrap, dobError ? styles.inputWrapError : null]}>
-                <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+              <View style={styles.nameRow}>
+                <View style={[styles.inputWrap, { flex: 1 }, showFirstNameError && styles.inputWrapError]}>
+                  <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                  <AppTextInput
+                    style={[styles.input, { paddingVertical: inputPad }]}
+                    value={firstName}
+                    onChangeText={(t) => { setFirstName(t); if (!firstNameTouched) setFirstNameTouched(true); }}
+                    onBlur={() => setFirstNameTouched(true)}
+                    placeholder="First name"
+                    placeholderTextColor="rgba(255,255,255,0.24)"
+                    autoCapitalize="words"
+                    autoComplete="given-name"
+                    maxLength={20}
+                  />
+                </View>
+                <View style={[styles.inputWrap, { flex: 1 }, showLastNameError && styles.inputWrapError]}>
+                  <AppTextInput
+                    style={[styles.input, styles.inputNoIcon, { paddingVertical: inputPad }]}
+                    value={lastName}
+                    onChangeText={(t) => { setLastName(t); if (!lastNameTouched) setLastNameTouched(true); }}
+                    onBlur={() => setLastNameTouched(true)}
+                    placeholder="Last name"
+                    placeholderTextColor="rgba(255,255,255,0.24)"
+                    autoCapitalize="words"
+                    autoComplete="family-name"
+                    maxLength={30}
+                  />
+                </View>
+              </View>
+              {showFirstNameError && (
+                <AppText style={styles.fieldError}>{firstNameError}</AppText>
+              )}
+              {!showFirstNameError && showLastNameError && (
+                <AppText style={styles.fieldError}>{lastNameError}</AppText>
+              )}
+            </View>
+
+            {/* Email */}
+            <View>
+              <View style={[styles.inputWrap, showEmailError && styles.inputWrapError]}>
+                <Mail color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
                 <AppTextInput
                   style={[styles.input, { paddingVertical: inputPad }]}
-                  value={dob}
-                  onChangeText={handleDobChange}
-                  placeholder="Date of Birth (MM/DD/YYYY)"
+                  value={email}
+                  onChangeText={(t) => { setEmail(t); if (!emailTouched) setEmailTouched(true); }}
+                  onBlur={() => setEmailTouched(true)}
+                  placeholder="Email"
                   placeholderTextColor="rgba(255,255,255,0.24)"
-                  keyboardType="number-pad"
-                  maxLength={10}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
                 />
               </View>
-              {dobError ? (
-                <AppText style={styles.fieldError}>{dobError}</AppText>
+              {showEmailError && (
+                <AppText style={styles.fieldError}>{emailError}</AppText>
+              )}
+            </View>
+
+            {/* Password */}
+            <View>
+              <View style={[styles.inputWrap, showPasswordError && styles.inputWrapError]}>
+                <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                <AppTextInput
+                  style={[styles.input, { paddingVertical: inputPad }]}
+                  value={password}
+                  onChangeText={(t) => { setPassword(t); if (!passwordTouched) setPasswordTouched(true); }}
+                  onBlur={() => setPasswordTouched(true)}
+                  placeholder="Password"
+                  placeholderTextColor="rgba(255,255,255,0.24)"
+                  secureTextEntry={!showPassword}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                  {showPassword
+                    ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
+                    : <Eye color="rgba(255,255,255,0.30)" size={16} />
+                  }
+                </TouchableOpacity>
+              </View>
+              {showPasswordError ? (
+                <AppText style={styles.fieldError}>{passwordError}</AppText>
+              ) : showPasswordHint ? (
+                <AppText style={styles.fieldHint}>Must be at least 8 characters</AppText>
+              ) : null}
+            </View>
+
+            {/* Confirm Password */}
+            <View>
+              <View style={[styles.inputWrap, showConfirmPasswordError && styles.inputWrapError]}>
+                <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                <AppTextInput
+                  style={[styles.input, { paddingVertical: inputPad }]}
+                  value={confirmPassword}
+                  onChangeText={(t) => { setConfirmPassword(t); if (!confirmPasswordTouched) setConfirmPasswordTouched(true); }}
+                  onBlur={() => setConfirmPasswordTouched(true)}
+                  placeholder="Confirm Password"
+                  placeholderTextColor="rgba(255,255,255,0.24)"
+                  secureTextEntry={!showConfirm}
+                />
+                <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeBtn}>
+                  {showConfirm
+                    ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
+                    : <Eye color="rgba(255,255,255,0.30)" size={16} />
+                  }
+                </TouchableOpacity>
+              </View>
+              {showConfirmPasswordError && (
+                <AppText style={styles.fieldError}>{confirmPasswordError}</AppText>
+              )}
+            </View>
+
+            {/* Date of Birth */}
+            <View>
+              {Platform.OS === 'web' ? (
+                <View style={[styles.inputWrap, showDobError && styles.inputWrapError]}>
+                  <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                  <AppTextInput
+                    style={[styles.input, { paddingVertical: inputPad }]}
+                    value={dobText}
+                    onChangeText={handleDobTextChange}
+                    onBlur={() => setDobTouched(true)}
+                    placeholder="Date of Birth (MM/DD/YYYY)"
+                    placeholderTextColor="rgba(255,255,255,0.24)"
+                    keyboardType="number-pad"
+                    maxLength={10}
+                  />
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.inputWrap, styles.dobTrigger, showDobError && styles.inputWrapError]}
+                  onPress={() => { setDobTouched(true); setShowDobPicker(true); }}
+                  activeOpacity={0.8}
+                >
+                  <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                  <AppText style={[
+                    styles.dobText,
+                    { paddingVertical: inputPad },
+                    !dobDate && styles.dobPlaceholder,
+                  ]}>
+                    {dobDate ? formatDate(dobDate) : 'Date of Birth'}
+                  </AppText>
+                  <ChevronLeft
+                    color="rgba(255,255,255,0.30)"
+                    size={16}
+                    style={{ transform: [{ rotate: '-90deg' }] }}
+                  />
+                </TouchableOpacity>
+              )}
+              {showDobError ? (
+                <AppText style={styles.fieldError}>{dobFieldError}</AppText>
               ) : (
                 <AppText style={styles.fieldHint}>You must be 18 or older to use this app.</AppText>
               )}
             </View>
 
-            {/* ToS checkbox */}
+            {/* API / server errors */}
+            {apiError ? <AppText style={styles.error}>{apiError}</AppText> : null}
+
+            {/* ToS checkbox — immediately above Create Account */}
             <TouchableOpacity
               style={styles.tosRow}
               onPress={() => setTosAccepted(!tosAccepted)}
@@ -465,22 +675,21 @@ export default function RegisterScreen() {
                 {' '}and{' '}
                 <AppText
                   style={styles.tosLink}
-                  onPress={(e) => { e.stopPropagation(); handlePrivacyPolicy(); }}
+                  onPress={(e) => { e.stopPropagation(); setPrivacyVisible(true); }}
                 >
                   Privacy Policy
                 </AppText>
               </AppText>
             </TouchableOpacity>
 
-            {error ? <AppText style={styles.error}>{error}</AppText> : null}
-
+            {/* Create Account */}
             <TouchableOpacity
-              style={[styles.createBtn, !tosAccepted && styles.createBtnDisabled]}
+              style={[styles.createBtn, !formReady && styles.createBtnDisabled]}
               onPress={handleRegister}
               activeOpacity={0.85}
               disabled={loading || oauthLoading !== null}
             >
-              {tosAccepted ? (
+              {formReady ? (
                 <LinearGradient
                   colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
                   start={{ x: 0, y: 0 }}
@@ -555,9 +764,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     borderWidth: 1,
   },
-  btnDisabled: {
-    opacity: 0.45,
-  },
   appleBtn: {
     backgroundColor: '#1A1A1A',
     borderColor: 'rgba(255,255,255,0.14)',
@@ -567,24 +773,14 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',
   },
-  textDisabled: {
-    color: 'rgba(255,255,255,0.35)',
-  },
   googleBtn: {
     backgroundColor: 'rgba(255,255,255,0.94)',
     borderColor: 'rgba(255,255,255,0.12)',
-  },
-  googleBtnDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.35)',
-    borderColor: 'rgba(255,255,255,0.08)',
   },
   googleBtnText: {
     color: '#1A1A1A',
     fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',
-  },
-  googleTextDisabled: {
-    color: 'rgba(26,26,26,0.45)',
   },
   dividerRow: {
     flexDirection: 'row',
@@ -615,6 +811,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.10)',
     paddingHorizontal: Spacing.md,
   },
+  inputWrapError: {
+    borderColor: '#FF5A5F',
+  },
   inputIcon: {
     marginRight: Spacing.sm,
   },
@@ -629,6 +828,32 @@ const styles = StyleSheet.create({
   },
   eyeBtn: {
     padding: 6,
+  },
+  dobTrigger: {
+    cursor: 'pointer',
+  } as any,
+  dobText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Regular',
+  },
+  dobPlaceholder: {
+    color: 'rgba(255,255,255,0.24)',
+  },
+  fieldError: {
+    color: '#FF5A5F',
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  fieldHint: {
+    color: 'rgba(255,255,255,0.28)',
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    marginTop: 4,
+    marginLeft: 4,
   },
   tosRow: {
     flexDirection: 'row',
@@ -657,23 +882,6 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  inputWrapError: {
-    borderColor: '#FF5A5F',
-  },
-  fieldError: {
-    color: '#FF5A5F',
-    fontSize: FontSize.xs,
-    fontFamily: 'Inter-Regular',
-    marginTop: 4,
-    marginLeft: 4,
-  },
-  fieldHint: {
-    color: 'rgba(255,255,255,0.28)',
-    fontSize: FontSize.xs,
-    fontFamily: 'Inter-Regular',
-    marginTop: 4,
-    marginLeft: 4,
   },
   tosText: {
     flex: 1,
@@ -726,6 +934,7 @@ const styles = StyleSheet.create({
   },
   loginRow: {
     alignItems: 'center',
+    paddingVertical: Spacing.sm,
   },
   loginText: {
     color: 'rgba(255,255,255,0.36)',
@@ -735,5 +944,101 @@ const styles = StyleSheet.create({
   loginLink: {
     color: '#FF7A45',
     fontFamily: 'Inter-SemiBold',
+  },
+  // ToS consent modal
+  consentOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  consentCard: {
+    backgroundColor: '#1A1020',
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    padding: Spacing.xl,
+    width: '100%',
+    maxWidth: 380,
+    gap: Spacing.md,
+  },
+  consentTitle: {
+    color: '#fff',
+    fontSize: FontSize.lg,
+    fontFamily: 'Inter-Bold',
+    textAlign: 'center',
+  },
+  consentBody: {
+    color: 'rgba(255,255,255,0.60)',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  consentLink: {
+    color: '#FF7A45',
+    fontFamily: 'Inter-SemiBold',
+  },
+  consentActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  consentCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  consentCancelText: {
+    color: 'rgba(255,255,255,0.60)',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-SemiBold',
+  },
+  consentAgreeBtn: {
+    flex: 1,
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+  },
+  consentAgreeGrad: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  consentAgreeText: {
+    color: '#fff',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Bold',
+  },
+  // iOS DOB picker bottom sheet
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    backgroundColor: '#1A1020',
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: 'rgba(255,255,255,0.10)',
+    paddingBottom: 32,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  pickerDone: {
+    color: '#FF7A45',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-SemiBold',
+    paddingHorizontal: Spacing.sm,
   },
 });
