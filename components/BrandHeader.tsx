@@ -34,7 +34,7 @@ export default function BrandHeader({
   return (
     <View style={styles.container}>
       {/* Left: logo + wordmark */}
-      <TouchableOpacity onPress={() => router.replace('/(app)/(tabs)/')} onLongPress={() => router.push('/debug')} delayLongPress={5000} activeOpacity={0.7} style={styles.left}>
+      <TouchableOpacity onPress={() => router.navigate('/(app)/(tabs)/index')} onLongPress={() => router.push('/debug')} delayLongPress={5000} activeOpacity={0.7} style={styles.left}>
         <WarmupLogo size={28} />
         <WarmupWordmark size={13} style={styles.wordmark} />
       </TouchableOpacity>
