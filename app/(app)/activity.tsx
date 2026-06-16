@@ -304,9 +304,9 @@ export default function ActivityScreen() {
       markViewedUtil(item, couple.id, user.id);
     }
     if (item.routeParams) {
-      router.push({ pathname: item.route as any, params: item.routeParams });
+      router.navigate({ pathname: item.route as any, params: item.routeParams });
     } else {
-      router.push(item.route as any);
+      router.navigate(item.route as any);
     }
   };
 
