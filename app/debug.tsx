@@ -10,7 +10,7 @@ import { useRouter, usePathname } from 'expo-router';
 import { ChevronLeft, Trash2, LogOut, Shield, Share2, RefreshCw } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import { useAuth, computeIsUnlockRequired, computeShouldShowPrivacyCover } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { supabase, getSupabaseDiagnostics } from '@/lib/supabase';
 import { secureKey, hasPinStored } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
 import { getDebugEvents, clearDebugEvents, subscribeDebugEvents, logDebugEvent, DebugEvent } from '@/lib/debugLog';
@@ -824,7 +824,29 @@ export default function DebugScreen() {
         <Row label="jwt.exp" value={jwtDecodeDebug.exp} />
         <Row label="DEBUG_ALWAYS_ON" value={process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON ?? null} />
 
-        {/* ── 4c. Auth Last Error ── */}
+        {/* ── 4c. Env vs Client Source Comparison ── */}
+        {/* If sourcesMatch=false the shared client was initialised with different values */}
+        {/* than what process.env returns at render time — this would explain auth failures. */}
+        {(() => {
+          const diag = getSupabaseDiagnostics();
+          return (
+            <>
+              <Section title="Env vs Client Source Comparison (V21)" />
+              <Row label="env.urlHost"                   value={diag.envUrlHost} />
+              <Row label="client.url"                    value={diag.clientUrl} />
+              <Row label="env.anonKeyLength"             value={diag.envAnonKeyLength} />
+              <Row label="client.anonKeyLength"          value={diag.clientAnonKeyLength} />
+              <Row label="env.anonKeyPrefix24"           value={diag.envAnonKeyPrefix24} />
+              <Row label="client.anonKeyPrefix24"        value={diag.clientAnonKeyPrefix24} />
+              <Row label="env.anonKeyProjectRef"         value={diag.envAnonKeyProjectRefDecoded} />
+              <Row label="client.anonKeyProjectRef"      value={diag.clientAnonKeyProjectRefDecoded} />
+              <Row label="client.hasAnonKey"             value={diag.clientHasAnonKey} />
+              <Row label="sourcesMatch"                  value={diag.sourcesMatch} />
+            </>
+          );
+        })()}
+
+        {/* ── 4d. Auth Last Error ── */}
         <Section title="Auth Last Error" />
         <Row label="supabaseAuthLastError" value={authLastError ?? '(none recorded)'} />
 

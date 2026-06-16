@@ -56,13 +56,38 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: { fetch: fetchWithTimeout as typeof fetch },
 });
 
-// Exportable diagnostic — call from login screen to verify key state at sign-in time.
+// Decode the ref claim from a JWT — same logic debug.tsx uses on the env var.
+function _decodeJwtRef(jwt: string): string | null {
+  try {
+    const parts = jwt.split('.');
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded));
+    return payload?.ref ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Exportable diagnostic — captures client values at createClient time (module scope).
+// These are compared against process.env values read at render time in debug.tsx.
 export function getSupabaseDiagnostics() {
   return {
+    // Values captured when createClient was called (module init time)
     clientUrl: supabaseUrl || 'EMPTY',
-    hasAnonKey: supabaseAnonKey.length > 0,
-    anonKeyLength: supabaseAnonKey.length,
-    anonKeyPrefix: supabaseAnonKey.slice(0, 20) || 'EMPTY',
+    clientHasAnonKey: supabaseAnonKey.length > 0,
+    clientAnonKeyLength: supabaseAnonKey.length,
+    clientAnonKeyPrefix24: supabaseAnonKey.slice(0, 24) || 'EMPTY',
+    clientAnonKeyProjectRefDecoded: _decodeJwtRef(supabaseAnonKey),
+    // Values read from process.env right now (call time) for comparison
+    envAnonKeyLength: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').length,
+    envAnonKeyPrefix24: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').slice(0, 24) || 'EMPTY',
+    envAnonKeyProjectRefDecoded: _decodeJwtRef(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''),
+    envUrlHost: (() => { try { return new URL(process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').hostname; } catch { return 'INVALID'; } })(),
+    sourcesMatch:
+      supabaseAnonKey === (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '') &&
+      supabaseUrl === (process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''),
   };
 }
 
