@@ -68,24 +68,33 @@ export default function LoginScreen() {
     setError('');
     setLoading(true);
     try {
-      const diag = getSupabaseDiagnostics();
-      console.log('[Login] client diagnostics at sign-in time', JSON.stringify(diag));
-      // Inspect the auth client's internal headers directly to prove apikey is set
+      // Capture auth-client internals immediately before the call and persist
+      // them so the debug screen shows what was present at attempt time.
       const authInternal = supabase.auth as any;
       const authHeaders: Record<string, string> = authInternal?.headers ?? {};
-      console.log('[Login] authClient.url:', authInternal?.url ?? 'UNKNOWN');
-      console.log('[Login] authClient.headerKeys:', Object.keys(authHeaders).join(', ') || '(none)');
-      console.log('[Login] authClient.hasApiKey:', Boolean(authHeaders?.apikey));
-      console.log('[Login] authClient.hasAuthorization:', Boolean(authHeaders?.Authorization));
-      console.log('[Login] signInWithPassword attempt', { email: email.trim(), url: process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'MISSING', keyLen: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').length });
-      const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
+      const diag = getSupabaseDiagnostics();
+      const attemptPayload = JSON.stringify({
+        attemptAt: new Date().toISOString(),
+        clientSource: 'supabase (shared lib/supabase.ts)',
+        clientUrl: authInternal?.url ?? 'UNKNOWN',
+        hasAnonKey: Boolean(authHeaders?.apikey),
+        anonKeyLength: (authHeaders?.apikey ?? '').length,
+        authHeaderKeys: Object.keys(authHeaders).join(', ') || '(none)',
+        diagClientHasAnonKey: diag.clientHasAnonKey,
+        diagClientAnonKeyLength: diag.clientAnonKeyLength,
+        diagSourcesMatch: diag.sourcesMatch,
+      });
+      await SecureStore.setItemAsync('debug_last_login_attempt', attemptPayload).catch(() => {});
+      console.log('[Login] attempt recorded', attemptPayload);
+      console.log('[Login] signInWithPassword → email:', email.trim(), 'url:', process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'MISSING', 'keyLen:', (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').length);
+
+      const { data, error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (err) {
         const errPayload = JSON.stringify({
           message: err.message,
           status: (err as any).status ?? null,
           name: err.name ?? null,
           code: (err as any).code ?? null,
-          // auth-js sometimes attaches the raw server response body
           httpBody: (err as any).__isAuthError
             ? ((err as any).status + ' ' + err.message)
             : ((err as any).body ?? (err as any).details ?? null),

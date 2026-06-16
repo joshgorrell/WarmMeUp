@@ -125,6 +125,7 @@ export default function DebugScreen() {
     error: string | null;
   }>({ status: 'idle', ranAt: null, result: null, error: null });
   const [authLastError, setAuthLastError] = useState<string | null>(null);
+  const [lastLoginAttempt, setLastLoginAttempt] = useState<string | null>(null);
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -159,6 +160,7 @@ export default function DebugScreen() {
     }
     // Load persisted last auth error (written by login screen on failure)
     SecureStore.getItemAsync('debug_last_auth_error').then(v => setAuthLastError(v ?? null)).catch(() => {});
+    SecureStore.getItemAsync('debug_last_login_attempt').then(v => setLastLoginAttempt(v ?? null)).catch(() => {});
   }, [userId]);
 
   useEffect(() => {
@@ -861,7 +863,32 @@ export default function DebugScreen() {
           );
         })()}
 
-        {/* ── 4d. Auth Last Error ── */}
+        {/* ── 4d. Login Attempt Debug ── */}
+        {(() => {
+          let a: Record<string, unknown> | null = null;
+          try { if (lastLoginAttempt) a = JSON.parse(lastLoginAttempt); } catch {}
+          let e: Record<string, unknown> | null = null;
+          try { if (authLastError) e = JSON.parse(authLastError); } catch {}
+          const aStr = (k: string) => { const v = a?.[k]; return v == null ? null : String(v); };
+          const eStr = (k: string) => { const v = e?.[k]; return v == null ? null : String(v); };
+          return (
+            <>
+              <Section title="Login Attempt Debug (persisted)" />
+              <Row label="auth_last_attempt_at"        value={aStr('attemptAt') ?? '(no attempt recorded)'} />
+              <Row label="auth_last_client_source"     value={aStr('clientSource')} />
+              <Row label="auth_last_client_url"        value={aStr('clientUrl')} />
+              <Row label="auth_last_has_anon_key"      value={aStr('hasAnonKey')} />
+              <Row label="auth_last_anon_key_length"   value={aStr('anonKeyLength')} />
+              <Row label="auth_last_header_keys"       value={aStr('authHeaderKeys')} />
+              <Row label="auth_last_error_message"     value={eStr('message') ?? '(none)'} />
+              <Row label="auth_last_error_status"      value={eStr('status')} />
+              <Row label="auth_last_error_code"        value={eStr('code')} />
+              <Row label="auth_last_error_full_json"   value={authLastError ?? '(none)'} />
+            </>
+          );
+        })()}
+
+        {/* ── 4e. Auth Last Error (legacy full blob) ── */}
         {(() => {
           let parsed: Record<string, unknown> | null = null;
           try { if (authLastError) parsed = JSON.parse(authLastError); } catch {}
@@ -872,7 +899,7 @@ export default function DebugScreen() {
           const clientDiag = parsed?.clientDiag as Record<string, unknown> | undefined;
           return (
             <>
-              <Section title="Auth Last Error" />
+              <Section title="Auth Last Error (detail)" />
               <Row label="authLastErrorMessage"     value={str('message') ?? '(none recorded)'} />
               <Row label="authLastErrorStatus"      value={str('status')} />
               <Row label="authLastErrorCode"        value={str('code')} />
