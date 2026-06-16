@@ -75,6 +75,8 @@ export default function LoginScreen() {
       const diag = getSupabaseDiagnostics();
       const attemptPayload = JSON.stringify({
         attemptAt: new Date().toISOString(),
+        email: email.trim(),
+        method: 'signInWithPassword',
         clientSource: 'supabase (shared lib/supabase.ts)',
         clientUrl: authInternal?.url ?? 'UNKNOWN',
         hasAnonKey: Boolean(authHeaders?.apikey),
@@ -84,9 +86,14 @@ export default function LoginScreen() {
         diagClientAnonKeyLength: diag.clientAnonKeyLength,
         diagSourcesMatch: diag.sourcesMatch,
       });
-      await SecureStore.setItemAsync('debug_last_login_attempt', attemptPayload).catch(() => {});
+      // Write synchronously before the auth call so the data is present even if
+      // the app is killed mid-request. Surface any write error instead of swallowing it.
+      try {
+        await SecureStore.setItemAsync('debug_last_login_attempt', attemptPayload);
+      } catch (writeErr) {
+        console.error('[Login] SecureStore write failed:', writeErr);
+      }
       console.log('[Login] attempt recorded', attemptPayload);
-      console.log('[Login] signInWithPassword → email:', email.trim(), 'url:', process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'MISSING', 'keyLen:', (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').length);
 
       const { data, error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (err) {

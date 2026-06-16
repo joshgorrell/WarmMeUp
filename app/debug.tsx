@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform, Share, ActivityIndicator,
 } from 'react-native';
@@ -6,7 +6,7 @@ import * as Updates from 'expo-updates';
 import * as Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, usePathname } from 'expo-router';
+import { useRouter, usePathname, useFocusEffect } from 'expo-router';
 import { ChevronLeft, Trash2, LogOut, Shield, Share2, RefreshCw } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import { useAuth, computeIsUnlockRequired, computeShouldShowPrivacyCover } from '@/context/AuthContext';
@@ -158,10 +158,22 @@ export default function DebugScreen() {
           else setInactiveCoupleCount(count ?? 0);
         });
     }
-    // Load persisted last auth error (written by login screen on failure)
-    SecureStore.getItemAsync('debug_last_auth_error').then(v => setAuthLastError(v ?? null)).catch(() => {});
-    SecureStore.getItemAsync('debug_last_login_attempt').then(v => setLastLoginAttempt(v ?? null)).catch(() => {});
   }, [userId]);
+
+  // Reload persisted login-attempt and auth-error values every time this screen
+  // comes into focus — not just on mount. After a failed login the user is not
+  // logged in (userId === null), so a [userId]-dep effect never re-runs if the
+  // screen was already mounted; useFocusEffect solves this.
+  useFocusEffect(
+    useCallback(() => {
+      SecureStore.getItemAsync('debug_last_auth_error')
+        .then(v => setAuthLastError(v ?? null))
+        .catch(() => setAuthLastError(null));
+      SecureStore.getItemAsync('debug_last_login_attempt')
+        .then(v => setLastLoginAttempt(v ?? null))
+        .catch(() => setLastLoginAttempt(null));
+    }, [])
+  );
 
   useEffect(() => {
     return subscribeDebugEvents(() => setEvents(getDebugEvents()));
@@ -864,6 +876,7 @@ export default function DebugScreen() {
         })()}
 
         {/* ── 4d. Login Attempt Debug ── */}
+        {/* Reloads on every screen focus via useFocusEffect — always shows latest attempt. */}
         {(() => {
           let a: Record<string, unknown> | null = null;
           try { if (lastLoginAttempt) a = JSON.parse(lastLoginAttempt); } catch {}
@@ -873,8 +886,10 @@ export default function DebugScreen() {
           const eStr = (k: string) => { const v = e?.[k]; return v == null ? null : String(v); };
           return (
             <>
-              <Section title="Login Attempt Debug (persisted)" />
+              <Section title="Login Attempt Debug (reloads on focus)" />
               <Row label="auth_last_attempt_at"        value={aStr('attemptAt') ?? '(no attempt recorded)'} />
+              <Row label="auth_last_email"             value={aStr('email')} />
+              <Row label="auth_last_method"            value={aStr('method')} />
               <Row label="auth_last_client_source"     value={aStr('clientSource')} />
               <Row label="auth_last_client_url"        value={aStr('clientUrl')} />
               <Row label="auth_last_has_anon_key"      value={aStr('hasAnonKey')} />
@@ -883,6 +898,7 @@ export default function DebugScreen() {
               <Row label="auth_last_error_message"     value={eStr('message') ?? '(none)'} />
               <Row label="auth_last_error_status"      value={eStr('status')} />
               <Row label="auth_last_error_code"        value={eStr('code')} />
+              <Row label="auth_last_error_name"        value={eStr('name')} />
               <Row label="auth_last_error_full_json"   value={authLastError ?? '(none)'} />
             </>
           );
