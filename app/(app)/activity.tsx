@@ -51,7 +51,7 @@ function timeAgo(iso: string) {
 
 export default function ActivityScreen() {
   const router = useRouter();
-  const { user, partnerProfile, couple } = useAuth();
+  const { user, partnerProfile, couple, profile } = useAuth();
   const { colors } = useTheme();
   const [allItems, setAllItems] = useState<ActivityItem[]>([]);
   const [viewedSet, setViewedSet] = useState<Set<string>>(new Set());
@@ -296,19 +296,59 @@ export default function ActivityScreen() {
     if (isMountedRef.current) setAllItems(mapped);
   };
 
-  const handleItemPress = (item: ActivityItem) => {
+  const handleItemPress = async (item: ActivityItem) => {
     if (!couple?.id || !user?.id) return;
     const key = `${item.sourceTable}:${item.sourceId}`;
     if (!viewedSet.has(key)) {
       setViewedSet(prev => new Set([...prev, key]));
       markViewedUtil(item, couple.id, user.id);
     }
-    // replace instead of navigate/push — prevents a second (tabs) instance
-    // being pushed onto the (app) stack, which causes an ErrorBoundary crash.
+
+    // For vault/media items we navigate to the vault-viewer Stack screen directly.
+    // This keeps the back stack as: (tabs) → activity → vault-viewer, so back
+    // navigation always works. Using replace('/(app)/(tabs)/vault') puts a second
+    // (tabs) instance on the (app) Stack which causes an ErrorBoundary crash on back.
+    if (item.route === '/(app)/(tabs)/vault' && item.routeParams?.vault_item_id) {
+      const vaultItemId = item.routeParams.vault_item_id;
+      const { data: vaultItem } = await supabase
+        .from('vault_items')
+        .select('*')
+        .eq('id', vaultItemId)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (!vaultItem) return;
+      const bucket = vaultItem.storage_bucket ?? 'vault';
+      const path = vaultItem.storage_path ?? vaultItem.file_path;
+      if (!path) return;
+      const { data: urlData } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60);
+      if (!urlData?.signedUrl) return;
+      const uploaderName = vaultItem.uploaded_by_user_id === user.id
+        ? (profile?.display_name ?? 'You')
+        : (partnerProfile?.display_name ?? 'Partner');
+      router.push({
+        pathname: '/(app)/vault-viewer',
+        params: {
+          id: vaultItem.id,
+          storagePath: path,
+          storageBucket: bucket,
+          mediaType: vaultItem.media_type,
+          allowScreenshot: vaultItem.allow_screenshot ? '1' : '0',
+          allowSave: vaultItem.allow_save ? '1' : '0',
+          allowShare: vaultItem.allow_share ? '1' : '0',
+          createdAt: vaultItem.created_at,
+          uploaderName,
+          thumbUri: urlData.signedUrl,
+        },
+      });
+      return;
+    }
+
+    // For all other items, use navigate() which finds the existing (tabs) entry
+    // already at position 0 in the (app) Stack instead of duplicating it.
     if (item.routeParams) {
-      router.replace({ pathname: item.route as any, params: item.routeParams });
+      router.navigate({ pathname: item.route as any, params: item.routeParams });
     } else {
-      router.replace(item.route as any);
+      router.navigate(item.route as any);
     }
   };
 
