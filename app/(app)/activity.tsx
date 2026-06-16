@@ -303,10 +303,12 @@ export default function ActivityScreen() {
       setViewedSet(prev => new Set([...prev, key]));
       markViewedUtil(item, couple.id, user.id);
     }
+    // replace instead of navigate/push — prevents a second (tabs) instance
+    // being pushed onto the (app) stack, which causes an ErrorBoundary crash.
     if (item.routeParams) {
-      router.navigate({ pathname: item.route as any, params: item.routeParams });
+      router.replace({ pathname: item.route as any, params: item.routeParams });
     } else {
-      router.navigate(item.route as any);
+      router.replace(item.route as any);
     }
   };
 

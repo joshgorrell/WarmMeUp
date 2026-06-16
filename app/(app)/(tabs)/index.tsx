@@ -363,9 +363,9 @@ export default function HomeScreen() {
     setRecentActivity(prev => prev.filter(i => i.id !== item.id));
     await markViewed(item);
     if (item.routeParams) {
-      router.push({ pathname: item.route as any, params: item.routeParams });
+      router.navigate({ pathname: item.route as any, params: item.routeParams });
     } else {
-      router.push(item.route as any);
+      router.navigate(item.route as any);
     }
   }, [markViewed]);
 
