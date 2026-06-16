@@ -107,6 +107,18 @@ export default function DebugScreen() {
     manifest: string | null;
     error: string | null;
   }>({ status: 'idle', ranAt: null, isAvailable: null, manifest: null, error: null });
+  const [sessionTest, setSessionTest] = useState<{
+    status: 'idle' | 'loading' | 'success' | 'error';
+    ranAt: string | null;
+    result: string | null;
+    error: string | null;
+  }>({ status: 'idle', ranAt: null, result: null, error: null });
+  const [dbTest, setDbTest] = useState<{
+    status: 'idle' | 'loading' | 'success' | 'error';
+    ranAt: string | null;
+    result: string | null;
+    error: string | null;
+  }>({ status: 'idle', ranAt: null, result: null, error: null });
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -373,6 +385,52 @@ export default function DebugScreen() {
         manifest: null,
         error: e?.message ?? String(e),
       });
+    }
+  };
+
+  // --- Action: Test getSession ---
+  const handleTestGetSession = async () => {
+    setSessionTest({ status: 'loading', ranAt: new Date().toISOString(), result: null, error: null });
+    try {
+      const { data, error: err } = await supabase.auth.getSession();
+      const ranAt = new Date().toISOString();
+      console.log('[DebugScreen] GET SESSION', JSON.stringify({ data, error: err }, null, 2));
+      if (err) {
+        setSessionTest({ status: 'error', ranAt, result: null, error: JSON.stringify(err, null, 2) });
+      } else {
+        setSessionTest({
+          status: 'success',
+          ranAt,
+          result: JSON.stringify({
+            hasSession: !!data.session,
+            userId: data.session?.user?.id ?? null,
+            email: data.session?.user?.email ?? null,
+            expiresAt: data.session?.expires_at ?? null,
+          }, null, 2),
+          error: null,
+        });
+      }
+    } catch (e: any) {
+      console.error('[DebugScreen] GET SESSION error', e);
+      setSessionTest({ status: 'error', ranAt: new Date().toISOString(), result: null, error: e?.message ?? String(e) });
+    }
+  };
+
+  // --- Action: Test DB (profiles select) ---
+  const handleTestDb = async () => {
+    setDbTest({ status: 'loading', ranAt: new Date().toISOString(), result: null, error: null });
+    try {
+      const { data, error: err } = await supabase.from('profiles').select('*').limit(1);
+      const ranAt = new Date().toISOString();
+      console.log('[DebugScreen] DB TEST', JSON.stringify({ data, error: err }, null, 2));
+      if (err) {
+        setDbTest({ status: 'error', ranAt, result: null, error: JSON.stringify(err, null, 2) });
+      } else {
+        setDbTest({ status: 'success', ranAt, result: JSON.stringify(data, null, 2), error: null });
+      }
+    } catch (e: any) {
+      console.error('[DebugScreen] DB TEST error', e);
+      setDbTest({ status: 'error', ranAt: new Date().toISOString(), result: null, error: e?.message ?? String(e) });
     }
   };
 
@@ -1011,6 +1069,88 @@ export default function DebugScreen() {
           )}
           <AppText style={styles.btnNote}>
             Calls Updates.checkForUpdateAsync() — shows whether a newer OTA is available.
+          </AppText>
+
+          {/* getSession test */}
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#0d1f33' }, sessionTest.status === 'loading' && styles.btnDisabled]}
+            onPress={handleTestGetSession}
+            disabled={sessionTest.status === 'loading'}
+            activeOpacity={0.8}
+          >
+            {sessionTest.status === 'loading'
+              ? <ActivityIndicator size="small" color="#7EC8FF" />
+              : <Shield size={15} color="#7EC8FF" />
+            }
+            <AppText style={[styles.actionBtnLabel, { color: '#7EC8FF' }]}>
+              {sessionTest.status === 'loading' ? 'Getting session…' : 'Test getSession()'}
+            </AppText>
+          </TouchableOpacity>
+          {sessionTest.status !== 'idle' && (
+            <View style={[
+              styles.rpcCard,
+              sessionTest.status === 'loading' && styles.rpcCardLoading,
+              sessionTest.status === 'success' && { backgroundColor: '#0d1f33', borderColor: '#1a4a6a' },
+              sessionTest.status === 'error' && styles.rpcCardError,
+            ]}>
+              <View style={styles.rpcCardHeader}>
+                <AppText style={[styles.rpcCardStatus, { color: sessionTest.status === 'error' ? '#FF6B6B' : '#7EC8FF' }]}>
+                  GET SESSION — {sessionTest.status.toUpperCase()}
+                </AppText>
+                {sessionTest.ranAt && <AppText style={styles.rpcCardTs} selectable>{sessionTest.ranAt.substring(11, 19)}</AppText>}
+              </View>
+              {(sessionTest.result || sessionTest.error) && (
+                <View style={styles.rpcCardField}>
+                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>
+                    {sessionTest.result ?? sessionTest.error}
+                  </AppText>
+                </View>
+              )}
+            </View>
+          )}
+          <AppText style={styles.btnNote}>
+            Calls supabase.auth.getSession() and logs full result to console.
+          </AppText>
+
+          {/* DB test */}
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#1a1a0d' }, dbTest.status === 'loading' && styles.btnDisabled]}
+            onPress={handleTestDb}
+            disabled={dbTest.status === 'loading'}
+            activeOpacity={0.8}
+          >
+            {dbTest.status === 'loading'
+              ? <ActivityIndicator size="small" color="#FFD966" />
+              : <RefreshCw size={15} color="#FFD966" />
+            }
+            <AppText style={[styles.actionBtnLabel, { color: '#FFD966' }]}>
+              {dbTest.status === 'loading' ? 'Testing DB…' : 'Test DB (profiles select)'}
+            </AppText>
+          </TouchableOpacity>
+          {dbTest.status !== 'idle' && (
+            <View style={[
+              styles.rpcCard,
+              dbTest.status === 'loading' && styles.rpcCardLoading,
+              dbTest.status === 'success' && { backgroundColor: '#1a1a0d', borderColor: '#4a4a1a' },
+              dbTest.status === 'error' && styles.rpcCardError,
+            ]}>
+              <View style={styles.rpcCardHeader}>
+                <AppText style={[styles.rpcCardStatus, { color: dbTest.status === 'error' ? '#FF6B6B' : '#FFD966' }]}>
+                  DB TEST — {dbTest.status.toUpperCase()}
+                </AppText>
+                {dbTest.ranAt && <AppText style={styles.rpcCardTs} selectable>{dbTest.ranAt.substring(11, 19)}</AppText>}
+              </View>
+              {(dbTest.result || dbTest.error) && (
+                <View style={styles.rpcCardField}>
+                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>
+                    {dbTest.result ?? dbTest.error}
+                  </AppText>
+                </View>
+              )}
+            </View>
+          )}
+          <AppText style={styles.btnNote}>
+            Calls supabase.from('profiles').select('*').limit(1) and logs full result to console.
           </AppText>
 
           <TouchableOpacity

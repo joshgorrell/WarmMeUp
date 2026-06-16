@@ -67,16 +67,14 @@ export default function LoginScreen() {
     setError('');
     setLoading(true);
     try {
+      console.log('[Login] signInWithPassword attempt', { email: email.trim(), url: process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'MISSING', keyLen: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').length });
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) {
-        console.error('[Login] signInWithPassword error:', JSON.stringify({
-          message: err.message,
-          status: (err as any).status,
-          code: (err as any).code,
-          name: err.name,
-        }));
+        console.error('[Login] AUTH ERROR FULL', JSON.stringify(err, null, 2));
+        console.error('[Login] AUTH ERROR extra', JSON.stringify({ message: err.message, status: (err as any).status, code: (err as any).code, name: err.name, stack: err.stack ?? null }));
         throw err;
       }
+      console.log('[Login] signInWithPassword success', { userId: data.user?.id ?? null });
 
       // After sign-in, check for a stored pending invite code (survives app restarts).
       // Route-param code takes priority over stored code.
