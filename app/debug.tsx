@@ -107,6 +107,11 @@ export default function DebugScreen() {
     manifest: string | null;
     error: string | null;
   }>({ status: 'idle', ranAt: null, isAvailable: null, manifest: null, error: null });
+  const [applyUpdate, setApplyUpdate] = useState<{
+    status: 'idle' | 'checking' | 'no-update' | 'fetching' | 'reloading' | 'error';
+    ranAt: string | null;
+    error: string | null;
+  }>({ status: 'idle', ranAt: null, error: null });
   const [sessionTest, setSessionTest] = useState<{
     status: 'idle' | 'loading' | 'success' | 'error';
     ranAt: string | null;
@@ -405,6 +410,24 @@ export default function DebugScreen() {
         manifest: null,
         error: e?.message ?? String(e),
       });
+    }
+  };
+
+  // --- Action: Fetch + Apply OTA update ---
+  const handleFetchAndApplyUpdate = async () => {
+    setApplyUpdate({ status: 'checking', ranAt: new Date().toISOString(), error: null });
+    try {
+      const check = await Updates.checkForUpdateAsync();
+      if (!check.isAvailable) {
+        setApplyUpdate({ status: 'no-update', ranAt: new Date().toISOString(), error: null });
+        return;
+      }
+      setApplyUpdate({ status: 'fetching', ranAt: new Date().toISOString(), error: null });
+      await Updates.fetchUpdateAsync();
+      setApplyUpdate({ status: 'reloading', ranAt: new Date().toISOString(), error: null });
+      await Updates.reloadAsync();
+    } catch (e: any) {
+      setApplyUpdate({ status: 'error', ranAt: new Date().toISOString(), error: e?.message ?? String(e) });
     }
   };
 
@@ -1100,6 +1123,58 @@ export default function DebugScreen() {
           )}
           <AppText style={styles.btnNote}>
             Calls Updates.checkForUpdateAsync() — shows whether a newer OTA is available.
+          </AppText>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#0d2b1a' }, (applyUpdate.status === 'checking' || applyUpdate.status === 'fetching' || applyUpdate.status === 'reloading') && styles.btnDisabled]}
+            onPress={handleFetchAndApplyUpdate}
+            disabled={applyUpdate.status === 'checking' || applyUpdate.status === 'fetching' || applyUpdate.status === 'reloading'}
+            activeOpacity={0.8}
+          >
+            {(applyUpdate.status === 'checking' || applyUpdate.status === 'fetching' || applyUpdate.status === 'reloading')
+              ? <ActivityIndicator size="small" color="#4CAF50" />
+              : <RefreshCw size={15} color="#4CAF50" />
+            }
+            <AppText style={[styles.actionBtnLabel, { color: '#4CAF50' }]}>
+              {applyUpdate.status === 'checking' ? 'Checking…'
+                : applyUpdate.status === 'fetching' ? 'Downloading update…'
+                : applyUpdate.status === 'reloading' ? 'Reloading app…'
+                : 'Fetch + Apply OTA Update'}
+            </AppText>
+          </TouchableOpacity>
+
+          {applyUpdate.status !== 'idle' && (
+            <View style={[
+              styles.rpcCard,
+              (applyUpdate.status === 'checking' || applyUpdate.status === 'fetching' || applyUpdate.status === 'reloading') && styles.rpcCardLoading,
+              applyUpdate.status === 'no-update' && { backgroundColor: '#0d2b0d', borderColor: '#2d6a2d' },
+              applyUpdate.status === 'error' && styles.rpcCardError,
+            ]}>
+              <View style={styles.rpcCardHeader}>
+                <AppText style={[
+                  styles.rpcCardStatus,
+                  applyUpdate.status === 'no-update' && { color: '#4CAF50' },
+                  applyUpdate.status === 'error' && { color: '#FF6B6B' },
+                  (applyUpdate.status === 'checking' || applyUpdate.status === 'fetching' || applyUpdate.status === 'reloading') && { color: '#FFA040' },
+                ]}>
+                  {applyUpdate.status === 'no-update' ? 'UP TO DATE'
+                    : applyUpdate.status === 'reloading' ? 'RELOADING…'
+                    : applyUpdate.status.toUpperCase()}
+                </AppText>
+                {applyUpdate.ranAt && (
+                  <AppText style={styles.rpcCardTs} selectable>{applyUpdate.ranAt.substring(11, 19)}</AppText>
+                )}
+              </View>
+              {applyUpdate.status === 'error' && applyUpdate.error && (
+                <View style={styles.rpcCardField}>
+                  <AppText style={styles.rpcCardFieldLabel}>error</AppText>
+                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{applyUpdate.error}</AppText>
+                </View>
+              )}
+            </View>
+          )}
+          <AppText style={styles.btnNote}>
+            Downloads the latest OTA if available and immediately reloads the app.
           </AppText>
 
           {/* getSession test */}
