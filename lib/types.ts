@@ -39,6 +39,8 @@ export interface UserSettings {
   login_method: 'none' | 'biometric' | 'password';
   blur_on_background: boolean;
   blur_media: boolean;
+  blur_chat_media: boolean;
+  blur_vault_media: boolean;
   discreet_notifications: boolean;
   notification_copy: string | null;
   vault_allow_screenshot_default: boolean;

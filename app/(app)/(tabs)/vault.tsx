@@ -66,7 +66,7 @@ export default function VaultScreen() {
 
   const vaultFaceIdRequired = (settings?.vault_face_id_required ?? false) && Platform.OS !== 'web';
 
-  const blurEnabled = settings?.blur_media ?? true;
+  const blurEnabled = settings?.blur_vault_media ?? settings?.blur_media ?? true;
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const cameraActiveRef = useRef(false);
 

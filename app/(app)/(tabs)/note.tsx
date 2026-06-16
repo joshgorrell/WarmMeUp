@@ -264,7 +264,7 @@ export default function ChatTab() {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const prevMsgCountRef = useRef(0);
 
-  const blurEnabled = settings?.blur_media ?? true;
+  const blurEnabled = settings?.blur_chat_media ?? settings?.blur_media ?? true;
   const chatFontScale = settings?.chat_font_scale ?? 1.0;
 
   const messageIds = useMemo(() => messages.map(m => m.id), [messages]);
