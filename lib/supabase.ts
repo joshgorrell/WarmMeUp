@@ -40,10 +40,39 @@ const storage = Platform.OS === 'web' ? webStorage : nativeStorage;
 
 const FETCH_TIMEOUT_MS = 15_000;
 
+// Normalize any headers value (Headers instance, string[][], or plain object)
+// to a plain Record<string,string> so React Native's fetch polyfill handles them correctly.
+// fetchWithAuth (supabase-js) builds a Headers instance and passes it in init.headers.
+// Spreading a Headers instance into a plain object loses its entries in RN's fetch polyfill,
+// which is why the apikey header was silently dropped and Supabase returned "No API key found".
+function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) {
+    const out: Record<string, string> = {};
+    headers.forEach((value, key) => { out[key] = value; });
+    return out;
+  }
+  if (Array.isArray(headers)) {
+    const out: Record<string, string> = {};
+    for (const [k, v] of headers) out[k] = v;
+    return out;
+  }
+  return headers as Record<string, string>;
+}
+
 function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  const normalizedInit: RequestInit = {
+    ...init,
+    headers: normalizeHeaders(init?.headers),
+    signal: controller.signal,
+  };
+  if (__DEV__) {
+    const h = normalizedInit.headers as Record<string, string>;
+    console.log('[fetchWithTimeout] apikey present:', Boolean(h?.apikey), 'Authorization present:', Boolean(h?.Authorization));
+  }
+  return fetch(input, normalizedInit).finally(() => clearTimeout(timer));
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

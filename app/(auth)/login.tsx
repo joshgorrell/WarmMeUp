@@ -70,6 +70,13 @@ export default function LoginScreen() {
     try {
       const diag = getSupabaseDiagnostics();
       console.log('[Login] client diagnostics at sign-in time', JSON.stringify(diag));
+      // Inspect the auth client's internal headers directly to prove apikey is set
+      const authInternal = supabase.auth as any;
+      const authHeaders: Record<string, string> = authInternal?.headers ?? {};
+      console.log('[Login] authClient.url:', authInternal?.url ?? 'UNKNOWN');
+      console.log('[Login] authClient.headerKeys:', Object.keys(authHeaders).join(', ') || '(none)');
+      console.log('[Login] authClient.hasApiKey:', Boolean(authHeaders?.apikey));
+      console.log('[Login] authClient.hasAuthorization:', Boolean(authHeaders?.Authorization));
       console.log('[Login] signInWithPassword attempt', { email: email.trim(), url: process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'MISSING', keyLen: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').length });
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) {

@@ -824,14 +824,21 @@ export default function DebugScreen() {
         <Row label="jwt.exp" value={jwtDecodeDebug.exp} />
         <Row label="DEBUG_ALWAYS_ON" value={process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON ?? null} />
 
-        {/* ── 4c. Env vs Client Source Comparison ── */}
-        {/* If sourcesMatch=false the shared client was initialised with different values */}
-        {/* than what process.env returns at render time — this would explain auth failures. */}
+        {/* ── 4c. Env vs Client Source + Auth Client Internals ── */}
+        {/* sourcesMatch=false → client initialised with wrong values.                   */}
+        {/* authClientHasApiKey=false → apikey header missing from auth client headers.  */}
+        {/* "No API key found in request" = apikey stripped before reaching Supabase API. */}
         {(() => {
           const diag = getSupabaseDiagnostics();
+          const authInternal = supabase.auth as any;
+          const authHeaders: Record<string, string> = authInternal?.headers ?? {};
+          const authUrl: string = authInternal?.url ?? 'UNKNOWN';
+          const authClientHasApiKey = Boolean(authHeaders?.apikey);
+          const authClientAnonKeyLength = (authHeaders?.apikey ?? '').length;
+          const authClientUrl = authUrl;
           return (
             <>
-              <Section title="Env vs Client Source Comparison (V21)" />
+              <Section title="Env vs Client Source Comparison (V22)" />
               <Row label="env.urlHost"                   value={diag.envUrlHost} />
               <Row label="client.url"                    value={diag.clientUrl} />
               <Row label="env.anonKeyLength"             value={diag.envAnonKeyLength} />
@@ -842,6 +849,12 @@ export default function DebugScreen() {
               <Row label="client.anonKeyProjectRef"      value={diag.clientAnonKeyProjectRefDecoded} />
               <Row label="client.hasAnonKey"             value={diag.clientHasAnonKey} />
               <Row label="sourcesMatch"                  value={diag.sourcesMatch} />
+              <Section title="Auth Client Internals (V22)" />
+              <Row label="authClientSource"              value="supabase.auth (shared lib/supabase.ts)" />
+              <Row label="authClientUrl"                 value={authClientUrl} />
+              <Row label="authClientHasApiKey"           value={authClientHasApiKey} />
+              <Row label="authClientAnonKeyLength"       value={authClientAnonKeyLength} />
+              <Row label="authClientHeaderKeys"          value={Object.keys(authHeaders).join(', ') || '(none)'} />
             </>
           );
         })()}
