@@ -662,6 +662,10 @@ export default function DebugScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
+      {/* OTA V27 test banner */}
+      <View style={styles.otaBanner}>
+        <AppText style={styles.otaBannerText}>*** OTA V27 ACTIVE ***</AppText>
+      </View>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -1386,6 +1390,17 @@ export default function DebugScreen() {
 }
 
 const styles = StyleSheet.create({
+  otaBanner: {
+    backgroundColor: '#CC0000',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  otaBannerText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+    fontSize: 14,
+    letterSpacing: 1,
+  },
   root: {
     flex: 1,
     backgroundColor: '#07070A',
