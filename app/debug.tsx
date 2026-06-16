@@ -676,6 +676,15 @@ export default function DebugScreen() {
         <Row label="jwt.role" value={jwtDecodeDebug.role} />
         <Row label="jwt.ref" value={jwtDecodeDebug.ref} />
         <Row label="jwt.payloadDecodes" value={jwtDecodeDebug.payloadDecodes} />
+        <Row
+          label="api_key_validation"
+          value={(() => {
+            const hostRef = dbProjectRef;
+            const decodedRef = jwtDecodeDebug.ref;
+            const match = hostRef && decodedRef ? hostRef === decodedRef : null;
+            return `hostRef=${hostRef ?? 'null'} decodedRef=${decodedRef ?? 'null'} match=${match === null ? 'unknown' : match}`;
+          })()}
+        />
         <Row label="channel" value={channel} />
         <Row label="cr.channel" value={cr_channel} />
         <Row label="manifest.metadata.channel" value={(() => { try { return (Updates as any).manifest?.metadata?.channel ?? null; } catch { return null; } })()} />

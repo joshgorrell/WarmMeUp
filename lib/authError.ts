@@ -24,8 +24,10 @@ export function friendlyAuthError(e: unknown): string {
   if (lower.includes('invalid login') || lower.includes('invalid credentials') || lower.includes('wrong password')) {
     return 'Incorrect email or password.';
   }
-  if (lower.includes('invalid api key') || lower.includes('apikey') || lower.includes('api key')) {
-    return 'Configuration error — please reinstall the app or contact support. (api_key_mismatch)';
+  // Only match the exact Supabase "invalid api key" error — not any string that merely
+  // contains the word "apikey" (e.g. header names in error bodies).
+  if (lower === 'invalid api key' || lower.startsWith('invalid api key')) {
+    return 'Configuration error — API key is invalid. Please contact support. (api_key_mismatch)';
   }
   if (lower.includes('email not confirmed')) {
     return 'Please confirm your email before signing in.';
