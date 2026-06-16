@@ -12,6 +12,55 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY length:', supabaseAnonKey.length);
 }
 
+// ─── Network interceptor ───────────────────────────────────────────────────
+// Patches globalThis.fetch to log every outgoing request to the Supabase URL.
+// This is the ground truth: it runs AFTER supabase-js builds and attaches all
+// headers, so if apikey is missing here it is missing on the wire.
+// Active in all builds until the auth issue is resolved.
+const _origFetch = globalThis.fetch;
+globalThis.fetch = function supabaseDebugFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const url =
+    typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.href
+        : (input as Request).url;
+
+  if (supabaseUrl && url.startsWith(supabaseUrl)) {
+    // Flatten headers to a plain object regardless of their type.
+    const rawHeaders = init?.headers;
+    const flat: Record<string, string> = {};
+    if (rawHeaders instanceof Headers) {
+      rawHeaders.forEach((v, k) => { flat[k] = v; });
+    } else if (Array.isArray(rawHeaders)) {
+      for (const [k, v] of rawHeaders) flat[k] = v;
+    } else if (rawHeaders && typeof rawHeaders === 'object') {
+      Object.assign(flat, rawHeaders);
+    }
+
+    const hasApiKey = Boolean(flat['apikey'] ?? flat['Apikey']);
+    const hasAuth   = Boolean(flat['authorization'] ?? flat['Authorization']);
+    const authPfx   = (flat['authorization'] ?? flat['Authorization'] ?? '').slice(0, 40);
+
+    console.log('[FetchInterceptor] →', init?.method ?? 'GET', url.replace(supabaseUrl, '<SB>'));
+    console.log('[FetchInterceptor] hasApiKey:', hasApiKey, '| apikey len:', (flat['apikey'] ?? flat['Apikey'] ?? '').length);
+    console.log('[FetchInterceptor] hasAuth:',   hasAuth,   '| auth pfx:', authPfx || '(none)');
+    console.log('[FetchInterceptor] allHeaderKeys:', Object.keys(flat).join(', ') || '(none)');
+
+    if (!hasApiKey) {
+      console.error('[FetchInterceptor] *** NO apikey HEADER — this request WILL fail with "No API key found" ***');
+      console.error('[FetchInterceptor] init.headers type:', Object.prototype.toString.call(rawHeaders));
+      console.error('[FetchInterceptor] full flat headers:', JSON.stringify(flat));
+    }
+  }
+
+  return _origFetch.call(globalThis, input, init);
+} as typeof fetch;
+// ──────────────────────────────────────────────────────────────────────────
+
 const webStorage = {
   getItem: (key: string) => {
     try { return window.localStorage.getItem(key); } catch { return null; }
@@ -32,11 +81,6 @@ const nativeStorage = {
 
 const storage = Platform.OS === 'web' ? webStorage : nativeStorage;
 
-// Do NOT pass a custom global.fetch. Every wrapper we have tried (fetchWithTimeout,
-// normalizeHeaders) has been the only non-default variable in the call chain and is
-// the prime suspect for the persistent "No API key found in request" error on iOS/Android.
-// React Native's built-in fetch handles supabase-js Header objects correctly without help.
-// Timeout is intentionally removed to eliminate the wrapper as a variable.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: storage as any,
@@ -46,7 +90,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// Decode the ref claim from a JWT.
 function _decodeJwtRef(jwt: string): string | null {
   try {
     const parts = jwt.split('.');
@@ -61,6 +104,8 @@ function _decodeJwtRef(jwt: string): string | null {
 }
 
 export function getSupabaseDiagnostics() {
+  const authInternal = supabase.auth as any;
+  const authHeaders: Record<string, string> = authInternal?.headers ?? {};
   return {
     clientUrl: supabaseUrl || 'EMPTY',
     clientHasAnonKey: supabaseAnonKey.length > 0,
@@ -74,8 +119,12 @@ export function getSupabaseDiagnostics() {
     sourcesMatch:
       supabaseAnonKey === (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '') &&
       supabaseUrl === (process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''),
-    // V24: no custom global.fetch — using RN's native fetch directly
-    fetchWrapper: 'none',
+    fetchWrapper: 'interceptor-v25',
+    // Auth client internal header state (sampled at call time)
+    authClientHasApiKey: Boolean(authHeaders['apikey']),
+    authClientAnonKeyLength: (authHeaders['apikey'] ?? '').length,
+    authClientUrl: authInternal?.url ?? 'UNKNOWN',
+    authClientHeaderKeys: Object.keys(authHeaders).join(', ') || '(none)',
   };
 }
 

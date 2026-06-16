@@ -827,18 +827,19 @@ export default function DebugScreen() {
         {/* ── 4c. Env vs Client Source + Auth Client Internals ── */}
         {/* sourcesMatch=false → client initialised with wrong values.                   */}
         {/* authClientHasApiKey=false → apikey header missing from auth client headers.  */}
+        {/* fetchWrapper=interceptor-v25 → confirms this build has the network logger.   */}
         {/* "No API key found in request" = apikey stripped before reaching Supabase API. */}
         {(() => {
-          const diag = getSupabaseDiagnostics();
-          const authInternal = supabase.auth as any;
-          const authHeaders: Record<string, string> = authInternal?.headers ?? {};
-          const authUrl: string = authInternal?.url ?? 'UNKNOWN';
-          const authClientHasApiKey = Boolean(authHeaders?.apikey);
-          const authClientAnonKeyLength = (authHeaders?.apikey ?? '').length;
-          const authClientUrl = authUrl;
+          const diag = getSupabaseDiagnostics() as ReturnType<typeof getSupabaseDiagnostics> & {
+            fetchWrapper?: string;
+            authClientHasApiKey?: boolean;
+            authClientAnonKeyLength?: number;
+            authClientUrl?: string;
+            authClientHeaderKeys?: string;
+          };
           return (
             <>
-              <Section title="Env vs Client Source Comparison (V24)" />
+              <Section title="Env vs Client Source Comparison (V25)" />
               <Row label="env.urlHost"                   value={diag.envUrlHost} />
               <Row label="client.url"                    value={diag.clientUrl} />
               <Row label="env.anonKeyLength"             value={diag.envAnonKeyLength} />
@@ -849,13 +850,13 @@ export default function DebugScreen() {
               <Row label="client.anonKeyProjectRef"      value={diag.clientAnonKeyProjectRefDecoded} />
               <Row label="client.hasAnonKey"             value={diag.clientHasAnonKey} />
               <Row label="sourcesMatch"                  value={diag.sourcesMatch} />
-              <Row label="fetchWrapper"                  value={(diag as any).fetchWrapper ?? 'unknown'} />
-              <Section title="Auth Client Internals (V24)" />
-              <Row label="authClientSource"              value="supabase.auth (shared lib/supabase.ts, no custom fetch)" />
-              <Row label="authClientUrl"                 value={authClientUrl} />
-              <Row label="authClientHasApiKey"           value={authClientHasApiKey} />
-              <Row label="authClientAnonKeyLength"       value={authClientAnonKeyLength} />
-              <Row label="authClientHeaderKeys"          value={Object.keys(authHeaders).join(', ') || '(none)'} />
+              <Row label="fetchWrapper"                  value={diag.fetchWrapper ?? 'unknown'} />
+              <Section title="Auth Client Internals (V25)" />
+              <Row label="authClientSource"              value="supabase.auth (shared lib/supabase.ts)" />
+              <Row label="authClientUrl"                 value={diag.authClientUrl} />
+              <Row label="authClientHasApiKey"           value={diag.authClientHasApiKey} />
+              <Row label="authClientAnonKeyLength"       value={diag.authClientAnonKeyLength} />
+              <Row label="authClientHeaderKeys"          value={diag.authClientHeaderKeys} />
             </>
           );
         })()}
