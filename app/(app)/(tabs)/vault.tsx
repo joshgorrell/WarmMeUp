@@ -4,6 +4,7 @@ import {
   RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { BlurView } from 'expo-blur';
 import { ResizeMode, Video } from 'expo-av';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -725,7 +726,6 @@ export default function VaultScreen() {
                         style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]}
                         contentFit="cover"
                         cachePolicy="memory-disk"
-                        blurRadius={thumbnailsVisible ? 0 : 6}
                       />
                     ) : (
                       <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' }]}>
@@ -733,11 +733,17 @@ export default function VaultScreen() {
                       </View>
                     )}
 
-                    {/* Blur overlay + eye icon — shown for all items while blurred */}
+                    {/* Blur overlay + eye icon — shown for all items while blurred.
+                        Using BlurView instead of expo-image's blurRadius prop, which
+                        is broken on iOS in expo-image ~3.x. */}
                     {!thumbnailsVisible && (
-                      <View style={styles.blurOverlay}>
+                      <BlurView
+                        intensity={80}
+                        tint="dark"
+                        style={[StyleSheet.absoluteFill, styles.blurOverlay]}
+                      >
                         <EyeOff color="rgba(255,255,255,0.7)" size={20} strokeWidth={2} />
-                      </View>
+                      </BlurView>
                     )}
 
                     {/* Play badge for videos when thumbnails are visible */}
@@ -960,7 +966,7 @@ const styles = StyleSheet.create({
   vaultHeaderText: { flex: 1, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   gridItem: { borderRadius: Radius.sm, overflow: 'hidden', backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
-  blurOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.18)' },
+  blurOverlay: { alignItems: 'center', justifyContent: 'center' },
   videoBadge: { position: 'absolute', bottom: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, padding: 4 },
   newDot: { position: 'absolute', top: 6, right: 6, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF2E8A', borderWidth: 2 },
   shieldBadge: { position: 'absolute', bottom: 6, left: 6, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: 3 },

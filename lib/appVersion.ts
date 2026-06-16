@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'fix-activity-nav-crash-2026-06-16-v27';
-export const OTA_MARKER = 'V27 FIX ACTIVITY NAV CRASH 2026-06-16';
+export const APP_CODE_VERSION = 'fix-vault-blur-expo-image-2026-06-16-v28';
+export const OTA_MARKER = 'V28 FIX VAULT BLUR EXPO IMAGE 2026-06-16';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.
