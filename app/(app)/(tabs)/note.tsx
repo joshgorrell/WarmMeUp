@@ -183,6 +183,7 @@ function MediaBubble({
       {!loaded ? (
         <View style={styles.mediaPlaceholder}>
           <ShimmerPlaceholder />
+          <ActivityIndicator size="small" color="rgba(255,255,255,0.35)" />
         </View>
       ) : signedUrl ? (
         <Image
@@ -217,19 +218,19 @@ function MediaBubble({
 
 // Animated shimmer for media loading state
 function ShimmerPlaceholder() {
-  const anim = useRef(new Animated.Value(0.4)).current;
+  const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(anim, { toValue: 0.8, duration: 800, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 600, useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => loop.stop();
   }, []);
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.06)', opacity: anim }]} />
+    <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.10)', opacity: anim }]} />
   );
 }
 
@@ -1589,7 +1590,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,
