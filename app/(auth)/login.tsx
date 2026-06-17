@@ -47,7 +47,7 @@ async function probeSupabaseNetwork(): Promise<void> {
     logDebugEvent('NETWORK PROBE root error', { error: e?.message ?? 'unknown' });
   }
 
-  // Probe 2 — auth health endpoint
+  // Probe 2 — auth health endpoint (no headers)
   try {
     const r = await fetch(`${base}/auth/v1/health`, { method: 'GET' });
     let body = '';
@@ -65,6 +65,61 @@ async function probeSupabaseNetwork(): Promise<void> {
       SecureStore.setItemAsync('debug_network_supabase_auth_health_error', e?.message ?? 'unknown').catch(() => {}),
     ]);
     logDebugEvent('NETWORK PROBE auth/v1/health error', { error: e?.message ?? 'unknown' });
+  }
+
+  // Probe 3 — auth health WITH apikey header (key diagnostic: does RN fetch deliver custom headers?)
+  // Expected: 200 if headers arrive, 401 "No API key found" if RN networking strips them.
+  try {
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+    const r = await fetch(`${base}/auth/v1/health`, {
+      method: 'GET',
+      headers: { apikey: anonKey },
+    });
+    let body = '';
+    try { body = await r.text(); } catch {}
+    await Promise.all([
+      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_ok', String(r.ok)).catch(() => {}),
+      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_status', String(r.status)).catch(() => {}),
+      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_error', r.ok ? '' : body.slice(0, 200)).catch(() => {}),
+    ]);
+    logDebugEvent('NETWORK PROBE health+apikey', { status: r.status, ok: r.ok });
+  } catch (e: any) {
+    await Promise.all([
+      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_ok', 'false').catch(() => {}),
+      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_status', 'error').catch(() => {}),
+      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_error', e?.message ?? 'unknown').catch(() => {}),
+    ]);
+    logDebugEvent('NETWORK PROBE health+apikey error', { error: e?.message ?? 'unknown' });
+  }
+
+  // Probe 4 — token endpoint WITH apikey + dummy credentials
+  // Expected: 400 "Invalid login credentials" if headers arrive, 401 "No API key" if stripped.
+  try {
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+    const r = await fetch(`${base}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email: 'probe@probe.test', password: 'probe-wrong-v36' }),
+    });
+    let body = '';
+    try { body = await r.text(); } catch {}
+    await Promise.all([
+      SecureStore.setItemAsync('debug_network_raw_auth_with_key_ok', String(r.ok)).catch(() => {}),
+      SecureStore.setItemAsync('debug_network_raw_auth_with_key_status', String(r.status)).catch(() => {}),
+      SecureStore.setItemAsync('debug_network_raw_auth_with_key_error', body.slice(0, 300)).catch(() => {}),
+    ]);
+    logDebugEvent('NETWORK PROBE token+apikey', { status: r.status, ok: r.ok });
+  } catch (e: any) {
+    await Promise.all([
+      SecureStore.setItemAsync('debug_network_raw_auth_with_key_ok', 'false').catch(() => {}),
+      SecureStore.setItemAsync('debug_network_raw_auth_with_key_status', 'error').catch(() => {}),
+      SecureStore.setItemAsync('debug_network_raw_auth_with_key_error', e?.message ?? 'unknown').catch(() => {}),
+    ]);
+    logDebugEvent('NETWORK PROBE token+apikey error', { error: e?.message ?? 'unknown' });
   }
 }
 

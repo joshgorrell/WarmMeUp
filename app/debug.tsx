@@ -201,6 +201,14 @@ export default function DebugScreen() {
     network_supabase_auth_health_ok: string | null;
     network_supabase_auth_health_status: string | null;
     network_supabase_auth_health_error: string | null;
+    // Probe 3: health WITH apikey header — if 200, RN fetch delivers headers; if 401, it strips them
+    network_raw_fetch_with_key_ok: string | null;
+    network_raw_fetch_with_key_status: string | null;
+    network_raw_fetch_with_key_error: string | null;
+    // Probe 4: token endpoint WITH apikey — 400=headers arrive, 401=headers stripped
+    network_raw_auth_with_key_ok: string | null;
+    network_raw_auth_with_key_status: string | null;
+    network_raw_auth_with_key_error: string | null;
   }>({
     ranAt: null,
     auth_storage_adapter: null,
@@ -262,6 +270,12 @@ export default function DebugScreen() {
     network_supabase_auth_health_ok: null,
     network_supabase_auth_health_status: null,
     network_supabase_auth_health_error: null,
+    network_raw_fetch_with_key_ok: null,
+    network_raw_fetch_with_key_status: null,
+    network_raw_fetch_with_key_error: null,
+    network_raw_auth_with_key_ok: null,
+    network_raw_auth_with_key_status: null,
+    network_raw_auth_with_key_error: null,
   });
 
   const [lastAuthEvent, setLastAuthEvent] = useState<{ event: string; at: string } | null>(null);
@@ -428,6 +442,8 @@ export default function DebugScreen() {
       pLoginErrName, pLoginErrMessage, pLoginErrStatus, pLoginErrCode, pLoginErrStack,
       pNetRootOk, pNetRootStatus,
       pNetAuthOk, pNetAuthStatus, pNetAuthError,
+      pNetRawKeyOk, pNetRawKeyStatus, pNetRawKeyError,
+      pNetRawAuthOk, pNetRawAuthStatus, pNetRawAuthError,
     ] = await Promise.all([
       SecureStore.getItemAsync('debug_auth_error_message').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_status').catch(() => null),
@@ -470,6 +486,12 @@ export default function DebugScreen() {
       SecureStore.getItemAsync('debug_network_supabase_auth_health_ok').catch(() => null),
       SecureStore.getItemAsync('debug_network_supabase_auth_health_status').catch(() => null),
       SecureStore.getItemAsync('debug_network_supabase_auth_health_error').catch(() => null),
+      SecureStore.getItemAsync('debug_network_raw_fetch_with_key_ok').catch(() => null),
+      SecureStore.getItemAsync('debug_network_raw_fetch_with_key_status').catch(() => null),
+      SecureStore.getItemAsync('debug_network_raw_fetch_with_key_error').catch(() => null),
+      SecureStore.getItemAsync('debug_network_raw_auth_with_key_ok').catch(() => null),
+      SecureStore.getItemAsync('debug_network_raw_auth_with_key_status').catch(() => null),
+      SecureStore.getItemAsync('debug_network_raw_auth_with_key_error').catch(() => null),
     ]);
 
     setAuthProbe(prev => ({
@@ -534,6 +556,12 @@ export default function DebugScreen() {
       network_supabase_auth_health_ok: pNetAuthOk,
       network_supabase_auth_health_status: pNetAuthStatus,
       network_supabase_auth_health_error: pNetAuthError,
+      network_raw_fetch_with_key_ok: pNetRawKeyOk,
+      network_raw_fetch_with_key_status: pNetRawKeyStatus,
+      network_raw_fetch_with_key_error: pNetRawKeyError,
+      network_raw_auth_with_key_ok: pNetRawAuthOk,
+      network_raw_auth_with_key_status: pNetRawAuthStatus,
+      network_raw_auth_with_key_error: pNetRawAuthError,
     }));
   }, []);
 
@@ -1085,6 +1113,12 @@ export default function DebugScreen() {
       network_supabase_auth_health_ok: authProbe.network_supabase_auth_health_ok,
       network_supabase_auth_health_status: authProbe.network_supabase_auth_health_status,
       network_supabase_auth_health_error: authProbe.network_supabase_auth_health_error,
+      network_raw_fetch_with_key_ok: authProbe.network_raw_fetch_with_key_ok,
+      network_raw_fetch_with_key_status: authProbe.network_raw_fetch_with_key_status,
+      network_raw_fetch_with_key_error: authProbe.network_raw_fetch_with_key_error,
+      network_raw_auth_with_key_ok: authProbe.network_raw_auth_with_key_ok,
+      network_raw_auth_with_key_status: authProbe.network_raw_auth_with_key_status,
+      network_raw_auth_with_key_error: authProbe.network_raw_auth_with_key_error,
     };
 
     try {
@@ -1448,6 +1482,12 @@ export default function DebugScreen() {
         <Row label="network_supabase_auth_health_ok"           value={authProbe.network_supabase_auth_health_ok ?? '(not run yet)'} />
         <Row label="network_supabase_auth_health_status"       value={authProbe.network_supabase_auth_health_status ?? '(not run yet)'} />
         <Row label="network_supabase_auth_health_error"        value={authProbe.network_supabase_auth_health_error ?? '(not run yet)'} />
+        <Row label="network_raw_fetch_with_key_ok"             value={authProbe.network_raw_fetch_with_key_ok ?? '(not run yet)'} />
+        <Row label="network_raw_fetch_with_key_status"         value={authProbe.network_raw_fetch_with_key_status ?? '(not run yet)'} />
+        <Row label="network_raw_fetch_with_key_error"          value={authProbe.network_raw_fetch_with_key_error ?? '(not run yet)'} />
+        <Row label="network_raw_auth_with_key_ok"              value={authProbe.network_raw_auth_with_key_ok ?? '(not run yet)'} />
+        <Row label="network_raw_auth_with_key_status"          value={authProbe.network_raw_auth_with_key_status ?? '(not run yet)'} />
+        <Row label="network_raw_auth_with_key_error"           value={authProbe.network_raw_auth_with_key_error ?? '(not run yet)'} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />
