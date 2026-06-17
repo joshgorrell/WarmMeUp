@@ -209,6 +209,11 @@ export default function DebugScreen() {
     network_raw_auth_with_key_ok: string | null;
     network_raw_auth_with_key_status: string | null;
     network_raw_auth_with_key_error: string | null;
+    // V37: Request-object probe — headers inspected from req.headers.entries() then fetch(req)
+    v37_req_headers_entries: string | null;
+    v37_req_fetch_status: string | null;
+    v37_req_fetch_ok: string | null;
+    v37_req_fetch_body: string | null;
   }>({
     ranAt: null,
     auth_storage_adapter: null,
@@ -276,6 +281,10 @@ export default function DebugScreen() {
     network_raw_auth_with_key_ok: null,
     network_raw_auth_with_key_status: null,
     network_raw_auth_with_key_error: null,
+    v37_req_headers_entries: null,
+    v37_req_fetch_status: null,
+    v37_req_fetch_ok: null,
+    v37_req_fetch_body: null,
   });
 
   const [lastAuthEvent, setLastAuthEvent] = useState<{ event: string; at: string } | null>(null);
@@ -444,6 +453,7 @@ export default function DebugScreen() {
       pNetAuthOk, pNetAuthStatus, pNetAuthError,
       pNetRawKeyOk, pNetRawKeyStatus, pNetRawKeyError,
       pNetRawAuthOk, pNetRawAuthStatus, pNetRawAuthError,
+      pV37ReqHeaders, pV37FetchStatus, pV37FetchOk, pV37FetchBody,
     ] = await Promise.all([
       SecureStore.getItemAsync('debug_auth_error_message').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_status').catch(() => null),
@@ -492,6 +502,10 @@ export default function DebugScreen() {
       SecureStore.getItemAsync('debug_network_raw_auth_with_key_ok').catch(() => null),
       SecureStore.getItemAsync('debug_network_raw_auth_with_key_status').catch(() => null),
       SecureStore.getItemAsync('debug_network_raw_auth_with_key_error').catch(() => null),
+      SecureStore.getItemAsync('debug_v37_req_headers_entries').catch(() => null),
+      SecureStore.getItemAsync('debug_v37_req_fetch_status').catch(() => null),
+      SecureStore.getItemAsync('debug_v37_req_fetch_ok').catch(() => null),
+      SecureStore.getItemAsync('debug_v37_req_fetch_body').catch(() => null),
     ]);
 
     setAuthProbe(prev => ({
@@ -562,6 +576,10 @@ export default function DebugScreen() {
       network_raw_auth_with_key_ok: pNetRawAuthOk,
       network_raw_auth_with_key_status: pNetRawAuthStatus,
       network_raw_auth_with_key_error: pNetRawAuthError,
+      v37_req_headers_entries: pV37ReqHeaders,
+      v37_req_fetch_status: pV37FetchStatus,
+      v37_req_fetch_ok: pV37FetchOk,
+      v37_req_fetch_body: pV37FetchBody,
     }));
   }, []);
 
@@ -1119,6 +1137,10 @@ export default function DebugScreen() {
       network_raw_auth_with_key_ok: authProbe.network_raw_auth_with_key_ok,
       network_raw_auth_with_key_status: authProbe.network_raw_auth_with_key_status,
       network_raw_auth_with_key_error: authProbe.network_raw_auth_with_key_error,
+      v37_req_headers_entries: authProbe.v37_req_headers_entries,
+      v37_req_fetch_status: authProbe.v37_req_fetch_status,
+      v37_req_fetch_ok: authProbe.v37_req_fetch_ok,
+      v37_req_fetch_body: authProbe.v37_req_fetch_body,
     };
 
     try {
@@ -1488,6 +1510,10 @@ export default function DebugScreen() {
         <Row label="network_raw_auth_with_key_ok"              value={authProbe.network_raw_auth_with_key_ok ?? '(not run yet)'} />
         <Row label="network_raw_auth_with_key_status"          value={authProbe.network_raw_auth_with_key_status ?? '(not run yet)'} />
         <Row label="network_raw_auth_with_key_error"           value={authProbe.network_raw_auth_with_key_error ?? '(not run yet)'} />
+        <Row label="v37_req_headers_entries"                   value={authProbe.v37_req_headers_entries ?? '(not run yet)'} />
+        <Row label="v37_req_fetch_status"                      value={authProbe.v37_req_fetch_status ?? '(not run yet)'} />
+        <Row label="v37_req_fetch_ok"                          value={authProbe.v37_req_fetch_ok ?? '(not run yet)'} />
+        <Row label="v37_req_fetch_body"                        value={authProbe.v37_req_fetch_body ?? '(not run yet)'} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />

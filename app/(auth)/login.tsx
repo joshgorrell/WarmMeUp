@@ -219,6 +219,42 @@ export default function LoginScreen() {
       console.log('[Login] attempt recorded', attemptPayload);
 
       await SecureStore.setItemAsync('debug_login_reached_signInWithPassword', 'true').catch(() => {});
+
+      // V37 probe: build a Request object and inspect req.headers.entries() before fetching.
+      // Tests whether fetch(RequestObject) delivers headers — the path supabase-js uses internally.
+      try {
+        const probeAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+        const probeBase = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+        const probeReq = new Request(`${probeBase}/auth/v1/health`, {
+          method: 'GET',
+          headers: {
+            apikey: probeAnonKey,
+            Authorization: `Bearer ${probeAnonKey}`,
+          },
+        });
+        const headerEntries = Array.from(probeReq.headers.entries());
+        const headerEntriesJson = JSON.stringify(headerEntries);
+        await SecureStore.setItemAsync('debug_v37_req_headers_entries', headerEntriesJson).catch(() => {});
+
+        const probeR = await fetch(probeReq);
+        let probeBody = '';
+        try { probeBody = await probeR.text(); } catch {}
+        await Promise.all([
+          SecureStore.setItemAsync('debug_v37_req_fetch_status', String(probeR.status)).catch(() => {}),
+          SecureStore.setItemAsync('debug_v37_req_fetch_ok', String(probeR.ok)).catch(() => {}),
+          SecureStore.setItemAsync('debug_v37_req_fetch_body', probeBody.slice(0, 300)).catch(() => {}),
+        ]);
+        logDebugEvent('V37 REQUEST PROBE', { headerCount: headerEntries.length, status: probeR.status, ok: probeR.ok });
+      } catch (probeErr: any) {
+        await Promise.all([
+          SecureStore.setItemAsync('debug_v37_req_headers_entries', `ERROR: ${probeErr?.message ?? 'unknown'}`).catch(() => {}),
+          SecureStore.setItemAsync('debug_v37_req_fetch_status', 'error').catch(() => {}),
+          SecureStore.setItemAsync('debug_v37_req_fetch_ok', 'false').catch(() => {}),
+          SecureStore.setItemAsync('debug_v37_req_fetch_body', probeErr?.message ?? 'unknown').catch(() => {}),
+        ]);
+        logDebugEvent('V37 REQUEST PROBE ERROR', { error: probeErr?.message ?? 'unknown' });
+      }
+
       const { data, error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (err) {
         const errPayload = JSON.stringify({

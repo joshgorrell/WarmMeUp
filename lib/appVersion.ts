@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'raw-fetch-header-probe-v36-2026-06-17';
-export const OTA_MARKER = 'OTA V36 RAW FETCH HEADER PROBE 2026-06-17';
+export const APP_CODE_VERSION = 'request-obj-header-probe-v37-2026-06-17';
+export const OTA_MARKER = 'OTA V37 REQUEST OBJ HEADER PROBE 2026-06-17';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.
