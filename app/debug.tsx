@@ -214,6 +214,15 @@ export default function DebugScreen() {
     v37_req_fetch_status: string | null;
     v37_req_fetch_ok: string | null;
     v37_req_fetch_body: string | null;
+    // V38: auto-run on debug load — Request obj + URL-param fallback
+    v38_ran_at: string | null;
+    v38_req_headers_entries: string | null;
+    v38_req_has_apikey: string | null;
+    v38_req_has_authorization: string | null;
+    v38_req_fetch_status: string | null;
+    v38_req_fetch_body: string | null;
+    v38_url_param_fetch_status: string | null;
+    v38_url_param_fetch_body: string | null;
   }>({
     ranAt: null,
     auth_storage_adapter: null,
@@ -285,6 +294,14 @@ export default function DebugScreen() {
     v37_req_fetch_status: null,
     v37_req_fetch_ok: null,
     v37_req_fetch_body: null,
+    v38_ran_at: null,
+    v38_req_headers_entries: null,
+    v38_req_has_apikey: null,
+    v38_req_has_authorization: null,
+    v38_req_fetch_status: null,
+    v38_req_fetch_body: null,
+    v38_url_param_fetch_status: null,
+    v38_url_param_fetch_body: null,
   });
 
   const [lastAuthEvent, setLastAuthEvent] = useState<{ event: string; at: string } | null>(null);
@@ -454,6 +471,9 @@ export default function DebugScreen() {
       pNetRawKeyOk, pNetRawKeyStatus, pNetRawKeyError,
       pNetRawAuthOk, pNetRawAuthStatus, pNetRawAuthError,
       pV37ReqHeaders, pV37FetchStatus, pV37FetchOk, pV37FetchBody,
+      pV38ReqHeaders, pV38ReqHasApikey, pV38ReqHasAuth,
+      pV38FetchStatus, pV38FetchBody,
+      pV38UrlStatus, pV38UrlBody,
     ] = await Promise.all([
       SecureStore.getItemAsync('debug_auth_error_message').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_status').catch(() => null),
@@ -506,6 +526,13 @@ export default function DebugScreen() {
       SecureStore.getItemAsync('debug_v37_req_fetch_status').catch(() => null),
       SecureStore.getItemAsync('debug_v37_req_fetch_ok').catch(() => null),
       SecureStore.getItemAsync('debug_v37_req_fetch_body').catch(() => null),
+      SecureStore.getItemAsync('debug_v38_req_headers_entries').catch(() => null),
+      SecureStore.getItemAsync('debug_v38_req_has_apikey').catch(() => null),
+      SecureStore.getItemAsync('debug_v38_req_has_authorization').catch(() => null),
+      SecureStore.getItemAsync('debug_v38_req_fetch_status').catch(() => null),
+      SecureStore.getItemAsync('debug_v38_req_fetch_body').catch(() => null),
+      SecureStore.getItemAsync('debug_v38_url_param_fetch_status').catch(() => null),
+      SecureStore.getItemAsync('debug_v38_url_param_fetch_body').catch(() => null),
     ]);
 
     setAuthProbe(prev => ({
@@ -580,6 +607,85 @@ export default function DebugScreen() {
       v37_req_fetch_status: pV37FetchStatus,
       v37_req_fetch_ok: pV37FetchOk,
       v37_req_fetch_body: pV37FetchBody,
+      v38_req_headers_entries: pV38ReqHeaders,
+      v38_req_has_apikey: pV38ReqHasApikey,
+      v38_req_has_authorization: pV38ReqHasAuth,
+      v38_req_fetch_status: pV38FetchStatus,
+      v38_req_fetch_body: pV38FetchBody,
+      v38_url_param_fetch_status: pV38UrlStatus,
+      v38_url_param_fetch_body: pV38UrlBody,
+    }));
+  }, []);
+
+  const runV38Probes = useCallback(async () => {
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+    const base = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+    const ranAt = new Date().toISOString();
+
+    let v38_req_headers_entries = 'not run';
+    let v38_req_has_apikey = 'not run';
+    let v38_req_has_authorization = 'not run';
+    let v38_req_fetch_status = 'not run';
+    let v38_req_fetch_body = 'not run';
+
+    // Test A: new Request(url, { headers: new Headers({...}) }) → fetch(req)
+    try {
+      const req = new Request(`${base}/auth/v1/health`, {
+        method: 'GET',
+        headers: new Headers({
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
+        }),
+      });
+      v38_req_headers_entries = JSON.stringify(Array.from(req.headers.entries()));
+      v38_req_has_apikey = String(req.headers.has('apikey'));
+      v38_req_has_authorization = String(req.headers.has('authorization'));
+      const res = await fetch(req);
+      let body = '';
+      try { body = await res.text(); } catch {}
+      v38_req_fetch_status = String(res.status);
+      v38_req_fetch_body = body.slice(0, 300);
+    } catch (e: any) {
+      v38_req_headers_entries = `ERROR: ${e?.message ?? 'unknown'}`;
+      v38_req_fetch_status = 'error';
+      v38_req_fetch_body = e?.message ?? 'unknown';
+    }
+
+    // Test B: URL-param fallback — if this works but Test A doesn't, RN strips Request headers
+    let v38_url_param_fetch_status = 'not run';
+    let v38_url_param_fetch_body = 'not run';
+    try {
+      const paramUrl = `${base}/auth/v1/health?apikey=${encodeURIComponent(anonKey)}`;
+      const res = await fetch(paramUrl);
+      let body = '';
+      try { body = await res.text(); } catch {}
+      v38_url_param_fetch_status = String(res.status);
+      v38_url_param_fetch_body = body.slice(0, 300);
+    } catch (e: any) {
+      v38_url_param_fetch_status = 'error';
+      v38_url_param_fetch_body = e?.message ?? 'unknown';
+    }
+
+    await Promise.all([
+      SecureStore.setItemAsync('debug_v38_req_headers_entries', v38_req_headers_entries).catch(() => {}),
+      SecureStore.setItemAsync('debug_v38_req_has_apikey', v38_req_has_apikey).catch(() => {}),
+      SecureStore.setItemAsync('debug_v38_req_has_authorization', v38_req_has_authorization).catch(() => {}),
+      SecureStore.setItemAsync('debug_v38_req_fetch_status', v38_req_fetch_status).catch(() => {}),
+      SecureStore.setItemAsync('debug_v38_req_fetch_body', v38_req_fetch_body).catch(() => {}),
+      SecureStore.setItemAsync('debug_v38_url_param_fetch_status', v38_url_param_fetch_status).catch(() => {}),
+      SecureStore.setItemAsync('debug_v38_url_param_fetch_body', v38_url_param_fetch_body).catch(() => {}),
+    ]);
+
+    setAuthProbe(prev => ({
+      ...prev,
+      v38_ran_at: ranAt,
+      v38_req_headers_entries,
+      v38_req_has_apikey,
+      v38_req_has_authorization,
+      v38_req_fetch_status,
+      v38_req_fetch_body,
+      v38_url_param_fetch_status,
+      v38_url_param_fetch_body,
     }));
   }, []);
 
@@ -592,7 +698,8 @@ export default function DebugScreen() {
         .then(v => setLastLoginAttempt(v ?? null))
         .catch(() => setLastLoginAttempt(null));
       runAuthProbe();
-    }, [runAuthProbe])
+      runV38Probes();
+    }, [runAuthProbe, runV38Probes])
   );
 
   useEffect(() => {
@@ -1141,6 +1248,14 @@ export default function DebugScreen() {
       v37_req_fetch_status: authProbe.v37_req_fetch_status,
       v37_req_fetch_ok: authProbe.v37_req_fetch_ok,
       v37_req_fetch_body: authProbe.v37_req_fetch_body,
+      v38_ran_at: authProbe.v38_ran_at,
+      v38_req_headers_entries: authProbe.v38_req_headers_entries,
+      v38_req_has_apikey: authProbe.v38_req_has_apikey,
+      v38_req_has_authorization: authProbe.v38_req_has_authorization,
+      v38_req_fetch_status: authProbe.v38_req_fetch_status,
+      v38_req_fetch_body: authProbe.v38_req_fetch_body,
+      v38_url_param_fetch_status: authProbe.v38_url_param_fetch_status,
+      v38_url_param_fetch_body: authProbe.v38_url_param_fetch_body,
     };
 
     try {
@@ -1514,6 +1629,14 @@ export default function DebugScreen() {
         <Row label="v37_req_fetch_status"                      value={authProbe.v37_req_fetch_status ?? '(not run yet)'} />
         <Row label="v37_req_fetch_ok"                          value={authProbe.v37_req_fetch_ok ?? '(not run yet)'} />
         <Row label="v37_req_fetch_body"                        value={authProbe.v37_req_fetch_body ?? '(not run yet)'} />
+        <Row label="v38_ran_at"                                value={authProbe.v38_ran_at ?? '(not run yet)'} />
+        <Row label="v38_req_headers_entries"                   value={authProbe.v38_req_headers_entries ?? '(not run yet)'} />
+        <Row label="v38_req_has_apikey"                        value={authProbe.v38_req_has_apikey ?? '(not run yet)'} />
+        <Row label="v38_req_has_authorization"                 value={authProbe.v38_req_has_authorization ?? '(not run yet)'} />
+        <Row label="v38_req_fetch_status"                      value={authProbe.v38_req_fetch_status ?? '(not run yet)'} />
+        <Row label="v38_req_fetch_body"                        value={authProbe.v38_req_fetch_body ?? '(not run yet)'} />
+        <Row label="v38_url_param_fetch_status"                value={authProbe.v38_url_param_fetch_status ?? '(not run yet)'} />
+        <Row label="v38_url_param_fetch_body"                  value={authProbe.v38_url_param_fetch_body ?? '(not run yet)'} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />
