@@ -126,6 +126,22 @@ export default function LoginScreen() {
       }
       console.log('[Login] signInWithPassword success', { userId: data.user?.id ?? null });
 
+      // Write signin-success diagnostics so the debug screen can prove the session
+      // was actually returned before any startup validation erased it.
+      try {
+        const { data: sessionCheck } = await supabase.auth.getSession();
+        const sessionAfterSignin = sessionCheck?.session ?? null;
+        await Promise.all([
+          SecureStore.setItemAsync('debug_last_signin_success', new Date().toISOString()),
+          SecureStore.setItemAsync('debug_last_signin_user_id', data.user?.id ?? ''),
+          SecureStore.setItemAsync('debug_last_signin_session_present', String(!!data.session)),
+          SecureStore.setItemAsync('debug_session_saved_after_signin', String(!!sessionAfterSignin)),
+          SecureStore.setItemAsync('debug_storage_key_after_signin_exists', String(!!sessionAfterSignin)),
+        ]);
+      } catch (writeErr) {
+        console.error('[Login] signin-success SecureStore write failed:', writeErr);
+      }
+
       // After sign-in, check for a stored pending invite code (survives app restarts).
       // Route-param code takes priority over stored code.
       const storedCode = await loadPendingCode();

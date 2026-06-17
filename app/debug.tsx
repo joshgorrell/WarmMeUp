@@ -158,6 +158,15 @@ export default function DebugScreen() {
     persisted_error_code: string | null;
     persisted_error_full_json: string | null;
     persisted_attempt_at: string | null;
+    // signin-success fields written immediately after signInWithPassword succeeds
+    auth_last_signin_success: string | null;
+    auth_last_signin_user_id: string | null;
+    auth_last_signin_session_present: string | null;
+    auth_session_saved_after_signin: string | null;
+    auth_storage_key_after_signin_exists: string | null;
+    // session-cleared fields written by AuthContext INITIAL_SESSION validation
+    auth_session_cleared_at: string | null;
+    auth_session_cleared_reason: string | null;
   }>({
     ranAt: null,
     auth_storage_adapter: null,
@@ -183,6 +192,13 @@ export default function DebugScreen() {
     persisted_error_code: null,
     persisted_error_full_json: null,
     persisted_attempt_at: null,
+    auth_last_signin_success: null,
+    auth_last_signin_user_id: null,
+    auth_last_signin_session_present: null,
+    auth_session_saved_after_signin: null,
+    auth_storage_key_after_signin_exists: null,
+    auth_session_cleared_at: null,
+    auth_session_cleared_reason: null,
   });
 
   const [lastAuthEvent, setLastAuthEvent] = useState<{ event: string; at: string } | null>(null);
@@ -334,12 +350,19 @@ export default function DebugScreen() {
     }
 
     // ── 5. Persisted per-key diagnostics written by login.tsx ────────────────
-    const [pMsg, pStatus, pCode, pFull, pAt] = await Promise.all([
+    const [pMsg, pStatus, pCode, pFull, pAt, pSigninSuccess, pSigninUid, pSigninSession, pSessionSaved, pKeyAfterSignin, pClearedAt, pClearedReason] = await Promise.all([
       SecureStore.getItemAsync('debug_auth_error_message').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_status').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_code').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_full_json').catch(() => null),
       SecureStore.getItemAsync('debug_auth_last_attempt_at').catch(() => null),
+      SecureStore.getItemAsync('debug_last_signin_success').catch(() => null),
+      SecureStore.getItemAsync('debug_last_signin_user_id').catch(() => null),
+      SecureStore.getItemAsync('debug_last_signin_session_present').catch(() => null),
+      SecureStore.getItemAsync('debug_session_saved_after_signin').catch(() => null),
+      SecureStore.getItemAsync('debug_storage_key_after_signin_exists').catch(() => null),
+      SecureStore.getItemAsync('debug_session_cleared_at').catch(() => null),
+      SecureStore.getItemAsync('debug_session_cleared_reason').catch(() => null),
     ]);
 
     setAuthProbe(prev => ({
@@ -368,6 +391,13 @@ export default function DebugScreen() {
       persisted_error_code: pCode,
       persisted_error_full_json: pFull,
       persisted_attempt_at: pAt,
+      auth_last_signin_success: pSigninSuccess,
+      auth_last_signin_user_id: pSigninUid,
+      auth_last_signin_session_present: pSigninSession,
+      auth_session_saved_after_signin: pSessionSaved,
+      auth_storage_key_after_signin_exists: pKeyAfterSignin,
+      auth_session_cleared_at: pClearedAt,
+      auth_session_cleared_reason: pClearedReason,
     }));
   }, []);
 
@@ -885,6 +915,13 @@ export default function DebugScreen() {
       auth_getUser_error_message: authProbe.auth_getUser_error_message,
       last_auth_event: authProbe.last_auth_event,
       last_auth_event_at: authProbe.last_auth_event_at,
+      auth_last_signin_success: authProbe.auth_last_signin_success,
+      auth_last_signin_user_id: authProbe.auth_last_signin_user_id,
+      auth_last_signin_session_present: authProbe.auth_last_signin_session_present,
+      auth_session_saved_after_signin: authProbe.auth_session_saved_after_signin,
+      auth_storage_key_after_signin_exists: authProbe.auth_storage_key_after_signin_exists,
+      auth_session_cleared_at: authProbe.auth_session_cleared_at,
+      auth_session_cleared_reason: authProbe.auth_session_cleared_reason,
     };
 
     try {
@@ -1210,6 +1247,13 @@ export default function DebugScreen() {
         <Row label="auth_last_error_status"              value={authProbe.persisted_error_status ?? '(none recorded)'} />
         <Row label="auth_last_error_code"                value={authProbe.persisted_error_code ?? '(none recorded)'} />
         <Row label="auth_last_error_full_json"           value={authProbe.persisted_error_full_json ?? '(none recorded)'} />
+        <Row label="auth_last_signin_success"            value={authProbe.auth_last_signin_success ?? '(none recorded)'} />
+        <Row label="auth_last_signin_user_id"            value={authProbe.auth_last_signin_user_id ?? '(none recorded)'} />
+        <Row label="auth_last_signin_session_present"    value={authProbe.auth_last_signin_session_present ?? '(none recorded)'} />
+        <Row label="auth_session_saved_after_signin"     value={authProbe.auth_session_saved_after_signin ?? '(none recorded)'} />
+        <Row label="auth_storage_key_after_signin_exists" value={authProbe.auth_storage_key_after_signin_exists ?? '(none recorded)'} />
+        <Row label="auth_session_cleared_at"             value={authProbe.auth_session_cleared_at ?? '(none recorded)'} />
+        <Row label="auth_session_cleared_reason"         value={authProbe.auth_session_cleared_reason ?? '(none recorded)'} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />

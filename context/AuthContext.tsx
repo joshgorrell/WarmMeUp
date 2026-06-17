@@ -310,6 +310,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const { error } = await supabase.auth.getUser();
             if (error) {
               console.warn('[AUTH INITIAL_SESSION]', { valid: false, userId: session.user.id, error: error.message });
+              // Persist the cleared-session diagnostics BEFORE signOut wipes SecureStore,
+              // so the debug screen can tell us exactly why and when the session was cleared.
+              if (Platform.OS !== 'web') {
+                const clearedAt = new Date().toISOString();
+                const reason = `INITIAL_SESSION getUser failed: ${error.message} (status=${(error as any).status ?? 'n/a'})`;
+                await Promise.all([
+                  SecureStore.setItemAsync('debug_session_cleared_at', clearedAt).catch(() => {}),
+                  SecureStore.setItemAsync('debug_session_cleared_reason', reason).catch(() => {}),
+                ]);
+              }
               await clearUnlockedAt(session.user.id);
               // signOut flushes the stale token from Keychain/SecureStore and fires
               // a SIGNED_OUT event which clears React state via the else branch below.
