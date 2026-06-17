@@ -1237,7 +1237,7 @@ export default function DebugScreen() {
             activeOpacity={0.7}
             hitSlop={8}
           >
-            <RefreshCw size={12} color="#555" />
+            <RefreshCw size={12} color="#777" />
             <AppText style={styles.clearEventsBtnText}>Clear</AppText>
           </TouchableOpacity>
         </View>
@@ -1653,7 +1653,7 @@ export default function DebugScreen() {
 
 const styles = StyleSheet.create({
   otaBanner: {
-    backgroundColor: '#FF0000',
+    backgroundColor: '#000000',
     paddingVertical: 18,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1684,7 +1684,7 @@ const styles = StyleSheet.create({
   },
   root: {
     flex: 1,
-    backgroundColor: '#FF0000',
+    backgroundColor: '#000000',
   },
   header: {
     flexDirection: 'row',
@@ -1719,7 +1719,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 11,
     fontFamily: 'Inter-SemiBold',
-    color: '#555',
+    color: '#777',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
@@ -1746,7 +1746,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   valueNull: {
-    color: '#555',
+    color: '#666',
     fontStyle: 'italic',
   },
   valueBad: {
@@ -1785,7 +1785,7 @@ const styles = StyleSheet.create({
   },
   btnNote: {
     fontSize: 11,
-    color: '#555',
+    color: '#777',
     textAlign: 'center',
     lineHeight: 16,
     paddingHorizontal: Spacing.sm,
@@ -1800,7 +1800,7 @@ const styles = StyleSheet.create({
   eventsCount: {
     fontSize: 11,
     fontFamily: 'Inter-Regular',
-    color: '#555',
+    color: '#777',
   },
   clearEventsBtn: {
     flexDirection: 'row',
@@ -1811,7 +1811,7 @@ const styles = StyleSheet.create({
   clearEventsBtnText: {
     fontSize: 11,
     fontFamily: 'Inter-Medium',
-    color: '#555',
+    color: '#777',
   },
   emptyEvents: {
     paddingHorizontal: Spacing.md,
@@ -1871,7 +1871,7 @@ const styles = StyleSheet.create({
   },
   emptyEventsText: {
     fontSize: 12,
-    color: '#444',
+    color: '#666',
     fontStyle: 'italic',
   },
   eventRow: {
@@ -1886,7 +1886,7 @@ const styles = StyleSheet.create({
   eventTime: {
     fontSize: 10,
     fontFamily: 'Inter-Regular',
-    color: '#444',
+    color: '#666',
     width: 60,
     flexShrink: 0,
     paddingTop: 2,
