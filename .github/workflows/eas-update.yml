@@ -58,8 +58,23 @@ jobs:
             console.log('PASS: anon key is valid for project', EXPECTED_REF);
           "
 
-      - name: Check OTA marker
-        run: grep -R "OTA_MARKER" lib/appVersion.ts
+      - name: Print app version marker
+        run: cat lib/appVersion.ts
+
+      - name: Fail unless V29 marker is present
+        run: grep -F "OTA V29 AUTH STORAGE PROBE 2026-06-17" lib/appVersion.ts
+
+      - name: Verify production channel exists
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas channel:view production
+
+      - name: Verify runtime version and project config
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npx expo config --type public | grep -E "runtimeVersion|projectId|updates"
 
       - name: Publish OTA update to production
         env:
@@ -67,5 +82,6 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
-          MARKER=$(grep OTA_MARKER lib/appVersion.ts | head -1)
+          MARKER=$(node -e "const f=require('fs').readFileSync('lib/appVersion.ts','utf8'); const m=f.match(/OTA_MARKER\s*=\s*'([^']+)'/); console.log(m?m[1]:'NO_MARKER_FOUND');")
+          echo "Publishing with message: $MARKER"
           eas update --channel production --message "$MARKER" --non-interactive
