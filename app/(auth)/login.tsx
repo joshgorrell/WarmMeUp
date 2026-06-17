@@ -89,7 +89,10 @@ export default function LoginScreen() {
       // Write synchronously before the auth call so the data is present even if
       // the app is killed mid-request. Surface any write error instead of swallowing it.
       try {
-        await SecureStore.setItemAsync('debug_last_login_attempt', attemptPayload);
+        await Promise.all([
+          SecureStore.setItemAsync('debug_last_login_attempt', attemptPayload),
+          SecureStore.setItemAsync('debug_auth_last_attempt_at', new Date().toISOString()),
+        ]);
       } catch (writeErr) {
         console.error('[Login] SecureStore write failed:', writeErr);
       }
@@ -110,7 +113,15 @@ export default function LoginScreen() {
         });
         console.error('[Login] AUTH ERROR FULL', JSON.stringify(err, null, 2));
         console.error('[Login] AUTH ERROR extra', errPayload);
-        SecureStore.setItemAsync('debug_last_auth_error', errPayload).catch(() => {});
+        // Write the full blob (legacy key) and each field as its own key for
+        // easier reading in the debug screen's individual Row cells.
+        await Promise.all([
+          SecureStore.setItemAsync('debug_last_auth_error', errPayload).catch(() => {}),
+          SecureStore.setItemAsync('debug_auth_error_message', err.message ?? '').catch(() => {}),
+          SecureStore.setItemAsync('debug_auth_error_status', String((err as any).status ?? '')).catch(() => {}),
+          SecureStore.setItemAsync('debug_auth_error_code', String((err as any).code ?? '')).catch(() => {}),
+          SecureStore.setItemAsync('debug_auth_error_full_json', errPayload).catch(() => {}),
+        ]);
         throw err;
       }
       console.log('[Login] signInWithPassword success', { userId: data.user?.id ?? null });

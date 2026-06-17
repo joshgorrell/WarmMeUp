@@ -126,6 +126,36 @@ export default function DebugScreen() {
   }>({ status: 'idle', ranAt: null, result: null, error: null });
   const [authLastError, setAuthLastError] = useState<string | null>(null);
   const [lastLoginAttempt, setLastLoginAttempt] = useState<string | null>(null);
+  const [authProbe, setAuthProbe] = useState<{
+    ranAt: string | null;
+    getSession_result: string | null;
+    getSession_error: string | null;
+    getUser_result: string | null;
+    getUser_error: string | null;
+    storage_session_key_exists: boolean | null;
+    storage_provider_used: string | null;
+    auth_client_source: string;
+    // persisted per-key values
+    persisted_error_message: string | null;
+    persisted_error_status: string | null;
+    persisted_error_code: string | null;
+    persisted_error_full_json: string | null;
+    persisted_attempt_at: string | null;
+  }>({
+    ranAt: null,
+    getSession_result: null,
+    getSession_error: null,
+    getUser_result: null,
+    getUser_error: null,
+    storage_session_key_exists: null,
+    storage_provider_used: null,
+    auth_client_source: 'supabase (shared lib/supabase.ts)',
+    persisted_error_message: null,
+    persisted_error_status: null,
+    persisted_error_code: null,
+    persisted_error_full_json: null,
+    persisted_attempt_at: null,
+  });
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -172,6 +202,94 @@ export default function DebugScreen() {
       SecureStore.getItemAsync('debug_last_login_attempt')
         .then(v => setLastLoginAttempt(v ?? null))
         .catch(() => setLastLoginAttempt(null));
+
+      // Run live auth probe every time the debug screen gains focus.
+      (async () => {
+        const ranAt = new Date().toISOString();
+
+        // --- getSession ---
+        let getSession_result: string | null = null;
+        let getSession_error: string | null = null;
+        try {
+          const { data, error: err } = await supabase.auth.getSession();
+          if (err) {
+            getSession_error = `${err.message} (status=${(err as any).status ?? 'n/a'})`;
+          } else {
+            getSession_result = JSON.stringify({
+              hasSession: !!data.session,
+              userId: data.session?.user?.id ?? null,
+              email: data.session?.user?.email ?? null,
+              expiresAt: data.session?.expires_at ?? null,
+            });
+          }
+        } catch (e: any) {
+          getSession_error = e?.message ?? String(e);
+        }
+
+        // --- getUser ---
+        let getUser_result: string | null = null;
+        let getUser_error: string | null = null;
+        try {
+          const { data, error: err } = await supabase.auth.getUser();
+          if (err) {
+            getUser_error = `${err.message} (status=${(err as any).status ?? 'n/a'} code=${(err as any).code ?? 'n/a'})`;
+          } else {
+            getUser_result = JSON.stringify({
+              userId: data.user?.id ?? null,
+              email: data.user?.email ?? null,
+              role: data.user?.role ?? null,
+              confirmed: data.user?.email_confirmed_at ? true : false,
+            });
+          }
+        } catch (e: any) {
+          getUser_error = e?.message ?? String(e);
+        }
+
+        // --- storage session key check ---
+        let storage_session_key_exists: boolean | null = null;
+        let storage_provider_used: string | null = null;
+        try {
+          if (Platform.OS !== 'web') {
+            // expo-secure-store key used by @supabase/supabase-js v2
+            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+            const sessionKey = `sb-${supabaseUrl.replace(/^https?:\/\//, '').split('.')[0]}-auth-token`;
+            const v = await SecureStore.getItemAsync(sessionKey);
+            storage_session_key_exists = v !== null;
+            storage_provider_used = 'expo-secure-store';
+          } else {
+            storage_session_key_exists = null;
+            storage_provider_used = 'localStorage (web)';
+          }
+        } catch {
+          storage_session_key_exists = null;
+          storage_provider_used = 'error reading';
+        }
+
+        // --- persisted per-key diagnostics written by login.tsx ---
+        const [pMsg, pStatus, pCode, pFull, pAt] = await Promise.all([
+          SecureStore.getItemAsync('debug_auth_error_message').catch(() => null),
+          SecureStore.getItemAsync('debug_auth_error_status').catch(() => null),
+          SecureStore.getItemAsync('debug_auth_error_code').catch(() => null),
+          SecureStore.getItemAsync('debug_auth_error_full_json').catch(() => null),
+          SecureStore.getItemAsync('debug_auth_last_attempt_at').catch(() => null),
+        ]);
+
+        setAuthProbe({
+          ranAt,
+          getSession_result,
+          getSession_error,
+          getUser_result,
+          getUser_error,
+          storage_session_key_exists,
+          storage_provider_used,
+          auth_client_source: 'supabase (shared lib/supabase.ts)',
+          persisted_error_message: pMsg,
+          persisted_error_status: pStatus,
+          persisted_error_code: pCode,
+          persisted_error_full_json: pFull,
+          persisted_attempt_at: pAt,
+        });
+      })();
     }, [])
   );
 
@@ -941,6 +1059,22 @@ export default function DebugScreen() {
             </>
           );
         })()}
+
+        {/* ── 4f. Auth Session Live Probe (runs on every screen focus) ── */}
+        <Section title="Auth Session Live Probe" />
+        <Row label="probe_ran_at"                    value={authProbe.ranAt ?? '(not yet run)'} />
+        <Row label="auth_client_source"              value={authProbe.auth_client_source} />
+        <Row label="storage_provider_used"           value={authProbe.storage_provider_used} />
+        <Row label="storage_session_key_exists"      value={authProbe.storage_session_key_exists} />
+        <Row label="getSession_result"               value={authProbe.getSession_result ?? '(null)'} />
+        <Row label="getSession_error"                value={authProbe.getSession_error ?? '(none)'} />
+        <Row label="getUser_result"                  value={authProbe.getUser_result ?? '(null)'} />
+        <Row label="getUser_error"                   value={authProbe.getUser_error ?? '(none)'} />
+        <Row label="auth_last_attempt_at"            value={authProbe.persisted_attempt_at ?? '(none recorded)'} />
+        <Row label="auth_last_error_message"         value={authProbe.persisted_error_message ?? '(none recorded)'} />
+        <Row label="auth_last_error_status"          value={authProbe.persisted_error_status ?? '(none recorded)'} />
+        <Row label="auth_last_error_code"            value={authProbe.persisted_error_code ?? '(none recorded)'} />
+        <Row label="auth_last_error_full_json"       value={authProbe.persisted_error_full_json ?? '(none recorded)'} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />

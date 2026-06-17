@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'ota-v27-debug-red-banner-2026-06-17';
-export const OTA_MARKER = 'OTA V27 ACTIVE 2026-06-17';
+export const APP_CODE_VERSION = 'auth-session-probe-2026-06-17-v28';
+export const OTA_MARKER = 'OTA V28 AUTH SESSION PROBE 2026-06-17';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.
