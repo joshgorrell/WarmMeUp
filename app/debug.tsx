@@ -662,9 +662,9 @@ export default function DebugScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* OTA V27 test banner */}
+      {/* OTA V27 banner */}
       <View style={styles.otaBanner}>
-        <AppText style={styles.otaBannerText}>*** OTA V27 ACTIVE ***</AppText>
+        <AppText style={styles.otaBannerText}>OTA V27 ACTIVE</AppText>
       </View>
       {/* Header */}
       <View style={styles.header}>
@@ -1391,19 +1391,21 @@ export default function DebugScreen() {
 
 const styles = StyleSheet.create({
   otaBanner: {
-    backgroundColor: '#CC0000',
-    paddingVertical: 8,
+    backgroundColor: '#FF0000',
+    paddingVertical: 18,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   otaBannerText: {
     color: '#FFFFFF',
     fontFamily: 'Inter-Bold',
-    fontSize: 14,
-    letterSpacing: 1,
+    fontSize: 28,
+    letterSpacing: 2,
+    textAlign: 'center',
   },
   root: {
     flex: 1,
-    backgroundColor: '#07070A',
+    backgroundColor: '#FF0000',
   },
   header: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'fix-header-nav-replace-fallback-2026-06-16-v36';
-export const OTA_MARKER = 'V36 FIX HEADER NAV REPLACE WITH FALLBACK 2026-06-16';
+export const APP_CODE_VERSION = 'ota-v27-debug-red-banner-2026-06-17';
+export const OTA_MARKER = 'OTA V27 ACTIVE 2026-06-17';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.
