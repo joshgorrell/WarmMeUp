@@ -61,8 +61,8 @@ jobs:
       - name: Print app version marker
         run: cat lib/appVersion.ts
 
-      - name: Fail unless V30 marker is present
-        run: grep -F "OTA V30 AUTH STORAGE PROBE FIELDS 2026-06-17" lib/appVersion.ts
+      - name: Fail unless V31 marker is present
+        run: grep -F "OTA V31 AUTH STORAGE PROBE JSON 2026-06-17" lib/appVersion.ts
 
       - name: Verify production channel exists
         env:

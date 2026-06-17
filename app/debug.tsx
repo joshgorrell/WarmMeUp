@@ -868,6 +868,23 @@ export default function DebugScreen() {
       currentRoute: pathname,
       capturedAt: new Date().toISOString(),
       recentEvents: events.slice(0, 20).map(e => ({ tag: e.tag, ts: e.timestamp, ...e.data })),
+      auth_storage_adapter: authProbe.auth_storage_adapter,
+      auth_storage_keys_found: authProbe.auth_storage_keys_found,
+      auth_storage_session_key_exists: authProbe.auth_storage_session_key_exists,
+      auth_storage_session_raw_length: authProbe.auth_storage_session_raw_length,
+      auth_storage_session_parse_ok: authProbe.auth_storage_session_parse_ok,
+      auth_storage_session_user_id: authProbe.auth_storage_session_user_id,
+      auth_storage_session_expires_at: authProbe.auth_storage_session_expires_at,
+      auth_getSession_ran_at: authProbe.auth_getSession_ran_at,
+      auth_getSession_has_session: authProbe.auth_getSession_has_session,
+      auth_getSession_user_id: authProbe.auth_getSession_user_id,
+      auth_getSession_error_message: authProbe.auth_getSession_error_message,
+      auth_getUser_ran_at: authProbe.auth_getUser_ran_at,
+      auth_getUser_has_user: authProbe.auth_getUser_has_user,
+      auth_getUser_user_id: authProbe.auth_getUser_user_id,
+      auth_getUser_error_message: authProbe.auth_getUser_error_message,
+      last_auth_event: authProbe.last_auth_event,
+      last_auth_event_at: authProbe.last_auth_event_at,
     };
 
     try {
