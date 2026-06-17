@@ -397,11 +397,6 @@ export default function DebugScreen() {
       pLoginPressedAt, pLoginHandlerFile, pLoginReached,
       pLoginHasClient, pLoginHasKey, pLoginKeyLen,
       pLoginErrSource, pLoginVisibleErr,
-      pSessionSaved, pKeyAfterSignin,
-      pClearedAt, pClearedReason,
-      pLoginPressedAt, pLoginHandlerFile, pLoginReached,
-      pLoginHasClient, pLoginHasKey, pLoginKeyLen,
-      pLoginErrSource, pLoginVisibleErr,
     ] = await Promise.all([
       SecureStore.getItemAsync('debug_auth_error_message').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_status').catch(() => null),
