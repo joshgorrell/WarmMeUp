@@ -61,8 +61,15 @@ jobs:
       - name: Print app version marker
         run: cat lib/appVersion.ts
 
-      - name: Fail unless V31 marker is present
-        run: grep -F "OTA V31 AUTH STORAGE PROBE JSON 2026-06-17" lib/appVersion.ts
+      - name: Extract and validate OTA_MARKER
+        run: |
+          MARKER=$(node -e "const fs=require('fs'); const s=fs.readFileSync('lib/appVersion.ts','utf8'); const m=s.match(/OTA_MARKER\s*=\s*['\"]([^'\"]+)['\"]/); if(!m){console.error('FAIL: OTA_MARKER not found in lib/appVersion.ts');process.exit(1)} console.log(m[1])")
+          if [ -z "$MARKER" ]; then
+            echo "FAIL: OTA_MARKER is empty"
+            exit 1
+          fi
+          echo "OTA_MARKER=$MARKER" >> $GITHUB_ENV
+          echo "Extracted marker: $MARKER"
 
       - name: Verify production channel exists
         env:
@@ -82,6 +89,5 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
-          MARKER=$(node -e "const f=require('fs').readFileSync('lib/appVersion.ts','utf8'); const m=f.match(/OTA_MARKER\s*=\s*'([^']+)'/); console.log(m?m[1]:'NO_MARKER_FOUND');")
-          echo "Publishing with message: $MARKER"
-          eas update --channel production --message "$MARKER" --non-interactive
+          echo "Publishing with message: $OTA_MARKER"
+          eas update --channel production --message "$OTA_MARKER" --non-interactive
