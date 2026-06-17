@@ -190,6 +190,17 @@ export default function DebugScreen() {
     login_error_source: string | null;
     login_visible_error_message: string | null;
     login_error_full_json: string | null;
+    login_error_name: string | null;
+    login_error_message: string | null;
+    login_error_status: string | null;
+    login_error_code: string | null;
+    login_error_stack: string | null;
+    // network probes
+    network_supabase_root_ok: string | null;
+    network_supabase_root_status: string | null;
+    network_supabase_auth_health_ok: string | null;
+    network_supabase_auth_health_status: string | null;
+    network_supabase_auth_health_error: string | null;
   }>({
     ranAt: null,
     auth_storage_adapter: null,
@@ -241,6 +252,16 @@ export default function DebugScreen() {
     login_error_source: null,
     login_visible_error_message: null,
     login_error_full_json: null,
+    login_error_name: null,
+    login_error_message: null,
+    login_error_status: null,
+    login_error_code: null,
+    login_error_stack: null,
+    network_supabase_root_ok: null,
+    network_supabase_root_status: null,
+    network_supabase_auth_health_ok: null,
+    network_supabase_auth_health_status: null,
+    network_supabase_auth_health_error: null,
   });
 
   const [lastAuthEvent, setLastAuthEvent] = useState<{ event: string; at: string } | null>(null);
@@ -404,6 +425,9 @@ export default function DebugScreen() {
       pLoginReachedPreflight, pLoginReached,
       pLoginHasClient, pLoginHasKey, pLoginKeyLen,
       pLoginErrSource, pLoginVisibleErr, pLoginErrFullJson,
+      pLoginErrName, pLoginErrMessage, pLoginErrStatus, pLoginErrCode, pLoginErrStack,
+      pNetRootOk, pNetRootStatus,
+      pNetAuthOk, pNetAuthStatus, pNetAuthError,
     ] = await Promise.all([
       SecureStore.getItemAsync('debug_auth_error_message').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_status').catch(() => null),
@@ -436,6 +460,16 @@ export default function DebugScreen() {
       SecureStore.getItemAsync('debug_login_error_source').catch(() => null),
       SecureStore.getItemAsync('debug_login_visible_error_message').catch(() => null),
       SecureStore.getItemAsync('debug_login_error_full_json').catch(() => null),
+      SecureStore.getItemAsync('debug_login_error_name').catch(() => null),
+      SecureStore.getItemAsync('debug_login_error_message').catch(() => null),
+      SecureStore.getItemAsync('debug_login_error_status').catch(() => null),
+      SecureStore.getItemAsync('debug_login_error_code').catch(() => null),
+      SecureStore.getItemAsync('debug_login_error_stack').catch(() => null),
+      SecureStore.getItemAsync('debug_network_supabase_root_ok').catch(() => null),
+      SecureStore.getItemAsync('debug_network_supabase_root_status').catch(() => null),
+      SecureStore.getItemAsync('debug_network_supabase_auth_health_ok').catch(() => null),
+      SecureStore.getItemAsync('debug_network_supabase_auth_health_status').catch(() => null),
+      SecureStore.getItemAsync('debug_network_supabase_auth_health_error').catch(() => null),
     ]);
 
     setAuthProbe(prev => ({
@@ -490,6 +524,16 @@ export default function DebugScreen() {
       login_error_source: pLoginErrSource,
       login_visible_error_message: pLoginVisibleErr,
       login_error_full_json: pLoginErrFullJson,
+      login_error_name: pLoginErrName,
+      login_error_message: pLoginErrMessage,
+      login_error_status: pLoginErrStatus,
+      login_error_code: pLoginErrCode,
+      login_error_stack: pLoginErrStack,
+      network_supabase_root_ok: pNetRootOk,
+      network_supabase_root_status: pNetRootStatus,
+      network_supabase_auth_health_ok: pNetAuthOk,
+      network_supabase_auth_health_status: pNetAuthStatus,
+      network_supabase_auth_health_error: pNetAuthError,
     }));
   }, []);
 
@@ -1031,6 +1075,16 @@ export default function DebugScreen() {
       login_error_source: authProbe.login_error_source,
       login_visible_error_message: authProbe.login_visible_error_message,
       login_error_full_json: authProbe.login_error_full_json,
+      login_error_name: authProbe.login_error_name,
+      login_error_message: authProbe.login_error_message,
+      login_error_status: authProbe.login_error_status,
+      login_error_code: authProbe.login_error_code,
+      login_error_stack: authProbe.login_error_stack,
+      network_supabase_root_ok: authProbe.network_supabase_root_ok,
+      network_supabase_root_status: authProbe.network_supabase_root_status,
+      network_supabase_auth_health_ok: authProbe.network_supabase_auth_health_ok,
+      network_supabase_auth_health_status: authProbe.network_supabase_auth_health_status,
+      network_supabase_auth_health_error: authProbe.network_supabase_auth_health_error,
     };
 
     try {
@@ -1381,7 +1435,19 @@ export default function DebugScreen() {
         <Row label="login_preflight_anon_key_length"           value={authProbe.login_preflight_anon_key_length ?? '(none recorded)'} />
         <Row label="login_error_source"                        value={authProbe.login_error_source ?? '(none recorded)'} />
         <Row label="login_visible_error_message"               value={authProbe.login_visible_error_message ?? '(none recorded)'} />
+        <Row label="login_error_name"                          value={authProbe.login_error_name ?? '(none recorded)'} />
+        <Row label="login_error_message"                       value={authProbe.login_error_message ?? '(none recorded)'} />
+        <Row label="login_error_status"                        value={authProbe.login_error_status ?? '(none recorded)'} />
+        <Row label="login_error_code"                          value={authProbe.login_error_code ?? '(none recorded)'} />
+        <Row label="login_error_stack"                         value={authProbe.login_error_stack ?? '(none recorded)'} />
         <Row label="login_error_full_json"                     value={authProbe.login_error_full_json ?? '(none recorded)'} />
+
+        <Section title="Network Probes (run after login error)" />
+        <Row label="network_supabase_root_ok"                  value={authProbe.network_supabase_root_ok ?? '(not run yet)'} />
+        <Row label="network_supabase_root_status"              value={authProbe.network_supabase_root_status ?? '(not run yet)'} />
+        <Row label="network_supabase_auth_health_ok"           value={authProbe.network_supabase_auth_health_ok ?? '(not run yet)'} />
+        <Row label="network_supabase_auth_health_status"       value={authProbe.network_supabase_auth_health_status ?? '(not run yet)'} />
+        <Row label="network_supabase_auth_health_error"        value={authProbe.network_supabase_auth_health_error ?? '(not run yet)'} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />

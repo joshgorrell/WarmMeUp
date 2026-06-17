@@ -87,6 +87,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',
+    // No custom fetch: supabase-js will use globalThis.fetch, which is wrapped
+    // by our debug interceptor above.
   },
 });
 
@@ -125,6 +127,10 @@ export function getSupabaseDiagnostics() {
     authClientAnonKeyLength: (authHeaders['apikey'] ?? '').length,
     authClientUrl: authInternal?.url ?? 'UNKNOWN',
     authClientHeaderKeys: Object.keys(authHeaders).join(', ') || '(none)',
+    // Fetch config: no custom fetch passed to createClient — relies on globalThis.fetch
+    // which is wrapped by our supabaseDebugFetch interceptor at module load time.
+    clientCustomFetch: 'none (uses globalThis.fetch via interceptor)',
+    interceptorActive: globalThis.fetch !== _origFetch,
   };
 }
 

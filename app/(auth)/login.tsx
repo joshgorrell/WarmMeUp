@@ -25,6 +25,49 @@ const V_SM = 16;
 const V_MD = 24;
 const INPUT_PAD = 14;
 
+// Runs two lightweight fetches to detect connectivity vs. Supabase-specific
+// issues. Results are written to SecureStore so the debug screen can surface them.
+async function probeSupabaseNetwork(): Promise<void> {
+  const base = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+  if (!base) return;
+
+  // Probe 1 — root URL
+  try {
+    const r = await fetch(base, { method: 'GET' });
+    await Promise.all([
+      SecureStore.setItemAsync('debug_network_supabase_root_ok', 'true').catch(() => {}),
+      SecureStore.setItemAsync('debug_network_supabase_root_status', String(r.status)).catch(() => {}),
+    ]);
+    logDebugEvent('NETWORK PROBE root', { status: r.status });
+  } catch (e: any) {
+    await Promise.all([
+      SecureStore.setItemAsync('debug_network_supabase_root_ok', 'false').catch(() => {}),
+      SecureStore.setItemAsync('debug_network_supabase_root_status', e?.message ?? 'error').catch(() => {}),
+    ]);
+    logDebugEvent('NETWORK PROBE root error', { error: e?.message ?? 'unknown' });
+  }
+
+  // Probe 2 — auth health endpoint
+  try {
+    const r = await fetch(`${base}/auth/v1/health`, { method: 'GET' });
+    let body = '';
+    try { body = await r.text(); } catch {}
+    await Promise.all([
+      SecureStore.setItemAsync('debug_network_supabase_auth_health_ok', String(r.ok)).catch(() => {}),
+      SecureStore.setItemAsync('debug_network_supabase_auth_health_status', String(r.status)).catch(() => {}),
+      SecureStore.setItemAsync('debug_network_supabase_auth_health_error', r.ok ? '' : body.slice(0, 200)).catch(() => {}),
+    ]);
+    logDebugEvent('NETWORK PROBE auth/v1/health', { status: r.status, ok: r.ok });
+  } catch (e: any) {
+    await Promise.all([
+      SecureStore.setItemAsync('debug_network_supabase_auth_health_ok', 'false').catch(() => {}),
+      SecureStore.setItemAsync('debug_network_supabase_auth_health_status', 'error').catch(() => {}),
+      SecureStore.setItemAsync('debug_network_supabase_auth_health_error', e?.message ?? 'unknown').catch(() => {}),
+    ]);
+    logDebugEvent('NETWORK PROBE auth/v1/health error', { error: e?.message ?? 'unknown' });
+  }
+}
+
 export default function LoginScreen() {
   const router = useRouter();
   const { pendingCode, prefilledCode } = useLocalSearchParams<{ pendingCode?: string; prefilledCode?: string }>();
@@ -142,8 +185,8 @@ export default function LoginScreen() {
           status: (err as any).status ?? null,
           code: (err as any).code ?? null,
         });
-        // Write the full blob (legacy key) and each field as its own key for
-        // easier reading in the debug screen's individual Row cells.
+        // Write every individual error field plus the full blob so debug rows
+        // show raw values without parsing JSON.
         await Promise.all([
           SecureStore.setItemAsync('debug_last_auth_error', errPayload).catch(() => {}),
           SecureStore.setItemAsync('debug_auth_error_message', err.message ?? '').catch(() => {}),
@@ -153,7 +196,15 @@ export default function LoginScreen() {
           SecureStore.setItemAsync('debug_login_error_source', 'login.tsx:signInWithPassword:error').catch(() => {}),
           SecureStore.setItemAsync('debug_login_visible_error_message', friendlyAuthError(err)).catch(() => {}),
           SecureStore.setItemAsync('debug_login_error_full_json', errPayload).catch(() => {}),
+          // Individual raw fields (new — surfaces what was previously buried in the JSON blob)
+          SecureStore.setItemAsync('debug_login_error_name', err.name ?? '').catch(() => {}),
+          SecureStore.setItemAsync('debug_login_error_message', err.message ?? '').catch(() => {}),
+          SecureStore.setItemAsync('debug_login_error_status', String((err as any).status ?? '')).catch(() => {}),
+          SecureStore.setItemAsync('debug_login_error_code', String((err as any).code ?? '')).catch(() => {}),
+          SecureStore.setItemAsync('debug_login_error_stack', ((err as any).stack ?? '').slice(0, 500)).catch(() => {}),
         ]);
+        // Fire network probes async — don't block the UI, results written when ready.
+        probeSupabaseNetwork().catch(() => {});
         throw err;
       }
       console.log('[Login] signInWithPassword success', { userId: data.user?.id ?? null });
