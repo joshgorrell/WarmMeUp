@@ -143,8 +143,10 @@ export default function DebugScreen() {
     auth_getSession_user_id: string | null;
     auth_getSession_error_message: string | null;
     // getUser
-    getUser_result: string | null;
-    getUser_error: string | null;
+    auth_getUser_ran_at: string | null;
+    auth_getUser_has_user: boolean | null;
+    auth_getUser_user_id: string | null;
+    auth_getUser_error_message: string | null;
     // auth state events
     last_auth_event: string | null;
     last_auth_event_at: string | null;
@@ -169,8 +171,10 @@ export default function DebugScreen() {
     auth_getSession_has_session: null,
     auth_getSession_user_id: null,
     auth_getSession_error_message: null,
-    getUser_result: null,
-    getUser_error: null,
+    auth_getUser_ran_at: null,
+    auth_getUser_has_user: null,
+    auth_getUser_user_id: null,
+    auth_getUser_error_message: null,
     last_auth_event: null,
     last_auth_event_at: null,
     auth_client_source: 'supabase (shared lib/supabase.ts)',
@@ -311,22 +315,22 @@ export default function DebugScreen() {
     }
 
     // ── 4. getUser ───────────────────────────────────────────────────────────
-    let getUser_result: string | null = null;
-    let getUser_error: string | null = null;
+    const auth_getUser_ran_at = new Date().toISOString();
+    let auth_getUser_has_user: boolean | null = null;
+    let auth_getUser_user_id: string | null = null;
+    let auth_getUser_error_message: string | null = null;
     try {
       const { data, error: err } = await supabase.auth.getUser();
       if (err) {
-        getUser_error = `${err.message} (status=${(err as any).status ?? 'n/a'} code=${(err as any).code ?? 'n/a'})`;
+        auth_getUser_error_message = `${err.message} (status=${(err as any).status ?? 'n/a'} code=${(err as any).code ?? 'n/a'})`;
+        auth_getUser_has_user = false;
       } else {
-        getUser_result = JSON.stringify({
-          userId: data.user?.id ?? null,
-          email: data.user?.email ?? null,
-          role: data.user?.role ?? null,
-          confirmed: data.user?.email_confirmed_at ? true : false,
-        });
+        auth_getUser_has_user = !!data.user;
+        auth_getUser_user_id = data.user?.id ?? null;
       }
     } catch (e: any) {
-      getUser_error = e?.message ?? String(e);
+      auth_getUser_error_message = e?.message ?? String(e);
+      auth_getUser_has_user = false;
     }
 
     // ── 5. Persisted per-key diagnostics written by login.tsx ────────────────
@@ -352,8 +356,10 @@ export default function DebugScreen() {
       auth_getSession_has_session,
       auth_getSession_user_id,
       auth_getSession_error_message,
-      getUser_result,
-      getUser_error,
+      auth_getUser_ran_at,
+      auth_getUser_has_user,
+      auth_getUser_user_id,
+      auth_getUser_error_message,
       last_auth_event: prev.last_auth_event,
       last_auth_event_at: prev.last_auth_event_at,
       auth_client_source: 'supabase (shared lib/supabase.ts) — storage: nativeStorage/SecureStore on native, webStorage/localStorage on web',
@@ -1175,8 +1181,10 @@ export default function DebugScreen() {
         <Row label="auth_getSession_has_session"         value={authProbe.auth_getSession_has_session} />
         <Row label="auth_getSession_user_id"             value={authProbe.auth_getSession_user_id} />
         <Row label="auth_getSession_error_message"       value={authProbe.auth_getSession_error_message ?? '(none)'} />
-        <Row label="getUser_result"                      value={authProbe.getUser_result ?? '(null — no active session)'} />
-        <Row label="getUser_error"                       value={authProbe.getUser_error ?? '(none)'} />
+        <Row label="auth_getUser_ran_at"                 value={authProbe.auth_getUser_ran_at} />
+        <Row label="auth_getUser_has_user"               value={authProbe.auth_getUser_has_user} />
+        <Row label="auth_getUser_user_id"                value={authProbe.auth_getUser_user_id} />
+        <Row label="auth_getUser_error_message"          value={authProbe.auth_getUser_error_message ?? '(none)'} />
         <Row label="last_auth_event"                     value={authProbe.last_auth_event ?? '(none since screen mount)'} />
         <Row label="last_auth_event_at"                  value={authProbe.last_auth_event_at ?? '(none)'} />
         <Row label="auth_client_source"                  value={authProbe.auth_client_source} />
