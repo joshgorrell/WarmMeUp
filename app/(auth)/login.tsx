@@ -13,6 +13,7 @@ import { signInWithProvider, isOAuthSupported } from '@/lib/oauth';
 import { savePendingCode, loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
 import { completePendingJoin } from '@/lib/coupleJoin';
+import { logDebugEvent } from '@/lib/debugLog';
 import WarmupBrand from '@/components/WarmupBrand';
 import PrimaryButton from '@/components/PrimaryButton';
 import AppleIcon from '@/components/icons/AppleIcon';
@@ -61,6 +62,17 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
+    // Fire the debug event as the very first statement — before any validation or
+    // early returns — so it appears in recentEvents even if we bail out early.
+    logDebugEvent('LOGIN BUTTON PRESSED', {
+      handler: 'login.tsx:handleLogin',
+      emailPresent: !!email.trim(),
+      passwordPresent: !!password.trim(),
+    });
+    SecureStore.setItemAsync('debug_login_button_pressed_at', new Date().toISOString()).catch(() => {});
+    SecureStore.setItemAsync('debug_login_handler_file', 'login.tsx').catch(() => {});
+    SecureStore.setItemAsync('debug_login_handler_name', 'handleLogin').catch(() => {});
+
     if (!email.trim() || !password.trim()) {
       setError('Please enter your email and password.');
       return;
@@ -68,6 +80,7 @@ export default function LoginScreen() {
     setError('');
     setLoading(true);
     try {
+      SecureStore.setItemAsync('debug_login_reached_preflight', 'true').catch(() => {});
       // Capture auth-client internals immediately before the call and persist
       // them so the debug screen shows what was present at attempt time.
       const authInternal = supabase.auth as any;
@@ -123,6 +136,12 @@ export default function LoginScreen() {
         });
         console.error('[Login] AUTH ERROR FULL', JSON.stringify(err, null, 2));
         console.error('[Login] AUTH ERROR extra', errPayload);
+        logDebugEvent('LOGIN SIGN_IN_ERROR', {
+          handler: 'login.tsx:handleLogin',
+          message: err.message,
+          status: (err as any).status ?? null,
+          code: (err as any).code ?? null,
+        });
         // Write the full blob (legacy key) and each field as its own key for
         // easier reading in the debug screen's individual Row cells.
         await Promise.all([
@@ -133,6 +152,7 @@ export default function LoginScreen() {
           SecureStore.setItemAsync('debug_auth_error_full_json', errPayload).catch(() => {}),
           SecureStore.setItemAsync('debug_login_error_source', 'login.tsx:signInWithPassword:error').catch(() => {}),
           SecureStore.setItemAsync('debug_login_visible_error_message', friendlyAuthError(err)).catch(() => {}),
+          SecureStore.setItemAsync('debug_login_error_full_json', errPayload).catch(() => {}),
         ]);
         throw err;
       }

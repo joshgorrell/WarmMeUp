@@ -14,6 +14,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { supabase } from '@/lib/supabase';
+import { logDebugEvent } from '@/lib/debugLog';
 import { useLayout } from '@/hooks/useLayout';
 
 export default function UnlockScreen() {
@@ -110,6 +111,16 @@ export default function UnlockScreen() {
   }, [tryBiometric]);
 
   const handleEmailSignIn = async () => {
+    // Fire as the very first statement so it always appears in recentEvents.
+    logDebugEvent('LOGIN BUTTON PRESSED', {
+      handler: 'unlock.tsx:handleEmailSignIn',
+      emailPresent: !!email.trim(),
+      passwordPresent: !!password,
+    });
+    SecureStore.setItemAsync('debug_login_button_pressed_at', new Date().toISOString()).catch(() => {});
+    SecureStore.setItemAsync('debug_login_handler_file', 'unlock.tsx').catch(() => {});
+    SecureStore.setItemAsync('debug_login_handler_name', 'handleEmailSignIn').catch(() => {});
+
     if (!email.trim() || !password) {
       setAuthError('Please enter your email and password.');
       return;
@@ -119,18 +130,18 @@ export default function UnlockScreen() {
 
     // Preflight diagnostics — written before signInWithPassword so they survive
     // even if the call throws or never returns.
+    SecureStore.setItemAsync('debug_login_reached_preflight', 'true').catch(() => {});
     const pressedAt = new Date().toISOString();
     const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
     try {
       await Promise.all([
-        SecureStore.setItemAsync('debug_login_button_pressed_at', pressedAt),
-        SecureStore.setItemAsync('debug_login_handler_file', 'unlock.tsx:handleEmailSignIn'),
         SecureStore.setItemAsync('debug_login_preflight_has_supabase_client', String(!!supabase)),
         SecureStore.setItemAsync('debug_login_preflight_has_anon_key', String(anonKey.length > 0)),
         SecureStore.setItemAsync('debug_login_preflight_anon_key_length', String(anonKey.length)),
         SecureStore.setItemAsync('debug_login_reached_signInWithPassword', 'false'),
         SecureStore.setItemAsync('debug_login_error_source', ''),
         SecureStore.setItemAsync('debug_login_visible_error_message', ''),
+        SecureStore.setItemAsync('debug_login_error_full_json', ''),
       ]);
     } catch {}
     console.log('[unlock] handleEmailSignIn preflight — anonKey length:', anonKey.length, '| client:', !!supabase);
@@ -142,25 +153,36 @@ export default function UnlockScreen() {
         const visibleMsg = error.message?.toLowerCase().includes('no api key')
           ? 'Could not reach the server. Check your connection and try again.'
           : 'Incorrect email or password.';
+        const errJson = JSON.stringify({ message: error.message, status: (error as any).status ?? null, code: (error as any).code ?? null });
+        logDebugEvent('LOGIN SIGN_IN_ERROR', {
+          handler: 'unlock.tsx:handleEmailSignIn',
+          message: error.message,
+          status: (error as any).status ?? null,
+        });
         await Promise.all([
           SecureStore.setItemAsync('debug_login_error_source', 'unlock.tsx:signInWithPassword:error').catch(() => {}),
           SecureStore.setItemAsync('debug_login_visible_error_message', visibleMsg).catch(() => {}),
           SecureStore.setItemAsync('debug_auth_error_message', error.message ?? '').catch(() => {}),
           SecureStore.setItemAsync('debug_auth_error_status', String((error as any).status ?? '')).catch(() => {}),
           SecureStore.setItemAsync('debug_auth_error_code', String((error as any).code ?? '')).catch(() => {}),
+          SecureStore.setItemAsync('debug_login_error_full_json', errJson).catch(() => {}),
         ]);
         console.error('[unlock] signInWithPassword error:', error.message, '| status:', (error as any).status);
         setAuthError(visibleMsg);
       } else {
         await SecureStore.setItemAsync('debug_login_error_source', 'none:success').catch(() => {});
+        logDebugEvent('LOGIN SIGN_IN_SUCCESS', { handler: 'unlock.tsx:handleEmailSignIn' });
         proceed();
       }
     } catch (e: any) {
       const visibleMsg = 'Something went wrong. Please try again.';
+      const errJson = JSON.stringify({ message: e?.message ?? 'unknown', type: 'catch' });
+      logDebugEvent('LOGIN SIGN_IN_CATCH', { handler: 'unlock.tsx:handleEmailSignIn', message: e?.message ?? 'unknown' });
       await Promise.all([
         SecureStore.setItemAsync('debug_login_error_source', 'unlock.tsx:catch:' + (e?.message ?? 'unknown')).catch(() => {}),
         SecureStore.setItemAsync('debug_login_visible_error_message', visibleMsg).catch(() => {}),
         SecureStore.setItemAsync('debug_auth_error_message', e?.message ?? 'unknown catch').catch(() => {}),
+        SecureStore.setItemAsync('debug_login_error_full_json', errJson).catch(() => {}),
       ]);
       console.error('[unlock] signInWithPassword threw:', e?.message);
       setAuthError(visibleMsg);

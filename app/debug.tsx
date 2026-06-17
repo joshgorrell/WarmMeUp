@@ -181,12 +181,15 @@ export default function DebugScreen() {
     // preflight / button-press fields written by login.tsx and unlock.tsx
     login_button_pressed_at: string | null;
     login_handler_file: string | null;
+    login_handler_name: string | null;
+    login_reached_preflight: string | null;
     login_reached_signInWithPassword: string | null;
     login_preflight_has_supabase_client: string | null;
     login_preflight_has_anon_key: string | null;
     login_preflight_anon_key_length: string | null;
     login_error_source: string | null;
     login_visible_error_message: string | null;
+    login_error_full_json: string | null;
   }>({
     ranAt: null,
     auth_storage_adapter: null,
@@ -229,12 +232,15 @@ export default function DebugScreen() {
     auth_session_cleared_reason: null,
     login_button_pressed_at: null,
     login_handler_file: null,
+    login_handler_name: null,
+    login_reached_preflight: null,
     login_reached_signInWithPassword: null,
     login_preflight_has_supabase_client: null,
     login_preflight_has_anon_key: null,
     login_preflight_anon_key_length: null,
     login_error_source: null,
     login_visible_error_message: null,
+    login_error_full_json: null,
   });
 
   const [lastAuthEvent, setLastAuthEvent] = useState<{ event: string; at: string } | null>(null);
@@ -394,9 +400,10 @@ export default function DebugScreen() {
       pAfterStorageKeys, pAfterKeyExists, pAfterRawLen, pAfterParseOk,
       pSessionSaved, pKeyAfterSignin,
       pClearedAt, pClearedReason,
-      pLoginPressedAt, pLoginHandlerFile, pLoginReached,
+      pLoginPressedAt, pLoginHandlerFile, pLoginHandlerName,
+      pLoginReachedPreflight, pLoginReached,
       pLoginHasClient, pLoginHasKey, pLoginKeyLen,
-      pLoginErrSource, pLoginVisibleErr,
+      pLoginErrSource, pLoginVisibleErr, pLoginErrFullJson,
     ] = await Promise.all([
       SecureStore.getItemAsync('debug_auth_error_message').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_status').catch(() => null),
@@ -420,12 +427,15 @@ export default function DebugScreen() {
       SecureStore.getItemAsync('debug_session_cleared_reason').catch(() => null),
       SecureStore.getItemAsync('debug_login_button_pressed_at').catch(() => null),
       SecureStore.getItemAsync('debug_login_handler_file').catch(() => null),
+      SecureStore.getItemAsync('debug_login_handler_name').catch(() => null),
+      SecureStore.getItemAsync('debug_login_reached_preflight').catch(() => null),
       SecureStore.getItemAsync('debug_login_reached_signInWithPassword').catch(() => null),
       SecureStore.getItemAsync('debug_login_preflight_has_supabase_client').catch(() => null),
       SecureStore.getItemAsync('debug_login_preflight_has_anon_key').catch(() => null),
       SecureStore.getItemAsync('debug_login_preflight_anon_key_length').catch(() => null),
       SecureStore.getItemAsync('debug_login_error_source').catch(() => null),
       SecureStore.getItemAsync('debug_login_visible_error_message').catch(() => null),
+      SecureStore.getItemAsync('debug_login_error_full_json').catch(() => null),
     ]);
 
     setAuthProbe(prev => ({
@@ -471,12 +481,15 @@ export default function DebugScreen() {
       auth_session_cleared_reason: pClearedReason,
       login_button_pressed_at: pLoginPressedAt,
       login_handler_file: pLoginHandlerFile,
+      login_handler_name: pLoginHandlerName,
+      login_reached_preflight: pLoginReachedPreflight,
       login_reached_signInWithPassword: pLoginReached,
       login_preflight_has_supabase_client: pLoginHasClient,
       login_preflight_has_anon_key: pLoginHasKey,
       login_preflight_anon_key_length: pLoginKeyLen,
       login_error_source: pLoginErrSource,
       login_visible_error_message: pLoginVisibleErr,
+      login_error_full_json: pLoginErrFullJson,
     }));
   }, []);
 
@@ -1009,12 +1022,15 @@ export default function DebugScreen() {
       auth_session_cleared_reason: authProbe.auth_session_cleared_reason,
       login_button_pressed_at: authProbe.login_button_pressed_at,
       login_handler_file: authProbe.login_handler_file,
+      login_handler_name: authProbe.login_handler_name,
+      login_reached_preflight: authProbe.login_reached_preflight,
       login_reached_signInWithPassword: authProbe.login_reached_signInWithPassword,
       login_preflight_has_supabase_client: authProbe.login_preflight_has_supabase_client,
       login_preflight_has_anon_key: authProbe.login_preflight_has_anon_key,
       login_preflight_anon_key_length: authProbe.login_preflight_anon_key_length,
       login_error_source: authProbe.login_error_source,
       login_visible_error_message: authProbe.login_visible_error_message,
+      login_error_full_json: authProbe.login_error_full_json,
     };
 
     try {
@@ -1357,12 +1373,15 @@ export default function DebugScreen() {
         <Section title="Login Button Preflight (login.tsx / unlock.tsx)" />
         <Row label="login_button_pressed_at"                   value={authProbe.login_button_pressed_at ?? '(none recorded)'} />
         <Row label="login_handler_file"                        value={authProbe.login_handler_file ?? '(none recorded)'} />
+        <Row label="login_handler_name"                        value={authProbe.login_handler_name ?? '(none recorded)'} />
+        <Row label="login_reached_preflight"                   value={authProbe.login_reached_preflight ?? '(none recorded)'} />
         <Row label="login_reached_signInWithPassword"          value={authProbe.login_reached_signInWithPassword ?? '(none recorded)'} />
         <Row label="login_preflight_has_supabase_client"       value={authProbe.login_preflight_has_supabase_client ?? '(none recorded)'} />
         <Row label="login_preflight_has_anon_key"              value={authProbe.login_preflight_has_anon_key ?? '(none recorded)'} />
         <Row label="login_preflight_anon_key_length"           value={authProbe.login_preflight_anon_key_length ?? '(none recorded)'} />
         <Row label="login_error_source"                        value={authProbe.login_error_source ?? '(none recorded)'} />
         <Row label="login_visible_error_message"               value={authProbe.login_visible_error_message ?? '(none recorded)'} />
+        <Row label="login_error_full_json"                     value={authProbe.login_error_full_json ?? '(none recorded)'} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />
