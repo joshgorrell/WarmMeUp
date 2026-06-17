@@ -24,10 +24,9 @@ export function friendlyAuthError(e: unknown): string {
   if (lower.includes('invalid login') || lower.includes('invalid credentials') || lower.includes('wrong password')) {
     return 'Incorrect email or password.';
   }
-  // Non-blocking warning only — never show api_key_mismatch to users since debug
-  // confirms the config is valid. Log and fall through to show the real Supabase error.
-  if (lower.includes('invalid api key') || lower.includes('no api key')) {
-    console.warn('[authError] api_key warning (non-blocking) raw:', raw);
+  if (lower.includes('invalid api key') || lower.includes('no api key') || lower.includes('apikey')) {
+    console.warn('[authError] api_key_missing raw:', raw);
+    return 'Could not reach the server. Check your connection and try again.';
   }
   if (lower.includes('email not confirmed')) {
     return 'Please confirm your email before signing in.';

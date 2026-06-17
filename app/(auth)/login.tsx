@@ -92,12 +92,22 @@ export default function LoginScreen() {
         await Promise.all([
           SecureStore.setItemAsync('debug_last_login_attempt', attemptPayload),
           SecureStore.setItemAsync('debug_auth_last_attempt_at', new Date().toISOString()),
+          // Standardised preflight fields (same keys as unlock.tsx so debug screen shows both)
+          SecureStore.setItemAsync('debug_login_button_pressed_at', new Date().toISOString()),
+          SecureStore.setItemAsync('debug_login_handler_file', 'login.tsx:handleLogin'),
+          SecureStore.setItemAsync('debug_login_preflight_has_supabase_client', String(!!supabase)),
+          SecureStore.setItemAsync('debug_login_preflight_has_anon_key', String(diag.clientHasAnonKey)),
+          SecureStore.setItemAsync('debug_login_preflight_anon_key_length', String(diag.clientAnonKeyLength)),
+          SecureStore.setItemAsync('debug_login_reached_signInWithPassword', 'false'),
+          SecureStore.setItemAsync('debug_login_error_source', ''),
+          SecureStore.setItemAsync('debug_login_visible_error_message', ''),
         ]);
       } catch (writeErr) {
         console.error('[Login] SecureStore write failed:', writeErr);
       }
       console.log('[Login] attempt recorded', attemptPayload);
 
+      await SecureStore.setItemAsync('debug_login_reached_signInWithPassword', 'true').catch(() => {});
       const { data, error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (err) {
         const errPayload = JSON.stringify({
@@ -121,10 +131,13 @@ export default function LoginScreen() {
           SecureStore.setItemAsync('debug_auth_error_status', String((err as any).status ?? '')).catch(() => {}),
           SecureStore.setItemAsync('debug_auth_error_code', String((err as any).code ?? '')).catch(() => {}),
           SecureStore.setItemAsync('debug_auth_error_full_json', errPayload).catch(() => {}),
+          SecureStore.setItemAsync('debug_login_error_source', 'login.tsx:signInWithPassword:error').catch(() => {}),
+          SecureStore.setItemAsync('debug_login_visible_error_message', friendlyAuthError(err)).catch(() => {}),
         ]);
         throw err;
       }
       console.log('[Login] signInWithPassword success', { userId: data.user?.id ?? null });
+      await SecureStore.setItemAsync('debug_login_error_source', 'none:success').catch(() => {});
 
       // Full signin-persistence probe: record every observable checkpoint so the
       // debug screen can show exactly what happened at the moment of sign-in.

@@ -3,6 +3,7 @@ import {
   View, StyleSheet, TouchableOpacity, ActivityIndicator,
   TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -115,15 +116,54 @@ export default function UnlockScreen() {
     }
     setSigningIn(true);
     setAuthError('');
+
+    // Preflight diagnostics — written before signInWithPassword so they survive
+    // even if the call throws or never returns.
+    const pressedAt = new Date().toISOString();
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
     try {
+      await Promise.all([
+        SecureStore.setItemAsync('debug_login_button_pressed_at', pressedAt),
+        SecureStore.setItemAsync('debug_login_handler_file', 'unlock.tsx:handleEmailSignIn'),
+        SecureStore.setItemAsync('debug_login_preflight_has_supabase_client', String(!!supabase)),
+        SecureStore.setItemAsync('debug_login_preflight_has_anon_key', String(anonKey.length > 0)),
+        SecureStore.setItemAsync('debug_login_preflight_anon_key_length', String(anonKey.length)),
+        SecureStore.setItemAsync('debug_login_reached_signInWithPassword', 'false'),
+        SecureStore.setItemAsync('debug_login_error_source', ''),
+        SecureStore.setItemAsync('debug_login_visible_error_message', ''),
+      ]);
+    } catch {}
+    console.log('[unlock] handleEmailSignIn preflight — anonKey length:', anonKey.length, '| client:', !!supabase);
+
+    try {
+      await SecureStore.setItemAsync('debug_login_reached_signInWithPassword', 'true').catch(() => {});
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) {
-        setAuthError('Incorrect email or password.');
+        const visibleMsg = error.message?.toLowerCase().includes('no api key')
+          ? 'Could not reach the server. Check your connection and try again.'
+          : 'Incorrect email or password.';
+        await Promise.all([
+          SecureStore.setItemAsync('debug_login_error_source', 'unlock.tsx:signInWithPassword:error').catch(() => {}),
+          SecureStore.setItemAsync('debug_login_visible_error_message', visibleMsg).catch(() => {}),
+          SecureStore.setItemAsync('debug_auth_error_message', error.message ?? '').catch(() => {}),
+          SecureStore.setItemAsync('debug_auth_error_status', String((error as any).status ?? '')).catch(() => {}),
+          SecureStore.setItemAsync('debug_auth_error_code', String((error as any).code ?? '')).catch(() => {}),
+        ]);
+        console.error('[unlock] signInWithPassword error:', error.message, '| status:', (error as any).status);
+        setAuthError(visibleMsg);
       } else {
+        await SecureStore.setItemAsync('debug_login_error_source', 'none:success').catch(() => {});
         proceed();
       }
-    } catch {
-      setAuthError('Something went wrong. Please try again.');
+    } catch (e: any) {
+      const visibleMsg = 'Something went wrong. Please try again.';
+      await Promise.all([
+        SecureStore.setItemAsync('debug_login_error_source', 'unlock.tsx:catch:' + (e?.message ?? 'unknown')).catch(() => {}),
+        SecureStore.setItemAsync('debug_login_visible_error_message', visibleMsg).catch(() => {}),
+        SecureStore.setItemAsync('debug_auth_error_message', e?.message ?? 'unknown catch').catch(() => {}),
+      ]);
+      console.error('[unlock] signInWithPassword threw:', e?.message);
+      setAuthError(visibleMsg);
     } finally {
       setSigningIn(false);
     }

@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'auth-signin-persistence-probe-v32-2026-06-17';
-export const OTA_MARKER = 'OTA V32 AUTH SIGNIN PERSISTENCE PROBE 2026-06-17';
+export const APP_CODE_VERSION = 'auth-preflight-probe-v33-2026-06-17';
+export const OTA_MARKER = 'OTA V33 AUTH PREFLIGHT PROBE 2026-06-17';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.
