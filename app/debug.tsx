@@ -662,9 +662,9 @@ export default function DebugScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* OTA V27 banner */}
+      {/* OTA banner — text sourced from OTA_MARKER in lib/appVersion.ts */}
       <View style={styles.otaBanner}>
-        <AppText style={styles.otaBannerText}>OTA V27 ACTIVE</AppText>
+        <AppText style={styles.otaBannerText}>{OTA_MARKER}</AppText>
       </View>
       {/* Header */}
       <View style={styles.header}>
@@ -721,6 +721,16 @@ export default function DebugScreen() {
         <Row label="isEmbeddedLaunch" value={isEmbeddedLaunch} />
         <Row label="runtimeVersion" value={runtimeVersion} />
         <Row label="channel" value={channel} />
+
+        {/* ── JS Bundle Identity ── */}
+        <Section title="JS Bundle Identity" />
+        <Row label="bundle_source" value={isEmbeddedLaunch ? 'embedded (native build)' : (updateId ? `ota:${updateId}` : 'unknown')} />
+        <Row label="APP_CODE_VERSION (lib/appVersion.ts)" value={APP_CODE_VERSION} />
+        <Row label="OTA_MARKER (lib/appVersion.ts)" value={OTA_MARKER} />
+        <Row label="Updates.updateId" value={updateId} />
+        <Row label="Updates.createdAt" value={createdAt} />
+        <Row label="Updates.isEmbeddedLaunch" value={isEmbeddedLaunch} />
+        <Row label="Updates.channel" value={channel} />
 
         {/* ── 1. Launch / Auth State ── */}
         <Section title="Launch / Auth State" />
