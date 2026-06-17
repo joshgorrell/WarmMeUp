@@ -126,20 +126,59 @@ export default function LoginScreen() {
       }
       console.log('[Login] signInWithPassword success', { userId: data.user?.id ?? null });
 
-      // Write signin-success diagnostics so the debug screen can prove the session
-      // was actually returned before any startup validation erased it.
+      // Full signin-persistence probe: record every observable checkpoint so the
+      // debug screen can show exactly what happened at the moment of sign-in.
       try {
+        const signinAt = new Date().toISOString();
+        const accessTokenPresent = !!data.session?.access_token;
+        const refreshTokenPresent = !!data.session?.refresh_token;
+
+        // Check getSession immediately — if supabase-js persisted the session this
+        // will return it; if storage is broken it will return null here.
         const { data: sessionCheck } = await supabase.auth.getSession();
         const sessionAfterSignin = sessionCheck?.session ?? null;
+
+        // Directly inspect SecureStore keys — the ground truth for persistence.
+        const supabaseUrlRaw = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+        const projectRef = supabaseUrlRaw.replace(/^https?:\/\//, '').split('.')[0] ?? '';
+        const sessionKey = `sb-${projectRef}-auth-token`;
+        const [sv0, sv1, sv2] = await Promise.all([
+          SecureStore.getItemAsync(sessionKey).catch(() => null),
+          SecureStore.getItemAsync(`${sessionKey}.0`).catch(() => null),
+          SecureStore.getItemAsync(`${sessionKey}.1`).catch(() => null),
+        ]);
+        const foundKeys: string[] = [];
+        if (sv0 !== null) foundKeys.push(sessionKey);
+        if (sv1 !== null) foundKeys.push(`${sessionKey}.0`);
+        if (sv2 !== null) foundKeys.push(`${sessionKey}.1`);
+        const rawSession = (sv1 !== null ? (sv1 + (sv2 ?? '')) : sv0) ?? null;
+        let storeParseOk: boolean | null = null;
+        if (rawSession !== null) {
+          try { JSON.parse(rawSession); storeParseOk = true; } catch { storeParseOk = false; }
+        }
+
         await Promise.all([
-          SecureStore.setItemAsync('debug_last_signin_success', new Date().toISOString()),
+          SecureStore.setItemAsync('debug_last_signin_success', signinAt),
           SecureStore.setItemAsync('debug_last_signin_user_id', data.user?.id ?? ''),
           SecureStore.setItemAsync('debug_last_signin_session_present', String(!!data.session)),
-          SecureStore.setItemAsync('debug_session_saved_after_signin', String(!!sessionAfterSignin)),
-          SecureStore.setItemAsync('debug_storage_key_after_signin_exists', String(!!sessionAfterSignin)),
+          SecureStore.setItemAsync('debug_last_signin_access_token_present', String(accessTokenPresent)),
+          SecureStore.setItemAsync('debug_last_signin_refresh_token_present', String(refreshTokenPresent)),
+          SecureStore.setItemAsync('debug_after_signin_getSession_has_session', String(!!sessionAfterSignin)),
+          SecureStore.setItemAsync('debug_after_signin_getSession_user_id', sessionAfterSignin?.user?.id ?? ''),
+          SecureStore.setItemAsync('debug_after_signin_storage_keys_found', foundKeys.length ? foundKeys.join(', ') : '(none found)'),
+          SecureStore.setItemAsync('debug_after_signin_session_key_exists', String(foundKeys.length > 0)),
+          SecureStore.setItemAsync('debug_after_signin_session_raw_length', String(rawSession?.length ?? 0)),
+          SecureStore.setItemAsync('debug_after_signin_session_parse_ok', storeParseOk === null ? 'null' : String(storeParseOk)),
         ]);
+        console.log('[Login] persistence probe:', {
+          accessTokenPresent, refreshTokenPresent,
+          sessionAfterSignin: !!sessionAfterSignin,
+          storageKeysFound: foundKeys,
+          rawLength: rawSession?.length ?? 0,
+          parseOk: storeParseOk,
+        });
       } catch (writeErr) {
-        console.error('[Login] signin-success SecureStore write failed:', writeErr);
+        console.error('[Login] persistence probe write failed:', writeErr);
       }
 
       // After sign-in, check for a stored pending invite code (survives app restarts).

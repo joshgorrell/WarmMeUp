@@ -162,6 +162,17 @@ export default function DebugScreen() {
     auth_last_signin_success: string | null;
     auth_last_signin_user_id: string | null;
     auth_last_signin_session_present: string | null;
+    auth_last_signin_access_token_present: string | null;
+    auth_last_signin_refresh_token_present: string | null;
+    // post-signin getSession check
+    auth_after_signin_getSession_has_session: string | null;
+    auth_after_signin_getSession_user_id: string | null;
+    // post-signin raw SecureStore inspection
+    auth_after_signin_storage_keys_found: string | null;
+    auth_after_signin_session_key_exists: string | null;
+    auth_after_signin_session_raw_length: string | null;
+    auth_after_signin_session_parse_ok: string | null;
+    // kept for backwards compat (old keys still written on older builds)
     auth_session_saved_after_signin: string | null;
     auth_storage_key_after_signin_exists: string | null;
     // session-cleared fields written by AuthContext INITIAL_SESSION validation
@@ -195,6 +206,14 @@ export default function DebugScreen() {
     auth_last_signin_success: null,
     auth_last_signin_user_id: null,
     auth_last_signin_session_present: null,
+    auth_last_signin_access_token_present: null,
+    auth_last_signin_refresh_token_present: null,
+    auth_after_signin_getSession_has_session: null,
+    auth_after_signin_getSession_user_id: null,
+    auth_after_signin_storage_keys_found: null,
+    auth_after_signin_session_key_exists: null,
+    auth_after_signin_session_raw_length: null,
+    auth_after_signin_session_parse_ok: null,
     auth_session_saved_after_signin: null,
     auth_storage_key_after_signin_exists: null,
     auth_session_cleared_at: null,
@@ -350,7 +369,15 @@ export default function DebugScreen() {
     }
 
     // ── 5. Persisted per-key diagnostics written by login.tsx ────────────────
-    const [pMsg, pStatus, pCode, pFull, pAt, pSigninSuccess, pSigninUid, pSigninSession, pSessionSaved, pKeyAfterSignin, pClearedAt, pClearedReason] = await Promise.all([
+    const [
+      pMsg, pStatus, pCode, pFull, pAt,
+      pSigninSuccess, pSigninUid, pSigninSession,
+      pAccessToken, pRefreshToken,
+      pAfterSessionHas, pAfterSessionUid,
+      pAfterStorageKeys, pAfterKeyExists, pAfterRawLen, pAfterParseOk,
+      pSessionSaved, pKeyAfterSignin,
+      pClearedAt, pClearedReason,
+    ] = await Promise.all([
       SecureStore.getItemAsync('debug_auth_error_message').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_status').catch(() => null),
       SecureStore.getItemAsync('debug_auth_error_code').catch(() => null),
@@ -359,6 +386,14 @@ export default function DebugScreen() {
       SecureStore.getItemAsync('debug_last_signin_success').catch(() => null),
       SecureStore.getItemAsync('debug_last_signin_user_id').catch(() => null),
       SecureStore.getItemAsync('debug_last_signin_session_present').catch(() => null),
+      SecureStore.getItemAsync('debug_last_signin_access_token_present').catch(() => null),
+      SecureStore.getItemAsync('debug_last_signin_refresh_token_present').catch(() => null),
+      SecureStore.getItemAsync('debug_after_signin_getSession_has_session').catch(() => null),
+      SecureStore.getItemAsync('debug_after_signin_getSession_user_id').catch(() => null),
+      SecureStore.getItemAsync('debug_after_signin_storage_keys_found').catch(() => null),
+      SecureStore.getItemAsync('debug_after_signin_session_key_exists').catch(() => null),
+      SecureStore.getItemAsync('debug_after_signin_session_raw_length').catch(() => null),
+      SecureStore.getItemAsync('debug_after_signin_session_parse_ok').catch(() => null),
       SecureStore.getItemAsync('debug_session_saved_after_signin').catch(() => null),
       SecureStore.getItemAsync('debug_storage_key_after_signin_exists').catch(() => null),
       SecureStore.getItemAsync('debug_session_cleared_at').catch(() => null),
@@ -394,6 +429,14 @@ export default function DebugScreen() {
       auth_last_signin_success: pSigninSuccess,
       auth_last_signin_user_id: pSigninUid,
       auth_last_signin_session_present: pSigninSession,
+      auth_last_signin_access_token_present: pAccessToken,
+      auth_last_signin_refresh_token_present: pRefreshToken,
+      auth_after_signin_getSession_has_session: pAfterSessionHas,
+      auth_after_signin_getSession_user_id: pAfterSessionUid,
+      auth_after_signin_storage_keys_found: pAfterStorageKeys,
+      auth_after_signin_session_key_exists: pAfterKeyExists,
+      auth_after_signin_session_raw_length: pAfterRawLen,
+      auth_after_signin_session_parse_ok: pAfterParseOk,
       auth_session_saved_after_signin: pSessionSaved,
       auth_storage_key_after_signin_exists: pKeyAfterSignin,
       auth_session_cleared_at: pClearedAt,
@@ -918,8 +961,14 @@ export default function DebugScreen() {
       auth_last_signin_success: authProbe.auth_last_signin_success,
       auth_last_signin_user_id: authProbe.auth_last_signin_user_id,
       auth_last_signin_session_present: authProbe.auth_last_signin_session_present,
-      auth_session_saved_after_signin: authProbe.auth_session_saved_after_signin,
-      auth_storage_key_after_signin_exists: authProbe.auth_storage_key_after_signin_exists,
+      auth_last_signin_access_token_present: authProbe.auth_last_signin_access_token_present,
+      auth_last_signin_refresh_token_present: authProbe.auth_last_signin_refresh_token_present,
+      auth_after_signin_getSession_has_session: authProbe.auth_after_signin_getSession_has_session,
+      auth_after_signin_getSession_user_id: authProbe.auth_after_signin_getSession_user_id,
+      auth_after_signin_storage_keys_found: authProbe.auth_after_signin_storage_keys_found,
+      auth_after_signin_session_key_exists: authProbe.auth_after_signin_session_key_exists,
+      auth_after_signin_session_raw_length: authProbe.auth_after_signin_session_raw_length,
+      auth_after_signin_session_parse_ok: authProbe.auth_after_signin_session_parse_ok,
       auth_session_cleared_at: authProbe.auth_session_cleared_at,
       auth_session_cleared_reason: authProbe.auth_session_cleared_reason,
     };
@@ -1247,13 +1296,19 @@ export default function DebugScreen() {
         <Row label="auth_last_error_status"              value={authProbe.persisted_error_status ?? '(none recorded)'} />
         <Row label="auth_last_error_code"                value={authProbe.persisted_error_code ?? '(none recorded)'} />
         <Row label="auth_last_error_full_json"           value={authProbe.persisted_error_full_json ?? '(none recorded)'} />
-        <Row label="auth_last_signin_success"            value={authProbe.auth_last_signin_success ?? '(none recorded)'} />
-        <Row label="auth_last_signin_user_id"            value={authProbe.auth_last_signin_user_id ?? '(none recorded)'} />
-        <Row label="auth_last_signin_session_present"    value={authProbe.auth_last_signin_session_present ?? '(none recorded)'} />
-        <Row label="auth_session_saved_after_signin"     value={authProbe.auth_session_saved_after_signin ?? '(none recorded)'} />
-        <Row label="auth_storage_key_after_signin_exists" value={authProbe.auth_storage_key_after_signin_exists ?? '(none recorded)'} />
-        <Row label="auth_session_cleared_at"             value={authProbe.auth_session_cleared_at ?? '(none recorded)'} />
-        <Row label="auth_session_cleared_reason"         value={authProbe.auth_session_cleared_reason ?? '(none recorded)'} />
+        <Row label="auth_last_signin_success"                  value={authProbe.auth_last_signin_success ?? '(none recorded)'} />
+        <Row label="auth_last_signin_user_id"                  value={authProbe.auth_last_signin_user_id ?? '(none recorded)'} />
+        <Row label="auth_last_signin_session_present"          value={authProbe.auth_last_signin_session_present ?? '(none recorded)'} />
+        <Row label="auth_last_signin_access_token_present"     value={authProbe.auth_last_signin_access_token_present ?? '(none recorded)'} />
+        <Row label="auth_last_signin_refresh_token_present"    value={authProbe.auth_last_signin_refresh_token_present ?? '(none recorded)'} />
+        <Row label="auth_after_signin_getSession_has_session"  value={authProbe.auth_after_signin_getSession_has_session ?? '(none recorded)'} />
+        <Row label="auth_after_signin_getSession_user_id"      value={authProbe.auth_after_signin_getSession_user_id ?? '(none recorded)'} />
+        <Row label="auth_after_signin_storage_keys_found"      value={authProbe.auth_after_signin_storage_keys_found ?? '(none recorded)'} />
+        <Row label="auth_after_signin_session_key_exists"      value={authProbe.auth_after_signin_session_key_exists ?? '(none recorded)'} />
+        <Row label="auth_after_signin_session_raw_length"      value={authProbe.auth_after_signin_session_raw_length ?? '(none recorded)'} />
+        <Row label="auth_after_signin_session_parse_ok"        value={authProbe.auth_after_signin_session_parse_ok ?? '(none recorded)'} />
+        <Row label="auth_session_cleared_at"                   value={authProbe.auth_session_cleared_at ?? '(none recorded)'} />
+        <Row label="auth_session_cleared_reason"               value={authProbe.auth_session_cleared_reason ?? '(none recorded)'} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />
