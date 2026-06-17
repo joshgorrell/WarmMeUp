@@ -12,55 +12,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY length:', supabaseAnonKey.length);
 }
 
-// ─── Network interceptor ───────────────────────────────────────────────────
-// Patches globalThis.fetch to log every outgoing request to the Supabase URL.
-// This is the ground truth: it runs AFTER supabase-js builds and attaches all
-// headers, so if apikey is missing here it is missing on the wire.
-// Active in all builds until the auth issue is resolved.
-const _origFetch = globalThis.fetch;
-globalThis.fetch = function supabaseDebugFetch(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
-  const url =
-    typeof input === 'string'
-      ? input
-      : input instanceof URL
-        ? input.href
-        : (input as Request).url;
-
-  if (supabaseUrl && url.startsWith(supabaseUrl)) {
-    // Flatten headers to a plain object regardless of their type.
-    const rawHeaders = init?.headers;
-    const flat: Record<string, string> = {};
-    if (rawHeaders instanceof Headers) {
-      rawHeaders.forEach((v, k) => { flat[k] = v; });
-    } else if (Array.isArray(rawHeaders)) {
-      for (const [k, v] of rawHeaders) flat[k] = v;
-    } else if (rawHeaders && typeof rawHeaders === 'object') {
-      Object.assign(flat, rawHeaders);
-    }
-
-    const hasApiKey = Boolean(flat['apikey'] ?? flat['Apikey']);
-    const hasAuth   = Boolean(flat['authorization'] ?? flat['Authorization']);
-    const authPfx   = (flat['authorization'] ?? flat['Authorization'] ?? '').slice(0, 40);
-
-    console.log('[FetchInterceptor] →', init?.method ?? 'GET', url.replace(supabaseUrl, '<SB>'));
-    console.log('[FetchInterceptor] hasApiKey:', hasApiKey, '| apikey len:', (flat['apikey'] ?? flat['Apikey'] ?? '').length);
-    console.log('[FetchInterceptor] hasAuth:',   hasAuth,   '| auth pfx:', authPfx || '(none)');
-    console.log('[FetchInterceptor] allHeaderKeys:', Object.keys(flat).join(', ') || '(none)');
-
-    if (!hasApiKey) {
-      console.error('[FetchInterceptor] *** NO apikey HEADER — this request WILL fail with "No API key found" ***');
-      console.error('[FetchInterceptor] init.headers type:', Object.prototype.toString.call(rawHeaders));
-      console.error('[FetchInterceptor] full flat headers:', JSON.stringify(flat));
-    }
-  }
-
-  return _origFetch.call(globalThis, input, init);
-} as typeof fetch;
-// ──────────────────────────────────────────────────────────────────────────
-
 const webStorage = {
   getItem: (key: string) => {
     try { return window.localStorage.getItem(key); } catch { return null; }
@@ -87,8 +38,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',
-    // No custom fetch: supabase-js will use globalThis.fetch, which is wrapped
-    // by our debug interceptor above.
   },
 });
 
@@ -121,16 +70,13 @@ export function getSupabaseDiagnostics() {
     sourcesMatch:
       supabaseAnonKey === (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '') &&
       supabaseUrl === (process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''),
-    fetchWrapper: 'interceptor-v25',
-    // Auth client internal header state (sampled at call time)
+    fetchWrapper: 'none (interceptor removed v35)',
     authClientHasApiKey: Boolean(authHeaders['apikey']),
     authClientAnonKeyLength: (authHeaders['apikey'] ?? '').length,
     authClientUrl: authInternal?.url ?? 'UNKNOWN',
     authClientHeaderKeys: Object.keys(authHeaders).join(', ') || '(none)',
-    // Fetch config: no custom fetch passed to createClient — relies on globalThis.fetch
-    // which is wrapped by our supabaseDebugFetch interceptor at module load time.
-    clientCustomFetch: 'none (uses globalThis.fetch via interceptor)',
-    interceptorActive: globalThis.fetch !== _origFetch,
+    clientCustomFetch: 'none',
+    interceptorActive: false,
   };
 }
 
