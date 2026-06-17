@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 import { ArrowLeft, Zap, Lock, MessageCircle, Dice6, Camera, Sparkles, ChevronRight, CheckCheck } from 'lucide-react-native';
+import { logDebugEvent } from '@/lib/debugLog';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -51,6 +52,7 @@ function timeAgo(iso: string) {
 
 export default function ActivityScreen() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, partnerProfile, couple, profile } = useAuth();
   const { colors } = useTheme();
   const [allItems, setAllItems] = useState<ActivityItem[]>([]);
@@ -369,16 +371,32 @@ export default function ActivityScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
-          activeOpacity={0.8}
-          style={[styles.backBtn, { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: colors.borderSubtle }]}
-        >
-          <ArrowLeft color={colors.text} size={20} strokeWidth={2} />
-        </TouchableOpacity>
-        <View style={styles.brand}>
-          <WarmupLogo size={28} />
-          <WarmupWordmark size={13} />
-        </View>
+            onPress={() => router.back()}
+            activeOpacity={0.8}
+            style={[styles.backBtn, { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: colors.borderSubtle }]}
+          >
+            <ArrowLeft color={colors.text} size={20} strokeWidth={2} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              logDebugEvent('HEADER_HOME_PRESSED', {
+                currentRoute: pathname,
+                targetRoute: '/(app)/(tabs)',
+                method: 'replace',
+              });
+              try {
+                router.replace('/(app)/(tabs)');
+              } catch (e: any) {
+                logDebugEvent('HEADER_HOME_PRESSED_ERROR', { error: e?.message ?? 'unknown' });
+                try { router.replace('/'); } catch {}
+              }
+            }}
+            activeOpacity={0.7}
+            style={styles.brand}
+          >
+            <WarmupLogo size={28} />
+            <WarmupWordmark size={13} />
+          </TouchableOpacity>
         <View style={styles.headerRight}>
           {unreadCount > 0 && (
             <TouchableOpacity

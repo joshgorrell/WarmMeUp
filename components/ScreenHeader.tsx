@@ -2,9 +2,11 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter, usePathname } from 'expo-router';
 import WarmupLogo from './WarmupLogo';
 import WarmupWordmark from './WarmupWordmark';
 import { useTheme } from '@/context/ThemeContext';
+import { logDebugEvent } from '@/lib/debugLog';
 import { Spacing, Radius } from '@/constants/theme';
 
 interface ScreenHeaderProps {
@@ -16,6 +18,22 @@ interface ScreenHeaderProps {
 export default function ScreenHeader({ onBack, rightSlot }: ScreenHeaderProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const handleHomePres = () => {
+    logDebugEvent('HEADER_HOME_PRESSED', {
+      currentRoute: pathname,
+      targetRoute: '/(app)/(tabs)',
+      method: 'replace',
+    });
+    try {
+      router.replace('/(app)/(tabs)');
+    } catch (e: any) {
+      logDebugEvent('HEADER_HOME_PRESSED_ERROR', { error: e?.message ?? 'unknown' });
+      try { router.replace('/'); } catch {}
+    }
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + Spacing.md }]}>
@@ -27,10 +45,14 @@ export default function ScreenHeader({ onBack, rightSlot }: ScreenHeaderProps) {
         <ArrowLeft color={colors.text} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
-      <View style={styles.brand}>
+      <TouchableOpacity
+        onPress={handleHomePres}
+        activeOpacity={0.7}
+        style={styles.brand}
+      >
         <WarmupLogo size={26} />
         <WarmupWordmark size={12} />
-      </View>
+      </TouchableOpacity>
 
       <View style={styles.right}>
         {rightSlot}

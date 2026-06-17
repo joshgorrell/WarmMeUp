@@ -1,12 +1,13 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 import Avatar from './Avatar';
 import WarmupLogo from './WarmupLogo';
 import WarmupWordmark from './WarmupWordmark';
 import { useAuth } from '@/context/AuthContext';
 import { useWeather } from '@/hooks/useWeather';
+import { logDebugEvent } from '@/lib/debugLog';
 import { Spacing } from '@/constants/theme';
 
 interface TabHeaderProps {
@@ -16,6 +17,7 @@ interface TabHeaderProps {
 
 export default function TabHeader({ rightSlot }: TabHeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { profile, settings } = useAuth();
   const privacyMode = settings?.stealth_mode_enabled ?? false;
   const temp = useWeather(
@@ -27,7 +29,25 @@ export default function TabHeader({ rightSlot }: TabHeaderProps) {
   return (
     <View style={styles.container}>
       {/* Left: logo + wordmark */}
-      <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/')} onLongPress={() => router.push('/debug')} delayLongPress={5000} activeOpacity={0.7} style={styles.brand}>
+      <TouchableOpacity
+        onPress={() => {
+          logDebugEvent('HEADER_HOME_PRESSED', {
+            currentRoute: pathname,
+            targetRoute: '/(app)/(tabs)',
+            method: 'replace',
+          });
+          try {
+            router.replace('/(app)/(tabs)');
+          } catch (e: any) {
+            logDebugEvent('HEADER_HOME_PRESSED_ERROR', { error: e?.message ?? 'unknown' });
+            try { router.replace('/'); } catch {}
+          }
+        }}
+        onLongPress={() => router.push('/debug')}
+        delayLongPress={5000}
+        activeOpacity={0.7}
+        style={styles.brand}
+      >
         <WarmupLogo size={28} />
         <WarmupWordmark size={13} />
       </TouchableOpacity>

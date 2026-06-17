@@ -1,12 +1,13 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 import WarmupLogo from './WarmupLogo';
 import WarmupWordmark from './WarmupWordmark';
 import Avatar from './Avatar';
 import { useWeather } from '@/hooks/useWeather';
 import { useAuth } from '@/context/AuthContext';
+import { logDebugEvent } from '@/lib/debugLog';
 import { Spacing } from '@/constants/theme';
 
 interface BrandHeaderProps {
@@ -23,6 +24,7 @@ export default function BrandHeader({
   onAvatarPress,
 }: BrandHeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { profile, settings } = useAuth();
   const privacyMode = settings?.stealth_mode_enabled ?? false;
   const temp = useWeather(
@@ -36,10 +38,16 @@ export default function BrandHeader({
       {/* Left: logo + wordmark */}
       <TouchableOpacity
         onPress={() => {
+          logDebugEvent('HEADER_HOME_PRESSED', {
+            currentRoute: pathname,
+            targetRoute: '/(app)/(tabs)',
+            method: 'replace',
+          });
           try {
             router.replace('/(app)/(tabs)');
-          } catch {
-            router.replace('/');
+          } catch (e: any) {
+            logDebugEvent('HEADER_HOME_PRESSED_ERROR', { error: e?.message ?? 'unknown' });
+            try { router.replace('/'); } catch {}
           }
         }}
         onLongPress={() => router.push('/debug')}
