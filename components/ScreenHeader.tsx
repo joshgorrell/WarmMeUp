@@ -31,7 +31,7 @@ export default function ScreenHeader({ onBack, rightSlot }: ScreenHeaderProps) {
       router.replace('/(app)/(tabs)');
     } catch (e: any) {
       logDebugEvent('HEADER_HOME_PRESSED_ERROR', { error: e?.message ?? 'unknown' });
-      try { router.replace('/'); } catch {}
+      try { router.navigate('/(app)/(tabs)'); } catch {}
     }
   };
 

@@ -1000,6 +1000,9 @@ export default function AccountScreen() {
     try {
       await supabase.from('chat_messages').delete().eq('couple_id', couple.id);
       await supabase.from('interactions').delete().eq('couple_id', couple.id);
+      await supabase.from('wishes').delete().eq('couple_id', couple.id);
+      await supabase.from('activity_events').delete().eq('couple_id', couple.id);
+      await supabase.from('activity_views').delete().eq('couple_id', couple.id);
       await supabase.from('cash_in_events').delete().eq('couple_id', couple.id);
       await supabase.from('point_events').delete().eq('couple_id', couple.id);
       await supabase.from('monthly_scores').delete().eq('couple_id', couple.id);
