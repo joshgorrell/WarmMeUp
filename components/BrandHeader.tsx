@@ -41,13 +41,15 @@ export default function BrandHeader({
           logDebugEvent('HEADER_HOME_PRESSED', {
             currentRoute: pathname,
             targetRoute: '/(app)/(tabs)',
-            method: 'replace',
+            method: 'dismissAll+navigate',
           });
           try {
-            router.replace('/(app)/(tabs)');
+            router.dismissAll();
+          } catch {}
+          try {
+            router.navigate('/(app)/(tabs)');
           } catch (e: any) {
             logDebugEvent('HEADER_HOME_PRESSED_ERROR', { error: e?.message ?? 'unknown' });
-            try { router.navigate('/(app)/(tabs)'); } catch {}
           }
         }}
         onLongPress={() => router.push('/debug')}

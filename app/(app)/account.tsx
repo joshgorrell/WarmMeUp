@@ -459,6 +459,11 @@ export default function AccountScreen() {
   const [deleting, setDeleting] = useState(false);
   const [deleteDone, setDeleteDone] = useState(false);
 
+  const goDeleteStep = (step: typeof deleteStep) => {
+    setDeleting(false);
+    setDeleteStep(step);
+  };
+
   // Reset Points modal
   const [resetPointsOpen, setResetPointsOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -999,6 +1004,7 @@ export default function AccountScreen() {
     setDeleting(true);
     try {
       await supabase.from('chat_messages').delete().eq('couple_id', couple.id);
+      await supabase.from('media_reactions').delete().eq('couple_id', couple.id);
       await supabase.from('interactions').delete().eq('couple_id', couple.id);
       await supabase.from('wishes').delete().eq('couple_id', couple.id);
       await supabase.from('activity_events').delete().eq('couple_id', couple.id);
@@ -1847,7 +1853,7 @@ export default function AccountScreen() {
       </Modal>
 
       {/* ── Delete History Modal ───────────────────────────────────── */}
-      <Modal visible={deleteStep !== null} transparent animationType="fade" onRequestClose={() => { if (!deleting) setDeleteStep(null); }}>
+      <Modal visible={deleteStep !== null} transparent animationType="fade" onRequestClose={() => { if (!deleting) goDeleteStep(null); }}>
         <View style={styles.modalOverlay}>
           <View style={[styles.dataModalCard, { backgroundColor: colors.card, borderColor: 'rgba(255,59,48,0.18)' }]}>
 
@@ -1860,7 +1866,7 @@ export default function AccountScreen() {
                 <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
                   Your profile, settings, partner connection, and custom prompts will all be kept. Choose what to delete:
                 </AppText>
-                <TouchableOpacity style={[styles.dataOptionBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]} onPress={() => setDeleteStep('confirm-content')} activeOpacity={0.8}>
+                <TouchableOpacity style={[styles.dataOptionBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]} onPress={() => goDeleteStep('confirm-content')} activeOpacity={0.8}>
                   <View style={[styles.dataOptionIcon, { backgroundColor: 'rgba(255,90,61,0.10)' }]}>
                     <MessageSquare color="#FF5A3D" size={20} strokeWidth={2} />
                   </View>
@@ -1870,7 +1876,7 @@ export default function AccountScreen() {
                   </View>
                   <ChevronRight color={colors.textMuted} size={16} />
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.dataOptionBtn, { borderColor: 'rgba(255,59,48,0.25)', backgroundColor: 'rgba(255,59,48,0.05)' }]} onPress={() => setDeleteStep('confirm-all')} activeOpacity={0.8}>
+                <TouchableOpacity style={[styles.dataOptionBtn, { borderColor: 'rgba(255,59,48,0.25)', backgroundColor: 'rgba(255,59,48,0.05)' }]} onPress={() => goDeleteStep('confirm-all')} activeOpacity={0.8}>
                   <View style={[styles.dataOptionIcon, { backgroundColor: 'rgba(255,59,48,0.12)' }]}>
                     <FolderOpen color="#FF3B30" size={20} strokeWidth={2} />
                   </View>
@@ -1880,7 +1886,7 @@ export default function AccountScreen() {
                   </View>
                   <ChevronRight color={colors.danger} size={16} />
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => setDeleteStep(null)} activeOpacity={0.7}>
+                <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => goDeleteStep(null)} activeOpacity={0.7}>
                   <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Cancel</AppText>
                 </TouchableOpacity>
               </>
@@ -1896,7 +1902,7 @@ export default function AccountScreen() {
                   This will permanently delete all chat messages, dares, dice challenges, asks, scores, and point history.{'\n\n'}Your Vault is not affected. This cannot be undone.
                 </AppText>
                 <View style={styles.dataModalBtns}>
-                  <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => setDeleteStep('choose')} activeOpacity={0.7} disabled={deleting}>
+                  <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => goDeleteStep('choose')} activeOpacity={0.7} disabled={deleting}>
                     <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Back</AppText>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.dataModalDeleteBtn} onPress={() => handleDeleteHistory(false)} activeOpacity={0.8} disabled={deleting}>
@@ -1916,7 +1922,7 @@ export default function AccountScreen() {
                   This will permanently delete all chat messages, dares, dice challenges, asks, scores, point history, and all Vault photos and videos.{'\n\n'}This cannot be undone.
                 </AppText>
                 <View style={styles.dataModalBtns}>
-                  <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => setDeleteStep('choose')} activeOpacity={0.7} disabled={deleting}>
+                  <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => goDeleteStep('choose')} activeOpacity={0.7} disabled={deleting}>
                     <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Back</AppText>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.dataModalDeleteBtn} onPress={() => handleDeleteHistory(true)} activeOpacity={0.8} disabled={deleting}>
