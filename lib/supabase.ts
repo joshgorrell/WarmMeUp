@@ -3,14 +3,30 @@ import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+const _rawUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const _rawAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+
+const supabaseUrl = _rawUrl.trim();
+const supabaseAnonKey = _rawAnonKey.trim();
+
+const anonKeyEndsWithNewline = _rawAnonKey !== supabaseAnonKey;
+const anonKeyLengthRaw = _rawAnonKey.length;
+const anonKeyLengthTrimmed = supabaseAnonKey.length;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('[Supabase] FATAL: missing env vars at createClient time');
   console.error('[Supabase] EXPO_PUBLIC_SUPABASE_URL:', supabaseUrl || 'EMPTY');
   console.error('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY length:', supabaseAnonKey.length);
 }
+
+if (anonKeyEndsWithNewline) {
+  console.warn('[Supabase] WARNING: anon key had trailing whitespace/newline — trimmed before use');
+}
+
+console.log('[Supabase] anonKeyLengthRaw:', anonKeyLengthRaw);
+console.log('[Supabase] anonKeyLengthTrimmed:', anonKeyLengthTrimmed);
+console.log('[Supabase] anonKeyEndsWithNewline:', anonKeyEndsWithNewline);
+console.log('[Supabase] anonKeyRawJSON:', JSON.stringify(_rawAnonKey.slice(-6)));
 
 const webStorage = {
   getItem: (key: string) => {
@@ -70,6 +86,10 @@ export function getSupabaseDiagnostics() {
     sourcesMatch:
       supabaseAnonKey === (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '') &&
       supabaseUrl === (process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''),
+    anonKeyLengthRaw,
+    anonKeyLengthTrimmed,
+    anonKeyEndsWithNewline,
+    anonKeyRawLastCharsJSON: JSON.stringify(_rawAnonKey.slice(-6)),
     fetchWrapper: 'none (interceptor removed v35)',
     authClientHasApiKey: Boolean(authHeaders['apikey']),
     authClientAnonKeyLength: (authHeaders['apikey'] ?? '').length,
