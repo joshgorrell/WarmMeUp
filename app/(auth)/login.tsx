@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView,
@@ -145,18 +145,9 @@ export default function LoginScreen() {
     console.log('[LoginScreen] ANON_KEY_LENGTH:', key.length);
   }, []);
 
-  // Hidden 5-tap logo trigger — opens debug screen without auth
-  const logoTapCount = useRef(0);
-  const logoTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleLogoTap = () => {
-    logoTapCount.current += 1;
-    if (logoTapTimer.current) clearTimeout(logoTapTimer.current);
-    if (logoTapCount.current >= 5) {
-      logoTapCount.current = 0;
-      router.push('/debug');
-      return;
-    }
-    logoTapTimer.current = setTimeout(() => { logoTapCount.current = 0; }, 3000);
+  // Hidden 5-second logo hold — opens debug screen without auth
+  const handleLogoHold = () => {
+    router.push('/debug');
   };
 
   const handleLogin = async () => {
@@ -464,10 +455,11 @@ export default function LoginScreen() {
         bounces={false}
       >
         <View style={isTablet ? [styles.innerWrap, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }] : styles.innerWrap}>
-          {/* Brand — tap 5 times to open debug screen */}
+          {/* Brand — hold 5 seconds to open debug screen */}
           <TouchableOpacity
             style={[styles.brandBlock, { marginBottom: V_MD }]}
-            onPress={handleLogoTap}
+            onLongPress={handleLogoHold}
+            delayLongPress={5000}
             activeOpacity={1}
           >
             <WarmupBrand logoSize={logoSize} sloganWidth={sloganWidth} showTagline />
@@ -571,14 +563,6 @@ export default function LoginScreen() {
               No account?{'  '}
               <AppText style={styles.footerAccent}>Create one</AppText>
             </AppText>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.debugLink}
-            onPress={() => router.push('/debug')}
-            activeOpacity={0.7}
-          >
-            <AppText style={styles.debugLinkText}>Debug</AppText>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -699,14 +683,5 @@ const styles = StyleSheet.create({
   footerAccent: {
     color: '#E05548',
     fontFamily: 'Inter-SemiBold',
-  },
-  debugLink: {
-    paddingVertical: Spacing.sm,
-    marginTop: Spacing.xs,
-  },
-  debugLinkText: {
-    color: 'rgba(255,255,255,0.2)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
   },
 });
