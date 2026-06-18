@@ -387,14 +387,9 @@ export default function ActivityScreen() {
               logDebugEvent('HEADER_HOME_PRESSED', {
                 currentRoute: pathname,
                 targetRoute: '/(app)/(tabs)',
-                method: 'replace',
+                method: 'back',
               });
-              try {
-                router.replace('/(app)/(tabs)');
-              } catch (e: any) {
-                logDebugEvent('HEADER_HOME_PRESSED_ERROR', { error: e?.message ?? 'unknown' });
-                try { router.replace('/'); } catch {}
-              }
+              router.back();
             }}
             activeOpacity={0.7}
             style={styles.brand}
