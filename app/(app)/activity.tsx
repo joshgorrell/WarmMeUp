@@ -345,8 +345,13 @@ export default function ActivityScreen() {
       return;
     }
 
-    // For all other items, use navigate() which finds the existing (tabs) entry
-    // already at position 0 in the (app) Stack instead of duplicating it.
+    // Pop activity off the (app) Stack first, then switch to the target tab.
+    // router.navigate() alone can push a second (tabs) instance on the Stack
+    // instead of returning to the existing one, leaving state:
+    //   (tabs)[index] → activity → (tabs)[dare]
+    // router.replace() in the header then crashes the ErrorBoundary.
+    // Calling back() first guarantees a clean Stack before the tab switch.
+    router.back();
     if (item.routeParams) {
       router.navigate({ pathname: item.route as any, params: item.routeParams });
     } else {
