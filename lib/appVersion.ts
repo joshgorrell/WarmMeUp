@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'fix-delete-history-nav-crash-v40-2026-06-18';
-export const OTA_MARKER = 'OTA V40 FIX DELETE HISTORY AND NAV CRASH 2026-06-18';
+export const APP_CODE_VERSION = 'fix-chat-image-bg-fast-load-v41-2026-06-18';
+export const OTA_MARKER = 'OTA V41 FIX CHAT IMAGE SHADOW AND FAST LOAD 2026-06-18';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.

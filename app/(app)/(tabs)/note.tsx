@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
-  TouchableOpacity, TouchableWithoutFeedback, Pressable, Image, ActivityIndicator, TextInput, Alert,
+  TouchableOpacity, TouchableWithoutFeedback, Pressable, ActivityIndicator, TextInput, Alert,
   AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager, InteractionManager, BackHandler,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -183,16 +184,17 @@ function MediaBubble({
       {!loaded ? (
         <View style={styles.mediaPlaceholder}>
           <ShimmerPlaceholder />
-          <ActivityIndicator size="small" color="rgba(255,255,255,0.35)" />
         </View>
       ) : signedUrl ? (
-        <Image
+        <ExpoImage
           source={{ uri: signedUrl }}
           style={[
             StyleSheet.absoluteFill,
             isBlurred && Platform.OS === 'web' ? { filter: 'blur(20px)', transform: 'scale(1.1)' } as any : undefined,
           ]}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={150}
           blurRadius={isBlurred && Platform.OS !== 'web' ? 20 : 0}
         />
       ) : (
@@ -1102,7 +1104,7 @@ export default function ChatTab() {
           ]}>
             {attachedMedia && !editingState && (
               <View style={styles.previewRow}>
-                <Image source={{ uri: attachedMedia.uri }} style={styles.previewThumb} />
+                <ExpoImage source={{ uri: attachedMedia.uri }} style={styles.previewThumb} contentFit="cover" />
                 <View style={styles.previewInfo}>
                   <Lock color="#FF8A3D" size={11} />
                   <AppText style={[styles.previewLabel, { color: colors.textMuted }]}>
@@ -1356,8 +1358,8 @@ const MessageRow = React.memo(function MessageRow({
               styles.bubble,
               radii,
               isMine
-                ? { backgroundColor: 'rgba(255,80,55,0.22)', borderColor: isMenuOpen ? 'rgba(255,90,61,0.7)' : 'rgba(255,80,55,0.32)' }
-                : { backgroundColor: colors.card, borderColor: colors.borderSubtle },
+                ? { backgroundColor: mediaOnly ? 'transparent' : 'rgba(255,80,55,0.22)', borderColor: isMenuOpen ? 'rgba(255,90,61,0.7)' : 'rgba(255,80,55,0.32)' }
+                : { backgroundColor: mediaOnly ? 'transparent' : colors.card, borderColor: colors.borderSubtle },
               hasMedia && styles.bubbleMediaOnly,
             ]}>
               {hasMedia && (
