@@ -8,7 +8,7 @@ import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, ShieldOff, Mail, Lock, Trash2, RotateCcw, MessageSquare, FolderOpen, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders, RefreshCw } from 'lucide-react-native';
+import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, ShieldOff, Mail, Lock, Trash2, RotateCcw, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders, RefreshCw } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -453,16 +453,6 @@ export default function AccountScreen() {
   const [showCommunityGuidelines, setShowCommunityGuidelines] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
-
-  // Delete History modal
-  const [deleteStep, setDeleteStep] = useState<null | 'choose' | 'confirm-content' | 'confirm-all'>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteDone, setDeleteDone] = useState(false);
-
-  const goDeleteStep = (step: typeof deleteStep) => {
-    setDeleting(false);
-    setDeleteStep(step);
-  };
 
   // Reset Points modal
   const [resetPointsOpen, setResetPointsOpen] = useState(false);
@@ -973,56 +963,6 @@ export default function AccountScreen() {
     } finally { setSavingEmail(false); }
   };
 
-  // ── Delete History ───────────────────────────────────────────────
-
-  // Deletes all files under a couple folder by listing user sub-folders then
-  // paginating through each sub-folder's files in batches of 100.
-  const deleteStorageFolder = async (bucket: string, coupleId: string) => {
-    try {
-      const { data: userFolders } = await supabase.storage.from(bucket).list(coupleId);
-      if (!userFolders?.length) return;
-      for (const folder of userFolders) {
-        let offset = 0;
-        const PAGE = 100;
-        while (true) {
-          const { data: files } = await supabase.storage
-            .from(bucket)
-            .list(`${coupleId}/${folder.name}`, { limit: PAGE, offset });
-          if (!files?.length) break;
-          await supabase.storage
-            .from(bucket)
-            .remove(files.map(f => `${coupleId}/${folder.name}/${f.name}`));
-          if (files.length < PAGE) break;
-          offset += PAGE;
-        }
-      }
-    } catch {}
-  };
-
-  const handleDeleteHistory = async (includeVault: boolean) => {
-    if (!couple?.id) return;
-    setDeleting(true);
-    try {
-      await supabase.from('chat_messages').delete().eq('couple_id', couple.id);
-      await supabase.from('media_reactions').delete().eq('couple_id', couple.id);
-      await supabase.from('interactions').delete().eq('couple_id', couple.id);
-      await supabase.from('wishes').delete().eq('couple_id', couple.id);
-      await supabase.from('activity_events').delete().eq('couple_id', couple.id);
-      await supabase.from('activity_views').delete().eq('couple_id', couple.id);
-      await supabase.from('cash_in_events').delete().eq('couple_id', couple.id);
-      await supabase.from('point_events').delete().eq('couple_id', couple.id);
-      await supabase.from('monthly_scores').delete().eq('couple_id', couple.id);
-      await supabase.from('scores').update({ points: 0 }).eq('couple_id', couple.id);
-      await deleteStorageFolder('chat_media', couple.id);
-      if (includeVault) {
-        await supabase.from('vault_items').delete().eq('couple_id', couple.id);
-        await deleteStorageFolder('vault', couple.id);
-      }
-      setDeleteDone(true);
-      setTimeout(() => { setDeleteStep(null); setDeleteDone(false); loadStats(); }, 1800);
-    } finally { setDeleting(false); }
-  };
-
   // ── Reset Points ─────────────────────────────────────────────────
   const handleResetPoints = async () => {
     if (!couple?.id) return;
@@ -1369,13 +1309,13 @@ export default function AccountScreen() {
 
         <TouchableOpacity
           style={[styles.menuRow, { borderBottomColor: colors.borderSubtle }]}
-          onPress={() => setDeleteStep('choose')}
+          onPress={() => router.push('/(app)/delete-content')}
           activeOpacity={0.7}
         >
           <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,90,95,0.08)' }]}>
             <Trash2 color={colors.danger} size={18} strokeWidth={2} />
           </View>
-          <AppText style={[styles.menuText, { color: colors.danger }]}>Delete History</AppText>
+          <AppText style={[styles.menuText, { color: colors.danger }]}>Delete Content</AppText>
           <ChevronRight color={colors.danger} size={16} />
         </TouchableOpacity>
 
@@ -1848,105 +1788,6 @@ export default function AccountScreen() {
                 </TouchableOpacity>
               </>
             )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Delete History Modal ───────────────────────────────────── */}
-      <Modal visible={deleteStep !== null} transparent animationType="fade" onRequestClose={() => { if (!deleting) goDeleteStep(null); }}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.dataModalCard, { backgroundColor: colors.card, borderColor: 'rgba(255,59,48,0.18)' }]}>
-
-            {deleteStep === 'choose' && (
-              <>
-                <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,59,48,0.10)' }]}>
-                  <Trash2 color="#FF3B30" size={28} strokeWidth={1.5} />
-                </View>
-                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Delete History</AppText>
-                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
-                  Your profile, settings, partner connection, and custom prompts will all be kept. Choose what to delete:
-                </AppText>
-                <TouchableOpacity style={[styles.dataOptionBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]} onPress={() => goDeleteStep('confirm-content')} activeOpacity={0.8}>
-                  <View style={[styles.dataOptionIcon, { backgroundColor: 'rgba(255,90,61,0.10)' }]}>
-                    <MessageSquare color="#FF5A3D" size={20} strokeWidth={2} />
-                  </View>
-                  <View style={styles.dataOptionText}>
-                    <AppText style={[styles.dataOptionTitle, { color: colors.text }]}>All Content</AppText>
-                    <AppText style={[styles.dataOptionSub, { color: colors.textSecondary }]}>Chat, dares, dice, asks, scores — Vault stays</AppText>
-                  </View>
-                  <ChevronRight color={colors.textMuted} size={16} />
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.dataOptionBtn, { borderColor: 'rgba(255,59,48,0.25)', backgroundColor: 'rgba(255,59,48,0.05)' }]} onPress={() => goDeleteStep('confirm-all')} activeOpacity={0.8}>
-                  <View style={[styles.dataOptionIcon, { backgroundColor: 'rgba(255,59,48,0.12)' }]}>
-                    <FolderOpen color="#FF3B30" size={20} strokeWidth={2} />
-                  </View>
-                  <View style={styles.dataOptionText}>
-                    <AppText style={[styles.dataOptionTitle, { color: colors.danger }]}>All Content + Vault</AppText>
-                    <AppText style={[styles.dataOptionSub, { color: colors.textSecondary }]}>Everything above, plus all Vault photos and videos</AppText>
-                  </View>
-                  <ChevronRight color={colors.danger} size={16} />
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => goDeleteStep(null)} activeOpacity={0.7}>
-                  <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Cancel</AppText>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {deleteStep === 'confirm-content' && !deleteDone && (
-              <>
-                <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,59,48,0.10)' }]}>
-                  <AlertTriangle color="#FF3B30" size={28} strokeWidth={1.5} />
-                </View>
-                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Delete All Content?</AppText>
-                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
-                  This will permanently delete all chat messages, dares, dice challenges, asks, scores, and point history.{'\n\n'}Your Vault is not affected. This cannot be undone.
-                </AppText>
-                <View style={styles.dataModalBtns}>
-                  <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => goDeleteStep('choose')} activeOpacity={0.7} disabled={deleting}>
-                    <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Back</AppText>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.dataModalDeleteBtn} onPress={() => handleDeleteHistory(false)} activeOpacity={0.8} disabled={deleting}>
-                    {deleting ? <ActivityIndicator color="#fff" size="small" /> : <AppText style={styles.dataModalDeleteBtnText}>Yes, Delete</AppText>}
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-
-            {deleteStep === 'confirm-all' && !deleteDone && (
-              <>
-                <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,59,48,0.10)' }]}>
-                  <AlertTriangle color="#FF3B30" size={28} strokeWidth={1.5} />
-                </View>
-                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Delete Everything?</AppText>
-                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
-                  This will permanently delete all chat messages, dares, dice challenges, asks, scores, point history, and all Vault photos and videos.{'\n\n'}This cannot be undone.
-                </AppText>
-                <View style={styles.dataModalBtns}>
-                  <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => goDeleteStep('choose')} activeOpacity={0.7} disabled={deleting}>
-                    <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Back</AppText>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.dataModalDeleteBtn} onPress={() => handleDeleteHistory(true)} activeOpacity={0.8} disabled={deleting}>
-                    {deleting ? <ActivityIndicator color="#fff" size="small" /> : <AppText style={styles.dataModalDeleteBtnText}>Yes, Delete All</AppText>}
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-
-            {deleteDone && (
-              <>
-                <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(51,209,122,0.12)' }]}>
-                  <Check color="#33D17A" size={28} strokeWidth={2} />
-                </View>
-                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>All Clear</AppText>
-                <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
-                  Your history has been deleted. Your settings and connection are intact — ready for a fresh start.
-                </AppText>
-                <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => { setDeleteStep(null); setDeleteDone(false); }} activeOpacity={0.7}>
-                  <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</AppText>
-                </TouchableOpacity>
-              </>
-            )}
-
           </View>
         </View>
       </Modal>
