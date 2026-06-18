@@ -282,6 +282,7 @@ function WishForm({
   const [category, setCategory] = useState<WishCategory | null>(null);
   const [saving, setSaving] = useState(false);
   const [imgPath, setImgPath] = useState<string | null>(null);
+  const [imgBucket, setImgBucket] = useState<string>('chat_media');
   const [imgUri, setImgUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -293,6 +294,7 @@ function WishForm({
       setLink(initial?.link ?? '');
       setCategory(initial?.category ?? null);
       setImgPath(initial?.image_storage_path ?? null);
+      setImgBucket(initial?.image_storage_bucket ?? 'chat_media');
       setImgUri(null);
       setError('');
       if (initial?.image_storage_path && initial?.image_storage_bucket) {
@@ -339,29 +341,31 @@ function WishForm({
 
       // Delete the old image from storage before uploading a new one
       if (imgPath) {
-        await supabase.storage.from('vault').remove([imgPath]).catch(() => {});
+        await supabase.storage.from(imgBucket).remove([imgPath]).catch(() => {});
       }
 
       const storagePath = `${couple.id}/${user.id}/wish_${Date.now()}.jpg`;
       logDebugEvent('WISH IMAGE UPLOAD START', { storagePath });
       logDebugEvent('WISH LAST UPLOAD PATH', { path: storagePath });
 
-      await uploadMediaFile(asset.uri, 'vault', storagePath, 'image/jpeg', undefined, user.id, couple.id);
+      await uploadMediaFile(asset.uri, 'chat_media', storagePath, 'image/jpeg', undefined, user.id, couple.id);
 
       // Generate a signed URL immediately so the preview survives a restart
       const { data: signedData, error: signError } = await supabase.storage
-        .from('vault')
+        .from('chat_media')
         .createSignedUrl(storagePath, 3600);
 
       if (signError || !signedData?.signedUrl) {
         logDebugEvent('WISH IMAGE SIGN ERROR', { storagePath, error: signError?.message ?? 'no signedUrl' });
         // Still persist the path — the card will re-sign on load
         setImgPath(storagePath);
+        setImgBucket('chat_media');
         setImgUri(null);
       } else {
         logDebugEvent('WISH IMAGE UPLOAD SUCCESS', { storagePath, signedUrl: signedData.signedUrl.slice(0, 60) });
         logDebugEvent('WISH LAST UPLOAD ERROR', { error: null });
         setImgPath(storagePath);
+        setImgBucket('chat_media');
         setImgUri(signedData.signedUrl);
       }
     } catch (err: any) {
@@ -376,10 +380,11 @@ function WishForm({
 
   const removeImage = async () => {
     if (imgPath) {
-      await supabase.storage.from('vault').remove([imgPath]).catch(() => {});
-      logDebugEvent('WISH IMAGE REMOVE', { path: imgPath });
+      await supabase.storage.from(imgBucket).remove([imgPath]).catch(() => {});
+      logDebugEvent('WISH IMAGE REMOVE', { path: imgPath, bucket: imgBucket });
     }
     setImgPath(null);
+    setImgBucket('chat_media');
     setImgUri(null);
   };
 
@@ -396,7 +401,7 @@ function WishForm({
         description: desc.trim() || null,
         category: category ?? null,
         image_storage_path: imgPath ?? null,
-        image_storage_bucket: imgPath ? 'vault' : null,
+        image_storage_bucket: imgPath ? imgBucket : null,
         link: link.trim() || null,
         status: shareNow ? 'shared' : 'draft',
         updated_at: new Date().toISOString(),
