@@ -419,6 +419,7 @@ function ConnectedPartnerCard({
   streaksEnabled: boolean;
   onManagePairing: () => void;
 }) {
+  const router = useRouter();
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -431,7 +432,7 @@ function ConnectedPartnerCard({
   }, []);
 
   return (
-    <TouchableOpacity onPress={onManagePairing} activeOpacity={0.92} style={pcc.outerWrap}>
+    <View style={pcc.outerWrap}>
       {/* Gradient border frame */}
       <LinearGradient
         colors={['#FFB347', '#FF5A3D', '#FF2E8A', '#FF5A3D', '#FFB347']}
@@ -511,7 +512,7 @@ function ConnectedPartnerCard({
       </LinearGradient>
 
       {/* Metrics row below the card */}
-      <View style={pcc.metricsCard}>
+      <TouchableOpacity onPress={() => router.push('/(app)/my-stats')} activeOpacity={0.75} style={pcc.metricsCard}>
         <View style={pcc.metricCol}>
           <Heart color="#FF2E8A" size={22} strokeWidth={0} fill="#FF2E8A" />
           <AppText style={pcc.metricValue}>{momentsToday.toLocaleString()}</AppText>
@@ -533,8 +534,8 @@ function ConnectedPartnerCard({
           <AppText style={pcc.metricValue}>{streaksEnabled ? streak.toLocaleString() : '—'}</AppText>
           <AppText style={pcc.metricLabel}>{'Day\nStreak'}</AppText>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 }
 
