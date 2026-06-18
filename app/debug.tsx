@@ -5,6 +5,7 @@ import {
 import * as Updates from 'expo-updates';
 import * as Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
+import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname, useFocusEffect } from 'expo-router';
 import { ChevronLeft, Trash2, LogOut, Shield, Share2, RefreshCw } from 'lucide-react-native';
@@ -305,6 +306,21 @@ export default function DebugScreen() {
   });
 
   const [lastAuthEvent, setLastAuthEvent] = useState<{ event: string; at: string } | null>(null);
+  const [pushDiag, setPushDiag] = useState<{
+    ranAt: string | null;
+    permission_status: string | null;
+    token_present: boolean | null;
+    token_prefix: string | null;
+    project_id_used: string | null;
+    last_registered_at: string | null;
+  }>({
+    ranAt: null,
+    permission_status: null,
+    token_present: null,
+    token_prefix: null,
+    project_id_used: null,
+    last_registered_at: null,
+  });
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -699,6 +715,28 @@ export default function DebugScreen() {
         .catch(() => setLastLoginAttempt(null));
       runAuthProbe();
       runV38Probes();
+
+      if (Platform.OS !== 'web') {
+        const PROJECT_ID = 'cfde070c-187f-4d7e-b643-a20446ff95ab';
+        const ranAt = new Date().toISOString();
+        Notifications.getPermissionsAsync().then(async ({ status }) => {
+          let token: string | null = null;
+          if (status === 'granted') {
+            try {
+              const t = await Notifications.getExpoPushTokenAsync({ projectId: PROJECT_ID });
+              token = t.data ?? null;
+            } catch {}
+          }
+          setPushDiag({
+            ranAt,
+            permission_status: status,
+            token_present: token !== null,
+            token_prefix: token ? token.slice(0, 30) : null,
+            project_id_used: PROJECT_ID,
+            last_registered_at: token ? ranAt : null,
+          });
+        }).catch(() => {});
+      }
     }, [runAuthProbe, runV38Probes])
   );
 
@@ -1362,6 +1400,15 @@ export default function DebugScreen() {
         <Row label="blur_on_background" value={settings?.blur_on_background ?? null} />
         <Row label="push_notifications_enabled" value={settings?.push_notifications_enabled ?? null} />
         <Row label="bootElapsedMs" value={bootElapsedMs} />
+
+        {/* ── 1b. Push Notifications State ── */}
+        <Section title="Push Notifications" />
+        <Row label="push.ranAt" value={pushDiag.ranAt} />
+        <Row label="push.permission_status" value={pushDiag.permission_status} />
+        <Row label="push.token_present" value={pushDiag.token_present} />
+        <Row label="push.token_prefix" value={pushDiag.token_prefix} />
+        <Row label="push.project_id_used" value={pushDiag.project_id_used} />
+        <Row label="push.last_registered_at" value={pushDiag.last_registered_at} />
 
         {/* ── 2. Subscription / Pairing State ── */}
         <Section title="Subscription / Pairing State" />

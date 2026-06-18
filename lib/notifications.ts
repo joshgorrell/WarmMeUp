@@ -73,10 +73,17 @@ export async function savePushToken(userId: string, token: string) {
 }
 
 /**
- * Clear the push token from the profile (on sign-out or notifications disabled).
+ * Clear the push token and mark notifications disabled.
+ * Call on sign-out or when the user disables notifications.
  */
 export async function clearPushToken(userId: string) {
-  await supabase.from('profiles').update({ push_token: null }).eq('id', userId);
+  await Promise.all([
+    supabase.from('profiles').update({ push_token: null }).eq('id', userId),
+    supabase
+      .from('user_settings')
+      .update({ push_notifications_enabled: false, updated_at: new Date().toISOString() })
+      .eq('user_id', userId),
+  ]);
 }
 
 /**

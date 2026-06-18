@@ -149,7 +149,7 @@ Deno.serve(async (req: Request) => {
       ? notifCopy
       : `${senderName} ${EVENT_LABELS[event_type] ?? "has new activity for you"}`;
 
-    await fetch("https://exp.host/--/api/v2/push/send", {
+    const pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -160,6 +160,15 @@ Deno.serve(async (req: Request) => {
         sound: "default",
       }),
     });
+
+    // Clear stale token if Expo reports the device is no longer registered.
+    try {
+      const pushJson = await pushRes.json() as any;
+      const ticket = pushJson?.data;
+      if (ticket?.status === "error" && ticket?.details?.error === "DeviceNotRegistered") {
+        await adminClient.from("profiles").update({ push_token: null }).eq("id", partnerId);
+      }
+    } catch {}
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
