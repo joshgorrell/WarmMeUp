@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter, usePathname } from 'expo-router';
-import { ArrowLeft, Zap, Lock, MessageCircle, Dice6, Camera, Sparkles, ChevronRight, CheckCheck } from 'lucide-react-native';
+import { ArrowLeft, Zap, Lock, MessageCircle, Dice6, Camera, Sparkles, ChevronRight, CheckCheck, Trash2 } from 'lucide-react-native';
 import { logDebugEvent } from '@/lib/debugLog';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -273,6 +273,40 @@ export default function ActivityScreen() {
           label = isMine ? 'You granted a wish' : `${partnerName} granted a wish`;
           sub = 'Wish completed';
           break;
+        case 'content_deleted': {
+          const cats: string[] = ev.metadata?.categories ?? [];
+          const isAll = cats.includes('all');
+          if (isAll) {
+            label = isMine ? 'You cleared all shared content' : `${partnerName} cleared all shared content`;
+            sub = 'All history deleted';
+          } else {
+            const names = cats.map((c: string) => {
+              const map: Record<string, string> = {
+                chat: 'Chat', dice: 'Dice', dare: 'Dare', wish: 'Wish',
+                vault: 'Vault', activity: 'Activity', points: 'Points',
+              };
+              return map[c] ?? c;
+            });
+            label = isMine
+              ? `You deleted: ${names.join(', ')}`
+              : `${partnerName} deleted: ${names.join(', ')}`;
+            sub = 'Content removed';
+          }
+          mapped.push({
+            id: `content_deleted_${ev.id}`,
+            sourceTable: 'activity_events',
+            sourceId: ev.id,
+            _type: 'all' as FilterTab,
+            label,
+            sub,
+            time: timeAgo(ev.created_at),
+            icon: <Trash2 color="#FF6B6B" size={18} strokeWidth={2} />,
+            color: '#FF6B6B',
+            _rawTime: ev.created_at,
+            route: '/(app)/(tabs)',
+          });
+          return;
+        }
         default:
           return;
       }

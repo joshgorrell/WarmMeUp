@@ -17,6 +17,31 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 
 type CategoryKey = 'chat' | 'dice' | 'dare' | 'wish' | 'vault' | 'activity' | 'points';
 
+const CATEGORY_LABELS: Record<CategoryKey, string> = {
+  chat: 'Chat Messages',
+  dice: 'Dice History',
+  dare: 'Dare History',
+  wish: 'Wish Items',
+  vault: 'Vault Photos & Videos',
+  activity: 'Activity Feed',
+  points: 'Points & Streaks',
+};
+
+async function notifyPartnerOfDeletion(
+  coupleId: string,
+  actorUserId: string,
+  partnerUserId: string,
+  categories: string[],
+) {
+  await supabase.from('activity_events').insert({
+    couple_id: coupleId,
+    actor_user_id: actorUserId,
+    target_user_id: partnerUserId,
+    event_type: 'content_deleted',
+    metadata: { categories },
+  });
+}
+
 interface Category {
   key: CategoryKey;
   label: string;
@@ -117,7 +142,7 @@ async function burnItAll(coupleId: string) {
 
 export default function DeleteContentScreen() {
   const router = useRouter();
-  const { couple } = useAuth();
+  const { couple, user, partnerProfile } = useAuth();
   const { colors } = useTheme();
 
   const [selected, setSelected] = useState<Set<CategoryKey>>(new Set());
@@ -233,6 +258,9 @@ export default function DeleteContentScreen() {
       if (selected.has('vault')) await deleteVaultHistory(couple.id);
       if (selected.has('activity')) await deleteActivityHistory(couple.id);
       if (selected.has('points')) await deletePointsAndStreaks(couple.id);
+      if (user?.id && partnerProfile?.id) {
+        await notifyPartnerOfDeletion(couple.id, user.id, partnerProfile.id, [...selected]);
+      }
       setSelected(new Set());
       setDeleteDone(true);
       await loadCounts();
@@ -246,6 +274,9 @@ export default function DeleteContentScreen() {
     setBurning(true);
     try {
       await burnItAll(couple.id);
+      if (user?.id && partnerProfile?.id) {
+        await notifyPartnerOfDeletion(couple.id, user.id, partnerProfile.id, ['all']);
+      }
       setBurnDone(true);
       setCounts({ chat: 0, dice: 0, dare: 0, wish: 0, vault: 0, activity: 0, points: 0 });
       setSelected(new Set());
