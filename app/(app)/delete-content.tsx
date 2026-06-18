@@ -293,7 +293,7 @@ export default function DeleteContentScreen() {
   };
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader title="Delete Content" onBack={() => router.back()} />
 
       <ScrollView
@@ -407,7 +407,7 @@ export default function DeleteContentScreen() {
         onRequestClose={() => { if (!deleting) { setConfirmOpen(false); setDeleteDone(false); } }}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: 'rgba(255,59,48,0.18)' }]}>
+          <View style={[styles.modalCard, { borderColor: 'rgba(255,59,48,0.18)' }]}>
             {!deleteDone ? (
               <>
                 <View style={[styles.modalIcon, { backgroundColor: 'rgba(255,59,48,0.10)' }]}>
@@ -469,7 +469,7 @@ export default function DeleteContentScreen() {
         onRequestClose={() => { if (!burning) { setBurnOpen(false); setBurnDone(false); setBurnInput(''); } }}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: 'rgba(255,59,48,0.30)' }]}>
+          <View style={[styles.modalCard, { borderColor: 'rgba(255,59,48,0.30)' }]}>
             {!burnDone ? (
               <>
                 <View style={[styles.modalIcon, { backgroundColor: 'rgba(255,59,48,0.12)' }]}>
@@ -695,6 +695,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 360,
     borderWidth: 1,
+    backgroundColor: '#1A1520',
   },
   modalIcon: {
     width: 64,
