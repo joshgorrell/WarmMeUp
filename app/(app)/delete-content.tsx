@@ -266,6 +266,7 @@ export default function DeleteContentScreen() {
       <ScreenHeader title="Delete Content" onBack={() => router.back()} />
 
       <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -519,6 +520,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screen,
     paddingTop: Spacing.md,
     paddingBottom: 40,
+  },
+  scrollView: {
+    flex: 1,
   },
   subtitle: {
     fontSize: FontSize.sm,

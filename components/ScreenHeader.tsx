@@ -25,12 +25,14 @@ export default function ScreenHeader({ onBack, rightSlot }: ScreenHeaderProps) {
     logDebugEvent('HEADER_HOME_PRESSED', {
       currentRoute: pathname,
       targetRoute: '/(app)/(tabs)',
-      method: 'replace',
     });
     try {
+      // Pop to the tabs screen which is already in the stack below us
+      if (router.canDismiss()) {
+        router.dismissAll();
+      }
       router.replace('/(app)/(tabs)');
-    } catch (e: any) {
-      logDebugEvent('HEADER_HOME_PRESSED_ERROR', { error: e?.message ?? 'unknown' });
+    } catch {
       try { router.navigate('/(app)/(tabs)'); } catch {}
     }
   };

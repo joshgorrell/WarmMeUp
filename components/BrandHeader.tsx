@@ -38,18 +38,12 @@ export default function BrandHeader({
       {/* Left: logo + wordmark */}
       <TouchableOpacity
         onPress={() => {
-          logDebugEvent('HEADER_HOME_PRESSED', {
-            currentRoute: pathname,
-            targetRoute: '/(app)/(tabs)',
-            method: 'dismissAll+navigate',
-          });
+          logDebugEvent('HEADER_HOME_PRESSED', { currentRoute: pathname });
           try {
-            router.dismissAll();
-          } catch {}
-          try {
-            router.navigate('/(app)/(tabs)');
-          } catch (e: any) {
-            logDebugEvent('HEADER_HOME_PRESSED_ERROR', { error: e?.message ?? 'unknown' });
+            if (router.canDismiss()) router.dismissAll();
+            router.replace('/(app)/(tabs)');
+          } catch {
+            try { router.navigate('/(app)/(tabs)'); } catch {}
           }
         }}
         onLongPress={() => router.push('/debug')}
