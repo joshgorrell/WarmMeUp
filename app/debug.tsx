@@ -16,6 +16,7 @@ import { secureKey, hasPinStored } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
 import { getDebugEvents, clearDebugEvents, subscribeDebugEvents, logDebugEvent, DebugEvent } from '@/lib/debugLog';
 import { APP_CODE_VERSION, OTA_MARKER, GIT_SHA } from '@/lib/appVersion';
+import { registerForPushNotifications, savePushToken } from '@/lib/notifications';
 import { Spacing, Radius, FontSize } from '@/constants/theme';
 
 function Row({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
@@ -321,6 +322,42 @@ export default function DebugScreen() {
     project_id_used: null,
     last_registered_at: null,
   });
+
+  type PushTestSubResult = {
+    status: 'idle' | 'loading' | 'success' | 'error';
+    send_status: number | null;
+    expo_status: string | null;
+    skipped_reason: string | null;
+    error: string | null;
+  };
+  const PUSH_TEST_SUB_IDLE: PushTestSubResult = {
+    status: 'idle', send_status: null, expo_status: null, skipped_reason: null, error: null,
+  };
+  const [pushTest, setPushTest] = useState<{
+    running: boolean;
+    ranAt: string | null;
+    permission_status: string | null;
+    token_present: boolean | null;
+    token_saved_to_db: boolean | null;
+    partner_token_present: boolean | null;
+    partner_enabled: boolean | null;
+    self: PushTestSubResult;
+    partner: PushTestSubResult;
+    top_error: string | null;
+  }>({
+    running: false,
+    ranAt: null,
+    permission_status: null,
+    token_present: null,
+    token_saved_to_db: null,
+    partner_token_present: null,
+    partner_enabled: null,
+    self: PUSH_TEST_SUB_IDLE,
+    partner: PUSH_TEST_SUB_IDLE,
+    top_error: null,
+  });
+
+  const [localTestSent, setLocalTestSent] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
   const userId = user?.id ?? session?.user?.id ?? null;
 
@@ -976,6 +1013,162 @@ export default function DebugScreen() {
     }
   };
 
+  // --- Action: Local test notification (proves in-app handler, no server) ---
+  const handleLocalTestNotification = async () => {
+    if (Platform.OS === 'web') return;
+    setLocalTestSent('sending');
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Warm Me Up',
+          body: '[Debug] Local test notification — app can display notifications',
+          data: { event_type: 'debug_local_test' },
+          sound: 'default',
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1 },
+      });
+      setLocalTestSent('sent');
+    } catch {
+      setLocalTestSent('error');
+    }
+  };
+
+  // --- Action: End-to-end push test (self + partner via edge function) ---
+  const handleTestPush = async (force = false) => {
+    if (Platform.OS === 'web' || !userId || !couple?.id) return;
+
+    const EAS_PROJECT_ID = 'cfde070c-187f-4d7e-b643-a20446ff95ab';
+    const resetState = {
+      running: true,
+      ranAt: new Date().toISOString(),
+      permission_status: null as string | null,
+      token_present: null as boolean | null,
+      token_saved_to_db: null as boolean | null,
+      partner_token_present: null as boolean | null,
+      partner_enabled: null as boolean | null,
+      self: { status: 'idle' as const, send_status: null, expo_status: null, skipped_reason: null, error: null },
+      partner: { status: 'idle' as const, send_status: null, expo_status: null, skipped_reason: null, error: null },
+      top_error: null as string | null,
+    };
+    setPushTest(resetState);
+
+    try {
+      // Step 1: Re-register and refresh token
+      const { status: existing } = await Notifications.getPermissionsAsync();
+      let finalStatus = existing;
+      if (existing !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      setPushTest(p => ({ ...p, permission_status: finalStatus }));
+
+      if (finalStatus !== 'granted') {
+        setPushTest(p => ({
+          ...p, running: false, token_present: false, token_saved_to_db: false,
+          top_error: 'Push permission not granted',
+        }));
+        return;
+      }
+
+      let token: string | null = null;
+      try {
+        const t = await Notifications.getExpoPushTokenAsync({ projectId: EAS_PROJECT_ID });
+        token = t.data ?? null;
+      } catch (e: any) {
+        setPushTest(p => ({ ...p, running: false, token_present: false, token_saved_to_db: false, top_error: `getExpoPushTokenAsync failed: ${e?.message ?? String(e)}` }));
+        return;
+      }
+      setPushTest(p => ({ ...p, token_present: token !== null }));
+
+      if (!token) {
+        setPushTest(p => ({ ...p, running: false, token_saved_to_db: false, top_error: 'No token returned from Expo' }));
+        return;
+      }
+
+      // Step 2: Save token to DB
+      await savePushToken(userId, token);
+
+      // Verify it was saved
+      const { data: savedProfile } = await supabase
+        .from('profiles')
+        .select('push_token')
+        .eq('id', userId)
+        .maybeSingle();
+      const tokenSaved = savedProfile?.push_token === token;
+      setPushTest(p => ({ ...p, token_saved_to_db: tokenSaved }));
+
+      const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setPushTest(p => ({ ...p, running: false, top_error: 'No active session' }));
+        return;
+      }
+
+      const callEdge = async (target: 'self' | 'partner', forceFlag: boolean) => {
+        const res = await fetch(`${baseUrl}/functions/v1/send-test-push`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+            Apikey: anonKey,
+          },
+          body: JSON.stringify({ target, couple_id: couple.id, force: forceFlag }),
+        });
+        const body = await res.json() as any;
+        return { httpStatus: res.status, body };
+      };
+
+      // Step 3: Self send
+      setPushTest(p => ({ ...p, self: { ...p.self, status: 'loading' } }));
+      try {
+        const { httpStatus, body } = await callEdge('self', false);
+        setPushTest(p => ({
+          ...p,
+          self: {
+            status: httpStatus === 200 && body?.ok ? 'success' : 'error',
+            send_status: httpStatus,
+            expo_status: body?.expo_status ?? null,
+            skipped_reason: body?.skipped ?? null,
+            error: body?.error ?? null,
+          },
+        }));
+      } catch (e: any) {
+        setPushTest(p => ({
+          ...p,
+          self: { status: 'error', send_status: null, expo_status: null, skipped_reason: null, error: e?.message ?? String(e) },
+        }));
+      }
+
+      // Step 4: Partner send — read partner token/enabled from response
+      setPushTest(p => ({ ...p, partner: { ...p.partner, status: 'loading' } }));
+      try {
+        const { httpStatus, body } = await callEdge('partner', force);
+        setPushTest(p => ({
+          ...p,
+          partner_token_present: body?.token_present ?? null,
+          partner_enabled: body?.partner_enabled ?? null,
+          partner: {
+            status: httpStatus === 200 && body?.ok ? 'success' : 'error',
+            send_status: httpStatus,
+            expo_status: body?.expo_status ?? null,
+            skipped_reason: body?.skipped ?? null,
+            error: body?.error ?? null,
+          },
+        }));
+      } catch (e: any) {
+        setPushTest(p => ({
+          ...p,
+          partner: { status: 'error', send_status: null, expo_status: null, skipped_reason: null, error: e?.message ?? String(e) },
+        }));
+      }
+    } catch (e: any) {
+      setPushTest(p => ({ ...p, top_error: e?.message ?? String(e) }));
+    } finally {
+      setPushTest(p => ({ ...p, running: false }));
+    }
+  };
+
   // --- Action: Check for OTA update ---
   const handleCheckUpdate = async () => {
     setCheckUpdate({ status: 'loading', ranAt: new Date().toISOString(), isAvailable: null, manifest: null, error: null });
@@ -1209,6 +1402,8 @@ export default function DebugScreen() {
       refreshBlockReason,
       couple_invite_code: couple?.invite_code ?? null,
       rpc_test: rpcTest,
+      push_diag: pushDiag,
+      push_test: pushTest,
       vault_bucket: 'vault',
       vault_uploadPathTemplate: uploadPathTemplate,
       vault_lastPickAt: lastVaultPick?.timestamp ?? null,
@@ -1409,6 +1604,24 @@ export default function DebugScreen() {
         <Row label="push.token_prefix" value={pushDiag.token_prefix} />
         <Row label="push.project_id_used" value={pushDiag.project_id_used} />
         <Row label="push.last_registered_at" value={pushDiag.last_registered_at} />
+
+        {/* ── Push Test Results (populated after running tests) ── */}
+        {pushTest.ranAt !== null && (
+          <>
+            <Row label="push_test.ranAt" value={pushTest.ranAt} />
+            <Row label="push_test.permission_status" value={pushTest.permission_status} />
+            <Row label="push_test.token_present" value={pushTest.token_present} />
+            <Row label="push_test.token_saved_to_db" value={pushTest.token_saved_to_db} />
+            <Row label="push_test.self.send_status" value={pushTest.self.send_status} />
+            <Row label="push_test.self.expo_status" value={pushTest.self.expo_status} />
+            <Row label="push_test.partner.token_present" value={pushTest.partner_token_present} />
+            <Row label="push_test.partner.enabled" value={pushTest.partner_enabled} />
+            <Row label="push_test.partner.send_status" value={pushTest.partner.send_status} />
+            <Row label="push_test.partner.expo_status" value={pushTest.partner.expo_status} />
+            <Row label="push_test.partner.skipped_reason" value={pushTest.partner.skipped_reason} />
+            <Row label="push_test.error" value={pushTest.top_error} />
+          </>
+        )}
 
         {/* ── 2. Subscription / Pairing State ── */}
         <Section title="Subscription / Pairing State" />
@@ -1786,6 +1999,116 @@ export default function DebugScreen() {
           <AppText style={styles.btnNote}>
             Sets login_method=password, disables stealth mode, clears lock timer in DB.
           </AppText>
+
+          {/* ── Push Test Buttons ── */}
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#1a2a1a' }, (localTestSent === 'sending' || Platform.OS === 'web') && styles.btnDisabled]}
+            onPress={handleLocalTestNotification}
+            disabled={localTestSent === 'sending' || Platform.OS === 'web'}
+            activeOpacity={0.8}
+          >
+            {localTestSent === 'sending'
+              ? <ActivityIndicator size="small" color="#82E0AA" />
+              : <RefreshCw size={15} color="#82E0AA" />
+            }
+            <AppText style={[styles.actionBtnLabel, { color: '#82E0AA' }]}>
+              {localTestSent === 'sending' ? 'Scheduling…'
+                : localTestSent === 'sent' ? 'Local Notification Sent'
+                : localTestSent === 'error' ? 'Local Notification Failed'
+                : 'A. Local Test Notification'}
+            </AppText>
+          </TouchableOpacity>
+          <AppText style={styles.btnNote}>
+            Schedules a notification to appear in 1 second. Proves permission + in-app handler. No server involved.
+          </AppText>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#0d2233' }, (pushTest.running || Platform.OS === 'web' || !couple?.id) && styles.btnDisabled]}
+            onPress={() => handleTestPush(false)}
+            disabled={pushTest.running || Platform.OS === 'web' || !couple?.id}
+            activeOpacity={0.8}
+          >
+            {pushTest.running && pushTest.self.status === 'loading'
+              ? <ActivityIndicator size="small" color="#5DADE2" />
+              : <RefreshCw size={15} color="#5DADE2" />
+            }
+            <AppText style={[styles.actionBtnLabel, { color: '#5DADE2' }]}>
+              {pushTest.running ? 'Running push tests…' : 'B. End-to-End Push Test (Self + Partner)'}
+            </AppText>
+          </TouchableOpacity>
+          <AppText style={styles.btnNote}>
+            Re-registers token, saves to DB, then sends via Expo push server to both self and partner.
+          </AppText>
+
+          {pushTest.running && (
+            <View style={[styles.rpcCard, styles.rpcCardLoading]}>
+              <AppText style={[styles.rpcCardStatus, { color: '#FFA040' }]}>
+                {pushTest.self.status === 'loading' ? 'Sending self push…'
+                  : pushTest.partner.status === 'loading' ? 'Sending partner push…'
+                  : 'Running…'}
+              </AppText>
+            </View>
+          )}
+
+          {!pushTest.running && pushTest.ranAt !== null && (
+            <View style={[
+              styles.rpcCard,
+              pushTest.top_error ? styles.rpcCardError :
+              (pushTest.self.expo_status === 'ok' ? { backgroundColor: '#0d1f2b', borderColor: '#1a4a6a' } : styles.rpcCardError),
+            ]}>
+              <View style={styles.rpcCardHeader}>
+                <AppText style={[styles.rpcCardStatus, { color: pushTest.top_error ? '#FF6B6B' : '#5DADE2' }]}>
+                  PUSH TEST — {pushTest.top_error ? 'ERROR' : 'DONE'}
+                </AppText>
+                <AppText style={styles.rpcCardTs} selectable>{pushTest.ranAt?.substring(11, 19)}</AppText>
+              </View>
+              {([
+                ['permission', pushTest.permission_status],
+                ['token_present', pushTest.token_present],
+                ['token_saved_to_db', pushTest.token_saved_to_db],
+                ['self.send_status', pushTest.self.send_status],
+                ['self.expo_status', pushTest.self.expo_status],
+                ['self.skipped', pushTest.self.skipped_reason],
+                ['self.error', pushTest.self.error],
+                ['partner.token_present', pushTest.partner_token_present],
+                ['partner.enabled', pushTest.partner_enabled],
+                ['partner.send_status', pushTest.partner.send_status],
+                ['partner.expo_status', pushTest.partner.expo_status],
+                ['partner.skipped', pushTest.partner.skipped_reason],
+                ['partner.error', pushTest.partner.error],
+                ['top_error', pushTest.top_error],
+              ] as [string, string | number | boolean | null][]).filter(([, v]) => v !== null).map(([label, value]) => (
+                <View key={label} style={styles.rpcCardField}>
+                  <AppText style={styles.rpcCardFieldLabel}>{label}</AppText>
+                  <AppText style={[styles.rpcCardFieldValue, value === false || (typeof value === 'string' && value.includes('error')) ? { color: '#FF6B6B' } : {}]} selectable>
+                    {String(value)}
+                  </AppText>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {profile?.is_super_admin === true && (
+            <>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#2a0d1a', borderWidth: 1, borderColor: '#6a2d3a' }, (pushTest.running || Platform.OS === 'web' || !couple?.id) && styles.btnDisabled]}
+                onPress={() => handleTestPush(true)}
+                disabled={pushTest.running || Platform.OS === 'web' || !couple?.id}
+                activeOpacity={0.8}
+              >
+                {pushTest.running
+                  ? <ActivityIndicator size="small" color="#F1948A" />
+                  : <Shield size={15} color="#F1948A" />
+                }
+                <AppText style={[styles.actionBtnLabel, { color: '#F1948A' }]}>
+                  Force Partner Test Push (Admin Override)
+                </AppText>
+              </TouchableOpacity>
+              <AppText style={styles.btnNote}>
+                Bypasses partner push_notifications_enabled. Super-admin only.
+              </AppText>
+            </>
+          )}
 
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#1a3a1a' }, rpcTest.status === 'loading' && styles.btnDisabled]}
