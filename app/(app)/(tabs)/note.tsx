@@ -5,6 +5,7 @@ import {
   AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager, InteractionManager, BackHandler, Linking,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { BlurView } from 'expo-blur';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -189,7 +190,8 @@ function MediaBubble({
     if (isBlurred) {
       onReveal(msg.id);
     } else {
-      onOpen(msg);
+      // Small delay so the screen-push doesn't race with any in-flight image transition
+      setTimeout(() => onOpen(msg), 30);
     }
   };
 
@@ -213,25 +215,29 @@ function MediaBubble({
           <ShimmerPlaceholder />
         </View>
       ) : signedUrl && !imgError ? (
-        <ExpoImage
-          source={{ uri: signedUrl }}
-          style={[
-            StyleSheet.absoluteFill,
-            isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.15)' } as any : undefined,
-          ]}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          transition={150}
-          blurRadius={isBlurred && Platform.OS !== 'web' ? 50 : 0}
-          onError={() => {
-            logDebugEvent('chat_message_image_load_error', {
-              messageId: msg.id,
-              signedUrlPresent: !!signedUrl,
-              signedUrlPrefix: signedUrl ? signedUrl.substring(0, 60) : null,
-            });
-            setImgError(true);
-          }}
-        />
+        <>
+          <ExpoImage
+            source={{ uri: signedUrl }}
+            style={[
+              StyleSheet.absoluteFill,
+              isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.15)' } as any : undefined,
+            ]}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            onError={() => {
+              logDebugEvent('chat_message_image_load_error', {
+                messageId: msg.id,
+                signedUrlPresent: !!signedUrl,
+                signedUrlPrefix: signedUrl ? signedUrl.substring(0, 60) : null,
+              });
+              setImgError(true);
+            }}
+          />
+          {/* Native blur via BlurView — matches vault blur quality; blurRadius on expo-image is broken on iOS */}
+          {isBlurred && Platform.OS !== 'web' && (
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+          )}
+        </>
       ) : (
         <View style={styles.mediaPlaceholder}>
           {imgError ? (

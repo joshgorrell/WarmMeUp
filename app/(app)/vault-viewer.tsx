@@ -18,6 +18,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+
+const AnimatedImage = Animated.createAnimatedComponent(Image);
 import { awardPoints } from '@/lib/points';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
@@ -308,8 +310,6 @@ function MediaPage({
       return item.uploaderName ? `${item.uploaderName} · ${dateTime}` : dateTime;
     } catch { return null; }
   })();
-
-  const AnimatedImage = Animated.createAnimatedComponent(Image);
 
   return (
     <View style={{ width: screenWidth, height: screenHeight, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
