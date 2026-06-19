@@ -18,6 +18,7 @@ import { awardPoints } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension } from '@/lib/uploadMedia';
 import { logDebugEvent } from '@/lib/debugLog';
+import { setGalleryItems } from '@/lib/mediaGalleryStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLayout } from '@/hooks/useLayout';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
@@ -299,36 +300,42 @@ export default function VaultScreen() {
 
   const handleTilePress = async (item: VaultItem) => {
     if (blurEnabled && !pageRevealed) {
-      // First tap while blurred: reveal all thumbnails
       await handleRevealPage();
       return;
     }
-    // Use the cached signed URL when available so navigation is immediate.
-    // Fall back to resolveSignedUrl only for stale/missing entries (rare after load).
     const fetchedAt = urlFetchedAtRef.current[item.id] ?? 0;
     const cachedFresh = signedUrls[item.id] && (Date.now() - fetchedAt < URL_TTL_MS);
     const signedUri = cachedFresh ? signedUrls[item.id] : await resolveSignedUrl(item);
     if (!signedUri) return;
-    const uploaderName = item.uploaded_by_user_id === user?.id
-      ? (profile?.display_name ?? 'You')
-      : (partnerProfile?.display_name ?? 'Partner');
+
+    // Build the full gallery from all loaded items, newest-first order
+    const gallery = items.map(i => {
+      const uploaderName = i.uploaded_by_user_id === user?.id
+        ? (profile?.display_name ?? 'You')
+        : (partnerProfile?.display_name ?? 'Partner');
+      return {
+        id: i.id,
+        storagePath: i.storage_path ?? i.file_path,
+        storageBucket: i.storage_bucket ?? 'vault',
+        coupleId: i.couple_id,
+        mediaType: i.media_type,
+        allowScreenshot: i.allow_screenshot,
+        allowSave: i.allow_save,
+        allowShare: i.allow_share,
+        createdAt: i.created_at,
+        uploaderName,
+        signedUri: signedUrls[i.id] ?? null,
+        thumbUri: thumbUrls[i.id] ?? null,
+        interactionId: null,
+      };
+    });
+
+    const initialIndex = gallery.findIndex(g => g.id === item.id);
+    setGalleryItems(gallery);
+
     router.push({
       pathname: '/(app)/vault-viewer',
-      params: {
-        id: item.id,
-        storagePath: item.storage_path ?? item.file_path,
-        storageBucket: item.storage_bucket ?? 'vault',
-        mediaType: item.media_type,
-        allowScreenshot: item.allow_screenshot ? '1' : '0',
-        allowSave: item.allow_save ? '1' : '0',
-        allowShare: item.allow_share ? '1' : '0',
-        createdAt: item.created_at,
-        uploaderName,
-        // Pre-signed full-res URL — viewer uses this immediately, no extra round-trip
-        signedUri,
-        // Thumbnail as poster for video and while full-res decodes
-        thumbUri: thumbUrls[item.id] ?? '',
-      },
+      params: { initialIndex: String(Math.max(0, initialIndex)) },
     });
   };
 

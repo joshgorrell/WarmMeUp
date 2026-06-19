@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ActivityIndicator,
   Platform, Share, Image, AppState, Modal, Animated as RNAnimated,
-  Pressable,
+  Pressable, FlatList,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,75 +14,53 @@ import {
 } from 'lucide-react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withSpring,
+  useSharedValue, useAnimatedStyle, withSpring, runOnJS,
 } from 'react-native-reanimated';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { awardPoints } from '@/lib/points';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
+import { getGalleryItems, GalleryItem } from '@/lib/mediaGalleryStore';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
-// Fade-in duration when re-showing badges
 const BADGE_SHOW_MS = 200;
-// Fade-out duration when auto-hiding badges
 const BADGE_HIDE_MS = 400;
-// Delay before badges auto-hide
 const BADGE_AUTO_HIDE_DELAY = 2500;
+const SPRING = { damping: 22, stiffness: 220 } as const;
 
-const AnimatedImage = Animated.createAnimatedComponent(Image);
+// ─── Single media page ────────────────────────────────────────────────────────
 
-export default function VaultViewerScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { width: screenWidth, height: screenHeight } = useLayout();
-  const { user, couple, settings } = useAuth();
-  const isMountedRef = useRef(true);
-  useEffect(() => { return () => { isMountedRef.current = false; }; }, []);
+function MediaPage({
+  item,
+  isActive,
+  screenWidth,
+  screenHeight,
+  insetTop,
+  insetBottom,
+  onZoomChange,
+  user,
+  couple,
+}: {
+  item: GalleryItem;
+  isActive: boolean;
+  screenWidth: number;
+  screenHeight: number;
+  insetTop: number;
+  insetBottom: number;
+  onZoomChange: (zoomed: boolean) => void;
+  user: any;
+  couple: any;
+}) {
+  const isVideo = item.mediaType === 'video';
+  const canScreenshot = item.allowScreenshot;
+  const canShare = item.allowShare;
+  const canSave = item.allowSave;
+  const showSaveToVault = !!item.interactionId && canSave;
 
-  const {
-    id: itemId,
-    storagePath,
-    storageBucket,
-    coupleId,
-    mediaType,
-    allowScreenshot,
-    allowShare,
-    allowSave,
-    interactionId,
-    timestamp,
-    createdAt,
-    uploaderName,
-    signedUri,
-    thumbUri,
-  } = useLocalSearchParams<{
-    id: string;
-    storagePath: string;
-    storageBucket: string;
-    coupleId: string;
-    mediaType: string;
-    allowScreenshot: string;
-    allowSave: string;
-    allowShare: string;
-    interactionId?: string;
-    timestamp?: string;
-    createdAt?: string;
-    uploaderName?: string;
-    signedUri?: string;
-    thumbUri?: string;
-  }>();
-
-  const isVideo = mediaType === 'video';
-  const canScreenshot = allowScreenshot === '1';
-  const canShare = allowShare === '1';
-  const canSave = allowSave === '1';
-  const showSaveToVault = !!interactionId && canSave;
-
-  // Use pre-signed URL passed from grid when available — no extra round-trip needed.
-  const [mediaUri, setMediaUri] = useState<string | null>(signedUri ?? null);
+  const [mediaUri, setMediaUri] = useState<string | null>(item.signedUri ?? null);
   const [imageLoaded, setImageLoaded] = useState(false);
-  // Native pixel dimensions of the loaded image — used for aspect-correct sizing
   const [imageNativeSize, setImageNativeSize] = useState<{ w: number; h: number } | null>(null);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -90,14 +68,23 @@ export default function VaultViewerScreen() {
   const [screenshotWarning, setScreenshotWarning] = useState(false);
   const [savedToVault, setSavedToVault] = useState(false);
   const [savingToVault, setSavingToVault] = useState(false);
-  const videoRef = useRef<any>(null);
-  const appState = useRef(AppState.currentState);
-  const lastInactiveAt = useRef<number | null>(null);
-
   const [VideoComponent, setVideoComponent] = useState<React.ComponentType<any> | null>(null);
   const [avLoaded, setAvLoaded] = useState(false);
+  const videoRef = useRef<any>(null);
+  const appStateRef = useRef(AppState.currentState);
+  const lastInactiveAt = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+  useEffect(() => { return () => { isMountedRef.current = false; }; }, []);
 
-  // ─── Badge fade animation ────────────────────────────────────────────────
+  // Pause video when page becomes inactive
+  useEffect(() => {
+    if (!isActive && videoRef.current && videoPlaying) {
+      videoRef.current.pauseAsync?.();
+      setVideoPlaying(false);
+    }
+  }, [isActive]);
+
+  // ─── Badge fade ───────────────────────────────────────────────────────────
   const badgesOpacity = useRef(new RNAnimated.Value(1)).current;
   const [badgesInteractive, setBadgesInteractive] = useState(true);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -105,21 +92,14 @@ export default function VaultViewerScreen() {
   const startFadeTimer = useCallback(() => {
     if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
     fadeTimerRef.current = setTimeout(() => {
-      RNAnimated.timing(badgesOpacity, {
-        toValue: 0,
-        duration: BADGE_HIDE_MS,
-        useNativeDriver: true,
-      }).start(() => setBadgesInteractive(false));
+      RNAnimated.timing(badgesOpacity, { toValue: 0, duration: BADGE_HIDE_MS, useNativeDriver: true })
+        .start(() => { if (isMountedRef.current) setBadgesInteractive(false); });
     }, BADGE_AUTO_HIDE_DELAY);
   }, [badgesOpacity]);
 
   const revealBadges = useCallback(() => {
     setBadgesInteractive(true);
-    RNAnimated.timing(badgesOpacity, {
-      toValue: 1,
-      duration: BADGE_SHOW_MS,
-      useNativeDriver: true,
-    }).start();
+    RNAnimated.timing(badgesOpacity, { toValue: 1, duration: BADGE_SHOW_MS, useNativeDriver: true }).start();
     startFadeTimer();
   }, [badgesOpacity, startFadeTimer]);
 
@@ -128,7 +108,7 @@ export default function VaultViewerScreen() {
     return () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); };
   }, []);
 
-  // ─── Zoom / pan gestures (images only) ─────────────────────────────────
+  // ─── Zoom / pan ───────────────────────────────────────────────────────────
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const tx = useSharedValue(0);
@@ -136,7 +116,7 @@ export default function VaultViewerScreen() {
   const savedTx = useSharedValue(0);
   const savedTy = useSharedValue(0);
 
-  const SPRING = { damping: 22, stiffness: 220 } as const;
+  const notifyZoom = useCallback((v: boolean) => { onZoomChange(v); }, [onZoomChange]);
 
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
@@ -150,9 +130,11 @@ export default function VaultViewerScreen() {
         savedScale.value = 1;
         savedTx.value = 0;
         savedTy.value = 0;
+        runOnJS(notifyZoom)(false);
       } else {
         scale.value = withSpring(2.5, { damping: 18, stiffness: 180 });
         savedScale.value = 2.5;
+        runOnJS(notifyZoom)(true);
       }
     });
 
@@ -170,8 +152,10 @@ export default function VaultViewerScreen() {
         savedScale.value = 1;
         savedTx.value = 0;
         savedTy.value = 0;
+        runOnJS(notifyZoom)(false);
       } else {
         savedScale.value = scale.value;
+        runOnJS(notifyZoom)(true);
       }
     });
 
@@ -190,71 +174,56 @@ export default function VaultViewerScreen() {
       savedTy.value = ty.value;
     });
 
-  const imageGesture = Gesture.Exclusive(
-    doubleTap,
-    Gesture.Simultaneous(pinch, pan),
-  );
+  const imageGesture = Gesture.Exclusive(doubleTap, Gesture.Simultaneous(pinch, pan));
 
   const imageAnimStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: tx.value },
-      { translateY: ty.value },
-      { scale: scale.value },
-    ],
+    transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
   }));
 
-  // ─── Signed URL ─────────────────────────────────────────────────────────
-  // Skip if a pre-signed URL was passed from the grid (common case — no round-trip needed).
-  // Only sign fresh when opening from a deep-link or when the param is absent.
+  // ─── Signed URL (lazy if not pre-populated) ────────────────────────────────
   useEffect(() => {
-    if (signedUri || !storagePath) return;
-    const bucket = storageBucket ?? 'vault';
-    supabase.storage.from(bucket).createSignedUrl(storagePath, 12 * 60 * 60).then(({ data }) => {
+    if (item.signedUri || !item.storagePath) return;
+    supabase.storage.from(item.storageBucket ?? 'vault').createSignedUrl(item.storagePath, 12 * 60 * 60).then(({ data }) => {
       if (isMountedRef.current && data?.signedUrl) setMediaUri(data.signedUrl);
     });
-  }, [storagePath, storageBucket, signedUri]);
+  }, [item.storagePath, item.storageBucket, item.signedUri]);
 
+  // ─── Video component ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!isVideo) return;
     let mounted = true;
     (async () => {
       try {
-        const { Video, ResizeMode } = await import('expo-av');
+        const { Video: V, ResizeMode } = await import('expo-av');
         if (!mounted) return;
-        setVideoComponent(() => (props: any) => (
-          <Video {...props} resizeMode={ResizeMode.CONTAIN} />
-        ));
+        setVideoComponent(() => (props: any) => <V {...props} resizeMode={ResizeMode.CONTAIN} />);
         setAvLoaded(true);
-      } catch {
-        if (mounted) setVideoError(true);
-      }
+      } catch { if (mounted) setVideoError(true); }
     })();
     return () => { mounted = false; };
   }, [isVideo]);
 
-  // ─── Screenshot detection ────────────────────────────────────────────────
+  // ─── Screenshot detection ──────────────────────────────────────────────────
   useEffect(() => {
-    if (Platform.OS === 'web') return;
+    if (Platform.OS === 'web' || !isActive) return;
     const sub = AppState.addEventListener('change', nextState => {
-      const prev = appState.current;
-      if (prev === 'active' && nextState === 'inactive') {
-        lastInactiveAt.current = Date.now();
-      }
+      const prev = appStateRef.current;
+      if (prev === 'active' && nextState === 'inactive') lastInactiveAt.current = Date.now();
       if (prev === 'inactive' && nextState === 'active') {
         const elapsed = lastInactiveAt.current ? Date.now() - lastInactiveAt.current : 999;
         if (elapsed < 400) handleScreenshotDetected();
         lastInactiveAt.current = null;
       }
-      appState.current = nextState;
+      appStateRef.current = nextState;
     });
     return () => sub.remove();
-  }, [itemId, interactionId, coupleId, user?.id, canScreenshot]);
+  }, [isActive, item.id, item.interactionId, item.coupleId, user?.id, canScreenshot]);
 
   const handleScreenshotDetected = useCallback(async () => {
-    if (!coupleId || !user?.id) return;
+    if (!item.coupleId || !user?.id) return;
     if (!canScreenshot) setScreenshotWarning(true);
-    if (interactionId) {
-      await supabase.from('interactions').update({ screenshot_detected: true }).eq('id', interactionId);
+    if (item.interactionId) {
+      await supabase.from('interactions').update({ screenshot_detected: true }).eq('id', item.interactionId);
     }
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -263,11 +232,11 @@ export default function VaultViewerScreen() {
         await fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-          body: JSON.stringify({ vault_item_id: itemId, couple_id: coupleId, detected_by_user_id: user.id }),
+          body: JSON.stringify({ vault_item_id: item.id, couple_id: item.coupleId, detected_by_user_id: user.id }),
         });
       }
     } catch {}
-  }, [itemId, interactionId, coupleId, user?.id, canScreenshot]);
+  }, [item, user?.id, canScreenshot]);
 
   const handleShare = useCallback(async () => {
     if (!canShare || !mediaUri) return;
@@ -275,7 +244,7 @@ export default function VaultViewerScreen() {
   }, [canShare, mediaUri]);
 
   const handleSaveToVault = useCallback(async () => {
-    if (!couple?.id || !user?.id || !storagePath || savingToVault || savedToVault) return;
+    if (!couple?.id || !user?.id || !item.storagePath || savingToVault || savedToVault) return;
     setSavingToVault(true);
     try {
       const ext = isVideo ? 'mp4' : 'jpg';
@@ -307,68 +276,63 @@ export default function VaultViewerScreen() {
       }
     } catch {}
     if (isMountedRef.current) setSavingToVault(false);
-  }, [couple?.id, user?.id, storagePath, mediaUri, isVideo, canScreenshot, canSave, canShare, savingToVault, savedToVault]);
+  }, [couple?.id, user?.id, item.storagePath, mediaUri, isVideo, canScreenshot, canSave, canShare, savingToVault, savedToVault]);
 
   const togglePlayPause = () => {
     if (!videoRef.current) return;
-    if (videoPlaying) { videoRef.current.pauseAsync?.(); }
-    else { videoRef.current.playAsync?.(); }
+    if (videoPlaying) { videoRef.current.pauseAsync?.(); } else { videoRef.current.playAsync?.(); }
     setVideoPlaying(!videoPlaying);
   };
 
-  // ─── Layout math ─────────────────────────────────────────────────────────
-  // Reserve space for header chrome; bottom overlay fades so doesn't need permanent space
-  const headerH = insets.top + 52;
+  // ─── Layout ────────────────────────────────────────────────────────────────
+  const headerH = insetTop + 52;
   const availH = screenHeight - headerH - 24;
   const availW = screenWidth;
-
   let imgW = availW;
   let imgH = availH;
-
   if (imageNativeSize && imageNativeSize.w > 0 && imageNativeSize.h > 0) {
-    const nativeAspect = imageNativeSize.w / imageNativeSize.h;
-    // Fit height-first (better for portrait photos)
+    const ratio = imageNativeSize.w / imageNativeSize.h;
     imgH = availH;
-    imgW = imgH * nativeAspect;
-    if (imgW > availW) {
-      // Too wide — clamp to width
-      imgW = availW;
-      imgH = imgW / nativeAspect;
-    }
+    imgW = imgH * ratio;
+    if (imgW > availW) { imgW = availW; imgH = imgW / ratio; }
   }
 
-  // Format timestamp — prefer createdAt + uploaderName, fall back to legacy timestamp param
   const formattedTimestamp = (() => {
-    const raw = createdAt ?? timestamp;
+    const raw = item.createdAt;
     if (!raw) return null;
     try {
       const d = new Date(raw);
       const datePart = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
       const timePart = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const dateTime = `${datePart} · ${timePart}`;
-      return uploaderName ? `${uploaderName} · ${dateTime}` : dateTime;
+      return item.uploaderName ? `${item.uploaderName} · ${dateTime}` : dateTime;
     } catch { return null; }
   })();
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  const AnimatedImage = Animated.createAnimatedComponent(Image);
+
   return (
-    <View style={styles.root}>
+    <View style={{ width: screenWidth, height: screenHeight, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
       {/* Full-screen tap to reveal badges */}
       <Pressable style={StyleSheet.absoluteFill} onPress={revealBadges} />
 
-      {/* Centered media area */}
+      {/* Media */}
       <View style={styles.mediaContainer}>
         {!mediaUri ? (
           <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-            {thumbUri ? (
+            {item.thumbUri ? (
               <Image
-                source={{ uri: thumbUri }}
+                source={{ uri: item.thumbUri }}
                 style={{ width: screenWidth, height: screenWidth, opacity: 0.45 }}
                 resizeMode="cover"
                 blurRadius={Platform.OS === 'ios' ? 18 : 6}
               />
             ) : null}
-            <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" style={thumbUri ? StyleSheet.absoluteFillObject : undefined} />
+            <ActivityIndicator
+              color="rgba(255,255,255,0.5)"
+              size="large"
+              style={item.thumbUri ? StyleSheet.absoluteFillObject : undefined}
+            />
           </View>
         ) : !isVideo ? (
           <>
@@ -382,9 +346,7 @@ export default function VaultViewerScreen() {
                 resizeMode="contain"
                 onLoad={(e: any) => {
                   const src = e.nativeEvent?.source;
-                  if (src?.width && src?.height) {
-                    setImageNativeSize({ w: src.width, h: src.height });
-                  }
+                  if (src?.width && src?.height) setImageNativeSize({ w: src.width, h: src.height });
                   setImageLoaded(true);
                 }}
               />
@@ -394,9 +356,9 @@ export default function VaultViewerScreen() {
           <View style={{ width: availW, height: availH, alignItems: 'center', justifyContent: 'center' }}>
             {!avLoaded && !videoError && (
               <>
-                {thumbUri ? (
+                {item.thumbUri ? (
                   <Image
-                    source={{ uri: thumbUri }}
+                    source={{ uri: item.thumbUri }}
                     style={[StyleSheet.absoluteFillObject, { opacity: 0.45 }]}
                     resizeMode="cover"
                     blurRadius={Platform.OS === 'ios' ? 14 : 5}
@@ -405,9 +367,7 @@ export default function VaultViewerScreen() {
                 <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
               </>
             )}
-            {videoError && (
-              <AppText style={styles.videoErrorText}>Video playback unavailable</AppText>
-            )}
+            {videoError && <AppText style={styles.videoErrorText}>Video playback unavailable</AppText>}
             {avLoaded && VideoComponent && (
               <>
                 <VideoComponent
@@ -416,37 +376,19 @@ export default function VaultViewerScreen() {
                   style={{ width: availW, height: availH }}
                   isMuted={muted}
                   shouldPlay={false}
-                  onPlaybackStatusUpdate={(status: any) => {
-                    if (status.isLoaded) setVideoPlaying(status.isPlaying);
-                  }}
+                  onPlaybackStatusUpdate={(status: any) => { if (status.isLoaded) setVideoPlaying(status.isPlaying); }}
                   onError={() => setVideoError(true)}
                   useNativeControls={Platform.OS === 'web'}
                 />
                 {Platform.OS !== 'web' && (
                   <>
-                    {/* Play / pause centered */}
-                    <TouchableOpacity
-                      onPress={togglePlayPause}
-                      style={styles.playBtn}
-                      activeOpacity={0.8}
-                    >
+                    <TouchableOpacity onPress={togglePlayPause} style={styles.playBtn} activeOpacity={0.8}>
                       <View style={styles.playBtnInner}>
-                        {videoPlaying
-                          ? <Pause color="#fff" size={26} strokeWidth={2} />
-                          : <Play color="#fff" size={26} strokeWidth={2} />
-                        }
+                        {videoPlaying ? <Pause color="#fff" size={26} strokeWidth={2} /> : <Play color="#fff" size={26} strokeWidth={2} />}
                       </View>
                     </TouchableOpacity>
-                    {/* Mute button — bottom-right of video frame */}
-                    <TouchableOpacity
-                      onPress={() => setMuted(!muted)}
-                      style={[styles.muteBtn, { bottom: 20, right: 16 }]}
-                      activeOpacity={0.8}
-                    >
-                      {muted
-                        ? <VolumeX color="rgba(255,255,255,0.8)" size={18} />
-                        : <Volume2 color="rgba(255,255,255,0.8)" size={18} />
-                      }
+                    <TouchableOpacity onPress={() => setMuted(!muted)} style={[styles.muteBtn, { bottom: 20, right: 16 }]} activeOpacity={0.8}>
+                      {muted ? <VolumeX color="rgba(255,255,255,0.8)" size={18} /> : <Volume2 color="rgba(255,255,255,0.8)" size={18} />}
                     </TouchableOpacity>
                   </>
                 )}
@@ -456,32 +398,22 @@ export default function VaultViewerScreen() {
         )}
       </View>
 
-      {/* Top chrome — compact gradient with back button + optional timestamp */}
-      <LinearGradient
-        colors={['rgba(0,0,0,0.70)', 'rgba(0,0,0,0.30)', 'transparent']}
-        style={[styles.topGradient, { paddingTop: insets.top + 6 }]}
-        pointerEvents="box-none"
-      >
-        <View style={styles.topRow}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.8}>
-            <ChevronLeft color="#fff" size={22} strokeWidth={2.2} />
-          </TouchableOpacity>
-          {formattedTimestamp && (
-            <AppText style={styles.headerTimestamp}>{formattedTimestamp}</AppText>
-          )}
-        </View>
-      </LinearGradient>
+      {/* Per-page timestamp — sits top-right below the global top chrome */}
+      {formattedTimestamp && (
+        <RNAnimated.View
+          style={[styles.timestampBadge, { opacity: badgesOpacity, top: insetTop + 14 }]}
+          pointerEvents="none"
+        >
+          <AppText style={styles.timestampBadgeText}>{formattedTimestamp}</AppText>
+        </RNAnimated.View>
+      )}
 
-      {/* Bottom overlay — fades in/out */}
+      {/* Bottom overlay */}
       <RNAnimated.View
-        style={[styles.bottomOverlay, { paddingBottom: insets.bottom + 16, opacity: badgesOpacity }]}
+        style={[styles.bottomOverlay, { paddingBottom: insetBottom + 16, opacity: badgesOpacity }]}
         pointerEvents={badgesInteractive ? 'box-none' : 'none'}
       >
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.80)']}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.80)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
 
         {showSaveToVault && (
           <TouchableOpacity
@@ -512,36 +444,19 @@ export default function VaultViewerScreen() {
             label={canScreenshot ? 'Screenshot OK' : 'Partner notified'}
             allowed={canScreenshot}
           />
-          <PermBadge
-            icon={<Camera color="rgba(255,255,255,0.28)" size={14} />}
-            label="Never saved"
-            allowed={false}
-          />
+          <PermBadge icon={<Camera color="rgba(255,255,255,0.28)" size={14} />} label="Never saved" allowed={false} />
           {canShare ? (
             <TouchableOpacity onPress={handleShare} activeOpacity={0.8}>
-              <PermBadge
-                icon={<Share2 color="#FF2E8A" size={14} />}
-                label="Share"
-                allowed
-              />
+              <PermBadge icon={<Share2 color="#FF2E8A" size={14} />} label="Share" allowed />
             </TouchableOpacity>
           ) : (
-            <PermBadge
-              icon={<Share2 color="rgba(255,255,255,0.28)" size={14} />}
-              label="No sharing"
-              allowed={false}
-            />
+            <PermBadge icon={<Share2 color="rgba(255,255,255,0.28)" size={14} />} label="No sharing" allowed={false} />
           )}
         </View>
       </RNAnimated.View>
 
-      {/* Screenshot warning modal */}
-      <Modal
-        visible={screenshotWarning}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setScreenshotWarning(false)}
-      >
+      {/* Screenshot modal */}
+      <Modal visible={screenshotWarning} transparent animationType="fade" onRequestClose={() => setScreenshotWarning(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalIcon}>
@@ -551,11 +466,7 @@ export default function VaultViewerScreen() {
             <AppText style={styles.modalBody}>
               Screenshots of this item are restricted. Your partner has been notified.
             </AppText>
-            <TouchableOpacity
-              style={styles.modalBtn}
-              onPress={() => setScreenshotWarning(false)}
-              activeOpacity={0.8}
-            >
+            <TouchableOpacity style={styles.modalBtn} onPress={() => setScreenshotWarning(false)} activeOpacity={0.8}>
               <AppText style={styles.modalBtnText}>Got it</AppText>
             </TouchableOpacity>
           </View>
@@ -565,13 +476,167 @@ export default function VaultViewerScreen() {
   );
 }
 
+// ─── Gallery shell ────────────────────────────────────────────────────────────
+
+export default function VaultViewerScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth, height: screenHeight } = useLayout();
+  const { user, couple, settings } = useAuth();
+
+  const {
+    initialIndex: initialIndexStr,
+    // Legacy single-item params — kept for deep-link backwards compat
+    id: legacyId,
+    storagePath: legacyStoragePath,
+    storageBucket: legacyStorageBucket,
+    coupleId: legacyCoupleId,
+    mediaType: legacyMediaType,
+    allowScreenshot: legacyAllowScreenshot,
+    allowSave: legacyAllowSave,
+    allowShare: legacyAllowShare,
+    interactionId: legacyInteractionId,
+    timestamp: legacyTimestamp,
+    createdAt: legacyCreatedAt,
+    uploaderName: legacyUploaderName,
+    signedUri: legacySignedUri,
+    thumbUri: legacyThumbUri,
+  } = useLocalSearchParams<{
+    initialIndex?: string;
+    id?: string;
+    storagePath?: string;
+    storageBucket?: string;
+    coupleId?: string;
+    mediaType?: string;
+    allowScreenshot?: string;
+    allowSave?: string;
+    allowShare?: string;
+    interactionId?: string;
+    timestamp?: string;
+    createdAt?: string;
+    uploaderName?: string;
+    signedUri?: string;
+    thumbUri?: string;
+  }>();
+
+  // Use gallery store if populated; fall back to single-item legacy params
+  const storeItems = getGalleryItems();
+  const items: GalleryItem[] = storeItems.length > 0 ? storeItems : (() => {
+    if (!legacyStoragePath) return [];
+    return [{
+      id: legacyId ?? '',
+      storagePath: legacyStoragePath,
+      storageBucket: legacyStorageBucket ?? 'vault',
+      coupleId: legacyCoupleId ?? null,
+      mediaType: legacyMediaType ?? 'photo',
+      allowScreenshot: legacyAllowScreenshot === '1',
+      allowSave: legacyAllowSave === '1',
+      allowShare: legacyAllowShare === '1',
+      interactionId: legacyInteractionId ?? null,
+      createdAt: legacyCreatedAt ?? legacyTimestamp ?? null,
+      uploaderName: legacyUploaderName ?? null,
+      signedUri: legacySignedUri ?? null,
+      thumbUri: legacyThumbUri ?? null,
+    }];
+  })();
+
+  const initialIndex = Math.min(
+    Math.max(0, parseInt(initialIndexStr ?? '0', 10)),
+    Math.max(0, items.length - 1),
+  );
+
+  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const listRef = useRef<FlatList>(null);
+
+  const handleZoomChange = useCallback((zoomed: boolean) => { setIsZoomed(zoomed); }, []);
+
+  const getItemLayout = useCallback((_: any, index: number) => ({
+    length: screenWidth,
+    offset: screenWidth * index,
+    index,
+  }), [screenWidth]);
+
+  const renderItem = useCallback(({ item, index }: { item: GalleryItem; index: number }) => (
+    <MediaPage
+      item={item}
+      isActive={index === activeIndex}
+      screenWidth={screenWidth}
+      screenHeight={screenHeight}
+      insetTop={insets.top}
+      insetBottom={insets.bottom}
+      onZoomChange={handleZoomChange}
+      user={user}
+      couple={couple}
+    />
+  ), [activeIndex, screenWidth, screenHeight, insets.top, insets.bottom, handleZoomChange, user, couple]);
+
+  const keyExtractor = useCallback((item: GalleryItem, index: number) => item.id || String(index), []);
+
+  if (items.length === 0) {
+    return (
+      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
+        <TouchableOpacity
+          style={[styles.backBtn, { position: 'absolute', top: insets.top + 6, left: Spacing.md }]}
+          onPress={() => router.back()}
+          activeOpacity={0.8}
+        >
+          <ChevronLeft color="#fff" size={22} strokeWidth={2.2} />
+        </TouchableOpacity>
+        <AppText style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, fontFamily: 'Inter-Regular' }}>Media unavailable</AppText>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.root}>
+      <FlatList
+        ref={listRef}
+        data={items}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        horizontal
+        pagingEnabled
+        scrollEnabled={!isZoomed}
+        showsHorizontalScrollIndicator={false}
+        getItemLayout={getItemLayout}
+        initialScrollIndex={initialIndex}
+        onMomentumScrollEnd={(e) => {
+          const idx = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+          setActiveIndex(idx);
+          if (isZoomed) setIsZoomed(false);
+        }}
+        removeClippedSubviews
+        windowSize={3}
+        maxToRenderPerBatch={3}
+      />
+
+      {/* Top chrome — back button + position counter */}
+      <LinearGradient
+        colors={['rgba(0,0,0,0.70)', 'rgba(0,0,0,0.30)', 'transparent']}
+        style={[styles.topGradient, { paddingTop: insets.top + 6 }]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.topRow}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.8}>
+            <ChevronLeft color="#fff" size={22} strokeWidth={2.2} />
+          </TouchableOpacity>
+          {items.length > 1 && (
+            <AppText style={styles.counterText}>{activeIndex + 1} / {items.length}</AppText>
+          )}
+          {/* Spacer keeps back button left-aligned */}
+          <View style={styles.counterSpacer} />
+        </View>
+      </LinearGradient>
+    </View>
+  );
+}
+
 function PermBadge({ icon, label, allowed }: { icon: React.ReactNode; label: string; allowed: boolean }) {
   return (
     <View style={[styles.badge, { borderColor: allowed ? 'rgba(255,46,138,0.35)' : 'rgba(255,255,255,0.10)' }]}>
       {icon}
-      <AppText style={[styles.badgeLabel, { color: allowed ? '#fff' : 'rgba(255,255,255,0.32)' }]}>
-        {label}
-      </AppText>
+      <AppText style={[styles.badgeLabel, { color: allowed ? '#fff' : 'rgba(255,255,255,0.32)' }]}>{label}</AppText>
     </View>
   );
 }
@@ -581,14 +646,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  // Fills remaining space and centers media vertically
   mediaContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  // Top chrome
   topGradient: {
     position: 'absolute',
     top: 0,
@@ -612,13 +674,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
   },
-  headerTimestamp: {
+  counterText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: 'rgba(255,255,255,0.80)',
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    overflow: 'hidden',
+  },
+  counterSpacer: {
+    width: 38,
+  },
+  timestampBadge: {
+    position: 'absolute',
+    right: Spacing.md,
+  },
+  timestampBadgeText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
     color: 'rgba(255,255,255,0.55)',
   },
-
-  // Bottom overlay
   bottomOverlay: {
     position: 'absolute',
     bottom: 0,
@@ -670,8 +749,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Medium',
   },
-
-  // Video controls
   playBtn: {
     position: 'absolute',
   },
@@ -699,8 +776,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
   },
-
-  // Screenshot modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.82)',

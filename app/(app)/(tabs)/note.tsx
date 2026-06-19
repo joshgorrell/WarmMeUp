@@ -25,6 +25,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logDebugEvent } from '@/lib/debugLog';
+import { setGalleryItems } from '@/lib/mediaGalleryStore';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -954,19 +955,33 @@ export default function ChatTab() {
 
   const handleOpenMedia = useCallback((msg: ChatMessage) => {
     if (!msg.media_storage_path) return;
+
+    // Build gallery from all chat messages that have media, in chronological order
+    const mediaMessages = messages.filter(m => !!m.media_storage_path);
+    const gallery = mediaMessages.map(m => ({
+      id: m.id,
+      storagePath: m.media_storage_path!,
+      storageBucket: m.media_storage_bucket ?? 'chat_media',
+      coupleId: m.couple_id,
+      mediaType: m.media_type ?? 'photo',
+      allowScreenshot: m.allow_screenshot,
+      allowSave: m.allow_save,
+      allowShare: m.allow_share,
+      createdAt: m.created_at,
+      uploaderName: null,
+      signedUri: signedUrls[m.id] ?? null,
+      thumbUri: null,
+      interactionId: null,
+    }));
+
+    const initialIndex = gallery.findIndex(g => g.id === msg.id);
+    setGalleryItems(gallery);
+
     router.push({
       pathname: '/(app)/vault-viewer',
-      params: {
-        storagePath: msg.media_storage_path,
-        storageBucket: msg.media_storage_bucket ?? 'chat_media',
-        coupleId: msg.couple_id,
-        mediaType: msg.media_type ?? 'photo',
-        allowScreenshot: msg.allow_screenshot ? '1' : '0',
-        allowSave: msg.allow_save ? '1' : '0',
-        allowShare: msg.allow_share ? '1' : '0',
-      },
+      params: { initialIndex: String(Math.max(0, initialIndex)) },
     });
-  }, [router]);
+  }, [router, messages, signedUrls]);
 
   const handleSaveToVault = useCallback(async (msg: ChatMessage) => {
     if (!msg.media_storage_path || !couple?.id || !user) return;
