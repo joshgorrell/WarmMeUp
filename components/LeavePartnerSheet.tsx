@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Modal, TouchableOpacity, StyleSheet, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ScrollView, Keyboard,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -107,60 +108,65 @@ export default function LeavePartnerSheet({ visible, onClose, partnerName }: Lea
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={resetAndClose}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={resetAndClose}>
-        <View
-          style={[styles.sheet, { backgroundColor: bg, paddingBottom: insets.bottom + 24 }]}
-          onStartShouldSetResponder={() => true}
-        >
-          <View style={styles.handle} />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => { Keyboard.dismiss(); resetAndClose(); }}>
+          <View
+            style={[styles.sheet, { backgroundColor: bg, paddingBottom: insets.bottom + 24 }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={styles.handle} />
 
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              {step === 2 && (
-                <TouchableOpacity
-                  onPress={() => { setStep(1); setConfirmInput(''); setError(null); }}
-                  style={styles.backBtn}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <ArrowLeft color={colors.textMuted} size={18} strokeWidth={2} />
-                </TouchableOpacity>
-              )}
-              <AppText style={[styles.title, { color: colors.text }]}>
-                {step === 1 ? 'End Partner Connection' : 'Are you sure?'}
-              </AppText>
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.headerLeft}>
+                {step === 2 && (
+                  <TouchableOpacity
+                    onPress={() => { setStep(1); setConfirmInput(''); setError(null); }}
+                    style={styles.backBtn}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <ArrowLeft color={colors.textMuted} size={18} strokeWidth={2} />
+                  </TouchableOpacity>
+                )}
+                <AppText style={[styles.title, { color: colors.text }]}>
+                  {step === 1 ? 'End Partner Connection' : 'Are you sure?'}
+                </AppText>
+              </View>
+              <TouchableOpacity
+                onPress={() => { Keyboard.dismiss(); resetAndClose(); }}
+                style={[styles.closeBtn, { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: colors.borderSubtle }]}
+                activeOpacity={0.7}
+              >
+                <X color={colors.textSecondary} size={18} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              onPress={resetAndClose}
-              style={[styles.closeBtn, { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: colors.borderSubtle }]}
-              activeOpacity={0.7}
-            >
-              <X color={colors.textSecondary} size={18} />
-            </TouchableOpacity>
-          </View>
 
-          {step === 1 ? (
-            <Step1
-              colors={colors}
-              partnerName={partnerName}
-              onKeepConnected={resetAndClose}
-              onContinue={() => setStep(2)}
-            />
-          ) : (
-            <Step2
-              colors={colors}
-              confirmInput={confirmInput}
-              onChangeInput={(v) => { setConfirmInput(v); setError(null); }}
-              canConfirm={canConfirm}
-              leaving={leaving}
-              error={error}
-              onLeave={handleLeave}
-              onBack={() => { setStep(1); setConfirmInput(''); setError(null); }}
-            />
-          )}
-        </View>
-      </TouchableOpacity>
+            {step === 1 ? (
+              <Step1
+                colors={colors}
+                partnerName={partnerName}
+                onKeepConnected={resetAndClose}
+                onContinue={() => setStep(2)}
+              />
+            ) : (
+              <Step2
+                colors={colors}
+                confirmInput={confirmInput}
+                onChangeInput={(v) => { setConfirmInput(v); setError(null); }}
+                canConfirm={canConfirm}
+                leaving={leaving}
+                error={error}
+                onLeave={handleLeave}
+                onBack={() => { setStep(1); setConfirmInput(''); setError(null); }}
+              />
+            )}
+          </View>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -264,6 +270,7 @@ function Step2({
         autoCorrect={false}
         autoFocus
         returnKeyType="done"
+        onSubmitEditing={Keyboard.dismiss}
         editable={!leaving}
       />
 
@@ -278,7 +285,7 @@ function Step2({
             ? { backgroundColor: '#FF5A5F', borderColor: 'transparent' }
             : { backgroundColor: 'rgba(255,90,95,0.12)', borderColor: 'rgba(255,90,95,0.20)' },
         ]}
-        onPress={onLeave}
+        onPress={() => { Keyboard.dismiss(); onLeave(); }}
         activeOpacity={canConfirm && !leaving ? 0.8 : 1}
         disabled={!canConfirm || leaving}
       >
