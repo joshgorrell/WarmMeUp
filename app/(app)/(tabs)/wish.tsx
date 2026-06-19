@@ -20,7 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { awardPoints, getPointValue, incrementMonthlyCounter } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { logDebugEvent } from '@/lib/debugLog';
-import { uploadMediaFile } from '@/lib/uploadMedia';
+import { uploadMediaFile, resolveAssetMimeType } from '@/lib/uploadMedia';
 import { Wish, WishReaction, WishCategory } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
@@ -311,7 +311,8 @@ function WishForm({
   }, [visible, initial]);
 
   const pickImage = async () => {
-    if (!couple?.id || !user) return;
+    if (!user) { setError('You must be logged in to add a photo.'); return; }
+    if (!couple?.id) { setError('Account not ready — please try again.'); return; }
     try {
       const ImagePicker = await import('expo-image-picker');
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -328,7 +329,7 @@ function WishForm({
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
 
-      const mime = asset.mimeType ?? 'image/jpeg';
+      const mime = resolveAssetMimeType(asset);
       logDebugEvent('WISH IMAGE PICK', {
         localUri: asset.uri,
         mimeType: mime,
@@ -348,7 +349,7 @@ function WishForm({
       logDebugEvent('WISH IMAGE UPLOAD START', { storagePath });
       logDebugEvent('WISH LAST UPLOAD PATH', { path: storagePath });
 
-      await uploadMediaFile(asset.uri, 'chat_media', storagePath, 'image/jpeg', undefined, user.id, couple.id);
+      await uploadMediaFile(asset.uri, 'chat_media', storagePath, mime, undefined, user.id, couple.id);
 
       // Generate a signed URL immediately so the preview survives a restart
       const { data: signedData, error: signError } = await supabase.storage
@@ -372,7 +373,7 @@ function WishForm({
       const msg = err?.message ?? 'Unknown error';
       logDebugEvent('WISH IMAGE UPLOAD ERROR', { error: msg });
       logDebugEvent('WISH LAST UPLOAD ERROR', { error: msg });
-      setError('Image upload failed. Please try again.');
+      setError(msg.length < 120 ? msg : 'Image upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -538,7 +539,7 @@ function WishForm({
 
             {/* Image */}
             <AppText style={[styles.formLabel, { marginTop: Spacing.md }]}>Photo</AppText>
-            <TouchableOpacity onPress={pickImage} style={styles.imgPicker} activeOpacity={0.75} disabled={uploading}>
+            <TouchableOpacity onPress={pickImage} style={styles.imgPicker} activeOpacity={0.75} disabled={uploading || !couple?.id}>
               {uploading ? (
                 <ActivityIndicator color={WISH_ACCENT} />
               ) : imgUri ? (
