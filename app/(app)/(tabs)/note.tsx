@@ -313,10 +313,10 @@ export default function ChatTab() {
     await Promise.all(
       Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
         const paths = bucketMsgs.map(m => m.media_storage_path!);
-        const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, 3600);
+        const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+        const pathToUrl = new Map(data?.map(d => [d.path, d.signedUrl]) ?? []);
         for (const m of bucketMsgs) {
-          const entry = data?.find(d => d.path === m.media_storage_path);
-          results[m.id] = entry?.signedUrl ?? null;
+          results[m.id] = pathToUrl.get(m.media_storage_path!) ?? null;
         }
       })
     );
@@ -567,7 +567,7 @@ export default function ChatTab() {
     if (chatStoragePath) {
       const { data: signedData } = await supabase.storage
         .from('chat_media')
-        .createSignedUrl(chatStoragePath, 7 * 24 * 3600);
+        .createSignedUrl(chatStoragePath, 24 * 3600);
       preSignedMediaUrl = signedData?.signedUrl ?? null;
     }
 

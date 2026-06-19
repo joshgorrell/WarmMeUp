@@ -55,7 +55,7 @@ export default function VaultScreen() {
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   // Timestamp (ms) when each URL was fetched — used to detect near-expiry
   const urlFetchedAtRef = useRef<Record<string, number>>({});
-  const URL_TTL_MS = 55 * 60 * 1000; // refresh 5 min before Supabase's 1-hour expiry
+  const URL_TTL_MS = 11.5 * 60 * 60 * 1000; // refresh 30 min before Supabase's 12-hour expiry
   // Vault biometric gate
   const [vaultAuthError, setVaultAuthError] = useState('');
   // Use a ref instead of state so changes don't cause useCallback/useEffect identity churn,
@@ -224,7 +224,7 @@ export default function VaultScreen() {
       // Full-resolution URLs
       ...Object.entries(byBucket).map(async ([bucket, bucketItems]) => {
         const paths = bucketItems.map(i => (i.storage_path ?? i.file_path)!);
-        const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 60 * 60);
+        const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
         if (!urlData) return;
         // O(1) Map lookup instead of O(n) find per item
         const pathToUrl = new Map(urlData.map(d => [d.path, d.signedUrl]));
@@ -244,7 +244,7 @@ export default function VaultScreen() {
       // Thumbnail URLs (separate paths — best-effort)
       ...Object.entries(thumbByBucket).map(async ([bucket, bucketItems]) => {
         const paths = bucketItems.map(i => i.blurred_thumbnail_path!);
-        const { data: thumbData } = await supabase.storage.from(bucket).createSignedUrls(paths, 60 * 60);
+        const { data: thumbData } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
         if (!thumbData) return;
         const pathToThumb = new Map(thumbData.map(d => [d.path, d.signedUrl]));
         const thumbMap: Record<string, string> = {};
@@ -273,7 +273,7 @@ export default function VaultScreen() {
     const bucket = item.storage_bucket ?? 'vault';
     const path = item.storage_path ?? item.file_path;
     if (!path) return null;
-    const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60);
+    const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 12 * 60 * 60);
     if (data?.signedUrl) {
       urlFetchedAtRef.current[item.id] = Date.now();
       setSignedUrls(prev => ({ ...prev, [item.id]: data.signedUrl }));
@@ -303,9 +303,12 @@ export default function VaultScreen() {
       await handleRevealPage();
       return;
     }
-    // Thumbnails visible: open fullscreen viewer
-    const signedUrl = await resolveSignedUrl(item);
-    if (!signedUrl) return;
+    // Use the cached signed URL when available so navigation is immediate.
+    // Fall back to resolveSignedUrl only for stale/missing entries (rare after load).
+    const fetchedAt = urlFetchedAtRef.current[item.id] ?? 0;
+    const cachedFresh = signedUrls[item.id] && (Date.now() - fetchedAt < URL_TTL_MS);
+    const signedUri = cachedFresh ? signedUrls[item.id] : await resolveSignedUrl(item);
+    if (!signedUri) return;
     const uploaderName = item.uploaded_by_user_id === user?.id
       ? (profile?.display_name ?? 'You')
       : (partnerProfile?.display_name ?? 'Partner');
@@ -321,8 +324,10 @@ export default function VaultScreen() {
         allowShare: item.allow_share ? '1' : '0',
         createdAt: item.created_at,
         uploaderName,
-        // Pass already-loaded thumbnail signed URL so viewer can show a poster immediately
-        thumbUri: thumbUrls[item.id] ?? signedUrls[item.id] ?? '',
+        // Pre-signed full-res URL — viewer uses this immediately, no extra round-trip
+        signedUri,
+        // Thumbnail as poster for video and while full-res decodes
+        thumbUri: thumbUrls[item.id] ?? '',
       },
     });
   };

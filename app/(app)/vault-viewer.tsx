@@ -54,6 +54,7 @@ export default function VaultViewerScreen() {
     timestamp,
     createdAt,
     uploaderName,
+    signedUri,
     thumbUri,
   } = useLocalSearchParams<{
     id: string;
@@ -68,6 +69,7 @@ export default function VaultViewerScreen() {
     timestamp?: string;
     createdAt?: string;
     uploaderName?: string;
+    signedUri?: string;
     thumbUri?: string;
   }>();
 
@@ -77,7 +79,8 @@ export default function VaultViewerScreen() {
   const canSave = allowSave === '1';
   const showSaveToVault = !!interactionId && canSave;
 
-  const [mediaUri, setMediaUri] = useState<string | null>(null);
+  // Use pre-signed URL passed from grid when available — no extra round-trip needed.
+  const [mediaUri, setMediaUri] = useState<string | null>(signedUri ?? null);
   const [imageLoaded, setImageLoaded] = useState(false);
   // Native pixel dimensions of the loaded image — used for aspect-correct sizing
   const [imageNativeSize, setImageNativeSize] = useState<{ w: number; h: number } | null>(null);
@@ -201,13 +204,15 @@ export default function VaultViewerScreen() {
   }));
 
   // ─── Signed URL ─────────────────────────────────────────────────────────
+  // Skip if a pre-signed URL was passed from the grid (common case — no round-trip needed).
+  // Only sign fresh when opening from a deep-link or when the param is absent.
   useEffect(() => {
-    if (!storagePath) return;
+    if (signedUri || !storagePath) return;
     const bucket = storageBucket ?? 'vault';
-    supabase.storage.from(bucket).createSignedUrl(storagePath, 60 * 60).then(({ data }) => {
+    supabase.storage.from(bucket).createSignedUrl(storagePath, 12 * 60 * 60).then(({ data }) => {
       if (isMountedRef.current && data?.signedUrl) setMediaUri(data.signedUrl);
     });
-  }, [storagePath, storageBucket]);
+  }, [storagePath, storageBucket, signedUri]);
 
   useEffect(() => {
     if (!isVideo) return;
