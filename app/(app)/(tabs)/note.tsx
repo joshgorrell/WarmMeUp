@@ -24,6 +24,7 @@ import { useMediaReactions } from '@/hooks/useMediaReactions';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { logDebugEvent } from '@/lib/debugLog';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -160,6 +161,7 @@ function MediaBubble({
 }) {
   const loaded = signedUrl !== undefined;
   const isBlurred = blurEnabled && !revealed;
+  const [imgError, setImgError] = useState(false);
 
   const handleImagePress = () => {
     if (isBlurred) {
@@ -185,7 +187,7 @@ function MediaBubble({
         <View style={styles.mediaPlaceholder}>
           <ShimmerPlaceholder />
         </View>
-      ) : signedUrl ? (
+      ) : signedUrl && !imgError ? (
         <ExpoImage
           source={{ uri: signedUrl }}
           style={[
@@ -196,20 +198,32 @@ function MediaBubble({
           cachePolicy="memory-disk"
           transition={150}
           blurRadius={isBlurred && Platform.OS !== 'web' ? 20 : 0}
+          onError={() => {
+            logDebugEvent('chat_message_image_load_error', {
+              messageId: msg.id,
+              signedUrlPresent: !!signedUrl,
+              signedUrlPrefix: signedUrl ? signedUrl.substring(0, 60) : null,
+            });
+            setImgError(true);
+          }}
         />
       ) : (
         <View style={styles.mediaPlaceholder}>
-          <Lock color="rgba(255,255,255,0.5)" size={20} />
+          {imgError ? (
+            <AppText style={styles.mediaErrorText}>Image failed to load</AppText>
+          ) : (
+            <Lock color="rgba(255,255,255,0.5)" size={20} />
+          )}
         </View>
       )}
-      {msg.media_type === 'video' && loaded && signedUrl && !isBlurred && (
+      {msg.media_type === 'video' && loaded && signedUrl && !isBlurred && !imgError && (
         <View style={styles.playOverlay}>
           <View style={styles.playCircle}>
             <AppText style={styles.playTriangle}>&#9654;</AppText>
           </View>
         </View>
       )}
-      {isBlurred && loaded && signedUrl && (
+      {isBlurred && loaded && signedUrl && !imgError && (
         <View style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay]}>
           <EyeOff color="rgba(255,255,255,0.8)" size={22} strokeWidth={2} />
         </View>
@@ -535,9 +549,17 @@ export default function ChatTab() {
       setUploadProgress(true);
       setUploadPct(0);
       const path = `${coupleId}/${userId}/${media.fileName}`;
+      logDebugEvent('chat_photo_upload_started', {
+        bucket: 'chat_media',
+        path,
+        mimeType: media.mimeType,
+        uri: media.uri,
+      });
       await uploadMediaFile(media.uri, 'chat_media', path, media.mimeType, (pct) => setUploadPct(pct));
+      logDebugEvent('chat_photo_upload_success', { bucket: 'chat_media', path });
       return path;
     } catch (e: any) {
+      logDebugEvent('chat_photo_upload_error', { error: e?.message ?? String(e) });
       Alert.alert('Upload Failed', e?.message ?? 'Could not upload media. Please try again.');
       return null;
     } finally {
@@ -567,15 +589,23 @@ export default function ChatTab() {
       }
     }
 
-    // Generate a 7-day signed URL immediately after upload so the recipient
+    // Generate a signed URL immediately after upload so the recipient
     // receives it inside the realtime INSERT event — no extra round-trip needed.
     let preSignedMediaUrl: string | null = null;
     if (chatStoragePath) {
-      const { data: signedData } = await supabase.storage
+      const { data: signedData, error: signError } = await supabase.storage
         .from('chat_media')
         .createSignedUrl(chatStoragePath, 24 * 3600);
       preSignedMediaUrl = signedData?.signedUrl ?? null;
+      logDebugEvent('chat_photo_presigned_url', {
+        present: !!preSignedMediaUrl,
+        path: chatStoragePath,
+        error: signError?.message ?? null,
+      });
     }
+
+    // Capture local URI before any state resets — used as immediate preview fallback.
+    const localMediaUri = attachedMedia?.uri ?? null;
 
     // Optimistic display — show the message in the sender's own list immediately
     // using a temporary ID. The local file URI is used as the image source so the
@@ -600,8 +630,8 @@ export default function ChatTab() {
     };
     setMessages(prev => [...prev, optimisticMsg]);
     // Use the local file URI immediately for the sender's own preview.
-    if (attachedMedia?.uri) {
-      setSignedUrls(prev => ({ ...prev, [tempId]: attachedMedia.uri }));
+    if (localMediaUri) {
+      setSignedUrls(prev => ({ ...prev, [tempId]: localMediaUri }));
     }
 
     const payload = {
@@ -617,9 +647,21 @@ export default function ChatTab() {
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
     };
+    logDebugEvent('chat_message_insert_media_field', {
+      media_url_present: !!payload.media_url,
+      media_storage_path: payload.media_storage_path,
+      media_storage_bucket: payload.media_storage_bucket,
+      media_type: payload.media_type,
+    });
     console.log('[CHAT_SEND]', payload);
     const { data, error: insertError } = await supabase.from('chat_messages').insert(payload).select().single();
     console.log('[CHAT_INSERT_RESULT]', { data, error: insertError });
+    logDebugEvent('chat_message_insert_result', {
+      success: !insertError && !!data,
+      error: insertError?.message ?? null,
+      returned_media_url_present: !!(data as any)?.media_url,
+      returned_media_storage_path: (data as any)?.media_storage_path ?? null,
+    });
 
     if (insertError || !data) {
       // Roll back the optimistic message on failure.
@@ -632,13 +674,27 @@ export default function ChatTab() {
 
     // Replace the temporary optimistic record with the real DB row and carry
     // the signed URL forward so the image stays visible without a re-fetch.
+    // Priority: pre-signed URL > local file URI (immediate preview).
+    // If neither is available, fall back to fetchSignedUrls so the image loads.
     setMessages(prev => prev.map(m => m.id === tempId ? { ...data as ChatMessage } : m));
-    if (attachedMedia?.uri || preSignedMediaUrl) {
+    const bestUrl = preSignedMediaUrl ?? localMediaUri;
+    if (chatStoragePath) {
       setSignedUrls(prev => {
         const next = { ...prev };
         delete next[tempId];
-        next[data.id] = preSignedMediaUrl ?? attachedMedia?.uri ?? null;
+        if (bestUrl) {
+          next[data.id] = bestUrl;
+        }
         return next;
+      });
+      // If we don't have a URL at all, trigger a fresh signed URL fetch.
+      if (!bestUrl) {
+        fetchSignedUrls([{ ...data as ChatMessage }]);
+      }
+      logDebugEvent('chat_message_render_image_url_present', {
+        messageId: data.id,
+        urlPresent: !!bestUrl,
+        source: preSignedMediaUrl ? 'presigned' : localMediaUri ? 'local_uri' : 'fetch_fallback',
       });
     }
 
@@ -1593,12 +1649,20 @@ const styles = StyleSheet.create({
   // Media bubble
   mediaTap: {
     overflow: 'hidden',
+    backgroundColor: '#1A1520',
   },
   mediaPlaceholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  mediaErrorText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+    paddingHorizontal: 12,
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,
