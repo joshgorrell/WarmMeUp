@@ -76,8 +76,10 @@ export default function TransitionScreen() {
   const startMs = useRef(Date.now());
   const elapsed = () => Date.now() - startMs.current;
 
+  // Emergency debug access: 5 rapid taps on splash logo.
+  // Super admin only (or debug mode enabled / __DEV__). Normal admins excluded by design.
   const handleDebugTap = () => {
-    const canDebug = __DEV__ || isAdminRef.current || debugModeRef.current || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
+    const canDebug = __DEV__ || isSuperAdminRef.current || debugModeRef.current || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
     if (!canDebug) return;
     debugTapCount.current += 1;
     if (debugTapTimer.current) clearTimeout(debugTapTimer.current);

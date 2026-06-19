@@ -472,7 +472,7 @@ export default function AdminDashboard() {
             </View>
             <View style={{ flex: 1 }}>
               <AppText style={[styles.devLabel, { color: colors.text }]}>Emergency Debug Access</AppText>
-              <AppText style={[styles.devSub, { color: colors.textMuted }]}>5-tap on weather temp or splash logo opens diagnostics screen</AppText>
+              <AppText style={[styles.devSub, { color: colors.textMuted }]}>Super admin: 5 rapid taps on splash or weather. Any user: 5-second hold on header logo. Non-super-admins see a limited safe view only.</AppText>
             </View>
             <Toggle
               value={debugModeEnabled}

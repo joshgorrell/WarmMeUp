@@ -83,7 +83,7 @@ export default function DebugScreen() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { session, user, profile, settings, couple, subscriptionInfo, unlockedAtMs, loading, signOut, refreshSettings } = useAuth();
+  const { session, user, profile, settings, couple, subscriptionInfo, unlockedAtMs, loading, signOut, refreshSettings, isSuperAdmin } = useAuth();
   const [clearing, setClearing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -753,6 +753,34 @@ export default function DebugScreen() {
       runAuthProbe();
       runV38Probes();
 
+      // Log admin debug identity fields every time the screen is opened
+      const nowIso = new Date().toISOString();
+      (async () => {
+        let lastOpenedAt: string | null = null;
+        let debugAccessEnabled = false;
+        try {
+          if (Platform.OS !== 'web') {
+            lastOpenedAt = await SecureStore.getItemAsync('debug_last_opened_at').catch(() => null);
+            await SecureStore.setItemAsync('debug_last_opened_at', nowIso).catch(() => {});
+          } else if (typeof window !== 'undefined') {
+            lastOpenedAt = window.localStorage.getItem('debug_last_opened_at');
+            window.localStorage.setItem('debug_last_opened_at', nowIso);
+          }
+        } catch {}
+        try {
+          const { data } = await supabase.from('app_config').select('value').eq('key', 'debug_mode_enabled').maybeSingle();
+          debugAccessEnabled = data?.value === true;
+        } catch {}
+        logDebugEvent('ADMIN_DEBUG_FIELDS', {
+          admin_is_admin: profile?.is_admin === true,
+          admin_is_super_admin: profile?.is_super_admin === true,
+          admin_debug_access_enabled: debugAccessEnabled,
+          admin_emergency_gesture_type: '5tap_logo_or_hold_5s',
+          admin_emergency_tap_count_required: 5,
+          admin_last_emergency_debug_opened_at: lastOpenedAt,
+        });
+      })();
+
       if (Platform.OS !== 'web') {
         const PROJECT_ID = 'cfde070c-187f-4d7e-b643-a20446ff95ab';
         const ranAt = new Date().toISOString();
@@ -774,7 +802,7 @@ export default function DebugScreen() {
           });
         }).catch(() => {});
       }
-    }, [runAuthProbe, runV38Probes])
+    }, [runAuthProbe, runV38Probes, profile?.is_admin, profile?.is_super_admin])
   );
 
   useEffect(() => {
@@ -1517,6 +1545,25 @@ export default function DebugScreen() {
         <View style={{ width: 44 }} />
       </View>
 
+      {/* Non-super-admin: show safe limited view only */}
+      {!isSuperAdmin && !__DEV__ && (
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40, gap: 12 }]}>
+          <Section title="APP" />
+          <Row label="version_code" value={APP_CODE_VERSION} />
+          <Row label="ota_marker" value={OTA_MARKER} />
+          <Row label="platform" value={Platform.OS} />
+          <Row label="user_id_prefix" value={user?.id ? user.id.slice(0, 8) + '…' : null} />
+          <Row label="signed_in" value={!!session} />
+          <Row label="couple_active" value={couple?.active ?? null} />
+          <Section title="SUPPORT" />
+          <AppText style={[styles.label, { color: '#999', fontSize: 12, paddingHorizontal: 16, lineHeight: 18 }]}>
+            {'Hold the Warm Me Up logo for 5 seconds to reach this screen.\nShare your user_id_prefix with support when reporting an issue.'}
+          </AppText>
+        </ScrollView>
+      )}
+
+      {/* Super-admin or __DEV__: full diagnostics */}
+      {(isSuperAdmin || __DEV__) && (
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
@@ -2461,6 +2508,7 @@ export default function DebugScreen() {
           </AppText>
         </View>
       </ScrollView>
+      )}
     </View>
   );
 }

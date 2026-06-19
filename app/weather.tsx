@@ -254,9 +254,11 @@ export default function WeatherScreen() {
     }
   }, [weather]);
 
+  // Emergency debug access: 5 rapid taps on temperature OR 5-second hold.
+  // Super admin only (or debug mode enabled / __DEV__). Normal admins excluded by design.
   const canAccessDebug =
     __DEV__ ||
-    profile?.is_admin === true ||
+    profile?.is_super_admin === true ||
     debugModeEnabled ||
     process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
 
