@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Pressable, ActivityIndicator, TextInput, Alert,
-  AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager, InteractionManager, BackHandler,
+  AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager, InteractionManager, BackHandler, Linking,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import AppText from '@/components/AppText';
@@ -493,14 +493,20 @@ export default function ChatTab() {
       if (source === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) {
-          Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+          Alert.alert('Camera Access Required', 'Allow camera access in Settings to send photos and videos.', [
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            { text: 'Cancel', style: 'cancel' },
+          ]);
           return;
         }
         result = await ImagePicker.launchCameraAsync(PICKER_OPTIONS);
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) {
-          Alert.alert('Permission Required', 'Please allow access to your photo library in Settings.');
+          Alert.alert('Photo Library Access Required', 'Allow access to your photo library in Settings to send media in Chat.', [
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            { text: 'Cancel', style: 'cancel' },
+          ]);
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated,
+  RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated, Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
@@ -541,7 +541,10 @@ export default function VaultScreen() {
       const ImagePicker = await import('expo-image-picker');
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permission Required', 'Please allow access to your photo library in Settings.');
+        Alert.alert('Photo Library Access Required', 'Allow access to your photo library in Settings to add media to the Vault.', [
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
@@ -571,7 +574,10 @@ export default function VaultScreen() {
       const ImagePicker = await import('expo-image-picker');
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+        Alert.alert('Camera Access Required', 'Allow camera access in Settings to capture media for the Vault.', [
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
         return;
       }
       cameraActiveRef.current = true;
@@ -607,7 +613,10 @@ export default function VaultScreen() {
       const ImagePicker = await import('expo-image-picker');
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+        Alert.alert('Camera Access Required', 'Allow camera access in Settings to capture media for the Vault.', [
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
         return;
       }
       cameraActiveRef.current = true;
@@ -634,7 +643,10 @@ export default function VaultScreen() {
       const ImagePicker = await import('expo-image-picker');
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+        Alert.alert('Camera Access Required', 'Allow camera access in Settings to capture media for the Vault.', [
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
         return;
       }
       cameraActiveRef.current = true;
