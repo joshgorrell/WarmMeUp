@@ -1314,62 +1314,6 @@ export default function AccountScreen() {
 
   const renderProfileTab = () => (
     <>
-      {/* Profile card */}
-      <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-        <TouchableOpacity onPress={handlePickAvatar} activeOpacity={0.8} style={styles.avatarWrap} disabled={uploadingAvatar}>
-          <Avatar key={profile?.avatar_url ?? 'noavatar'} name={profile?.display_name} uri={profile?.avatar_url} size="lg" bgColor="rgba(255,46,138,0.20)" />
-          <View style={[styles.cameraChip, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-            <Camera color={uploadingAvatar ? colors.textMuted : '#FF2E8A'} size={12} strokeWidth={2.5} />
-          </View>
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          {editingName ? (
-            <View ref={nameWrapRef} style={styles.nameEditRow}>
-              <View style={styles.nameInputsCol}>
-                <AppTextInput
-                  style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
-                  value={firstNameInput}
-                  onChangeText={setFirstNameInput}
-                  autoFocus
-                  returnKeyType="next"
-                  placeholderTextColor={colors.textMuted}
-                  placeholder="First name"
-                  maxLength={20}
-                />
-                <AppTextInput
-                  style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
-                  value={lastNameInput}
-                  onChangeText={setLastNameInput}
-                  returnKeyType="done"
-                  onSubmitEditing={saveName}
-                  onBlur={saveName}
-                  placeholderTextColor={colors.textMuted}
-                  placeholder="Last name"
-                  maxLength={30}
-                />
-              </View>
-              <View style={styles.nameActionBtns}>
-                <TouchableOpacity onPress={saveName} disabled={savingName} style={styles.nameActionBtn} activeOpacity={0.7}>
-                  <Check color="#33D17A" size={18} strokeWidth={2.5} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={cancelEditName} style={styles.nameActionBtn} activeOpacity={0.7}>
-                  <X color={colors.textMuted} size={18} strokeWidth={2.5} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <TouchableOpacity onPress={startEditName} style={styles.nameRow} activeOpacity={0.7}>
-              <AppText style={[styles.name, { color: colors.text }]}>{profile ? `${profile.first_name} ${profile.last_name}`.trim() || profile.display_name : 'Your Name'}</AppText>
-              <Pencil color={colors.textMuted} size={14} strokeWidth={2} />
-            </TouchableOpacity>
-          )}
-          <AppText style={[styles.emailText, { color: colors.textMuted }]}>{user?.email ?? ''}</AppText>
-          {uploadingAvatar && <AppText style={[styles.emailText, { color: '#FF2E8A', marginTop: 4 }]}>Uploading...</AppText>}
-          {avatarError && !uploadingAvatar && <AppText style={[styles.emailText, { color: colors.danger, marginTop: 4 }]}>{avatarError}</AppText>}
-          {nameError && <AppText style={[styles.emailText, { color: colors.danger, marginTop: 4 }]}>{nameError}</AppText>}
-        </View>
-      </View>
-
       {/* Stats row — only shown when no partner; replaced by ConnectedPartnerCard metrics when paired */}
       {!couple?.user_b_id && (
         <View style={styles.statsWrap}>
@@ -1575,6 +1519,63 @@ export default function AccountScreen() {
           <AppText style={[styles.menuText, { color: colors.danger }]}>Sign Out</AppText>
           <ChevronRight color={colors.danger} size={16} />
         </TouchableOpacity>
+      </View>
+
+      {/* My Profile section */}
+      <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>My Profile</AppText>
+      <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+        <TouchableOpacity onPress={handlePickAvatar} activeOpacity={0.8} style={styles.avatarWrap} disabled={uploadingAvatar}>
+          <Avatar key={profile?.avatar_url ?? 'noavatar'} name={profile?.display_name} uri={profile?.avatar_url} size="lg" bgColor="rgba(255,46,138,0.20)" />
+          <View style={[styles.cameraChip, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+            <Camera color={uploadingAvatar ? colors.textMuted : '#FF2E8A'} size={12} strokeWidth={2.5} />
+          </View>
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          {editingName ? (
+            <View ref={nameWrapRef} style={styles.nameEditRow}>
+              <View style={styles.nameInputsCol}>
+                <AppTextInput
+                  style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
+                  value={firstNameInput}
+                  onChangeText={setFirstNameInput}
+                  autoFocus
+                  returnKeyType="next"
+                  placeholderTextColor={colors.textMuted}
+                  placeholder="First name"
+                  maxLength={20}
+                />
+                <AppTextInput
+                  style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
+                  value={lastNameInput}
+                  onChangeText={setLastNameInput}
+                  returnKeyType="done"
+                  onSubmitEditing={saveName}
+                  onBlur={saveName}
+                  placeholderTextColor={colors.textMuted}
+                  placeholder="Last name"
+                  maxLength={30}
+                />
+              </View>
+              <View style={styles.nameActionBtns}>
+                <TouchableOpacity onPress={saveName} disabled={savingName} style={styles.nameActionBtn} activeOpacity={0.7}>
+                  <Check color="#33D17A" size={18} strokeWidth={2.5} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={cancelEditName} style={styles.nameActionBtn} activeOpacity={0.7}>
+                  <X color={colors.textMuted} size={18} strokeWidth={2.5} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity onPress={startEditName} style={styles.nameRow} activeOpacity={0.7}>
+              <AppText style={[styles.name, { color: colors.text }]}>{profile ? `${profile.first_name} ${profile.last_name}`.trim() || profile.display_name : 'Your Name'}</AppText>
+              <Pencil color={colors.textMuted} size={14} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
+          <AppText style={[styles.emailText, { color: colors.textMuted }]}>{user?.email ?? ''}</AppText>
+          {uploadingAvatar && <AppText style={[styles.emailText, { color: '#FF2E8A', marginTop: 4 }]}>Uploading...</AppText>}
+          {avatarError && !uploadingAvatar && <AppText style={[styles.emailText, { color: colors.danger, marginTop: 4 }]}>{avatarError}</AppText>}
+          {nameError && <AppText style={[styles.emailText, { color: colors.danger, marginTop: 4 }]}>{nameError}</AppText>}
+        </View>
       </View>
 
       {/* Debug diagnostics — temporary production diagnostic tool */}
@@ -2374,6 +2375,7 @@ const styles = StyleSheet.create({
   },
   inviteBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   menuCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden', marginBottom: Spacing.md },
+  sectionLabel: { fontSize: FontSize.label, fontFamily: 'Inter-SemiBold', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: Spacing.sm },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.card, borderBottomWidth: 1 },
   menuIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   menuText: { flex: 1, fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
