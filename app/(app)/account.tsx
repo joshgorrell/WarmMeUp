@@ -1158,7 +1158,14 @@ export default function AccountScreen() {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        setAvatarError('Photo library permission is required to upload a photo.');
+        Alert.alert(
+          'Photo Library Access Required',
+          'Allow access to your photo library in Settings to upload a profile photo.',
+          [
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
