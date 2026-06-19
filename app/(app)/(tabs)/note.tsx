@@ -7,7 +7,7 @@ import {
 import { Image as ExpoImage } from 'expo-image';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Image as ImageIcon, Camera, X, Lock, EyeOff, Pencil, ArrowUp } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -163,6 +163,27 @@ function MediaBubble({
   const loaded = signedUrl !== undefined;
   const isBlurred = blurEnabled && !revealed;
   const [imgError, setImgError] = useState(false);
+  // Fade-in animation for the reveal: 0 = overlay visible, 1 = overlay hidden
+  const overlayOpacity = useRef(new Animated.Value(isBlurred ? 1 : 0)).current;
+  const prevRevealedRef = useRef(revealed);
+
+  useEffect(() => {
+    if (prevRevealedRef.current !== revealed) {
+      prevRevealedRef.current = revealed;
+      Animated.timing(overlayOpacity, {
+        toValue: revealed ? 0 : 1,
+        duration: 280,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [revealed]);
+
+  // Sync overlay when blur is re-enabled (e.g. tab leave)
+  useEffect(() => {
+    if (isBlurred) {
+      overlayOpacity.setValue(1);
+    }
+  }, [isBlurred]);
 
   const handleImagePress = () => {
     if (isBlurred) {
@@ -172,6 +193,9 @@ function MediaBubble({
     }
   };
 
+  // Cap portrait height so tall images don't dominate the chat
+  const cappedHeight = Math.min(bubbleHeight, Math.round(bubbleWidth * 1.35));
+
   return (
     <Pressable
       onPress={handleImagePress}
@@ -180,7 +204,7 @@ function MediaBubble({
       android_ripple={null}
       style={[
         styles.mediaTap,
-        { width: bubbleWidth, height: bubbleHeight },
+        { width: bubbleWidth, height: cappedHeight },
         radii,
       ]}
     >
@@ -193,12 +217,12 @@ function MediaBubble({
           source={{ uri: signedUrl }}
           style={[
             StyleSheet.absoluteFill,
-            isBlurred && Platform.OS === 'web' ? { filter: 'blur(20px)', transform: 'scale(1.1)' } as any : undefined,
+            isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.15)' } as any : undefined,
           ]}
           contentFit="cover"
           cachePolicy="memory-disk"
           transition={150}
-          blurRadius={isBlurred && Platform.OS !== 'web' ? 20 : 0}
+          blurRadius={isBlurred && Platform.OS !== 'web' ? 50 : 0}
           onError={() => {
             logDebugEvent('chat_message_image_load_error', {
               messageId: msg.id,
@@ -224,10 +248,15 @@ function MediaBubble({
           </View>
         </View>
       )}
-      {isBlurred && loaded && signedUrl && !imgError && (
-        <View style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay]}>
-          <EyeOff color="rgba(255,255,255,0.8)" size={22} strokeWidth={2} />
-        </View>
+      {loaded && signedUrl && !imgError && (
+        <Animated.View
+          style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay, { opacity: overlayOpacity }]}
+          pointerEvents={isBlurred ? 'none' : 'none'}
+        >
+          <View style={styles.blurRevealBtn}>
+            <EyeOff color="rgba(255,255,255,0.92)" size={20} strokeWidth={2} />
+          </View>
+        </Animated.View>
       )}
     </Pressable>
   );
@@ -312,6 +341,15 @@ export default function ChatTab() {
     });
     return () => sub.remove();
   }, [blurEnabled]);
+
+  // Re-blur when leaving the Chat tab
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        if (blurEnabled) setRevealedMedia(new Set());
+      };
+    }, [blurEnabled])
+  );
 
   const fetchSignedUrls = useCallback(async (msgs: ChatMessage[]) => {
     const mediaMessages = msgs.filter(m => m.media_storage_path);
@@ -1688,7 +1726,17 @@ const styles = StyleSheet.create({
   mediaBlurOverlay: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+  },
+  blurRevealBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   playCircle: {
     width: 48,
