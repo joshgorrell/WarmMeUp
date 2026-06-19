@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, StyleSheet, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, Animated, Modal,
-  Pressable, Linking, ActivityIndicator,
+  Pressable, Linking, ActivityIndicator, Alert,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -317,7 +317,14 @@ function WishForm({
       const ImagePicker = await import('expo-image-picker');
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        setError('Photo library permission is required to add an image.');
+        Alert.alert(
+          'Photo Access Required',
+          'Allow access to your photo library in Settings to add a photo to your wish.',
+          [
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -649,7 +656,14 @@ function FulfillSheet({
       const ImagePicker = await import('expo-image-picker');
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        setError('Photo library permission is required to add a memory photo.');
+        Alert.alert(
+          'Photo Access Required',
+          'Allow access to your photo library in Settings to attach a memory photo.',
+          [
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
