@@ -106,12 +106,24 @@ function WishCard({
 
   return (
     <View style={[styles.wishCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-      {imgUri ? (
-        <Image source={{ uri: imgUri }} style={styles.wishCardImg} resizeMode="cover" />
-      ) : null}
+      {/* Horizontal layout: thumbnail left, content right */}
+      <View style={styles.wishCardRow}>
+        {imgUri ? (
+          <Image source={{ uri: imgUri }} style={styles.wishCardThumb} resizeMode="cover" />
+        ) : null}
 
-      <View style={styles.wishCardBody}>
-        <View style={styles.wishCardTop}>
+        <View style={[styles.wishCardBody, !imgUri && styles.wishCardBodyNoImg]}>
+          {/* Title row with more button */}
+          <View style={styles.wishCardTop}>
+            <AppText style={[styles.wishTitle, { color: colors.text, flex: 1 }]} numberOfLines={2}>{wish.title}</AppText>
+            <TouchableOpacity onPress={() => setShowActions(v => !v)} style={styles.moreBtn} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <View style={styles.dotRow}>
+                {[0,1,2].map(i => <View key={i} style={[styles.dot, { backgroundColor: colors.textMuted }]} />)}
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* Meta row: category badge + age */}
           <View style={styles.wishCardMeta}>
             {wish.category ? (
               <View style={[styles.categoryBadge, { backgroundColor: 'rgba(232,99,122,0.12)', borderColor: 'rgba(232,99,122,0.28)' }]}>
@@ -122,78 +134,72 @@ function WishCard({
             ) : null}
             <AppText style={[styles.wishAge, { color: colors.textMuted }]}>{timeAgo(wish.created_at)}</AppText>
           </View>
-          <TouchableOpacity onPress={() => setShowActions(v => !v)} style={styles.moreBtn} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <View style={styles.dotRow}>
-              {[0,1,2].map(i => <View key={i} style={[styles.dot, { backgroundColor: colors.textMuted }]} />)}
-            </View>
-          </TouchableOpacity>
-        </View>
 
-        <AppText style={[styles.wishTitle, { color: colors.text }]} numberOfLines={2}>{wish.title}</AppText>
-        {wish.description ? (
-          <AppText style={[styles.wishDesc, { color: colors.textSecondary }]} numberOfLines={3}>{wish.description}</AppText>
-        ) : null}
-        {wish.link ? (
-          <TouchableOpacity onPress={() => wish.link && Linking.openURL(wish.link)} activeOpacity={0.7} style={styles.linkRow}>
-            <ExternalLink color={WISH_ACCENT} size={12} strokeWidth={2} />
-            <AppText style={[styles.linkText, { color: WISH_ACCENT }]} numberOfLines={1}>{wish.link}</AppText>
-          </TouchableOpacity>
-        ) : null}
+          {wish.description ? (
+            <AppText style={[styles.wishDesc, { color: colors.textSecondary }]} numberOfLines={2}>{wish.description}</AppText>
+          ) : null}
+          {wish.link ? (
+            <TouchableOpacity onPress={() => wish.link && Linking.openURL(wish.link)} activeOpacity={0.7} style={styles.linkRow}>
+              <ExternalLink color={WISH_ACCENT} size={12} strokeWidth={2} />
+              <AppText style={[styles.linkText, { color: WISH_ACCENT }]} numberOfLines={1}>{wish.link}</AppText>
+            </TouchableOpacity>
+          ) : null}
 
-        {/* Reaction bar */}
-        <View style={styles.reactionBar}>
-          {REACTIONS.map(emoji => {
-            const count = reactionCounts[emoji] ?? 0;
-            const mine = myReaction === emoji;
-            return (
-              <TouchableOpacity
-                key={emoji}
-                onPress={() => onReact(wish, emoji)}
-                style={[styles.reactionBtn, mine && { backgroundColor: 'rgba(232,99,122,0.15)', borderColor: 'rgba(232,99,122,0.40)' }, !mine && { borderColor: colors.borderSubtle }]}
-                activeOpacity={0.7}
-              >
-                <AppText style={styles.reactionEmoji}>{emoji}</AppText>
-                {count > 0 && <AppText style={[styles.reactionCount, { color: mine ? WISH_ACCENT : colors.textMuted }]}>{count}</AppText>}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Actions dropdown */}
-        {showActions && (
-          <View style={[styles.actionsMenu, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-            {!isMine && wish.status === 'shared' && (
-              <TouchableOpacity onPress={() => { setShowActions(false); onFulfill(wish); }} style={styles.actionItem} activeOpacity={0.8}>
-                <Heart color={WISH_GOLD} size={15} strokeWidth={2} />
-                <AppText style={[styles.actionLabel, { color: WISH_GOLD }]}>Grant this Wish</AppText>
-              </TouchableOpacity>
-            )}
-            {isMine && wish.status === 'shared' && (
-              <TouchableOpacity onPress={() => { setShowActions(false); onFulfill(wish); }} style={styles.actionItem} activeOpacity={0.8}>
-                <Heart color={WISH_GOLD} size={15} strokeWidth={2} />
-                <AppText style={[styles.actionLabel, { color: WISH_GOLD }]}>Mark as Granted</AppText>
-              </TouchableOpacity>
-            )}
-            {isMine && (
-              <TouchableOpacity onPress={() => { setShowActions(false); onEdit(wish); }} style={styles.actionItem} activeOpacity={0.8}>
-                <Pencil color={colors.textSecondary} size={15} strokeWidth={2} />
-                <AppText style={[styles.actionLabel, { color: colors.textSecondary }]}>Edit</AppText>
-              </TouchableOpacity>
-            )}
-            {isMine && wish.status !== 'archived' && (
-              <TouchableOpacity onPress={() => { setShowActions(false); onArchive(wish); }} style={styles.actionItem} activeOpacity={0.8}>
-                <X color={colors.textMuted} size={15} strokeWidth={2} />
-                <AppText style={[styles.actionLabel, { color: colors.textMuted }]}>Archive</AppText>
-              </TouchableOpacity>
-            )}
-            {isMine && (
-              <TouchableOpacity onPress={() => { setShowActions(false); onDelete(wish); }} style={styles.actionItem} activeOpacity={0.8}>
-                <Trash2 color="#FF5A5F" size={15} strokeWidth={2} />
-                <AppText style={[styles.actionLabel, { color: '#FF5A5F' }]}>Delete</AppText>
-              </TouchableOpacity>
-            )}
+          {/* Reaction bar */}
+          <View style={styles.reactionBar}>
+            {REACTIONS.map(emoji => {
+              const count = reactionCounts[emoji] ?? 0;
+              const mine = myReaction === emoji;
+              return (
+                <TouchableOpacity
+                  key={emoji}
+                  onPress={() => onReact(wish, emoji)}
+                  style={[styles.reactionBtn, mine && { backgroundColor: 'rgba(232,99,122,0.15)', borderColor: 'rgba(232,99,122,0.40)' }, !mine && { borderColor: colors.borderSubtle }]}
+                  activeOpacity={0.7}
+                >
+                  <AppText style={styles.reactionEmoji}>{emoji}</AppText>
+                  {count > 0 && <AppText style={[styles.reactionCount, { color: mine ? WISH_ACCENT : colors.textMuted }]}>{count}</AppText>}
+                </TouchableOpacity>
+              );
+            })}
           </View>
-        )}
+
+          {/* Actions dropdown */}
+          {showActions && (
+            <View style={[styles.actionsMenu, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+              {!isMine && wish.status === 'shared' && (
+                <TouchableOpacity onPress={() => { setShowActions(false); onFulfill(wish); }} style={styles.actionItem} activeOpacity={0.8}>
+                  <Heart color={WISH_GOLD} size={15} strokeWidth={2} />
+                  <AppText style={[styles.actionLabel, { color: WISH_GOLD }]}>Grant this Wish</AppText>
+                </TouchableOpacity>
+              )}
+              {isMine && wish.status === 'shared' && (
+                <TouchableOpacity onPress={() => { setShowActions(false); onFulfill(wish); }} style={styles.actionItem} activeOpacity={0.8}>
+                  <Heart color={WISH_GOLD} size={15} strokeWidth={2} />
+                  <AppText style={[styles.actionLabel, { color: WISH_GOLD }]}>Mark as Granted</AppText>
+                </TouchableOpacity>
+              )}
+              {isMine && (
+                <TouchableOpacity onPress={() => { setShowActions(false); onEdit(wish); }} style={styles.actionItem} activeOpacity={0.8}>
+                  <Pencil color={colors.textSecondary} size={15} strokeWidth={2} />
+                  <AppText style={[styles.actionLabel, { color: colors.textSecondary }]}>Edit</AppText>
+                </TouchableOpacity>
+              )}
+              {isMine && wish.status !== 'archived' && (
+                <TouchableOpacity onPress={() => { setShowActions(false); onArchive(wish); }} style={styles.actionItem} activeOpacity={0.8}>
+                  <X color={colors.textMuted} size={15} strokeWidth={2} />
+                  <AppText style={[styles.actionLabel, { color: colors.textMuted }]}>Archive</AppText>
+                </TouchableOpacity>
+              )}
+              {isMine && (
+                <TouchableOpacity onPress={() => { setShowActions(false); onDelete(wish); }} style={styles.actionItem} activeOpacity={0.8}>
+                  <Trash2 color="#FF5A5F" size={15} strokeWidth={2} />
+                  <AppText style={[styles.actionLabel, { color: '#FF5A5F' }]}>Delete</AppText>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -1128,32 +1134,34 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20, marginTop: 4 },
 
   // Scroll
-  scrollContent: { paddingTop: Spacing.md, gap: 6 },
-  tabletGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  scrollContent: { paddingTop: Spacing.md, gap: 4 },
+  tabletGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   tabletCard: { width: '48.5%' },
 
   // Wish card
   wishCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
-  wishCardImg: { width: '100%', aspectRatio: 16 / 9 },
-  wishCardBody: { padding: Spacing.sm, gap: 4 },
+  wishCardRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  wishCardThumb: { width: 76, height: 76, flexShrink: 0 },
+  wishCardBody: { flex: 1, padding: 10, gap: 3, paddingLeft: 10 },
+  wishCardBodyNoImg: { paddingLeft: 12 },
   wishCardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  wishCardMeta: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  categoryBadge: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
-  categoryBadgeText: { fontSize: 11, fontFamily: 'Inter-Medium', color: WISH_ACCENT, letterSpacing: 0.2 },
-  wishAge: { fontSize: 11, fontFamily: 'Inter-Regular' },
-  moreBtn: { padding: 4, marginLeft: 4 },
+  wishCardMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  categoryBadge: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 2 },
+  categoryBadgeText: { fontSize: 10, fontFamily: 'Inter-Medium', color: WISH_ACCENT, letterSpacing: 0.2 },
+  wishAge: { fontSize: 10, fontFamily: 'Inter-Regular' },
+  moreBtn: { padding: 4, marginLeft: 4, flexShrink: 0 },
   dotRow: { flexDirection: 'row', gap: 3 },
   dot: { width: 3.5, height: 3.5, borderRadius: 2 },
-  wishTitle: { fontSize: 14, fontFamily: 'Inter-SemiBold', lineHeight: 20 },
-  wishDesc: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 16 },
-  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  linkText: { fontSize: 12, fontFamily: 'Inter-Regular', flex: 1 },
+  wishTitle: { fontSize: 13, fontFamily: 'Inter-SemiBold', lineHeight: 18 },
+  wishDesc: { fontSize: 12, fontFamily: 'Inter-Regular', lineHeight: 15 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  linkText: { fontSize: 11, fontFamily: 'Inter-Regular', flex: 1 },
 
   // Reactions
-  reactionBar: { flexDirection: 'row', gap: 6, marginTop: 2, flexWrap: 'wrap' },
-  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 8 },
-  reactionEmoji: { fontSize: 15 },
-  reactionCount: { fontSize: 11, fontFamily: 'Inter-SemiBold' },
+  reactionBar: { flexDirection: 'row', gap: 5, marginTop: 1, flexWrap: 'wrap' },
+  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 5 },
+  reactionEmoji: { fontSize: 13 },
+  reactionCount: { fontSize: 10, fontFamily: 'Inter-SemiBold' },
 
   // Actions menu
   actionsMenu: { borderRadius: Radius.md, borderWidth: 1, marginTop: 4, overflow: 'hidden' },
