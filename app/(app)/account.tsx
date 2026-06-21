@@ -1150,23 +1150,56 @@ export default function AccountScreen() {
     setUploadingAvatar(true);
     setAvatarError(null);
     try {
-      const ext = uri.split('.').pop()?.split('?')[0]?.toLowerCase() ?? 'jpg';
-      const mimeMap: Record<string, string> = {
-        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-        webp: 'image/webp', gif: 'image/gif',
-        heic: 'image/heic', heif: 'image/heif',
-      };
-      const contentType = mimeMap[ext] ?? 'image/jpeg';
-      const path = `${user.id}/avatar-${Date.now()}.${ext}`;
+      // Compress to JPEG first (handles HEIC conversion and size reduction)
+      let uploadUri = uri;
+      let contentType = 'image/jpeg';
+      if (Platform.OS !== 'web') {
+        try {
+          const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
+          const result = await manipulateAsync(uri, [{ resize: { width: 800 } }], { compress: 0.80, format: SaveFormat.JPEG });
+          uploadUri = result.uri;
+        } catch {}
+      }
 
-      // FormData file upload works reliably for local photo URIs on React Native.
-      // fetch(uri).blob() returns an empty blob on iOS for ph:// and file:// URIs.
-      const formData = new FormData();
-      formData.append('file', { uri, name: `avatar.${ext}`, type: contentType } as any);
+      const path = `${user.id}/avatar-${Date.now()}.jpg`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars').upload(path, formData, { contentType: 'multipart/form-data', upsert: true });
-      if (uploadError) { setAvatarError(uploadError.message ?? 'Upload failed.'); return; }
+      // XHR reads local file:// and ph:// URIs correctly on React Native.
+      // fetch(uri).blob() and the Supabase JS client both return 0-byte blobs for local URIs.
+      const blob: Blob = await new Promise((resolve, reject) => {
+        if (uploadUri.startsWith('http://') || uploadUri.startsWith('https://')) {
+          fetch(uploadUri).then(r => r.blob()).then(resolve).catch(reject);
+          return;
+        }
+        const xhr = new XMLHttpRequest();
+        xhr.responseType = 'blob';
+        xhr.onload = () => resolve(xhr.response as Blob);
+        xhr.onerror = () => reject(new Error('Could not read photo file.'));
+        xhr.open('GET', uploadUri);
+        xhr.send();
+      });
+
+      await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setAvatarError('Session expired — please sign in again.'); return; }
+
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+      const response = await fetch(`${supabaseUrl}/storage/v1/object/avatars/${path}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+          'Content-Type': contentType,
+          'x-upsert': 'true',
+        },
+        body: blob,
+      });
+      if (!response.ok) {
+        let body: any = null;
+        try { body = await response.json(); } catch {}
+        setAvatarError(body?.message ?? body?.error ?? `Upload failed (HTTP ${response.status}).`);
+        return;
+      }
+
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
       const { data: updated, error: updateError } = await supabase
