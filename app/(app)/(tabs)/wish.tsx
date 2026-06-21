@@ -1140,8 +1140,8 @@ const styles = StyleSheet.create({
 
   // Wish card
   wishCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
-  wishCardRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  wishCardThumb: { width: 76, height: 76, flexShrink: 0 },
+  wishCardRow: { flexDirection: 'row', alignItems: 'stretch' },
+  wishCardThumb: { width: 76, flexShrink: 0 },
   wishCardBody: { flex: 1, padding: 10, gap: 3, paddingLeft: 10 },
   wishCardBodyNoImg: { paddingLeft: 12 },
   wishCardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
