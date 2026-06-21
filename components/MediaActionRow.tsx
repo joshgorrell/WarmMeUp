@@ -105,20 +105,12 @@ export default function MediaActionRow({
 
   return (
     <>
-      {/* Full-screen tap-away backdrop */}
-      <TouchableOpacity
-        style={StyleSheet.absoluteFill}
-        onPress={onDismiss}
-        activeOpacity={1}
-      />
-
       {/* Floating card */}
       <Animated.View
         style={[
           styles.card,
           { width: cardWidth, transform: [{ scale: scaleAnim }], opacity: opacityAnim },
         ]}
-        pointerEvents="box-none"
       >
         {/* Row 1 — Reactions */}
         <View style={styles.reactionRow}>
@@ -182,19 +174,17 @@ export default function MediaActionRow({
                 </AppText>
               </TouchableOpacity>
 
-              {isMine && (
-                <>
-                  <View style={styles.actionDivider} />
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => { onDismiss(); onDelete?.(); }}
-                    activeOpacity={0.65}
-                  >
-                    <Trash2 color="#FF4444" size={15} strokeWidth={2} />
-                    <AppText style={styles.actionLabelDanger}>Delete</AppText>
-                  </TouchableOpacity>
-                </>
-              )}
+              <>
+                <View style={styles.actionDivider} />
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => { onDismiss(); onDelete?.(); }}
+                  activeOpacity={0.65}
+                >
+                  <Trash2 color="#FF4444" size={15} strokeWidth={2} />
+                  <AppText style={styles.actionLabelDanger}>Delete</AppText>
+                </TouchableOpacity>
+              </>
             </>
           ) : (
             <>

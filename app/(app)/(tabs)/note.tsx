@@ -1025,7 +1025,7 @@ export default function ChatTab() {
         .from('chat_messages')
         .update({ deleted_at: deletedAt })
         .eq('id', msg.id)
-        .eq('sender_id', user!.id);
+        .eq('couple_id', couple!.id);
       return error;
     };
 
