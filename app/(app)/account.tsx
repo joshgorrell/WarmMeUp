@@ -1151,11 +1151,17 @@ export default function AccountScreen() {
     setAvatarError(null);
     try {
       const ext = uri.split('.').pop()?.split('?')[0]?.toLowerCase() ?? 'jpg';
+      const mimeMap: Record<string, string> = {
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+        webp: 'image/webp', gif: 'image/gif',
+        heic: 'image/heic', heif: 'image/heif',
+      };
+      const contentType = mimeMap[ext] ?? 'image/jpeg';
       const path = `${user.id}/avatar-${Date.now()}.${ext}`;
       const res = await fetch(uri);
       const blob = await res.blob();
       const { error: uploadError } = await supabase.storage
-        .from('avatars').upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
+        .from('avatars').upload(path, blob, { contentType, upsert: true });
       if (uploadError) { setAvatarError(uploadError.message ?? 'Upload failed.'); return; }
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
