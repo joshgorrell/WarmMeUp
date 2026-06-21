@@ -29,6 +29,7 @@ import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
 import { useLayout } from '@/hooks/useLayout';
+import { ensureConfigured } from '@/lib/purchases';
 
 type AccountTab = 'profile' | 'settings';
 
@@ -818,6 +819,21 @@ export default function AccountScreen() {
   useFocusEffect(useCallback(() => {
     refreshSubscription();
   }, []));
+
+  const handleRestorePurchase = useCallback(async () => {
+    if (Platform.OS === 'web') { Alert.alert('Not Available', 'Restoration is only available in the mobile app.'); return; }
+    try {
+      const Purchases = await ensureConfigured();
+      if (!Purchases) { Alert.alert('Unavailable', 'Purchases are not available on this device.'); return; }
+      const info = await Purchases.restorePurchases();
+      if (info.entitlements.active['premium']) {
+        await refreshSubscription();
+        Alert.alert('Restored', 'Your subscription has been restored.');
+      } else {
+        Alert.alert('No Purchases Found', 'No active subscription was found.');
+      }
+    } catch (e: any) { Alert.alert('Restore Failed', e?.message ?? 'Please try again.'); }
+  }, [refreshSubscription]);
 
   // Reload scores when this screen regains focus so stale totals are never shown.
   useFocusEffect(useCallback(() => {
@@ -1811,68 +1827,58 @@ export default function AccountScreen() {
         />
       </Section>
 
-      <Section title="SUBSCRIPTION">
+      <Section title="MEMBERSHIP">
         {subscriptionInfo.loading ? (
           <SettingsRow label="Status" sub="Loading…" last />
+
+        ) : (subscriptionInfo.source === 'admin' || subscriptionInfo.source === 'super_admin' || subscriptionInfo.source === 'admin_grant') ? (
+          <SettingsRow
+            label="Access"
+            sub="Complimentary — full access granted"
+            last
+          />
+
         ) : subscriptionInfo.source === 'partner' ? (
           <>
             <SettingsRow
-              label="Status"
-              sub="You're connected through your partner's subscription"
+              label="Plan"
+              sub="Covered by partner's subscription"
             />
             <SettingsRow
-              label="Coverage"
-              sub="One subscription covers both of you. Your partner is the subscriber."
+              label="Manage"
+              sub="View or cancel in the App Store"
+              onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
+              accent
               last
             />
           </>
+
         ) : subscriptionInfo.source === 'self' && subscriptionInfo.isOnTrial ? (
           <>
-            <SettingsRow label="Plan" sub="Free Trial" />
             <SettingsRow
-              label="Trial Ends"
-              sub={subscriptionInfo.trialExpiresAt
-                ? new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-                : '—'}
+              label="Plan"
+              sub={`Free Trial${subscriptionInfo.trialExpiresAt ? ` · ends ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`}
             />
             <SettingsRow
               label="Subscribe"
-              sub="Unlock full access and invite your partner"
+              sub="Unlock full access · your partner joins free"
               onPress={() => router.push('/(auth)/subscription')}
               accent
             />
             <SettingsRow
               label="Restore Purchase"
               sub="Recover a previous subscription"
-              onPress={async () => {
-                if (Platform.OS === 'web') { Alert.alert('Not Available', 'Restoration is only available in the mobile app.'); return; }
-                try {
-                  const Purchases = (await import('react-native-purchases')).default;
-                  const info = await Purchases.restorePurchases();
-                  if (info.entitlements.active['premium']) {
-                    await refreshSubscription();
-                    Alert.alert('Restored', 'Your subscription has been restored.');
-                  } else {
-                    Alert.alert('No Purchases Found', 'No active subscription was found.');
-                  }
-                } catch (e: any) { Alert.alert('Restore Failed', e?.message ?? 'Please try again.'); }
-              }}
+              onPress={handleRestorePurchase}
               last
             />
           </>
+
         ) : subscriptionInfo.source === 'self' && subscriptionInfo.isPremium ? (
           <>
             <SettingsRow
               label="Plan"
-              sub={subscriptionInfo.plan === 'yearly' ? 'Yearly' : 'Monthly'}
+              sub={`${subscriptionInfo.plan === 'yearly' ? 'Yearly' : 'Monthly'} · Active${subscriptionInfo.expiresAt ? ` — renews ${new Date(subscriptionInfo.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`}
             />
-            <SettingsRow label="Status" sub="Active" />
-            {subscriptionInfo.expiresAt && (
-              <SettingsRow
-                label="Renews"
-                sub={new Date(subscriptionInfo.expiresAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-              />
-            )}
             <SettingsRow
               label="Manage Subscription"
               sub="View or cancel in the App Store"
@@ -1882,47 +1888,24 @@ export default function AccountScreen() {
             <SettingsRow
               label="Restore Purchase"
               sub="Recover a previous subscription"
-              onPress={async () => {
-                if (Platform.OS === 'web') { Alert.alert('Not Available', 'Restoration is only available in the mobile app.'); return; }
-                try {
-                  const Purchases = (await import('react-native-purchases')).default;
-                  const info = await Purchases.restorePurchases();
-                  if (info.entitlements.active['premium']) {
-                    await refreshSubscription();
-                    Alert.alert('Restored', 'Your subscription has been restored.');
-                  } else {
-                    Alert.alert('No Purchases Found', 'No active subscription was found.');
-                  }
-                } catch (e: any) { Alert.alert('Restore Failed', e?.message ?? 'Please try again.'); }
-              }}
+              onPress={handleRestorePurchase}
               last
             />
           </>
+
         ) : (
           <>
             <SettingsRow label="Plan" sub="No active subscription" />
             <SettingsRow
               label="Subscribe"
-              sub="Subscribe to invite your partner. They join free."
+              sub="One subscription covers both of you · partner joins free"
               onPress={() => router.push('/(auth)/subscription')}
               accent
             />
             <SettingsRow
               label="Restore Purchase"
               sub="Recover a previous subscription"
-              onPress={async () => {
-                if (Platform.OS === 'web') { Alert.alert('Not Available', 'Restoration is only available in the mobile app.'); return; }
-                try {
-                  const Purchases = (await import('react-native-purchases')).default;
-                  const info = await Purchases.restorePurchases();
-                  if (info.entitlements.active['premium']) {
-                    await refreshSubscription();
-                    Alert.alert('Restored', 'Your subscription has been restored.');
-                  } else {
-                    Alert.alert('No Purchases Found', 'No active subscription was found.');
-                  }
-                } catch (e: any) { Alert.alert('Restore Failed', e?.message ?? 'Please try again.'); }
-              }}
+              onPress={handleRestorePurchase}
               last
             />
           </>

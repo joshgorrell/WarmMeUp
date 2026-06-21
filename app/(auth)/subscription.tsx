@@ -12,7 +12,10 @@ import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Flame, Gift, Lock, MessageCircle, Star, Zap, CircleAlert as AlertCircle, Heart } from 'lucide-react-native';
+import {
+  Flame, Gift, Lock, MessageCircle, Star, Zap,
+  CircleAlert as AlertCircle, Heart, X,
+} from 'lucide-react-native';
 import WarmupBrand from '@/components/WarmupBrand';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
@@ -36,7 +39,7 @@ const PLANS: {
     label: 'Monthly',
     price: '$9.99',
     period: 'per month',
-    sub: 'Billed monthly, cancel anytime',
+    sub: 'Billed monthly · cancel anytime',
   },
   {
     id: 'yearly',
@@ -44,17 +47,17 @@ const PLANS: {
     price: '$99.99',
     period: 'per year',
     badge: 'Best Value',
-    sub: 'Save 17% — just $8.33/mo',
+    sub: 'Save 17% · just $8.33/mo',
   },
 ];
 
 const FEATURES = [
-  { Icon: Zap, text: 'Unlimited Dares & Dice rolls' },
+  { Icon: Zap,           text: 'Unlimited Dares & Dice rolls' },
   { Icon: MessageCircle, text: 'Private couples chat' },
-  { Icon: Lock, text: 'Shared Vault for photos & videos' },
-  { Icon: Flame, text: 'Streaks & daily challenges' },
-  { Icon: Star, text: 'Points, rewards & milestones' },
-  { Icon: Gift, text: 'Custom prompts for your vibe' },
+  { Icon: Lock,          text: 'Shared Vault for photos & videos' },
+  { Icon: Flame,         text: 'Streaks & daily challenges' },
+  { Icon: Star,          text: 'Points, rewards & milestones' },
+  { Icon: Gift,          text: 'Custom prompts for your vibe' },
 ];
 
 export default function SubscriptionScreen() {
@@ -71,6 +74,7 @@ export default function SubscriptionScreen() {
   const [offeringsLoaded, setOfferingsLoaded] = useState(false);
 
   const logoSize = Math.min(Math.round(width * 0.12), 48);
+  const canDismiss = !reason;
 
   // Load RevenueCat offerings on mount (native only)
   useEffect(() => {
@@ -193,9 +197,9 @@ export default function SubscriptionScreen() {
 
   const selectedPlan = PLANS.find((p) => p.id === selected)!;
 
-  const centerStyle = isTablet
+  const innerStyle = isTablet
     ? { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const }
-    : {};
+    : { width: '100%' as const };
 
   const reasonBanner =
     reason === 'post_unpairing'
@@ -212,14 +216,25 @@ export default function SubscriptionScreen() {
       />
       <View style={[styles.glowTop, { width: width * 0.9, height: width * 0.6 }]} />
 
+      {canDismiss && (
+        <TouchableOpacity
+          style={[styles.dismissBtn, { top: insets.top + 12 }]}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <X color="rgba(255,255,255,0.50)" size={20} strokeWidth={2} />
+        </TouchableOpacity>
+      )}
+
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 32 },
+          { paddingTop: insets.top + (canDismiss ? 52 : 24), paddingBottom: insets.bottom + 32 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={centerStyle}>
+        <View style={innerStyle}>
           <View style={styles.brandRow}>
             <WarmupBrand logoSize={logoSize} showTagline={false} />
           </View>
@@ -233,14 +248,14 @@ export default function SubscriptionScreen() {
 
           <AppText style={styles.heading}>Unlock everything</AppText>
           <AppText style={styles.sub}>
-            One subscription covers both of you. Your partner joins free.
+            One subscription covers both of you.{'\n'}Your partner joins at no extra cost.
           </AppText>
 
           <View style={[styles.featureList, { marginBottom: height < 700 ? 20 : 28 }]}>
             {FEATURES.map(({ Icon, text }) => (
               <View key={text} style={styles.featureRow}>
                 <View style={styles.featureIcon}>
-                  <Icon color="#FF5A3D" size={15} strokeWidth={2} />
+                  <Icon color="#FF5A3D" size={16} strokeWidth={2} />
                 </View>
                 <AppText style={styles.featureText}>{text}</AppText>
               </View>
@@ -274,7 +289,7 @@ export default function SubscriptionScreen() {
                     <View style={[styles.radio, active && styles.radioActive]}>
                       {active && <View style={styles.radioDot} />}
                     </View>
-                    <View>
+                    <View style={styles.planLabelWrap}>
                       <AppText style={[styles.planLabel, active && styles.planLabelActive]}>
                         {plan.label}
                       </AppText>
@@ -319,10 +334,6 @@ export default function SubscriptionScreen() {
             Subscription auto-renews. Cancel anytime in your account settings.
           </AppText>
 
-          <AppText style={styles.partnerNote}>
-            Subscribe to invite your partner. They join at no extra cost.
-          </AppText>
-
           <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} style={styles.restoreBtn} disabled={loading}>
             <AppText style={styles.restoreText}>Restore Purchase</AppText>
           </TouchableOpacity>
@@ -344,6 +355,17 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
     backgroundColor: 'rgba(255,60,80,0.06)',
   },
+  dismissBtn: {
+    position: 'absolute',
+    right: 18,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scroll: {
     paddingHorizontal: Spacing.xl,
     alignItems: 'center',
@@ -362,7 +384,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: 12,
-    marginBottom: 20,
+    marginBottom: 24,
     width: '100%',
   },
   reasonBannerText: {
@@ -390,28 +412,29 @@ const styles = StyleSheet.create({
   },
   featureList: {
     width: '100%',
-    gap: 10,
+    gap: 12,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
+    width: '100%',
   },
   featureIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: 'rgba(255,90,61,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,90,61,0.20)',
+    borderColor: 'rgba(255,90,61,0.22)',
     flexShrink: 0,
   },
   featureText: {
-    color: 'rgba(255,255,255,0.72)',
+    color: 'rgba(255,255,255,0.80)',
     fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'Inter-Medium',
     flex: 1,
   },
   planList: {
@@ -458,6 +481,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     flex: 1,
+    marginRight: 8,
+  },
+  planLabelWrap: {
+    flex: 1,
   },
   radio: {
     width: 20,
@@ -495,7 +522,6 @@ const styles = StyleSheet.create({
   planRight: {
     alignItems: 'flex-end',
     flexShrink: 0,
-    marginLeft: 8,
   },
   planPrice: {
     color: 'rgba(255,255,255,0.60)',
@@ -511,7 +537,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   ctaBtn: {
-    width: '88%',
+    width: '100%',
     borderRadius: Radius.pill,
     overflow: 'hidden',
     shadowColor: '#FF5A3D',
@@ -520,7 +546,6 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 12,
     marginBottom: 14,
-    alignSelf: 'center',
   },
   ctaGrad: {
     paddingVertical: 17,
@@ -537,15 +562,6 @@ const styles = StyleSheet.create({
   },
   legal: {
     color: 'rgba(255,255,255,0.28)',
-    fontSize: FontSize.xs,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 8,
-    paddingHorizontal: Spacing.md,
-  },
-  partnerNote: {
-    color: 'rgba(255,255,255,0.35)',
     fontSize: FontSize.xs,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
