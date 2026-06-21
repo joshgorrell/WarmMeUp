@@ -9,7 +9,7 @@ import { BlurView } from 'expo-blur';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Image as ImageIcon, Camera, X, Lock, EyeOff, Pencil, ArrowUp } from 'lucide-react-native';
+import { Image as ImageIcon, Camera, X, Lock, EyeOff, Pencil, ChevronLeft, Phone, Video, Send } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -18,7 +18,8 @@ import { notifyPartner } from '@/lib/notifications';
 import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension, extensionToMime } from '@/lib/uploadMedia';
 import { ChatMessage } from '@/lib/types';
 import AppShell from '@/components/AppShell';
-import TabHeader from '@/components/TabHeader';
+import Avatar from '@/components/Avatar';
+import { LinearGradient } from 'expo-linear-gradient';
 import MediaActionRow from '@/components/MediaActionRow';
 import ConfirmSheet, { ConfirmAction } from '@/components/ConfirmSheet';
 import { useMediaReactions } from '@/hooks/useMediaReactions';
@@ -285,6 +286,117 @@ function ShimmerPlaceholder() {
     <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.10)', opacity: anim }]} />
   );
 }
+
+function ChatHeader({
+  partnerName,
+  partnerAvatarUri,
+  hasPartner,
+  onBack,
+}: {
+  partnerName: string;
+  partnerAvatarUri: string | null;
+  hasPartner: boolean;
+  onBack: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[chatHeaderStyles.container, { paddingTop: insets.top + 10 }]}>
+      <TouchableOpacity onPress={onBack} style={chatHeaderStyles.backBtn} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <ChevronLeft color="#fff" size={26} strokeWidth={2} />
+      </TouchableOpacity>
+
+      <View style={chatHeaderStyles.centerRow}>
+        <View style={chatHeaderStyles.avatarWrap}>
+          <Avatar name={partnerName} uri={partnerAvatarUri} size="sm" bgColor="rgba(255,46,138,0.20)" />
+          {hasPartner && <View style={chatHeaderStyles.onlineDot} />}
+        </View>
+        <View>
+          <AppText style={chatHeaderStyles.name}>{partnerName}</AppText>
+          {hasPartner && <AppText style={chatHeaderStyles.status}>Active now</AppText>}
+        </View>
+      </View>
+
+      <View style={chatHeaderStyles.rightIcons}>
+        <TouchableOpacity style={chatHeaderStyles.iconBtn} activeOpacity={0.7}>
+          <Phone color="rgba(255,255,255,0.70)" size={20} strokeWidth={2} />
+        </TouchableOpacity>
+        <TouchableOpacity style={chatHeaderStyles.iconBtn} activeOpacity={0.7}>
+          <Video color="rgba(255,255,255,0.70)" size={22} strokeWidth={2} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={chatHeaderStyles.separator} />
+    </View>
+  );
+}
+
+const chatHeaderStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    position: 'relative',
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  centerRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  avatarWrap: {
+    position: 'relative',
+  },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#33D17A',
+    borderWidth: 1.5,
+    borderColor: '#050408',
+  },
+  name: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    letterSpacing: -0.2,
+  },
+  status: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginTop: 1,
+  },
+  rightIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  separator: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+});
 
 export default function ChatTab() {
   const router = useRouter();
@@ -1142,8 +1254,14 @@ export default function ChatTab() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <AppShell scrollable={false}>
-          <TabHeader title="Chat" />
+        <AppShell scrollable={false} noTopPadding>
+          {/* Chat-specific header */}
+          <ChatHeader
+            partnerName={partnerProfile?.display_name ?? (hasPartner ? 'Partner' : 'Chat')}
+            partnerAvatarUri={partnerProfile?.avatar_url ?? null}
+            hasPartner={hasPartner}
+            onBack={() => router.replace('/(app)/(tabs)')}
+          />
 
           {chatLoading ? (
             <View style={styles.emptyState}>
@@ -1220,7 +1338,7 @@ export default function ChatTab() {
           {/* Compose bar */}
           <View style={[
             styles.compose,
-            { borderTopColor: colors.borderSubtle, paddingBottom: insets.bottom > 0 ? insets.bottom + 4 : Spacing.sm },
+            { paddingBottom: insets.bottom > 0 ? insets.bottom + 4 : Spacing.sm },
             !hasPartner && styles.composeHidden,
           ]}>
             {attachedMedia && !editingState && (
@@ -1249,22 +1367,22 @@ export default function ChatTab() {
               {!editingState && (
                 <>
                   <TouchableOpacity onPress={() => pickMedia('library')} style={styles.attachIcon} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <ImageIcon color={colors.textMuted} size={22} strokeWidth={2} />
+                    <ImageIcon color="rgba(255,255,255,0.35)" size={22} strokeWidth={2} />
                   </TouchableOpacity>
                   {Platform.OS !== 'web' && (
                     <TouchableOpacity onPress={() => pickMedia('camera')} style={styles.attachIcon} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Camera color={colors.textMuted} size={22} strokeWidth={2} />
+                      <Camera color="rgba(255,255,255,0.35)" size={22} strokeWidth={2} />
                     </TouchableOpacity>
                   )}
                 </>
               )}
               <AppTextInput
                 ref={inputRef}
-                style={[styles.input, { color: colors.text, backgroundColor: colors.bg2 ?? 'rgba(255,255,255,0.06)' }]}
+                style={[styles.input, { color: colors.text }]}
                 value={text}
                 onChangeText={setText}
-                placeholder={editingState ? 'Edit message…' : 'Message…'}
-                placeholderTextColor={colors.textMuted}
+                placeholder={editingState ? 'Edit message…' : 'Type a message…'}
+                placeholderTextColor="rgba(255,255,255,0.32)"
                 multiline
                 maxLength={1000}
                 returnKeyType="send"
@@ -1276,15 +1394,22 @@ export default function ChatTab() {
                 onPress={handleSend}
                 disabled={!canSend}
                 style={[styles.sendBtn, { opacity: canSend ? 1 : 0.35 }]}
-                activeOpacity={0.75}
+                activeOpacity={0.8}
                 hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
               >
                 {sending ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <View style={[styles.sendCircle, { backgroundColor: editingState ? '#FF8A3D' : '#FF5A3D' }]}>
-                    <ArrowUp color="#fff" size={16} strokeWidth={2.5} />
+                  <View style={styles.sendCircle}>
+                    <ActivityIndicator color="#fff" size="small" />
                   </View>
+                ) : (
+                  <LinearGradient
+                    colors={editingState ? ['#FF8A3D', '#FF5A3D'] : ['#E8196E', '#FF5A3D']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.sendCircle}
+                  >
+                    <Send color="#fff" size={16} strokeWidth={2.5} style={{ marginLeft: 2 }} />
+                  </LinearGradient>
                 )}
               </TouchableOpacity>
             </View>
@@ -1446,9 +1571,7 @@ const MessageRow = React.memo(function MessageRow({
     <>
       {showDivider && (
         <View style={styles.dateDivider}>
-          <View style={[styles.dateLine, { backgroundColor: colors.borderSubtle }]} />
           <AppText style={[styles.dateText, { color: colors.textMuted }]}>{getDividerLabel(item.created_at)}</AppText>
-          <View style={[styles.dateLine, { backgroundColor: colors.borderSubtle }]} />
         </View>
       )}
       <Animated.View style={[
@@ -1475,55 +1598,103 @@ const MessageRow = React.memo(function MessageRow({
             delayLongPress={350}
             activeOpacity={1}
           >
-            <View style={[
-              styles.bubble,
-              radii,
-              isMine
-                ? { backgroundColor: mediaOnly ? 'transparent' : 'rgba(255,80,55,0.22)', borderColor: isMenuOpen ? 'rgba(255,90,61,0.7)' : 'rgba(255,80,55,0.32)' }
-                : { backgroundColor: mediaOnly ? 'transparent' : colors.card, borderColor: colors.borderSubtle },
-              hasMedia && styles.bubbleMediaOnly,
-            ]}>
-              {hasMedia && (
-                <MediaBubble
-                  msg={item}
-                  blurEnabled={blurEnabled}
-                  revealed={revealed}
-                  onReveal={onReveal}
-                  signedUrl={signedUrl}
-                  onOpen={onOpen}
-                  onLongPress={onLongPress}
-                  bubbleWidth={mediaBubbleWidth}
-                  bubbleHeight={mediaBubbleHeight}
-                  radii={item.content_text ? { ...radii, borderBottomLeftRadius: 6, borderBottomRightRadius: 6 } : radii}
-                />
-              )}
-              {item.content_text ? (
-                <AppText style={[styles.bubbleText, styles.mediaCaption, {
-                  color: colors.text,
-                  fontSize: Math.round(14 * chatFontScale),
-                  lineHeight: Math.round(14 * chatFontScale * 1.5),
-                }]}>
-                  {item.content_text}
-                </AppText>
-              ) : null}
-              {/* Timestamp + edited — only shown inside bubble when there's text, or below media */}
-              <View style={[styles.bubbleMeta, hasMedia && styles.bubbleMetaMedia]}>
-                <AppText style={[styles.bubbleTime, {
-                  color: isMine ? 'rgba(255,255,255,0.55)' : colors.textMuted,
-                  fontSize: Math.round(11 * chatFontScale),
-                }]}>
-                  {formatTime(item.created_at)}
-                </AppText>
-                {item.edited_at && (
-                  <AppText style={[styles.editedLabel, {
-                    color: isMine ? 'rgba(255,255,255,0.38)' : colors.textMuted,
-                    fontSize: Math.round(10 * chatFontScale),
-                  }]}>
-                    edited
-                  </AppText>
+            {isMine && !mediaOnly ? (
+              <LinearGradient
+                colors={['#E8196E', '#FF5A3D']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.bubble, radii, isMenuOpen && styles.bubbleMenuOpen]}
+              >
+                {hasMedia && (
+                  <MediaBubble
+                    msg={item}
+                    blurEnabled={blurEnabled}
+                    revealed={revealed}
+                    onReveal={onReveal}
+                    signedUrl={signedUrl}
+                    onOpen={onOpen}
+                    onLongPress={onLongPress}
+                    bubbleWidth={mediaBubbleWidth}
+                    bubbleHeight={mediaBubbleHeight}
+                    radii={item.content_text ? { ...radii, borderBottomLeftRadius: 6, borderBottomRightRadius: 6 } : radii}
+                  />
                 )}
+                {item.content_text ? (
+                  <AppText style={[styles.bubbleText, styles.mediaCaption, {
+                    color: '#fff',
+                    fontSize: Math.round(15 * chatFontScale),
+                    lineHeight: Math.round(15 * chatFontScale * 1.45),
+                  }]}>
+                    {item.content_text}
+                  </AppText>
+                ) : null}
+                <View style={[styles.bubbleMeta, hasMedia && styles.bubbleMetaMedia]}>
+                  <AppText style={[styles.bubbleTime, {
+                    color: 'rgba(255,255,255,0.65)',
+                    fontSize: Math.round(11 * chatFontScale),
+                  }]}>
+                    {formatTime(item.created_at)}
+                  </AppText>
+                  {item.edited_at && (
+                    <AppText style={[styles.editedLabel, {
+                      color: 'rgba(255,255,255,0.45)',
+                      fontSize: Math.round(10 * chatFontScale),
+                    }]}>
+                      edited
+                    </AppText>
+                  )}
+                </View>
+              </LinearGradient>
+            ) : (
+              <View style={[
+                styles.bubble,
+                radii,
+                isMine
+                  ? [styles.bubbleOutboundMediaOnly, isMenuOpen && styles.bubbleMenuOpen]
+                  : [styles.bubbleInbound, isMenuOpen && styles.bubbleMenuOpen],
+                hasMedia && styles.bubbleMediaOnly,
+              ]}>
+                {hasMedia && (
+                  <MediaBubble
+                    msg={item}
+                    blurEnabled={blurEnabled}
+                    revealed={revealed}
+                    onReveal={onReveal}
+                    signedUrl={signedUrl}
+                    onOpen={onOpen}
+                    onLongPress={onLongPress}
+                    bubbleWidth={mediaBubbleWidth}
+                    bubbleHeight={mediaBubbleHeight}
+                    radii={item.content_text ? { ...radii, borderBottomLeftRadius: 6, borderBottomRightRadius: 6 } : radii}
+                  />
+                )}
+                {item.content_text ? (
+                  <AppText style={[styles.bubbleText, styles.mediaCaption, {
+                    color: colors.text,
+                    fontSize: Math.round(15 * chatFontScale),
+                    lineHeight: Math.round(15 * chatFontScale * 1.45),
+                  }]}>
+                    {item.content_text}
+                  </AppText>
+                ) : null}
+                <View style={[styles.bubbleMeta, hasMedia && styles.bubbleMetaMedia]}>
+                  <AppText style={[styles.bubbleTime, {
+                    color: isMine ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.45)',
+                    fontSize: Math.round(11 * chatFontScale),
+                  }]}>
+                    {formatTime(item.created_at)}
+                  </AppText>
+                  {item.edited_at && (
+                    <AppText style={[styles.editedLabel, {
+                      color: isMine ? 'rgba(255,255,255,0.38)' : 'rgba(255,255,255,0.35)',
+                      fontSize: Math.round(10 * chatFontScale),
+                    }]}>
+                      edited
+                    </AppText>
+                  )}
+                </View>
               </View>
-            </View>
+            )}
           </TouchableOpacity>
 
           {/* Reactions — anchored to bubble bottom corner, overlapping slightly */}
@@ -1568,19 +1739,17 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold', textAlign: 'center' },
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 22 },
 
-  // Date separator
+  // Date separator — centered text only, no lines
   dateDivider: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
     marginTop: 20,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   dateLine: { flex: 1, height: StyleSheet.hairlineWidth },
   dateText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    letterSpacing: 0.8,
+    fontFamily: 'Inter-Medium',
+    letterSpacing: 0.4,
   },
 
   // Message row
@@ -1623,19 +1792,25 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
 
-  // Bubble
+  // Bubble — shared base (radii applied inline)
   bubble: {
-    borderWidth: 1,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  bubbleInbound: {
+    backgroundColor: '#1E1E26',
+  },
+  bubbleOutboundMediaOnly: {
+    backgroundColor: 'transparent',
+  },
+  bubbleMenuOpen: {
+    opacity: 0.80,
   },
   bubbleMediaOnly: {
     padding: 0,
     paddingHorizontal: 0,
     gap: 0,
-    borderWidth: 0,
-    borderColor: 'transparent',
     overflow: 'hidden',
   },
   mediaCaption: {
@@ -1760,10 +1935,9 @@ const styles = StyleSheet.create({
 
   // Compose
   compose: {
-    borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     paddingTop: 10,
-    backgroundColor: 'rgba(8,7,14,0.97)',
+    backgroundColor: '#050408',
   },
   previewRow: {
     flexDirection: 'row',
@@ -1789,13 +1963,16 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    borderRadius: 22,
-    paddingHorizontal: 15,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
     fontFamily: 'Inter-Regular',
     maxHeight: 120,
-    minHeight: 40,
+    minHeight: 44,
     lineHeight: 20,
   },
   sendBtn: {
@@ -1805,9 +1982,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
