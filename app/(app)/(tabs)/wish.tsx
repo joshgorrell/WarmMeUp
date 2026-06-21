@@ -106,14 +106,16 @@ function WishCard({
 
   return (
     <View style={[styles.wishCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-      {/* Horizontal layout: thumbnail left, content right */}
+      {/* Main row: thumbnail + content */}
       <View style={styles.wishCardRow}>
         {imgUri ? (
-          <Image source={{ uri: imgUri }} style={styles.wishCardThumb} resizeMode="cover" />
+          <View style={styles.wishCardThumbWrap}>
+            <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill as any} resizeMode="cover" />
+          </View>
         ) : null}
 
         <View style={[styles.wishCardBody, !imgUri && styles.wishCardBodyNoImg]}>
-          {/* Title row with more button */}
+          {/* Title + more button */}
           <View style={styles.wishCardTop}>
             <AppText style={[styles.wishTitle, { color: colors.text, flex: 1 }]} numberOfLines={2}>{wish.title}</AppText>
             <TouchableOpacity onPress={() => setShowActions(v => !v)} style={styles.moreBtn} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
@@ -123,17 +125,19 @@ function WishCard({
             </TouchableOpacity>
           </View>
 
-          {/* Meta row: category badge + age */}
-          <View style={styles.wishCardMeta}>
-            {wish.category ? (
-              <View style={[styles.categoryBadge, { backgroundColor: 'rgba(232,99,122,0.12)', borderColor: 'rgba(232,99,122,0.28)' }]}>
-                <AppText style={styles.categoryBadgeText}>
-                  {getCategoryEmoji(wish.category)}  {wish.category}
-                </AppText>
-              </View>
-            ) : null}
-            <AppText style={[styles.wishAge, { color: colors.textMuted }]}>{timeAgo(wish.created_at)}</AppText>
-          </View>
+          {/* Subtitle: added by + age */}
+          <AppText style={[styles.wishSubtitle, { color: colors.textMuted }]}>
+            {isMine ? 'Added by you' : 'Added by partner'} · {timeAgo(wish.created_at)}
+          </AppText>
+
+          {/* Category badge */}
+          {wish.category ? (
+            <View style={[styles.categoryBadge, { backgroundColor: 'rgba(232,99,122,0.12)', borderColor: 'rgba(232,99,122,0.28)', alignSelf: 'flex-start' }]}>
+              <AppText style={styles.categoryBadgeText}>
+                {getCategoryEmoji(wish.category)}  {wish.category}
+              </AppText>
+            </View>
+          ) : null}
 
           {wish.description ? (
             <AppText style={[styles.wishDesc, { color: colors.textSecondary }]} numberOfLines={2}>{wish.description}</AppText>
@@ -144,25 +148,6 @@ function WishCard({
               <AppText style={[styles.linkText, { color: WISH_ACCENT }]} numberOfLines={1}>{wish.link}</AppText>
             </TouchableOpacity>
           ) : null}
-
-          {/* Reaction bar */}
-          <View style={styles.reactionBar}>
-            {REACTIONS.map(emoji => {
-              const count = reactionCounts[emoji] ?? 0;
-              const mine = myReaction === emoji;
-              return (
-                <TouchableOpacity
-                  key={emoji}
-                  onPress={() => onReact(wish, emoji)}
-                  style={[styles.reactionBtn, mine && { backgroundColor: 'rgba(232,99,122,0.15)', borderColor: 'rgba(232,99,122,0.40)' }, !mine && { borderColor: colors.borderSubtle }]}
-                  activeOpacity={0.7}
-                >
-                  <AppText style={styles.reactionEmoji}>{emoji}</AppText>
-                  {count > 0 && <AppText style={[styles.reactionCount, { color: mine ? WISH_ACCENT : colors.textMuted }]}>{count}</AppText>}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
 
           {/* Actions dropdown */}
           {showActions && (
@@ -200,6 +185,25 @@ function WishCard({
             </View>
           )}
         </View>
+      </View>
+
+      {/* Reaction footer — below the main row, always visible */}
+      <View style={[styles.reactionFooter, { borderTopColor: colors.borderSubtle }]}>
+        {REACTIONS.map(emoji => {
+          const count = reactionCounts[emoji] ?? 0;
+          const mine = myReaction === emoji;
+          return (
+            <TouchableOpacity
+              key={emoji}
+              onPress={() => onReact(wish, emoji)}
+              style={[styles.reactionBtn, mine && { backgroundColor: 'rgba(232,99,122,0.15)', borderColor: 'rgba(232,99,122,0.40)' }, !mine && { borderColor: colors.borderSubtle }]}
+              activeOpacity={0.7}
+            >
+              <AppText style={styles.reactionEmoji}>{emoji}</AppText>
+              {count > 0 && <AppText style={[styles.reactionCount, { color: mine ? WISH_ACCENT : colors.textMuted }]}>{count}</AppText>}
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
@@ -1141,23 +1145,25 @@ const styles = StyleSheet.create({
   // Wish card
   wishCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
   wishCardRow: { flexDirection: 'row', alignItems: 'stretch' },
-  wishCardThumb: { width: 76, flexShrink: 0 },
-  wishCardBody: { flex: 1, padding: 10, gap: 3, paddingLeft: 10 },
-  wishCardBodyNoImg: { paddingLeft: 12 },
+  wishCardThumbWrap: { width: 100, alignSelf: 'stretch' },
+  wishCardBody: { flex: 1, padding: 12, gap: 5, paddingLeft: 12 },
+  wishCardBodyNoImg: { paddingLeft: 14 },
   wishCardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   wishCardMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   categoryBadge: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 2 },
   categoryBadgeText: { fontSize: 10, fontFamily: 'Inter-Medium', color: WISH_ACCENT, letterSpacing: 0.2 },
   wishAge: { fontSize: 10, fontFamily: 'Inter-Regular' },
+  wishSubtitle: { fontSize: 11, fontFamily: 'Inter-Regular', lineHeight: 15 },
   moreBtn: { padding: 4, marginLeft: 4, flexShrink: 0 },
   dotRow: { flexDirection: 'row', gap: 3 },
   dot: { width: 3.5, height: 3.5, borderRadius: 2 },
-  wishTitle: { fontSize: 13, fontFamily: 'Inter-SemiBold', lineHeight: 18 },
+  wishTitle: { fontSize: 14, fontFamily: 'Inter-SemiBold', lineHeight: 19 },
   wishDesc: { fontSize: 12, fontFamily: 'Inter-Regular', lineHeight: 15 },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   linkText: { fontSize: 11, fontFamily: 'Inter-Regular', flex: 1 },
 
   // Reactions
+  reactionFooter: { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderTopWidth: StyleSheet.hairlineWidth, flexWrap: 'wrap' },
   reactionBar: { flexDirection: 'row', gap: 5, marginTop: 1, flexWrap: 'wrap' },
   reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 5 },
   reactionEmoji: { fontSize: 13 },
