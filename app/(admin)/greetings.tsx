@@ -231,7 +231,7 @@ export default function GreetingsScreen() {
       {/* Add / Edit Modal */}
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={closeModal}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+          <View style={[styles.modalCard, { backgroundColor: colors.bg3, borderColor: colors.borderSubtle }]}>
             <View style={styles.modalHeader}>
               <AppText style={[styles.modalTitle, { color: colors.text }]}>
                 {modalMode === 'add' ? 'Add Phrase' : 'Edit Phrase'}
@@ -291,7 +291,7 @@ export default function GreetingsScreen() {
       {/* Delete Confirmation Modal */}
       <Modal visible={!!deleteConfirm} transparent animationType="fade" onRequestClose={() => setDeleteConfirm(null)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+          <View style={[styles.modalCard, { backgroundColor: colors.bg3, borderColor: colors.borderSubtle }]}>
             <AppText style={[styles.modalTitle, { color: colors.text, marginBottom: Spacing.sm }]}>Delete Phrase?</AppText>
             <AppText style={[styles.deleteConfirmText, { color: colors.textSecondary }]} numberOfLines={4}>
               &quot;{deleteConfirm?.text}&quot;
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: Spacing.screen,
@@ -390,6 +390,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: Spacing.card,
     gap: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
   },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   modalTitle: { fontSize: FontSize.body, fontFamily: 'Inter-SemiBold' },

@@ -294,8 +294,8 @@ export default function StatsAdmin() {
   const statItems = [
     { label: 'Dice Rolls',    value: totals.dice,         color: '#FFB347' },
     { label: 'Dares Sent',    value: totals.dare,         color: '#FF2E8A' },
-    { label: 'Wishes Sent',  value: totals.tell_me,      color: '#FF8A3D' },
-    { label: 'Wishes Shared', value: totals.wish,         color: '#E8637A' },
+    { label: 'Tell Me',      value: totals.tell_me,      color: '#FF8A3D' },
+    { label: 'Wishes',       value: totals.wish,         color: '#E8637A' },
     { label: 'Chat Msgs',     value: totals.chat,         color: '#69A7FF' },
     { label: 'Dares Skipped', value: totals.dare_skipped, color: '#FF5A5F' },
     { label: 'Dice Skipped',  value: totals.dice_skipped, color: '#FF5A5F' },
