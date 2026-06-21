@@ -549,7 +549,38 @@ export default function VaultViewerScreen() {
   const [isZoomed, setIsZoomed] = useState(false);
   const listRef = useRef<FlatList>(null);
 
-  const handleZoomChange = useCallback((zoomed: boolean) => { setIsZoomed(zoomed); }, []);
+  const isZoomedShared = useSharedValue(false);
+  const translateY = useSharedValue(0);
+
+  const handleBack = useCallback(() => { router.back(); }, [router]);
+
+  const handleZoomChange = useCallback((zoomed: boolean) => {
+    setIsZoomed(zoomed);
+    isZoomedShared.value = zoomed;
+  }, []);
+
+  const swipeDown = Gesture.Pan()
+    .failOffsetX([-15, 15])
+    .activeOffsetY([10, 500])
+    .onUpdate((e) => {
+      'worklet';
+      if (isZoomedShared.value) return;
+      if (e.translationY > 0) translateY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      'worklet';
+      if (isZoomedShared.value) return;
+      if (e.translationY > 120 || e.velocityY > 800) {
+        translateY.value = withSpring(600, { damping: 20, stiffness: 120 });
+        runOnJS(handleBack)();
+      } else {
+        translateY.value = withSpring(0, SPRING);
+      }
+    });
+
+  const animRootStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
 
   const getItemLayout = useCallback((_: any, index: number) => ({
     length: screenWidth,
@@ -589,7 +620,8 @@ export default function VaultViewerScreen() {
   }
 
   return (
-    <View style={styles.root}>
+    <GestureDetector gesture={swipeDown}>
+      <Animated.View style={[styles.root, animRootStyle]}>
       <FlatList
         ref={listRef}
         data={items}
@@ -614,7 +646,7 @@ export default function VaultViewerScreen() {
       {/* Top chrome — back button + position counter */}
       <LinearGradient
         colors={['rgba(0,0,0,0.70)', 'rgba(0,0,0,0.30)', 'transparent']}
-        style={[styles.topGradient, { paddingTop: insets.top + 6 }]}
+        style={[styles.topGradient, { paddingTop: insets.top + 8, height: insets.top + 64 }]}
         pointerEvents="box-none"
       >
         <View style={styles.topRow}>
@@ -628,7 +660,8 @@ export default function VaultViewerScreen() {
           <View style={styles.counterSpacer} />
         </View>
       </LinearGradient>
-    </View>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
@@ -656,7 +689,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 90,
     paddingHorizontal: Spacing.md,
   },
   topRow: {
