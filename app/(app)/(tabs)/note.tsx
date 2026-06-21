@@ -37,13 +37,12 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 function formatTime(iso: string) {
   const d = new Date(iso);
   const now = new Date();
-  if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+  const timeStr = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return timeStr;
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  if (d.toDateString() === yesterday.toDateString()) return `Yesterday · ${timeStr}`;
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${timeStr}`;
 }
 
 function getDividerLabel(iso: string): string {
@@ -165,6 +164,8 @@ function MediaBubble({
   const loaded = signedUrl !== undefined;
   const isBlurred = blurEnabled && !revealed;
   const [imgError, setImgError] = useState(false);
+  const [retryUrl, setRetryUrl] = useState<string | null>(null);
+  const retryAttempted = useRef(false);
   // Fade-in animation for the reveal: 0 = overlay visible, 1 = overlay hidden
   const overlayOpacity = useRef(new Animated.Value(isBlurred ? 1 : 0)).current;
   const prevRevealedRef = useRef(revealed);
@@ -215,10 +216,11 @@ function MediaBubble({
         <View style={styles.mediaPlaceholder}>
           <ShimmerPlaceholder />
         </View>
-      ) : signedUrl && !imgError ? (
+      ) : (retryUrl ?? signedUrl) && !imgError ? (
         <>
           <ExpoImage
-            source={{ uri: signedUrl }}
+            key={retryUrl ?? signedUrl ?? 'img'}
+            source={{ uri: retryUrl ?? signedUrl! }}
             style={[
               StyleSheet.absoluteFill,
               isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.15)' } as any : undefined,
@@ -226,12 +228,27 @@ function MediaBubble({
             contentFit="cover"
             cachePolicy="memory-disk"
             onError={() => {
-              logDebugEvent('chat_message_image_load_error', {
-                messageId: msg.id,
-                signedUrlPresent: !!signedUrl,
-                signedUrlPrefix: signedUrl ? signedUrl.substring(0, 60) : null,
-              });
-              setImgError(true);
+              if (retryAttempted.current) {
+                logDebugEvent('chat_message_image_load_error_hard', { messageId: msg.id });
+                setImgError(true);
+                return;
+              }
+              retryAttempted.current = true;
+              logDebugEvent('chat_message_image_load_error_retrying', { messageId: msg.id });
+              if (msg.media_storage_path) {
+                const bucket = msg.media_storage_bucket ?? 'chat_media';
+                supabase.storage.from(bucket).createSignedUrl(msg.media_storage_path, 12 * 3600)
+                  .then(({ data }) => {
+                    if (data?.signedUrl) {
+                      setRetryUrl(data.signedUrl);
+                    } else {
+                      setImgError(true);
+                    }
+                  })
+                  .catch(() => setImgError(true));
+              } else {
+                setImgError(true);
+              }
             }}
           />
           {/* Native blur via BlurView — matches vault blur quality; blurRadius on expo-image is broken on iOS */}
@@ -248,14 +265,14 @@ function MediaBubble({
           )}
         </View>
       )}
-      {msg.media_type === 'video' && loaded && signedUrl && !isBlurred && !imgError && (
+      {msg.media_type === 'video' && loaded && (retryUrl ?? signedUrl) && !isBlurred && !imgError && (
         <View style={styles.playOverlay}>
           <View style={styles.playCircle}>
             <AppText style={styles.playTriangle}>&#9654;</AppText>
           </View>
         </View>
       )}
-      {loaded && signedUrl && !imgError && (
+      {loaded && (retryUrl ?? signedUrl) && !imgError && (
         <Animated.View
           style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay, { opacity: overlayOpacity }]}
           pointerEvents={isBlurred ? 'none' : 'none'}
@@ -291,11 +308,13 @@ function ChatHeader({
   partnerName,
   partnerAvatarUri,
   hasPartner,
+  partnerIsOnline,
   onBack,
 }: {
   partnerName: string;
   partnerAvatarUri: string | null;
   hasPartner: boolean;
+  partnerIsOnline: boolean;
   onBack: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -308,11 +327,11 @@ function ChatHeader({
       <View style={chatHeaderStyles.centerRow}>
         <View style={chatHeaderStyles.avatarWrap}>
           <Avatar name={partnerName} uri={partnerAvatarUri} size="sm" bgColor="rgba(255,46,138,0.20)" />
-          {hasPartner && <View style={chatHeaderStyles.onlineDot} />}
+          {partnerIsOnline && <View style={chatHeaderStyles.onlineDot} />}
         </View>
         <View>
           <AppText style={chatHeaderStyles.name}>{partnerName}</AppText>
-          {hasPartner && <AppText style={chatHeaderStyles.status}>Active now</AppText>}
+          {partnerIsOnline && <AppText style={chatHeaderStyles.status}>Active now</AppText>}
         </View>
       </View>
 
@@ -467,6 +486,29 @@ export default function ChatTab() {
         if (blurEnabled) setRevealedMedia(new Set());
       };
     }, [blurEnabled])
+  );
+
+  // Real-time presence — tracks whether the partner currently has the app open
+  const [partnerIsOnline, setPartnerIsOnline] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!couple?.id || !user?.id || !hasPartner || !partnerProfile?.id) return;
+      const ch = supabase.channel(`presence:couple_${couple.id}`)
+        .on('presence', { event: 'sync' }, () => {
+          const state = ch.presenceState<{ user_id: string }>();
+          const allPresences = (Object.values(state) as Array<Array<{ user_id: string }>>).flat();
+          setPartnerIsOnline(allPresences.some(p => p.user_id === partnerProfile.id));
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            await ch.track({ user_id: user.id });
+          }
+        });
+      return () => {
+        ch.untrack().then(() => supabase.removeChannel(ch)).catch(() => {});
+        setPartnerIsOnline(false);
+      };
+    }, [couple?.id, user?.id, hasPartner, partnerProfile?.id])
   );
 
   const fetchSignedUrls = useCallback(async (msgs: ChatMessage[]) => {
@@ -1260,6 +1302,7 @@ export default function ChatTab() {
             partnerName={partnerProfile?.display_name ?? (hasPartner ? 'Partner' : 'Chat')}
             partnerAvatarUri={partnerProfile?.avatar_url ?? null}
             hasPartner={hasPartner}
+            partnerIsOnline={partnerIsOnline}
             onBack={() => router.replace('/(app)/(tabs)')}
           />
 
