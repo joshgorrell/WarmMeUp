@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { ensureConfigured } from '@/lib/purchases';
 
 export type SubscriptionPlan = 'Free' | 'Monthly' | 'Annual';
 export type SubscriptionStatus = 'Active' | 'Inactive' | 'Trial';
@@ -99,10 +100,8 @@ export function useSubscription(): SubscriptionState {
       // Secondary: RevenueCat receipt check (native only, own subscription)
       if (Platform.OS !== 'web') {
         try {
-          const Purchases = (await import('react-native-purchases')).default;
-          const apiKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
-          if (apiKey) {
-            Purchases.configure({ apiKey });
+          const Purchases = await ensureConfigured();
+          if (Purchases) {
             const info = await Purchases.getCustomerInfo();
             const entitlement = info.entitlements.active['premium'];
             if (entitlement) {
@@ -150,7 +149,11 @@ export function useSubscription(): SubscriptionState {
       return;
     }
     try {
-      const Purchases = (await import('react-native-purchases')).default;
+      const Purchases = await ensureConfigured();
+      if (!Purchases) {
+        Alert.alert('Unavailable', 'Purchases are not available on this device.');
+        return;
+      }
       const info = await Purchases.restorePurchases();
       const entitlement = info.entitlements.active['premium'];
       if (entitlement) {

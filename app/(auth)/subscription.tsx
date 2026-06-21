@@ -18,6 +18,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { ensureConfigured } from '@/lib/purchases';
 
 type Plan = 'monthly' | 'yearly';
 type Reason = 'expired_trial' | 'post_unpairing' | undefined;
@@ -79,12 +80,8 @@ export default function SubscriptionScreen() {
     }
     (async () => {
       try {
-        const Purchases = (await import('react-native-purchases')).default;
-        const iosKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
-        const androidKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
-        const apiKey = Platform.OS === 'ios' ? iosKey : androidKey;
-        if (!apiKey) { setOfferingsLoaded(true); return; }
-        Purchases.configure({ apiKey });
+        const Purchases = await ensureConfigured();
+        if (!Purchases) { setOfferingsLoaded(true); return; }
         const offerings = await Purchases.getOfferings();
         const current = offerings.current;
         if (current) {
@@ -147,13 +144,13 @@ export default function SubscriptionScreen() {
 
     setLoading(true);
     try {
-      const Purchases = (await import('react-native-purchases')).default;
-      const pkg = packages[selected];
+      const Purchases = await ensureConfigured();
+      const pkg = Purchases ? packages[selected] : null;
       if (!pkg) {
         Alert.alert('Unavailable', 'This plan is currently unavailable. Please try again later.');
         return;
       }
-      const { customerInfo } = await Purchases.purchasePackage(pkg);
+      const { customerInfo } = await Purchases!.purchasePackage(pkg);
       await confirmWithServer(customerInfo.entitlements, selected, null);
       await refreshSubscription();
       router.replace('/(app)/(tabs)');
@@ -172,7 +169,12 @@ export default function SubscriptionScreen() {
     }
     setLoading(true);
     try {
-      const Purchases = (await import('react-native-purchases')).default;
+      const Purchases = await ensureConfigured();
+      if (!Purchases) {
+        Alert.alert('Unavailable', 'Purchases are not available on this device.');
+        setLoading(false);
+        return;
+      }
       const info = await Purchases.restorePurchases();
       const entitlement = info.entitlements.active['premium'];
       if (entitlement) {
