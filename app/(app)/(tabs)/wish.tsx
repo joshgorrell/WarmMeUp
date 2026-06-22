@@ -54,6 +54,8 @@ type TabKey = 'mine' | 'shared' | 'theirs' | 'granted';
 
 interface WishWithReactions extends Wish {
   reactions: WishReaction[];
+  resolvedImageUri?: string | null;
+  resolvedMemoryUri?: string | null;
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -88,22 +90,8 @@ function WishCard({
 }) {
   const { colors } = useTheme();
   const [showActions, setShowActions] = useState(false);
-  const [imgUri, setImgUri] = useState<string | null>(null);
+  const imgUri = wish.resolvedImageUri ?? null;
   const myReaction = wish.reactions.find(r => r.user_id === userId)?.emoji ?? null;
-
-  useEffect(() => {
-    if (!wish.image_storage_path || !wish.image_storage_bucket) return;
-    supabase.storage
-      .from(wish.image_storage_bucket)
-      .createSignedUrl(wish.image_storage_path, 3600)
-      .then(({ data, error }) => {
-        if (error) {
-          logDebugEvent('WISH IMAGE SIGN ERROR', { path: wish.image_storage_path, error: error.message });
-          return;
-        }
-        if (data?.signedUrl) setImgUri(data.signedUrl);
-      });
-  }, [wish.image_storage_path, wish.image_storage_bucket]);
 
   const reactionCounts: Record<string, number> = {};
   wish.reactions.forEach(r => { reactionCounts[r.emoji] = (reactionCounts[r.emoji] ?? 0) + 1; });
@@ -237,8 +225,8 @@ function WishCard({
 
 function GrantedCard({ wish, isMine }: { wish: WishWithReactions; isMine: boolean }) {
   const { colors } = useTheme();
-  const [imgUri, setImgUri] = useState<string | null>(null);
-  const [memImgUri, setMemImgUri] = useState<string | null>(null);
+  const imgUri = wish.resolvedImageUri ?? null;
+  const memImgUri = wish.resolvedMemoryUri ?? null;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -249,29 +237,6 @@ function GrantedCard({ wish, isMine }: { wish: WishWithReactions; isMine: boolea
       ])
     ).start();
   }, []);
-
-  useEffect(() => {
-    if (wish.image_storage_path && wish.image_storage_bucket) {
-      supabase.storage.from(wish.image_storage_bucket).createSignedUrl(wish.image_storage_path, 3600)
-        .then(({ data, error }) => {
-          if (error) {
-            logDebugEvent('WISH IMAGE SIGN ERROR', { path: wish.image_storage_path, error: error.message });
-            return;
-          }
-          if (data?.signedUrl) setImgUri(data.signedUrl);
-        });
-    }
-    if (wish.fulfilled_image_path) {
-      supabase.storage.from('vault').createSignedUrl(wish.fulfilled_image_path, 3600)
-        .then(({ data, error }) => {
-          if (error) {
-            logDebugEvent('WISH MEMORY IMAGE SIGN ERROR', { path: wish.fulfilled_image_path, error: error.message });
-            return;
-          }
-          if (data?.signedUrl) setMemImgUri(data.signedUrl);
-        });
-    }
-  }, [wish]);
 
   return (
     <View style={[styles.grantedCard, { backgroundColor: colors.card, borderColor: 'rgba(240,169,106,0.30)' }]}>
@@ -494,7 +459,7 @@ function WishForm({
           }
         }
       }
-      onSave({ ...result, reactions: initial?.reactions ?? [] });
+      onSave({ ...result, reactions: initial?.reactions ?? [], resolvedImageUri: imgUri ?? null });
     } catch (err: any) {
       const msg = err?.message ?? 'Unknown error';
       logDebugEvent('WISH SAVE ERROR', { error: msg, hasImage: !!imgPath });
@@ -923,7 +888,28 @@ export default function WishTab() {
         reactionMap[r.wish_id].push(r);
       });
 
-      setWishes(wishData.map(w => ({ ...w, reactions: reactionMap[w.id] ?? [] })));
+      // Sign all images in one parallel batch
+      const signed = await Promise.all(
+        wishData.map(async w => {
+          let resolvedImageUri: string | null = null;
+          let resolvedMemoryUri: string | null = null;
+          if (w.image_storage_path && w.image_storage_bucket) {
+            const { data } = await supabase.storage
+              .from(w.image_storage_bucket)
+              .createSignedUrl(w.image_storage_path, 3600);
+            resolvedImageUri = data?.signedUrl ?? null;
+          }
+          if (w.fulfilled_image_path) {
+            const { data } = await supabase.storage
+              .from('vault')
+              .createSignedUrl(w.fulfilled_image_path, 3600);
+            resolvedMemoryUri = data?.signedUrl ?? null;
+          }
+          return { ...w, reactions: reactionMap[w.id] ?? [], resolvedImageUri, resolvedMemoryUri };
+        })
+      );
+
+      setWishes(signed);
     } finally {
       setLoading(false);
     }
