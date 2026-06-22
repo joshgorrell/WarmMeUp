@@ -27,7 +27,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logDebugEvent } from '@/lib/debugLog';
-import { setGalleryItems } from '@/lib/mediaGalleryStore';
+import { setGalleryItems, getCachedUrl, setCachedUrl, evictCachedUrl } from '@/lib/mediaGalleryStore';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -515,8 +515,24 @@ export default function ChatTab() {
     const mediaMessages = msgs.filter(m => m.media_storage_path);
     if (mediaMessages.length === 0) return;
 
-    const byBucket: Record<string, ChatMessage[]> = {};
+    // Seed from cross-navigation module-level cache first
+    const seeded: Record<string, string> = {};
+    const needsFetch: ChatMessage[] = [];
     for (const m of mediaMessages) {
+      const cached = getCachedUrl(m.media_storage_path!);
+      if (cached) {
+        seeded[m.id] = cached;
+      } else {
+        needsFetch.push(m);
+      }
+    }
+    if (Object.keys(seeded).length > 0) {
+      setSignedUrls(prev => ({ ...prev, ...seeded }));
+    }
+    if (needsFetch.length === 0) return;
+
+    const byBucket: Record<string, ChatMessage[]> = {};
+    for (const m of needsFetch) {
       const bucket = m.media_storage_bucket ?? 'chat_media';
       if (!byBucket[bucket]) byBucket[bucket] = [];
       byBucket[bucket].push(m);
@@ -529,7 +545,9 @@ export default function ChatTab() {
         const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
         const pathToUrl = new Map(data?.map(d => [d.path, d.signedUrl]) ?? []);
         for (const m of bucketMsgs) {
-          results[m.id] = pathToUrl.get(m.media_storage_path!) ?? null;
+          const signed = pathToUrl.get(m.media_storage_path!) ?? null;
+          results[m.id] = signed;
+          if (signed) setCachedUrl(m.media_storage_path!, signed);
         }
       })
     );
@@ -558,10 +576,12 @@ export default function ChatTab() {
         // Pre-populate signedUrls from embedded media_url where available.
         const withUrl = sorted.filter(m => m.media_url);
         if (withUrl.length > 0) {
-          setSignedUrls(prev => ({
-            ...prev,
-            ...Object.fromEntries(withUrl.map(m => [m.id, m.media_url!])),
-          }));
+          const urlMap = Object.fromEntries(withUrl.map(m => [m.id, m.media_url!]));
+          setSignedUrls(prev => ({ ...prev, ...urlMap }));
+          // Also seed the cross-nav cache so navigating away and back is instant
+          for (const m of withUrl) {
+            if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url!);
+          }
         }
         const needsFetch = sorted.filter(m => m.media_storage_path && !m.media_url);
         if (needsFetch.length > 0) fetchSignedUrls(needsFetch);
@@ -590,10 +610,11 @@ export default function ChatTab() {
         setMessages(prev => [...sorted, ...prev]);
         const withUrl = sorted.filter(m => m.media_url);
         if (withUrl.length > 0) {
-          setSignedUrls(prev => ({
-            ...prev,
-            ...Object.fromEntries(withUrl.map(m => [m.id, m.media_url!])),
-          }));
+          const urlMap = Object.fromEntries(withUrl.map(m => [m.id, m.media_url!]));
+          setSignedUrls(prev => ({ ...prev, ...urlMap }));
+          for (const m of withUrl) {
+            if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url!);
+          }
         }
         const needsFetch = sorted.filter(m => m.media_storage_path && !m.media_url);
         if (needsFetch.length > 0) fetchSignedUrls(needsFetch);

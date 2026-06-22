@@ -18,7 +18,8 @@ import { awardPoints } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension } from '@/lib/uploadMedia';
 import { logDebugEvent } from '@/lib/debugLog';
-import { setGalleryItems } from '@/lib/mediaGalleryStore';
+import { setGalleryItems, getCachedUrl, setCachedUrl, evictCachedUrl } from '@/lib/mediaGalleryStore';
+import { Image as ExpoImageStatic } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLayout } from '@/hooks/useLayout';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
@@ -171,6 +172,9 @@ export default function VaultScreen() {
             setItems(prev => prev.filter(i => i.id !== updated.id));
             setSignedUrls(prev => { const n = { ...prev }; delete n[updated.id]; return n; });
             setThumbUrls(prev => { const n = { ...prev }; delete n[updated.id]; return n; });
+            const p = (updated as any).storage_path ?? (updated as any).file_path;
+            if (p) evictCachedUrl(p);
+            if ((updated as any).blurred_thumbnail_path) evictCachedUrl((updated as any).blurred_thumbnail_path);
           }
         }
       )
@@ -206,16 +210,36 @@ export default function VaultScreen() {
     const byBucket: Record<string, VaultItem[]> = {};
     const thumbByBucket: Record<string, VaultItem[]> = {};
 
+    // Seed from cross-navigation module-level cache before hitting the network
+    const seededUrls: Record<string, string> = {};
+    const seededThumbs: Record<string, string> = {};
+    for (const item of itemsToFetch) {
+      const path = item.storage_path ?? item.file_path;
+      if (path) {
+        const cached = getCachedUrl(path);
+        if (cached) {
+          seededUrls[item.id] = cached;
+          urlFetchedAtRef.current[item.id] = now; // treat as fresh
+        }
+      }
+      if (item.blurred_thumbnail_path) {
+        const cachedThumb = getCachedUrl(item.blurred_thumbnail_path);
+        if (cachedThumb) seededThumbs[item.id] = cachedThumb;
+      }
+    }
+    if (Object.keys(seededUrls).length > 0) setSignedUrls(prev => ({ ...prev, ...seededUrls }));
+    if (Object.keys(seededThumbs).length > 0) setThumbUrls(prev => ({ ...prev, ...seededThumbs }));
+
     for (const item of itemsToFetch) {
       const bucket = item.storage_bucket ?? 'vault';
       const path = item.storage_path ?? item.file_path;
       if (!path) continue;
       const fetchedAt = urlFetchedAtRef.current[item.id] ?? 0;
-      if (now - fetchedAt < URL_TTL_MS) continue; // still fresh
+      if (now - fetchedAt < URL_TTL_MS) continue; // still fresh (includes cache hits above)
       if (!byBucket[bucket]) byBucket[bucket] = [];
       byBucket[bucket].push(item);
 
-      if (item.blurred_thumbnail_path) {
+      if (item.blurred_thumbnail_path && !seededThumbs[item.id]) {
         if (!thumbByBucket[bucket]) thumbByBucket[bucket] = [];
         thumbByBucket[bucket].push(item);
       }
@@ -227,7 +251,6 @@ export default function VaultScreen() {
         const paths = bucketItems.map(i => (i.storage_path ?? i.file_path)!);
         const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
         if (!urlData) return;
-        // O(1) Map lookup instead of O(n) find per item
         const pathToUrl = new Map(urlData.map(d => [d.path, d.signedUrl]));
         const urlMap: Record<string, string> = {};
         const fetchTs: Record<string, number> = {};
@@ -237,10 +260,17 @@ export default function VaultScreen() {
           if (signed) {
             urlMap[item.id] = signed;
             fetchTs[item.id] = Date.now();
+            setCachedUrl(path!, signed); // persist across navigation
           }
         }
         urlFetchedAtRef.current = { ...urlFetchedAtRef.current, ...fetchTs };
         setSignedUrls(prev => ({ ...prev, ...urlMap }));
+        // Background prefetch full-res images (not videos) — max 3 concurrent
+        const imageItems = bucketItems.filter(i => i.media_type !== 'video' && urlMap[i.id]);
+        for (let i = 0; i < imageItems.length; i += 3) {
+          const batch = imageItems.slice(i, i + 3);
+          await Promise.all(batch.map(it => ExpoImageStatic.prefetch(urlMap[it.id]).catch(() => {})));
+        }
       }),
       // Thumbnail URLs (separate paths — best-effort)
       ...Object.entries(thumbByBucket).map(async ([bucket, bucketItems]) => {
@@ -251,7 +281,10 @@ export default function VaultScreen() {
         const thumbMap: Record<string, string> = {};
         for (const item of bucketItems) {
           const signed = pathToThumb.get(item.blurred_thumbnail_path ?? '');
-          if (signed) thumbMap[item.id] = signed;
+          if (signed) {
+            thumbMap[item.id] = signed;
+            setCachedUrl(item.blurred_thumbnail_path!, signed);
+          }
         }
         setThumbUrls(prev => ({ ...prev, ...thumbMap }));
       }),
@@ -356,8 +389,10 @@ export default function VaultScreen() {
       setItems(prev => prev.filter(i => i.id !== item.id));
       setSignedUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
       setThumbUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
-      const bucket = item.storage_bucket ?? 'vault';
       const path = item.storage_path ?? item.file_path;
+      if (path) evictCachedUrl(path);
+      if (item.blurred_thumbnail_path) evictCachedUrl(item.blurred_thumbnail_path);
+      const bucket = item.storage_bucket ?? 'vault';
       if (path) supabase.storage.from(bucket).remove([path]).catch(() => {});
       if (item.chat_message_id) {
         const { data: chatMsg } = await supabase

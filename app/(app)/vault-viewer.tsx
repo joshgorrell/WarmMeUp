@@ -1,9 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Platform, Share, Image, AppState, Modal, Animated as RNAnimated,
+  Platform, Share, AppState, Modal, Animated as RNAnimated,
   Pressable, FlatList,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import AppText from '@/components/AppText';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,7 +20,7 @@ import Animated, {
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 
-const AnimatedImage = Animated.createAnimatedComponent(Image);
+const AnimatedExpoImage = Animated.createAnimatedComponent(ExpoImage);
 import { awardPoints } from '@/lib/points';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
@@ -65,6 +66,7 @@ function MediaPage({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageNativeSize, setImageNativeSize] = useState<{ w: number; h: number } | null>(null);
   const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoTapped, setVideoTapped] = useState(false);
   const [muted, setMuted] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [screenshotWarning, setScreenshotWarning] = useState(false);
@@ -192,7 +194,7 @@ function MediaPage({
 
   // ─── Video component ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isVideo) return;
+    if (!isVideo || !videoTapped) return;
     let mounted = true;
     (async () => {
       try {
@@ -203,7 +205,7 @@ function MediaPage({
       } catch { if (mounted) setVideoError(true); }
     })();
     return () => { mounted = false; };
-  }, [isVideo]);
+  }, [isVideo, videoTapped]);
 
   // ─── Screenshot detection ──────────────────────────────────────────────────
   useEffect(() => {
@@ -321,11 +323,12 @@ function MediaPage({
         {!mediaUri ? (
           <View style={{ alignItems: 'center', justifyContent: 'center' }}>
             {item.thumbUri ? (
-              <Image
+              <ExpoImage
                 source={{ uri: item.thumbUri }}
                 style={{ width: screenWidth, height: screenWidth, opacity: 0.45 }}
-                resizeMode="cover"
-                blurRadius={Platform.OS === 'ios' ? 18 : 6}
+                contentFit="cover"
+                blurRadius={18}
+                cachePolicy="memory-disk"
               />
             ) : null}
             <ActivityIndicator
@@ -337,15 +340,28 @@ function MediaPage({
         ) : !isVideo ? (
           <>
             {!imageLoaded && (
-              <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" style={StyleSheet.absoluteFillObject} />
+              <>
+                {item.thumbUri ? (
+                  <ExpoImage
+                    source={{ uri: item.thumbUri }}
+                    style={{ width: screenWidth, height: screenWidth, opacity: 0.4 }}
+                    contentFit="cover"
+                    blurRadius={12}
+                    cachePolicy="memory-disk"
+                  />
+                ) : (
+                  <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" style={StyleSheet.absoluteFillObject} />
+                )}
+              </>
             )}
             <GestureDetector gesture={imageGesture}>
-              <AnimatedImage
+              <AnimatedExpoImage
                 source={{ uri: mediaUri }}
                 style={[{ width: imgW, height: imgH }, imageAnimStyle]}
-                resizeMode="contain"
+                contentFit="contain"
+                cachePolicy="memory-disk"
                 onLoad={(e: any) => {
-                  const src = e.nativeEvent?.source;
+                  const src = e.source;
                   if (src?.width && src?.height) setImageNativeSize({ w: src.width, h: src.height });
                   setImageLoaded(true);
                 }}
@@ -354,18 +370,29 @@ function MediaPage({
           </>
         ) : (
           <View style={{ width: availW, height: availH, alignItems: 'center', justifyContent: 'center' }}>
-            {!avLoaded && !videoError && (
-              <>
-                {item.thumbUri ? (
-                  <Image
-                    source={{ uri: item.thumbUri }}
-                    style={[StyleSheet.absoluteFillObject, { opacity: 0.45 }]}
-                    resizeMode="cover"
-                    blurRadius={Platform.OS === 'ios' ? 14 : 5}
-                  />
-                ) : null}
-                <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
-              </>
+            {/* Always show the thumbnail poster for videos */}
+            {item.thumbUri && !avLoaded && (
+              <ExpoImage
+                source={{ uri: item.thumbUri }}
+                style={[StyleSheet.absoluteFillObject, { opacity: 0.5 }]}
+                contentFit="cover"
+                blurRadius={Platform.OS === 'ios' ? 14 : 5}
+                cachePolicy="memory-disk"
+              />
+            )}
+            {!videoTapped && !videoError && (
+              <TouchableOpacity
+                style={styles.playBtn}
+                activeOpacity={0.8}
+                onPress={() => { setVideoTapped(true); setVideoPlaying(true); }}
+              >
+                <View style={styles.playBtnInner}>
+                  <Play color="#fff" size={26} strokeWidth={2} />
+                </View>
+              </TouchableOpacity>
+            )}
+            {videoTapped && !avLoaded && !videoError && (
+              <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
             )}
             {videoError && <AppText style={styles.videoErrorText}>Video playback unavailable</AppText>}
             {avLoaded && VideoComponent && (
@@ -375,7 +402,7 @@ function MediaPage({
                   source={{ uri: mediaUri ?? undefined }}
                   style={{ width: availW, height: availH }}
                   isMuted={muted}
-                  shouldPlay={false}
+                  shouldPlay={videoPlaying}
                   onPlaybackStatusUpdate={(status: any) => { if (status.isLoaded) setVideoPlaying(status.isPlaying); }}
                   onError={() => setVideoError(true)}
                   useNativeControls={Platform.OS === 'web'}
