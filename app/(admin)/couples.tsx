@@ -32,6 +32,7 @@ export default function CouplesAdmin() {
   const insets = useSafeAreaInsets();
   const [couples, setCouples] = useState<CoupleRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<CoupleRow | null>(null);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -104,7 +105,7 @@ export default function CouplesAdmin() {
 
   return (
     <AppShell scrollable={false} noTopPadding>
-      <ScreenHeader title="Couples & Users" onBack={() => router.back()} />
+      <ScreenHeader title="Couples" onBack={() => router.back()} />
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -112,40 +113,60 @@ export default function CouplesAdmin() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + Spacing.xl }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          {couples.length === 0 && (
-            <View style={styles.emptyWrap}>
-              <Users color={colors.textMuted} size={36} strokeWidth={1.5} />
-              <AppText style={[styles.emptyText, { color: colors.textMuted }]}>No couples registered yet.</AppText>
-            </View>
-          )}
-          {couples.map(c => (
-            <TouchableOpacity
-              key={c.id}
-              style={[styles.coupleRow, { backgroundColor: colors.card, borderColor: c.active ? colors.borderSubtle : 'rgba(255,90,95,0.25)' }]}
-              onPress={() => openDetail(c)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.avatarPair, { backgroundColor: c.active ? 'rgba(255,46,138,0.10)' : 'rgba(255,90,95,0.10)' }]}>
-                <AppText style={styles.avatarEmoji}>{c.active ? '❤️' : '🔒'}</AppText>
-              </View>
-              <View style={{ flex: 1 }}>
-                <AppText style={[styles.coupleName, { color: colors.text }]}>
-                  {c.user_a_name}{c.user_b_name ? ` & ${c.user_b_name}` : ' (unpaired)'}
+          <AppTextInput
+            style={[styles.searchInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search couples…"
+            placeholderTextColor={colors.textMuted}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          {(() => {
+            const q = search.trim().toLowerCase();
+            const filtered = q
+              ? couples.filter(c =>
+                  c.user_a_name.toLowerCase().includes(q) ||
+                  (c.user_b_name ?? '').toLowerCase().includes(q)
+                )
+              : couples;
+            if (filtered.length === 0) return (
+              <View style={styles.emptyWrap}>
+                <Users color={colors.textMuted} size={36} strokeWidth={1.5} />
+                <AppText style={[styles.emptyText, { color: colors.textMuted }]}>
+                  {q ? 'No couples match your search.' : 'No couples registered yet.'}
                 </AppText>
-                <View style={styles.metaRow}>
-                  <View style={[styles.statusBadge, { backgroundColor: c.active ? 'rgba(51,209,122,0.12)' : 'rgba(255,90,95,0.12)' }]}>
-                    <AppText style={[styles.statusText, { color: c.active ? '#33D17A' : colors.danger }]}>
-                      {c.active ? 'Active' : 'Inactive'}
+              </View>
+            );
+            return filtered.map(c => (
+              <TouchableOpacity
+                key={c.id}
+                style={[styles.coupleRow, { backgroundColor: colors.card, borderColor: c.active ? colors.borderSubtle : 'rgba(255,90,95,0.25)' }]}
+                onPress={() => openDetail(c)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.avatarPair, { backgroundColor: c.active ? 'rgba(255,46,138,0.10)' : 'rgba(255,90,95,0.10)' }]}>
+                  <AppText style={styles.avatarEmoji}>{c.active ? '❤️' : '🔒'}</AppText>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <AppText style={[styles.coupleName, { color: colors.text }]}>
+                    {c.user_a_name}{c.user_b_name ? ` & ${c.user_b_name}` : ' (unpaired)'}
+                  </AppText>
+                  <View style={styles.metaRow}>
+                    <View style={[styles.statusBadge, { backgroundColor: c.active ? 'rgba(51,209,122,0.12)' : 'rgba(255,90,95,0.12)' }]}>
+                      <AppText style={[styles.statusText, { color: c.active ? '#33D17A' : colors.danger }]}>
+                        {c.active ? 'Active' : 'Inactive'}
+                      </AppText>
+                    </View>
+                    <AppText style={[styles.dateText, { color: colors.textMuted }]}>
+                      {new Date(c.created_at).toLocaleDateString()}
                     </AppText>
                   </View>
-                  <AppText style={[styles.dateText, { color: colors.textMuted }]}>
-                    {new Date(c.created_at).toLocaleDateString()}
-                  </AppText>
                 </View>
-              </View>
-              <ChevronRight color={colors.textMuted} size={16} />
-            </TouchableOpacity>
-          ))}
+                <ChevronRight color={colors.textMuted} size={16} />
+              </TouchableOpacity>
+            ));
+          })()}
         </ScrollView>
       )}
 
@@ -244,6 +265,14 @@ export default function CouplesAdmin() {
 const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingHorizontal: Spacing.screen, gap: Spacing.sm },
+  searchInput: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+  },
   emptyWrap: { alignItems: 'center', paddingTop: 60, gap: Spacing.md },
   emptyText: { fontSize: FontSize.body, fontFamily: 'Inter-Regular' },
   coupleRow: {

@@ -284,8 +284,8 @@ export default function AdminDashboard() {
       route: '/(admin)/prompts',
     },
     {
-      label: 'Couples & Users',
-      sub: 'View all couples, manage accounts',
+      label: 'Couples',
+      sub: 'View and manage all couple accounts',
       icon: <Users color="#FF2E8A" size={22} strokeWidth={2} />,
       color: '#FF2E8A',
       bg: 'rgba(255,46,138,0.10)',
@@ -311,8 +311,8 @@ export default function AdminDashboard() {
       route: '/(admin)/points-config',
     },
     {
-      label: 'Manage Users',
-      sub: 'Grant or revoke admin privileges',
+      label: 'Users & Roles',
+      sub: 'View all users and manage admin roles',
       icon: <UserCog color="#60C8FF" size={22} strokeWidth={2} />,
       color: '#60C8FF',
       bg: 'rgba(96,200,255,0.10)',

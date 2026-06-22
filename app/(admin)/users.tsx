@@ -4,6 +4,7 @@ import {
   Modal, Alert, ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
+import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronRight, UserCog, X, ShieldCheck, ShieldOff, Crown } from 'lucide-react-native';
@@ -22,26 +23,55 @@ interface UserRow {
   created_at: string;
 }
 
+interface CoupleContext {
+  partnerName: string | null;
+  active: boolean;
+}
+
 export default function UsersAdmin() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const { profile: myProfile, isSuperAdmin } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [coupleMap, setCoupleMap] = useState<Record<string, CoupleContext>>({});
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<UserRow | null>(null);
   const [saving, setSaving] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, display_name, is_admin, is_super_admin, created_at')
-      .order('created_at', { ascending: true });
-    if (error) {
-      console.error('[ADMIN USERS LOAD ERROR]', error.message);
+    const [profilesResult, couplesResult] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, display_name, is_admin, is_super_admin, created_at')
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('couples')
+        .select('user_a_id, user_b_id, active'),
+    ]);
+
+    if (profilesResult.error) {
+      console.error('[ADMIN USERS LOAD ERROR]', profilesResult.error.message);
     }
-    setUsers(data ?? []);
+
+    const profileList = profilesResult.data ?? [];
+    const nameMap = Object.fromEntries(profileList.map(p => [p.id, p.display_name]));
+
+    const map: Record<string, CoupleContext> = {};
+    for (const couple of couplesResult.data ?? []) {
+      const { user_a_id, user_b_id, active } = couple;
+      if (user_a_id) {
+        map[user_a_id] = { partnerName: user_b_id ? (nameMap[user_b_id] ?? 'Unknown') : null, active };
+      }
+      if (user_b_id) {
+        map[user_b_id] = { partnerName: nameMap[user_a_id] ?? 'Unknown', active };
+      }
+    }
+
+    setUsers(profileList);
+    setCoupleMap(map);
     setLoading(false);
   }, []);
 
@@ -88,7 +118,7 @@ export default function UsersAdmin() {
 
   return (
     <AppShell scrollable={false} noTopPadding>
-      <ScreenHeader title="Manage Users" onBack={() => router.back()} />
+      <ScreenHeader title="Users & Roles" onBack={() => router.back()} />
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -96,62 +126,84 @@ export default function UsersAdmin() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + Spacing.xl }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          {users.length === 0 && (
-            <View style={styles.emptyWrap}>
-              <UserCog color={colors.textMuted} size={36} strokeWidth={1.5} />
-              <AppText style={[styles.emptyText, { color: colors.textMuted }]}>No users found.</AppText>
-            </View>
-          )}
-          {users.map(u => (
-            <TouchableOpacity
-              key={u.id}
-              style={[styles.userRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-              onPress={() => setSelected(u)}
-              activeOpacity={0.8}
-            >
-              <View style={[
-                styles.avatarCircle,
-                { backgroundColor: u.is_super_admin ? 'rgba(255,179,0,0.15)' : u.is_admin ? 'rgba(255,46,138,0.10)' : 'rgba(120,120,130,0.10)' },
-              ]}>
-                {u.is_super_admin ? (
-                  <Crown color="#FFB300" size={20} strokeWidth={2} />
-                ) : u.is_admin ? (
-                  <ShieldCheck color="#FF2E8A" size={20} strokeWidth={2} />
-                ) : (
-                  <UserCog color={colors.textMuted} size={20} strokeWidth={1.5} />
-                )}
+          <AppTextInput
+            style={[styles.searchInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search users…"
+            placeholderTextColor={colors.textMuted}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          {(() => {
+            const q = search.trim().toLowerCase();
+            const filtered = q
+              ? users.filter(u => u.display_name.toLowerCase().includes(q))
+              : users;
+            if (filtered.length === 0) return (
+              <View style={styles.emptyWrap}>
+                <UserCog color={colors.textMuted} size={36} strokeWidth={1.5} />
+                <AppText style={[styles.emptyText, { color: colors.textMuted }]}>
+                  {q ? 'No users match your search.' : 'No users found.'}
+                </AppText>
               </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.nameRow}>
-                  <AppText style={[styles.userName, { color: colors.text }]}>{u.display_name}</AppText>
-                  {u.id === myProfile?.id && (
-                    <View style={[styles.youBadge, { backgroundColor: 'rgba(120,120,130,0.12)' }]}>
-                      <AppText style={[styles.youBadgeText, { color: colors.textMuted }]}>YOU</AppText>
+            );
+            return filtered.map(u => {
+              const ctx = coupleMap[u.id];
+              return (
+                <TouchableOpacity
+                  key={u.id}
+                  style={[styles.userRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+                  onPress={() => setSelected(u)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[
+                    styles.avatarCircle,
+                    { backgroundColor: u.is_super_admin ? 'rgba(255,179,0,0.15)' : u.is_admin ? 'rgba(255,46,138,0.10)' : 'rgba(120,120,130,0.10)' },
+                  ]}>
+                    {u.is_super_admin ? (
+                      <Crown color="#FFB300" size={20} strokeWidth={2} />
+                    ) : u.is_admin ? (
+                      <ShieldCheck color="#FF2E8A" size={20} strokeWidth={2} />
+                    ) : (
+                      <UserCog color={colors.textMuted} size={20} strokeWidth={1.5} />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.nameRow}>
+                      <AppText style={[styles.userName, { color: colors.text }]}>{u.display_name}</AppText>
+                      {u.id === myProfile?.id && (
+                        <View style={[styles.youBadge, { backgroundColor: 'rgba(120,120,130,0.12)' }]}>
+                          <AppText style={[styles.youBadgeText, { color: colors.textMuted }]}>YOU</AppText>
+                        </View>
+                      )}
                     </View>
-                  )}
-                </View>
-                <View style={styles.metaRow}>
-                  {u.is_super_admin ? (
-                    <View style={[styles.roleBadge, { backgroundColor: 'rgba(255,179,0,0.12)' }]}>
-                      <AppText style={[styles.roleText, { color: '#FFB300' }]}>Super Admin</AppText>
+                    <View style={styles.metaRow}>
+                      {u.is_super_admin ? (
+                        <View style={[styles.roleBadge, { backgroundColor: 'rgba(255,179,0,0.12)' }]}>
+                          <AppText style={[styles.roleText, { color: '#FFB300' }]}>Super Admin</AppText>
+                        </View>
+                      ) : u.is_admin ? (
+                        <View style={[styles.roleBadge, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
+                          <AppText style={[styles.roleText, { color: '#FF2E8A' }]}>Admin</AppText>
+                        </View>
+                      ) : (
+                        <View style={[styles.roleBadge, { backgroundColor: 'rgba(120,120,130,0.08)' }]}>
+                          <AppText style={[styles.roleText, { color: colors.textMuted }]}>User</AppText>
+                        </View>
+                      )}
+                      {ctx ? (
+                        <AppText style={[styles.dateText, { color: ctx.active ? colors.textMuted : colors.danger }]}>
+                          {ctx.partnerName ? `w/ ${ctx.partnerName}` : 'Solo'}
+                        </AppText>
+                      ) : null}
                     </View>
-                  ) : u.is_admin ? (
-                    <View style={[styles.roleBadge, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
-                      <AppText style={[styles.roleText, { color: '#FF2E8A' }]}>Admin</AppText>
-                    </View>
-                  ) : (
-                    <View style={[styles.roleBadge, { backgroundColor: 'rgba(120,120,130,0.08)' }]}>
-                      <AppText style={[styles.roleText, { color: colors.textMuted }]}>User</AppText>
-                    </View>
-                  )}
-                  <AppText style={[styles.dateText, { color: colors.textMuted }]}>
-                    Joined {new Date(u.created_at).toLocaleDateString()}
-                  </AppText>
-                </View>
-              </View>
-              <ChevronRight color={colors.textMuted} size={16} />
-            </TouchableOpacity>
-          ))}
+                  </View>
+                  <ChevronRight color={colors.textMuted} size={16} />
+                </TouchableOpacity>
+              );
+            });
+          })()}
         </ScrollView>
       )}
 
@@ -180,6 +232,26 @@ export default function UsersAdmin() {
                     {selected.is_super_admin ? 'Super Admin' : selected.is_admin ? 'Admin' : 'Regular User'}
                   </AppText>
                 </View>
+
+                {coupleMap[selected.id] ? (
+                  <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+                    <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>COUPLE</AppText>
+                    <AppText style={[styles.detailValue, { color: colors.text }]}>
+                      {coupleMap[selected.id].partnerName
+                        ? `Paired with ${coupleMap[selected.id].partnerName}`
+                        : 'Solo (no partner yet)'}
+                    </AppText>
+                    <View style={[styles.statusBadge, {
+                      backgroundColor: coupleMap[selected.id].active ? 'rgba(51,209,122,0.12)' : 'rgba(255,90,95,0.12)',
+                      alignSelf: 'flex-start',
+                      marginTop: 4,
+                    }]}>
+                      <AppText style={[styles.statusText, { color: coupleMap[selected.id].active ? '#33D17A' : '#FF5A5F' }]}>
+                        {coupleMap[selected.id].active ? 'Active' : 'Inactive'}
+                      </AppText>
+                    </View>
+                  </View>
+                ) : null}
 
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                   <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>MEMBER SINCE</AppText>
@@ -254,8 +326,18 @@ export default function UsersAdmin() {
 const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingHorizontal: Spacing.screen, gap: Spacing.sm },
+  searchInput: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+  },
   emptyWrap: { alignItems: 'center', paddingTop: 60, gap: Spacing.md },
   emptyText: { fontSize: FontSize.body, fontFamily: 'Inter-Regular' },
+  statusBadge: { borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
+  statusText: { fontSize: 10, fontFamily: 'Inter-Bold' },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
