@@ -412,8 +412,8 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const myName = profile?.display_name ?? 'You';
-  const partnerName = partnerProfile?.display_name ?? 'Partner';
+  const myName = profile?.first_name || profile?.display_name || 'You';
+  const partnerName = partnerProfile?.first_name || partnerProfile?.display_name || 'Partner';
   const total = myScore + partnerScore;
   const myPct = total > 0 ? myScore / total : 0.5;
   const pointsEnabled = (couple?.points_enabled ?? true) && hasPartner;
