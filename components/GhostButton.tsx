@@ -33,7 +33,7 @@ export default function GhostButton({
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.6}
-      style={[styles.btn, { height: small ? 40 : 48 }, style, disabled && styles.disabled]}
+      style={[styles.btn, { minHeight: small ? 40 : 48 }, style, disabled && styles.disabled]}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
@@ -60,6 +60,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 18,
+    paddingVertical: 10,
     backgroundColor: 'transparent',
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },

@@ -39,7 +39,7 @@ export default function SecondaryButton({
         {
           borderColor: danger ? colors.danger : 'rgba(255,255,255,0.12)',
           backgroundColor: danger ? 'rgba(255,90,95,0.08)' : colors.card,
-          height: small ? 42 : 52,
+          minHeight: small ? 42 : 52,
         },
         style,
         (disabled || loading) && styles.disabled,
@@ -71,6 +71,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 28,
+    paddingVertical: 12,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   label: {

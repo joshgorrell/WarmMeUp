@@ -63,14 +63,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   gradient: {
-    height: 54,
+    minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
+    paddingVertical: 14,
   },
   gradientSmall: {
-    height: 42,
+    minHeight: 42,
     paddingHorizontal: 20,
+    paddingVertical: 10,
   },
   row: {
     flexDirection: 'row',

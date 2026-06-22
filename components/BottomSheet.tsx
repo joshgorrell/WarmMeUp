@@ -112,12 +112,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FontSize.h2,
     fontFamily: 'Inter-Bold',
-    lineHeight: 30,
   },
   subtitle: {
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
-    lineHeight: 18,
   },
   closeBtn: {
     width: 36,

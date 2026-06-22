@@ -2,7 +2,7 @@ import React from 'react';
 import { TextInput, TextInputProps } from 'react-native';
 
 const AppTextInput = React.forwardRef<TextInput, TextInputProps>(
-  ({ allowFontScaling = true, maxFontSizeMultiplier = 1.5, ...props }, ref) => (
+  ({ allowFontScaling = true, maxFontSizeMultiplier = 1.3, ...props }, ref) => (
     <TextInput
       ref={ref}
       allowFontScaling={allowFontScaling}
