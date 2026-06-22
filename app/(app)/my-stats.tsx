@@ -506,10 +506,9 @@ export default function MyStatsScreen() {
                 <Avatar name={myName} uri={profile?.avatar_url} size="md" />
                 <AppText style={[styles.vsName, { color: colors.textSecondary }]}>{myName}</AppText>
                 <AppText style={[styles.vsPts, { color: colors.text }]}>{myPts}</AppText>
-                <AppText style={styles.vsSparksLabel}>Sparks ⚡</AppText>
               </View>
               <View style={styles.vsHeartWrap}>
-                <Heart color="#FF2E8A" size={80} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
+                <Heart color="#FF2E8A" size={48} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
                 <AppText style={styles.vsHeartScore}>{totalPts}</AppText>
                 <AppText style={styles.vsHeartLabel}>Together Sparks</AppText>
               </View>
@@ -517,7 +516,6 @@ export default function MyStatsScreen() {
                 <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="md" />
                 <AppText style={[styles.vsName, { color: colors.textSecondary }]}>{partnerName}</AppText>
                 <AppText style={[styles.vsPts, { color: colors.text }]}>{partnerPts}</AppText>
-                <AppText style={styles.vsSparksLabel}>Sparks ⚡</AppText>
               </View>
             </View>
             {totalPts > 0 && (
@@ -722,11 +720,10 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 60, paddingTop: Spacing.md },
   vsCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.card, marginBottom: Spacing.lg, gap: Spacing.md },
-  vsInner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  vsInner: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md },
   vsSide: { flex: 1, alignItems: 'center', gap: 4 },
   vsName: { fontSize: 11, fontFamily: 'Inter-Medium', letterSpacing: 0.3 },
   vsPts: { fontSize: 36, fontFamily: 'Inter-Bold', lineHeight: 42 },
-  vsSparksLabel: { fontSize: 12, fontFamily: 'Inter-SemiBold', color: '#FF8A3D' },
   vsHeartWrap: { alignItems: 'center', gap: 2 },
   vsHeartScore: { fontSize: 22, fontFamily: 'Inter-Bold', color: '#fff', lineHeight: 26 },
   vsHeartLabel: { fontSize: 10, fontFamily: 'Inter-SemiBold', color: '#FF2E8A', textAlign: 'center' },
