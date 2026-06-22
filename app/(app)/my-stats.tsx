@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { MonthlyScore, PointEvent } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
+import Avatar from '@/components/Avatar';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -502,9 +503,7 @@ export default function MyStatsScreen() {
           <LinearGradient colors={['rgba(255,179,71,0.15)', 'rgba(255,46,138,0.10)']} style={[styles.vsCard, { borderColor: colors.borderSubtle }]}>
             <View style={styles.vsInner}>
               <View style={styles.vsSide}>
-                <View style={[styles.vsAvatar, { backgroundColor: 'rgba(255,90,61,0.20)' }]}>
-                  <AppText style={[styles.vsAvatarText, { color: '#FF5A3D' }]}>{myName.charAt(0).toUpperCase()}</AppText>
-                </View>
+                <Avatar name={myName} uri={profile?.avatar_url} size="md" />
                 <AppText style={[styles.vsName, { color: colors.textSecondary }]}>{myName}</AppText>
                 <AppText style={[styles.vsPts, { color: colors.text }]}>{myPts}</AppText>
                 <AppText style={styles.vsSparksLabel}>Sparks ⚡</AppText>
@@ -515,9 +514,7 @@ export default function MyStatsScreen() {
                 <AppText style={styles.vsHeartLabel}>Together Sparks</AppText>
               </View>
               <View style={[styles.vsSide, { alignItems: 'flex-end' }]}>
-                <View style={[styles.vsAvatar, { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
-                  <AppText style={[styles.vsAvatarText, { color: '#FF8A3D' }]}>{partnerName.charAt(0).toUpperCase()}</AppText>
-                </View>
+                <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="md" />
                 <AppText style={[styles.vsName, { color: colors.textSecondary }]}>{partnerName}</AppText>
                 <AppText style={[styles.vsPts, { color: colors.text }]}>{partnerPts}</AppText>
                 <AppText style={styles.vsSparksLabel}>Sparks ⚡</AppText>
@@ -727,19 +724,10 @@ const styles = StyleSheet.create({
   vsCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.card, marginBottom: Spacing.lg, gap: Spacing.md },
   vsInner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   vsSide: { flex: 1, alignItems: 'center', gap: 4 },
-  vsAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  vsAvatarText: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold' },
   vsName: { fontSize: 11, fontFamily: 'Inter-Medium', letterSpacing: 0.3 },
   vsPts: { fontSize: 36, fontFamily: 'Inter-Bold', lineHeight: 42 },
   vsSparksLabel: { fontSize: 12, fontFamily: 'Inter-SemiBold', color: '#FF8A3D' },
-  vsHeartWrap: {
-    alignItems: 'center',
-    gap: 2,
-    shadowColor: '#FF2E8A',
-    shadowRadius: 16,
-    shadowOpacity: 0.65,
-    shadowOffset: { width: 0, height: 0 },
-  },
+  vsHeartWrap: { alignItems: 'center', gap: 2 },
   vsHeartScore: { fontSize: 22, fontFamily: 'Inter-Bold', color: '#fff', lineHeight: 26 },
   vsHeartLabel: { fontSize: 10, fontFamily: 'Inter-SemiBold', color: '#FF2E8A', textAlign: 'center' },
   progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
