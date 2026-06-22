@@ -677,7 +677,7 @@ export default function DebugScreen() {
   }, []);
 
   const runV38Probes = useCallback(async () => {
-    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+    const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
     const base = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
     const ranAt = new Date().toISOString();
 
@@ -1200,7 +1200,7 @@ export default function DebugScreen() {
       setPushTest(p => ({ ...p, token_saved_to_db: tokenSaved }));
 
       const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+      const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setPushTest(p => ({ ...p, running: false, top_error: 'No active session' }));
@@ -1872,6 +1872,10 @@ export default function DebugScreen() {
               <Row label="client.anonKeyProjectRef"      value={diag.clientAnonKeyProjectRefDecoded} />
               <Row label="client.hasAnonKey"             value={diag.clientHasAnonKey} />
               <Row label="sourcesMatch"                  value={diag.sourcesMatch} />
+              <Row label="anonKey.rawLength"             value={diag.anonKeyLengthRaw} />
+              <Row label="anonKey.trimmedLength"         value={diag.anonKeyLengthTrimmed} />
+              <Row label="anonKey.hadWhitespace"         value={diag.anonKeyEndsWithNewline} />
+              <Row label="anonKey.rawLastCharsJSON"      value={diag.anonKeyRawLastCharsJSON} />
               <Row label="fetchWrapper"                  value={diag.fetchWrapper ?? 'unknown'} />
               <Section title="Auth Client Internals (V25)" />
               <Row label="authClientSource"              value="supabase.auth (shared lib/supabase.ts)" />

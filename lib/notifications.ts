@@ -108,13 +108,14 @@ export async function notifyPartner(payload: {
 
     const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
     if (!baseUrl.startsWith('https://')) return;
+    const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
     const url = `${baseUrl}/functions/v1/notify-partner`;
     fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
-        Apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+        Apikey: anonKey,
       },
       body: JSON.stringify(payload),
     }).catch(() => {});
