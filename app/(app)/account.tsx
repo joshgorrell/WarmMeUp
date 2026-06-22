@@ -1633,7 +1633,7 @@ export default function AccountScreen() {
             </View>
           ) : (
             <TouchableOpacity onPress={startEditName} style={styles.nameRow} activeOpacity={0.7}>
-              <AppText style={[styles.name, { color: colors.text }]}>{profile ? `${profile.first_name} ${profile.last_name}`.trim() || profile.display_name : 'Your Name'}</AppText>
+              <AppText style={[styles.name, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">{profile ? `${profile.first_name} ${profile.last_name}`.trim() || profile.display_name : 'Your Name'}</AppText>
               <Pencil color={colors.textMuted} size={14} strokeWidth={2} />
             </TouchableOpacity>
           )}

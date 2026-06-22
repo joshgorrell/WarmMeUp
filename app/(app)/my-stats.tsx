@@ -504,7 +504,7 @@ export default function MyStatsScreen() {
             <View style={styles.vsInner}>
               <View style={styles.vsSide}>
                 <Avatar name={myName} uri={profile?.avatar_url} size="md" />
-                <AppText style={[styles.vsName, { color: colors.textSecondary }]}>{myName}</AppText>
+                <AppText style={[styles.vsName, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{myName}</AppText>
                 <AppText style={[styles.vsPts, { color: colors.text }]}>{myPts}</AppText>
               </View>
               <View style={styles.vsHeartWrap}>
@@ -514,7 +514,7 @@ export default function MyStatsScreen() {
               </View>
               <View style={[styles.vsSide, { alignItems: 'flex-end' }]}>
                 <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="md" />
-                <AppText style={[styles.vsName, { color: colors.textSecondary }]}>{partnerName}</AppText>
+                <AppText style={[styles.vsName, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{partnerName}</AppText>
                 <AppText style={[styles.vsPts, { color: colors.text }]}>{partnerPts}</AppText>
               </View>
             </View>
@@ -580,12 +580,12 @@ export default function MyStatsScreen() {
               <View style={styles.catValues}>
                 <View style={styles.catVal}>
                   <AppText style={[styles.catNum, { color: colors.text }]}>{cat.myVal}</AppText>
-                  <AppText style={[styles.catValLabel, { color: colors.textMuted }]}>{myFirstName}</AppText>
+                  <AppText style={[styles.catValLabel, { color: colors.textMuted }]} numberOfLines={1} ellipsizeMode="tail">{myFirstName}</AppText>
                 </View>
                 <View style={[styles.catDivider, { backgroundColor: colors.borderSubtle }]} />
                 <View style={styles.catVal}>
                   <AppText style={[styles.catNum, { color: colors.text }]}>{cat.partnerVal}</AppText>
-                  <AppText style={[styles.catValLabel, { color: colors.textMuted }]}>{partnerFirstName}</AppText>
+                  <AppText style={[styles.catValLabel, { color: colors.textMuted }]} numberOfLines={1} ellipsizeMode="tail">{partnerFirstName}</AppText>
                 </View>
               </View>
             </View>

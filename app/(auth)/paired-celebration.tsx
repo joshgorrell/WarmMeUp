@@ -149,7 +149,7 @@ export default function PairedCelebrationScreen() {
           <AppText style={styles.heading}>You're connected!</AppText>
           {partnerName ? (
             <AppText style={styles.sub}>
-              You and <AppText style={styles.partnerName}>{partnerName}</AppText> are now paired.{'\n'}
+              You and <AppText style={styles.partnerName} numberOfLines={1} ellipsizeMode="tail">{partnerName}</AppText> are now paired.{'\n'}
               Your private space is ready.
             </AppText>
           ) : (
