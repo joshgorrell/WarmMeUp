@@ -451,11 +451,12 @@ export default function HomeScreen() {
         <View style={styles.scoreRow}>
           <Avatar name={myName} uri={profile?.avatar_url} size="sm" bgColor="rgba(255,46,138,0.18)" />
           <AppText style={[styles.scoreName, { color: colors.textSecondary }]} numberOfLines={1}>{myName}</AppText>
-          <AppText style={[styles.scorePts, { color: colors.text }]}>{myScore}</AppText>
+          <AppText style={[styles.scorePts, { color: colors.text }]}>{myScore} ⚡</AppText>
           <View style={styles.scoreVs}>
-            <Heart color="#FF2E8A" size={11} fill="rgba(255,46,138,0.20)" strokeWidth={2} />
+            <Heart color="#FF2E8A" size={24} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
+            <AppText style={styles.scoreHeartNum}>{total}</AppText>
           </View>
-          <AppText style={[styles.scorePts, { color: colors.text }]}>{partnerScore}</AppText>
+          <AppText style={[styles.scorePts, { color: colors.text }]}>{partnerScore} ⚡</AppText>
           <AppText style={[styles.scoreName, { color: colors.textSecondary, textAlign: 'right' }]} numberOfLines={1}>{partnerName}</AppText>
           <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="sm" bgColor="rgba(255,138,61,0.18)" />
         </View>
@@ -763,7 +764,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   scoreVs: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scoreHeartNum: {
+    position: 'absolute',
+    fontSize: 9,
+    fontFamily: 'Inter-Bold',
+    color: '#fff',
   },
   barTrack: {
     height: 3,

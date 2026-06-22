@@ -1558,7 +1558,7 @@ export default function AccountScreen() {
           <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
             <RotateCcw color="#FFB347" size={18} strokeWidth={2} />
           </View>
-          <AppText style={[styles.menuText, { color: colors.text }]}>Reset Points</AppText>
+          <AppText style={[styles.menuText, { color: colors.text }]}>Reset Sparks</AppText>
           <ChevronRight color={colors.textMuted} size={16} />
         </TouchableOpacity>
 
@@ -1828,7 +1828,7 @@ export default function AccountScreen() {
         }
       >
         <SettingsRow
-          label="Points System"
+          label="Sparks System"
           sub="Show scores, leaderboard, and Cash In features"
           toggle
           value={optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)}
@@ -2043,9 +2043,9 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,179,71,0.12)' }]}>
                   <RotateCcw color="#FFB347" size={28} strokeWidth={1.5} />
                 </View>
-                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Reset All Points?</AppText>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Reset All Sparks?</AppText>
                 <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
-                  This will reset all points back to zero — including all-time history. It's like starting the game over fresh!{'\n\n'}Your content, vault, and settings are not affected. This cannot be undone.
+                  This will reset all Sparks back to zero — including all-time history. It's like starting the game over fresh!{'\n\n'}Your content, vault, and settings are not affected. This cannot be undone.
                 </AppText>
                 <View style={styles.dataModalBtns}>
                   <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => setResetPointsOpen(false)} activeOpacity={0.7} disabled={resetting}>
@@ -2061,7 +2061,7 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(51,209,122,0.12)' }]}>
                   <Check color="#33D17A" size={28} strokeWidth={2} />
                 </View>
-                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Points Reset</AppText>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Sparks Reset</AppText>
                 <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>Both scores are back to zero. Ready for a fresh start!</AppText>
                 <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => { setResetPointsOpen(false); setResetDone(false); }} activeOpacity={0.7}>
                   <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</AppText>

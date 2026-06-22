@@ -594,7 +594,7 @@ export default function SettingsScreen() {
                 }
               >
                 <SettingsRow
-                  label="Points System"
+                  label="Sparks System"
                   sub={couple?.user_b_id ? "Show scores, leaderboard, and Cash In features" : "Requires an active partner connection"}
                   toggle
                   value={couple?.user_b_id ? (couple?.points_enabled ?? true) : false}

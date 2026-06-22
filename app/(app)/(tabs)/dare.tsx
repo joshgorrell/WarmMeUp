@@ -325,7 +325,7 @@ export default function DareTab() {
             <View style={[styles.incomingSection, highlightDare && styles.incomingHighlight]}>
               <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
                 <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>
-                  Accept = <AppText style={styles.pts}>+{acceptPts} pts</AppText> — Complete it = <AppText style={styles.pts}>+{completePts} pts</AppText>
+                  Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText> — Complete it = <AppText style={styles.pts}>+{completePts} ⚡</AppText>
                 </AppText>
               </View>
               <ReceivedDareCard
@@ -358,7 +358,7 @@ export default function DareTab() {
                   <AppText style={[styles.verifyTitle, { color: colors.text }]}>Partner completed the dare!</AppText>
                 </View>
                 <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>
-                  Confirm to award them <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} pts</AppText>
+                  Confirm to award them <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText>
                 </AppText>
                 <TouchableOpacity
                   style={styles.verifyBtn}

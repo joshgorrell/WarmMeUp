@@ -5,7 +5,7 @@ import {
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { ChevronLeft, ChevronRight, Zap, MessageCircle, Star, Vault, Trophy, Flame, Clock, EyeOff, Bug } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Zap, MessageCircle, Star, Vault, Heart, Flame, Clock, EyeOff, Bug } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -382,7 +382,7 @@ export default function MyStatsScreen() {
       bg: 'rgba(255,46,138,0.12)', border: 'rgba(255,46,138,0.25)',
       myVal: showPts ? (myCatPts!.pts_dares ?? 0) : (myStats?.dares_accepted ?? 0) + (myStats?.dares_completed ?? 0),
       partnerVal: showPts ? (partnerCatPts?.pts_dares ?? 0) : (partnerStats?.dares_accepted ?? 0) + (partnerStats?.dares_completed ?? 0),
-      unit: showPts ? 'pts' : 'done',
+      unit: showPts ? '⚡' : 'done',
       extra: showPts
         ? `${(myStats?.dares_accepted ?? 0) + (myStats?.dares_completed ?? 0)} accepted/completed · ${myStats?.dares_skipped ?? 0} skipped`
         : `${myStats?.dares_skipped ?? 0} skipped`,
@@ -393,7 +393,7 @@ export default function MyStatsScreen() {
       bg: 'rgba(255,179,71,0.12)', border: 'rgba(255,179,71,0.25)',
       myVal: showPts ? (myCatPts!.pts_dice ?? 0) : (myStats?.dice_accepted ?? 0) + (myStats?.dice_completed ?? 0),
       partnerVal: showPts ? (partnerCatPts?.pts_dice ?? 0) : (partnerStats?.dice_accepted ?? 0) + (partnerStats?.dice_completed ?? 0),
-      unit: showPts ? 'pts' : 'done',
+      unit: showPts ? '⚡' : 'done',
       extra: showPts
         ? `${(myStats?.dice_accepted ?? 0) + (myStats?.dice_completed ?? 0)} accepted/completed · ${myStats?.dice_skipped ?? 0} skipped`
         : `${myStats?.dice_skipped ?? 0} skipped`,
@@ -404,7 +404,7 @@ export default function MyStatsScreen() {
       bg: 'rgba(255,138,61,0.12)', border: 'rgba(255,138,61,0.25)',
       myVal: showPts ? (myCatPts!.pts_wish ?? 0) : (myStats?.wishes_sent ?? 0) + (myStats?.wishes_fulfilled ?? 0) + (myStats?.asks_sent ?? 0) + (myStats?.asks_replied ?? 0),
       partnerVal: showPts ? (partnerCatPts?.pts_wish ?? 0) : (partnerStats?.wishes_sent ?? 0) + (partnerStats?.wishes_fulfilled ?? 0) + (partnerStats?.asks_sent ?? 0) + (partnerStats?.asks_replied ?? 0),
-      unit: showPts ? 'pts' : 'done',
+      unit: showPts ? '⚡' : 'done',
       extra: showPts
         ? `${myStats?.wishes_sent ?? 0} wished · ${myStats?.wishes_fulfilled ?? 0} granted · ${myStats?.asks_sent ?? 0} asked`
         : `${myStats?.wishes_sent ?? 0} wished · ${myStats?.asks_sent ?? 0} asked`,
@@ -415,7 +415,7 @@ export default function MyStatsScreen() {
       bg: 'rgba(105,167,255,0.12)', border: 'rgba(105,167,255,0.25)',
       myVal: showPts ? (myCatPts!.pts_chat ?? 0) : (myStats?.chat_messages_sent ?? 0) + (myStats?.media_sent ?? 0),
       partnerVal: showPts ? (partnerCatPts?.pts_chat ?? 0) : (partnerStats?.chat_messages_sent ?? 0) + (partnerStats?.media_sent ?? 0),
-      unit: showPts ? 'pts' : 'sent',
+      unit: showPts ? '⚡' : 'sent',
       extra: showPts
         ? `${myStats?.chat_messages_sent ?? 0} messages · ${myStats?.media_sent ?? 0} media`
         : `${myStats?.media_sent ?? 0} media sent`,
@@ -426,7 +426,7 @@ export default function MyStatsScreen() {
       bg: 'rgba(51,209,122,0.12)', border: 'rgba(51,209,122,0.25)',
       myVal: showPts ? (myCatPts!.pts_vault ?? 0) : (myStats?.vault_uploads ?? 0),
       partnerVal: showPts ? (partnerCatPts?.pts_vault ?? 0) : (partnerStats?.vault_uploads ?? 0),
-      unit: showPts ? 'pts' : 'uploads',
+      unit: showPts ? '⚡' : 'uploads',
       extra: showPts ? `${myStats?.vault_uploads ?? 0} uploads` : '',
     },
   ];
@@ -493,7 +493,7 @@ export default function MyStatsScreen() {
             <View style={[styles.hiddenBanner, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: colors.borderSubtle }]}>
               <EyeOff color={colors.textMuted} size={16} strokeWidth={1.75} />
               <AppText style={[styles.hiddenBannerText, { color: colors.textMuted }]}>
-                Points are hidden — scores shown below are still being tracked in the background.
+                Sparks are hidden — scores shown below are still being tracked in the background.
               </AppText>
             </View>
           )}
@@ -507,19 +507,22 @@ export default function MyStatsScreen() {
                 </View>
                 <AppText style={[styles.vsName, { color: colors.textSecondary }]}>{myName}</AppText>
                 <AppText style={[styles.vsPts, { color: colors.text }]}>{myPts}</AppText>
-                <AppText style={[styles.vsPtsLabel, { color: colors.textMuted }]}>pts</AppText>
+                <AppText style={styles.vsSparksLabel}>Sparks ⚡</AppText>
               </View>
-              <View style={styles.vsCenter}>
-                <Trophy color="#FFB347" size={22} strokeWidth={2} />
-                <AppText style={[styles.vsVS, { color: colors.textMuted }]}>VS</AppText>
+              <View style={styles.vsHeartWrap}>
+                <Heart color="#FF2E8A" size={88} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
+                <View style={styles.vsHeartOverlay}>
+                  <AppText style={styles.vsHeartScore}>{totalPts}</AppText>
+                  <AppText style={styles.vsHeartLabel}>Together{'\n'}Sparks</AppText>
+                </View>
               </View>
-              <View style={styles.vsSide}>
+              <View style={[styles.vsSide, { alignItems: 'flex-end' }]}>
                 <View style={[styles.vsAvatar, { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
                   <AppText style={[styles.vsAvatarText, { color: '#FF8A3D' }]}>{partnerName.charAt(0).toUpperCase()}</AppText>
                 </View>
                 <AppText style={[styles.vsName, { color: colors.textSecondary }]}>{partnerName}</AppText>
                 <AppText style={[styles.vsPts, { color: colors.text }]}>{partnerPts}</AppText>
-                <AppText style={[styles.vsPtsLabel, { color: colors.textMuted }]}>pts</AppText>
+                <AppText style={styles.vsSparksLabel}>Sparks ⚡</AppText>
               </View>
             </View>
             {totalPts > 0 && (
@@ -730,9 +733,24 @@ const styles = StyleSheet.create({
   vsAvatarText: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold' },
   vsName: { fontSize: 11, fontFamily: 'Inter-Medium', letterSpacing: 0.3 },
   vsPts: { fontSize: 36, fontFamily: 'Inter-Bold', lineHeight: 42 },
-  vsPtsLabel: { fontSize: 11, fontFamily: 'Inter-Medium', marginTop: -2 },
-  vsCenter: { alignItems: 'center', gap: 4 },
-  vsVS: { fontSize: 11, fontFamily: 'Inter-Bold', letterSpacing: 1 },
+  vsSparksLabel: { fontSize: 12, fontFamily: 'Inter-SemiBold', color: '#FF8A3D' },
+  vsHeartWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF2E8A',
+    shadowRadius: 16,
+    shadowOpacity: 0.65,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  vsHeartOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 6,
+  },
+  vsHeartScore: { fontSize: 24, fontFamily: 'Inter-Bold', color: '#fff', lineHeight: 28 },
+  vsHeartLabel: { fontSize: 9, fontFamily: 'Inter-SemiBold', color: '#FF2E8A', textAlign: 'center', lineHeight: 12 },
   progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
   streakRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingTop: 2 },

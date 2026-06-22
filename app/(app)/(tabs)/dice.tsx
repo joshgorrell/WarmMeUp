@@ -473,7 +473,7 @@ export default function DiceTab() {
           <View style={[styles.challengeSection, highlightChallenge && styles.challengeHighlight]}>
             <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,179,71,0.08)', borderColor: 'rgba(255,179,71,0.25)' }]}>
               <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>
-                Accept = <AppText style={styles.pts}>+{acceptPts} pts</AppText> — Complete it = <AppText style={styles.pts}>+{completePts} pts</AppText>
+                Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText> — Complete it = <AppText style={styles.pts}>+{completePts} ⚡</AppText>
               </AppText>
             </View>
             <ReceivedDiceChallengeCard
@@ -502,7 +502,7 @@ export default function DiceTab() {
               </AppText>
             ) : null}
             <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>
-              When they complete it, confirm here — they earn <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} pts</AppText>
+              When they complete it, confirm here — they earn <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText>
             </AppText>
             <TouchableOpacity
               style={styles.verifyBtn}
