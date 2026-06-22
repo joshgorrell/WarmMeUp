@@ -29,6 +29,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logDebugEvent } from '@/lib/debugLog';
 import { setGalleryItems, getCachedUrl, setCachedUrl, evictCachedUrl } from '@/lib/mediaGalleryStore';
 
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -450,6 +452,7 @@ export default function ChatTab() {
   const bubbleRefs = useRef<Record<string, View | null>>({});
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const prevMsgCountRef = useRef(0);
+  const lastInactiveAtRef = useRef<number | null>(null);
 
   const blurEnabled = settings?.blur_chat_media ?? settings?.blur_media ?? true;
   const chatFontScale = settings?.chat_font_scale ?? 1.0;
@@ -466,18 +469,37 @@ export default function ChatTab() {
   const mediaBubbleWidth = Math.min(Math.round(screenWidth * 0.72), 320);
   const mediaBubbleHeight = Math.round(mediaBubbleWidth * 1.0);
 
-  // Re-blur chat media when returning from background
+  // Re-blur chat media when returning from background + screenshot detection
   useEffect(() => {
-    if (!blurEnabled) return;
+    if (Platform.OS === 'web') return;
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       const prev = appStateRef.current;
       appStateRef.current = next;
+      if (prev === 'active' && next === 'inactive') {
+        lastInactiveAtRef.current = Date.now();
+      }
       if ((prev === 'background' || prev === 'inactive') && next === 'active') {
-        setRevealedMedia(new Set());
+        if (blurEnabled) setRevealedMedia(new Set());
+        const elapsed = lastInactiveAtRef.current ? Date.now() - lastInactiveAtRef.current : 999;
+        if (elapsed < 400 && couple?.id && user?.id) {
+          supabase.auth.getSession().then(({ data }) => {
+            const token = data?.session?.access_token;
+            if (!token) return;
+            fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ couple_id: couple.id, detected_by_user_id: user.id, source_screen: 'chat' }),
+            }).catch(() => {});
+          });
+          if (settings?.notify_me_on_own_screenshots) {
+            Alert.alert('Screenshot Reminder', "You just screenshotted your partner's content.");
+          }
+        }
+        lastInactiveAtRef.current = null;
       }
     });
     return () => sub.remove();
-  }, [blurEnabled]);
+  }, [blurEnabled, couple?.id, user?.id, settings?.notify_me_on_own_screenshots]);
 
   // Re-blur when leaving the Chat tab
   useFocusEffect(

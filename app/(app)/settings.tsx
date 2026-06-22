@@ -494,6 +494,20 @@ export default function SettingsScreen() {
                   onChange={v => update({ blur_on_background: v })}
                 />
                 <SettingsRow
+                  label="Notify Me if My Content is Screenshotted"
+                  sub="You'll be notified when your partner screenshots your content in Chat, Vault, or Wish"
+                  toggle
+                  value={s?.screenshot_notify_partner ?? true}
+                  onChange={v => update({ screenshot_notify_partner: v })}
+                />
+                <SettingsRow
+                  label="Remind Me When I Screenshot Partner Content"
+                  sub="Shows a reminder on your device when you screenshot their content"
+                  toggle
+                  value={s?.notify_me_on_own_screenshots ?? false}
+                  onChange={v => update({ notify_me_on_own_screenshots: v })}
+                />
+                <SettingsRow
                   label="Community Guidelines"
                   sub="How we keep this space safe and respectful"
                   onPress={() => setShowCommunityGuidelines(true)}
@@ -524,20 +538,6 @@ export default function SettingsScreen() {
                   toggle
                   value={s?.vault_allow_share_default ?? false}
                   onChange={v => update({ vault_allow_share_default: v })}
-                />
-                <SettingsRow
-                  label="Notify Me if My Content is Screenshotted"
-                  sub="You'll get an alert when your partner screenshots something you uploaded"
-                  toggle
-                  value={s?.screenshot_notify_partner ?? true}
-                  onChange={v => update({ screenshot_notify_partner: v })}
-                />
-                <SettingsRow
-                  label="Remind Me When I Screenshot Partner Content"
-                  sub="A personal reminder on your device when you screenshot their uploads"
-                  toggle
-                  value={s?.notify_me_on_own_screenshots ?? false}
-                  onChange={v => update({ notify_me_on_own_screenshots: v })}
                 />
                 <SettingsRow
                   label="Auto-Save Chat Media to Vault"

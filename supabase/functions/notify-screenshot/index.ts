@@ -7,6 +7,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const SCREEN_ROUTES: Record<string, string> = {
+  vault: "/(app)/(tabs)/vault",
+  chat: "/(app)/(tabs)/note",
+  wish: "/(app)/(tabs)/wish",
+};
+
+const SCREEN_LABELS: Record<string, string> = {
+  vault: "Vault",
+  chat: "Chat",
+  wish: "Wish List",
+};
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -39,7 +51,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { vault_item_id, couple_id, detected_by_user_id } = body;
+    const { vault_item_id, couple_id, detected_by_user_id, source_screen } = body;
 
     if (!couple_id || !detected_by_user_id) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -109,6 +121,7 @@ Deno.serve(async (req: Request) => {
       target_user_id: partnerId,
       event_type: "screenshot_detected",
       vault_item_id: vault_item_id ?? null,
+      source_screen: source_screen ?? null,
       read: false,
     });
 
@@ -117,10 +130,13 @@ Deno.serve(async (req: Request) => {
       const detectorName = detectorProfile?.display_name ?? "Your partner";
       const isDiscreet = partnerSettings?.discreet_notifications ?? true;
       const notifCopy = partnerSettings?.notification_copy ?? "New activity";
+      const screenLabel = source_screen ? SCREEN_LABELS[source_screen] ?? "the app" : "the app";
 
       const bodyText = isDiscreet
         ? notifCopy
-        : `${detectorName} took a screenshot of protected media.`;
+        : `${detectorName} took a screenshot in ${screenLabel}.`;
+
+      const targetRoute = source_screen ? (SCREEN_ROUTES[source_screen] ?? "/(app)/(tabs)/vault") : "/(app)/(tabs)/vault";
 
       await fetch("https://exp.host/--/api/v2/push/send", {
         method: "POST",
@@ -129,7 +145,7 @@ Deno.serve(async (req: Request) => {
           to: partnerProfile.push_token,
           title: "Warm Me Up",
           body: bodyText,
-          data: { event_type: "screenshot_detected", couple_id, vault_item_id, target_route: "/(app)/(tabs)/vault" },
+          data: { event_type: "screenshot_detected", couple_id, vault_item_id, source_screen, target_route: targetRoute },
           sound: "default",
         }),
       });

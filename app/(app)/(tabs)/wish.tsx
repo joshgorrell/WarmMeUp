@@ -3,6 +3,7 @@ import {
   View, StyleSheet, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, Animated, Modal,
   Pressable, Linking, ActivityIndicator, Alert,
+  AppState, AppStateStatus,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -29,6 +30,8 @@ import { FontSize, Spacing, Radius, Gradient as GradientColors } from '@/constan
 import { useLayout } from '@/hooks/useLayout';
 
 // ─── constants ────────────────────────────────────────────────────────────────
+
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
 const WISH_ACCENT = '#E8637A';
 const WISH_GOLD = '#F0A96A';
@@ -872,7 +875,7 @@ function FulfillSheet({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function WishTab() {
-  const { user, couple } = useAuth();
+  const { user, couple, settings } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -886,6 +889,8 @@ export default function WishTab() {
   const [fulfillWish, setFulfillWish] = useState<WishWithReactions | null>(null);
   const tabIndicator = useRef(new Animated.Value(0)).current;
   const handledWishLinkRef = useRef<string | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const lastInactiveAtRef = useRef<number | null>(null);
 
   const TAB_DEFS: { key: TabKey; label: string }[] = [
     { key: 'shared',  label: 'Ours' },
@@ -924,8 +929,38 @@ export default function WishTab() {
     }
   }, [couple?.id]);
 
+  // Screenshot detection for Wish tab
   useEffect(() => {
-    if (!couple?.id) { setLoading(false); return; }
+    if (Platform.OS === 'web') return;
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      const prev = appStateRef.current;
+      appStateRef.current = next;
+      if (prev === 'active' && next === 'inactive') {
+        lastInactiveAtRef.current = Date.now();
+      }
+      if ((prev === 'background' || prev === 'inactive') && next === 'active') {
+        const elapsed = lastInactiveAtRef.current ? Date.now() - lastInactiveAtRef.current : 999;
+        if (elapsed < 400 && couple?.id && user?.id) {
+          supabase.auth.getSession().then(({ data }) => {
+            const token = data?.session?.access_token;
+            if (!token) return;
+            fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ couple_id: couple.id, detected_by_user_id: user.id, source_screen: 'wish' }),
+            }).catch(() => {});
+          });
+          if (settings?.notify_me_on_own_screenshots) {
+            Alert.alert('Screenshot Reminder', "You just screenshotted your partner's content.");
+          }
+        }
+        lastInactiveAtRef.current = null;
+      }
+    });
+    return () => sub.remove();
+  }, [couple?.id, user?.id, settings?.notify_me_on_own_screenshots]);
+
+  useEffect(() => {
     loadWishes();
     const ch = supabase.channel(`wish_tab_${couple.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wishes', filter: `couple_id=eq.${couple.id}` }, loadWishes)

@@ -270,16 +270,19 @@ export default function HomeScreen() {
       if (viewedSet.has(`activity_events:${ev.id}`)) return;
 
       if (ev.event_type === 'screenshot_detected') {
+        const screen = ev.source_screen ?? 'vault';
+        const routeMap: Record<string, string> = { vault: '/(app)/(tabs)/vault', chat: '/(app)/(tabs)/note', wish: '/(app)/(tabs)/wish' };
+        const subMap: Record<string, string> = { vault: 'Vault', chat: 'Chat', wish: 'Wish List' };
         items.push({
           id: `privacy_${ev.id}`,
           sourceTable: 'activity_events',
           sourceId: ev.id,
           label: `${partnerName} screenshotted your content`,
-          sub: ev.vault_item_id ? 'Vault item' : '',
+          sub: subMap[screen] ?? 'Vault',
           time: timeAgo(ev.created_at),
           icon: <Camera color="#FF8A3D" size={16} strokeWidth={2} />,
           color: '#FF8A3D',
-          route: '/(app)/(tabs)/vault',
+          route: routeMap[screen] ?? '/(app)/(tabs)/vault',
           _rawTime: ev.created_at,
         });
         return;

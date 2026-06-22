@@ -236,7 +236,7 @@ function MediaPage({
         await fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-          body: JSON.stringify({ vault_item_id: item.id, couple_id: item.coupleId, detected_by_user_id: user.id }),
+          body: JSON.stringify({ vault_item_id: item.id, couple_id: item.coupleId, detected_by_user_id: user.id, source_screen: 'vault' }),
         });
       }
     } catch {}

@@ -206,18 +206,21 @@ export default function ActivityScreen() {
       const isMine = ev.actor_user_id === user.id;
 
       if (ev.event_type === 'screenshot_detected') {
+        const screen = ev.source_screen ?? 'vault';
+        const routeMap: Record<string, string> = { vault: '/(app)/(tabs)/vault', chat: '/(app)/(tabs)/note', wish: '/(app)/(tabs)/wish' };
+        const subMap: Record<string, string> = { vault: 'Vault', chat: 'Chat', wish: 'Wish List' };
         mapped.push({
           id: `privacy_${ev.id}`,
           sourceTable: 'activity_events',
           sourceId: ev.id,
           _type: 'privacy',
           label: `${partnerName} screenshotted your content`,
-          sub: ev.vault_item_id ? 'Vault item' : '',
+          sub: subMap[screen] ?? 'Vault',
           time: timeAgo(ev.created_at),
           icon: <Camera color="#FF8A3D" size={18} strokeWidth={2} />,
           color: '#FF8A3D',
           _rawTime: ev.created_at,
-          route: '/(app)/(tabs)/vault',
+          route: routeMap[screen] ?? '/(app)/(tabs)/vault',
           routeParams: ev.vault_item_id ? { vault_item_id: ev.vault_item_id } : undefined,
         });
         return;
