@@ -314,6 +314,9 @@ export default function DebugScreen() {
     token_prefix: string | null;
     project_id_used: string | null;
     last_registered_at: string | null;
+    token_in_db: boolean | null;
+    token_matches_device: boolean | null;
+    db_notifications_enabled: boolean | null;
   }>({
     ranAt: null,
     permission_status: null,
@@ -321,6 +324,9 @@ export default function DebugScreen() {
     token_prefix: null,
     project_id_used: null,
     last_registered_at: null,
+    token_in_db: null,
+    token_matches_device: null,
+    db_notifications_enabled: null,
   });
 
   type PushTestSubResult = {
@@ -792,6 +798,24 @@ export default function DebugScreen() {
               token = t.data ?? null;
             } catch {}
           }
+
+          // Compare device token against what's stored in the DB
+          let token_in_db: boolean | null = null;
+          let token_matches_device: boolean | null = null;
+          let db_notifications_enabled: boolean | null = null;
+          if (userId) {
+            try {
+              const [profileRes, settingsRes] = await Promise.all([
+                supabase.from('profiles').select('push_token').eq('id', userId).maybeSingle(),
+                supabase.from('user_settings').select('push_notifications_enabled').eq('user_id', userId).maybeSingle(),
+              ]);
+              const dbToken = profileRes.data?.push_token ?? null;
+              token_in_db = dbToken !== null;
+              token_matches_device = token !== null && dbToken !== null ? token === dbToken : null;
+              db_notifications_enabled = settingsRes.data?.push_notifications_enabled ?? null;
+            } catch {}
+          }
+
           setPushDiag({
             ranAt,
             permission_status: status,
@@ -799,10 +823,13 @@ export default function DebugScreen() {
             token_prefix: token ? token.slice(0, 30) : null,
             project_id_used: PROJECT_ID,
             last_registered_at: token ? ranAt : null,
+            token_in_db,
+            token_matches_device,
+            db_notifications_enabled,
           });
         }).catch(() => {});
       }
-    }, [runAuthProbe, runV38Probes, profile?.is_admin, profile?.is_super_admin])
+    }, [runAuthProbe, runV38Probes, profile?.is_admin, profile?.is_super_admin, userId])
   );
 
   useEffect(() => {
@@ -1039,6 +1066,53 @@ export default function DebugScreen() {
         error: { code: null, message: e?.message ?? String(e), details: null, hint: null },
       });
     }
+  };
+
+  // --- Action: Re-register push token (force token refresh + save to DB) ---
+  const [reRegisterStatus, setReRegisterStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const handleReRegisterToken = async () => {
+    if (Platform.OS === 'web' || !userId) return;
+    setReRegisterStatus('running');
+    try {
+      const token = await registerForPushNotifications();
+      if (token) {
+        await savePushToken(userId, token);
+        setReRegisterStatus('done');
+      } else {
+        setReRegisterStatus('error');
+      }
+    } catch {
+      setReRegisterStatus('error');
+    }
+    // Refresh push diag rows after re-registration
+    const PROJECT_ID = 'cfde070c-187f-4d7e-b643-a20446ff95ab';
+    const ranAt = new Date().toISOString();
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      let token: string | null = null;
+      if (status === 'granted') {
+        try {
+          const t = await Notifications.getExpoPushTokenAsync({ projectId: PROJECT_ID });
+          token = t.data ?? null;
+        } catch {}
+      }
+      const [profileRes, settingsRes] = await Promise.all([
+        supabase.from('profiles').select('push_token').eq('id', userId).maybeSingle(),
+        supabase.from('user_settings').select('push_notifications_enabled').eq('user_id', userId).maybeSingle(),
+      ]);
+      const dbToken = profileRes.data?.push_token ?? null;
+      setPushDiag({
+        ranAt,
+        permission_status: status,
+        token_present: token !== null,
+        token_prefix: token ? token.slice(0, 30) : null,
+        project_id_used: PROJECT_ID,
+        last_registered_at: token ? ranAt : null,
+        token_in_db: dbToken !== null,
+        token_matches_device: token !== null && dbToken !== null ? token === dbToken : null,
+        db_notifications_enabled: settingsRes.data?.push_notifications_enabled ?? null,
+      });
+    } catch {}
   };
 
   // --- Action: Local test notification (proves in-app handler, no server) ---
@@ -1647,8 +1721,16 @@ export default function DebugScreen() {
         <Section title="Push Notifications" />
         <Row label="push.ranAt" value={pushDiag.ranAt} />
         <Row label="push.permission_status" value={pushDiag.permission_status} />
+        {pushDiag.permission_status === 'denied' && (
+          <View style={styles.blockedBanner}>
+            <AppText style={styles.blockedBannerText}>BLOCKED — user must enable in iOS Settings &gt; Warm Me Up &gt; Notifications</AppText>
+          </View>
+        )}
         <Row label="push.token_present" value={pushDiag.token_present} />
         <Row label="push.token_prefix" value={pushDiag.token_prefix} />
+        <Row label="push.token_in_db" value={pushDiag.token_in_db} />
+        <Row label="push.token_matches_device" value={pushDiag.token_matches_device} />
+        <Row label="push.db_notifications_enabled" value={pushDiag.db_notifications_enabled} />
         <Row label="push.project_id_used" value={pushDiag.project_id_used} />
         <Row label="push.last_registered_at" value={pushDiag.last_registered_at} />
 
@@ -2049,6 +2131,27 @@ export default function DebugScreen() {
 
           {/* ── Push Test Buttons ── */}
           <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#1a1a2e' }, (reRegisterStatus === 'running' || Platform.OS === 'web' || !userId) && styles.btnDisabled]}
+            onPress={handleReRegisterToken}
+            disabled={reRegisterStatus === 'running' || Platform.OS === 'web' || !userId}
+            activeOpacity={0.8}
+          >
+            {reRegisterStatus === 'running'
+              ? <ActivityIndicator size="small" color="#A569BD" />
+              : <RefreshCw size={15} color="#A569BD" />
+            }
+            <AppText style={[styles.actionBtnLabel, { color: '#A569BD' }]}>
+              {reRegisterStatus === 'running' ? 'Re-registering…'
+                : reRegisterStatus === 'done' ? 'Token Re-registered'
+                : reRegisterStatus === 'error' ? 'Re-register Failed (check permission)'
+                : 'A. Re-register Push Token'}
+            </AppText>
+          </TouchableOpacity>
+          <AppText style={styles.btnNote}>
+            Fetches a fresh Expo push token from APNs and saves it to the database. Fixes stale or missing tokens without toggling Settings.
+          </AppText>
+
+          <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#1a2a1a' }, (localTestSent === 'sending' || Platform.OS === 'web') && styles.btnDisabled]}
             onPress={handleLocalTestNotification}
             disabled={localTestSent === 'sending' || Platform.OS === 'web'}
@@ -2062,7 +2165,7 @@ export default function DebugScreen() {
               {localTestSent === 'sending' ? 'Scheduling…'
                 : localTestSent === 'sent' ? 'Local Notification Sent'
                 : localTestSent === 'error' ? 'Local Notification Failed'
-                : 'A. Local Test Notification'}
+                : 'B. Local Test Notification'}
             </AppText>
           </TouchableOpacity>
           <AppText style={styles.btnNote}>
@@ -2080,7 +2183,7 @@ export default function DebugScreen() {
               : <RefreshCw size={15} color="#5DADE2" />
             }
             <AppText style={[styles.actionBtnLabel, { color: '#5DADE2' }]}>
-              {pushTest.running ? 'Running push tests…' : 'B. End-to-End Push Test (Self + Partner)'}
+              {pushTest.running ? 'Running push tests…' : 'C. End-to-End Push Test (Self + Partner)'}
             </AppText>
           </TouchableOpacity>
           <AppText style={styles.btnNote}>
@@ -2651,6 +2754,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 16,
     paddingHorizontal: Spacing.sm,
+  },
+  blockedBanner: {
+    backgroundColor: 'rgba(255,60,60,0.15)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF3C3C',
+    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    marginHorizontal: Spacing.sm,
+    marginVertical: 4,
+    borderRadius: 4,
+  },
+  blockedBannerText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FF6B6B',
+    lineHeight: 16,
   },
   eventsHeader: {
     flexDirection: 'row',
