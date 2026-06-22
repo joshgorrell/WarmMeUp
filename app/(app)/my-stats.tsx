@@ -510,11 +510,9 @@ export default function MyStatsScreen() {
                 <AppText style={styles.vsSparksLabel}>Sparks ⚡</AppText>
               </View>
               <View style={styles.vsHeartWrap}>
-                <Heart color="#FF2E8A" size={88} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
-                <View style={styles.vsHeartOverlay}>
-                  <AppText style={styles.vsHeartScore}>{totalPts}</AppText>
-                  <AppText style={styles.vsHeartLabel}>Together{'\n'}Sparks</AppText>
-                </View>
+                <Heart color="#FF2E8A" size={80} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
+                <AppText style={styles.vsHeartScore}>{totalPts}</AppText>
+                <AppText style={styles.vsHeartLabel}>Together Sparks</AppText>
               </View>
               <View style={[styles.vsSide, { alignItems: 'flex-end' }]}>
                 <View style={[styles.vsAvatar, { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
@@ -736,21 +734,14 @@ const styles = StyleSheet.create({
   vsSparksLabel: { fontSize: 12, fontFamily: 'Inter-SemiBold', color: '#FF8A3D' },
   vsHeartWrap: {
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 2,
     shadowColor: '#FF2E8A',
     shadowRadius: 16,
     shadowOpacity: 0.65,
     shadowOffset: { width: 0, height: 0 },
   },
-  vsHeartOverlay: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 6,
-  },
-  vsHeartScore: { fontSize: 24, fontFamily: 'Inter-Bold', color: '#fff', lineHeight: 28 },
-  vsHeartLabel: { fontSize: 9, fontFamily: 'Inter-SemiBold', color: '#FF2E8A', textAlign: 'center', lineHeight: 12 },
+  vsHeartScore: { fontSize: 22, fontFamily: 'Inter-Bold', color: '#fff', lineHeight: 26 },
+  vsHeartLabel: { fontSize: 10, fontFamily: 'Inter-SemiBold', color: '#FF2E8A', textAlign: 'center' },
   progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
   streakRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingTop: 2 },

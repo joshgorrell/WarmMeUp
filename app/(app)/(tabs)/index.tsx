@@ -453,7 +453,7 @@ export default function HomeScreen() {
           <AppText style={[styles.scoreName, { color: colors.textSecondary }]} numberOfLines={1}>{myName}</AppText>
           <AppText style={[styles.scorePts, { color: colors.text }]}>{myScore} ⚡</AppText>
           <View style={styles.scoreVs}>
-            <Heart color="#FF2E8A" size={24} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
+            <Heart color="#FF2E8A" size={20} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
             <AppText style={styles.scoreHeartNum}>{total}</AppText>
           </View>
           <AppText style={[styles.scorePts, { color: colors.text }]}>{partnerScore} ⚡</AppText>
@@ -766,13 +766,12 @@ const styles = StyleSheet.create({
   scoreVs: {
     paddingHorizontal: 2,
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 1,
   },
   scoreHeartNum: {
-    position: 'absolute',
     fontSize: 9,
     fontFamily: 'Inter-Bold',
-    color: '#fff',
+    color: '#FF2E8A',
   },
   barTrack: {
     height: 3,
