@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView,
@@ -137,15 +137,7 @@ export default function LoginScreen() {
   const [oauthLoading, setOauthLoading] = useState<'apple' | 'google' | null>(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'MISSING';
-    const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'MISSING';
-    console.log('[LoginScreen] SUPABASE_URL:', url);
-    console.log('[LoginScreen] ANON_KEY_PREFIX_25:', key.slice(0, 25));
-    console.log('[LoginScreen] ANON_KEY_LENGTH:', key.length);
-  }, []);
-
-  // Hidden 5-second logo hold — opens debug screen without auth
+  // Hidden 5-second logo hold — intentional no-auth emergency escape hatch to debug screen
   const handleLogoHold = () => {
     router.push('/debug');
   };

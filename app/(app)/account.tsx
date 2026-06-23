@@ -1644,15 +1644,16 @@ export default function AccountScreen() {
         </View>
       </View>
 
-      {/* Debug diagnostics — temporary production diagnostic tool */}
-      <TouchableOpacity
-        style={styles.debugRow}
-        onPress={() => router.push('/debug')}
-        activeOpacity={0.7}
-      >
-        <AppText style={styles.debugRowText}>Debug Diagnostics</AppText>
-        <ChevronRight color="#333" size={14} />
-      </TouchableOpacity>
+      {(isAdmin || isSuperAdmin) && (
+        <TouchableOpacity
+          style={styles.debugRow}
+          onPress={() => router.push('/debug')}
+          activeOpacity={0.7}
+        >
+          <AppText style={styles.debugRowText}>Debug Diagnostics</AppText>
+          <ChevronRight color="#333" size={14} />
+        </TouchableOpacity>
+      )}
 
       {/* Footer logo */}
       <View style={styles.footerLogoWrap}>
