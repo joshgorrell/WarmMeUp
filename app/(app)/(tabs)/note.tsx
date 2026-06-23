@@ -1784,7 +1784,7 @@ const MessageRow = React.memo(function MessageRow({
                 hasMedia && styles.bubbleMediaOnly,
                 !isMine && !hasMedia && styles.bubbleInboundPad,
               ]}>
-                {!isMine && (
+                {!isMine && !mediaOnly && (
                   <LinearGradient
                     colors={['#FF4D8D', '#FF6A5B']}
                     start={{ x: 0, y: 0 }}
