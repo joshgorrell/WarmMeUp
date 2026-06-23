@@ -337,15 +337,6 @@ export default function AdminDashboard() {
       border: 'rgba(255,179,71,0.25)',
       route: '/(admin)/greetings',
     },
-    {
-      label: 'Debug Diagnostics',
-      sub: 'Open the full diagnostic screen',
-      icon: <Bug color="#60C8FF" size={22} strokeWidth={2} />,
-      color: '#60C8FF',
-      bg: 'rgba(96,200,255,0.10)',
-      border: 'rgba(96,200,255,0.25)',
-      route: '/debug',
-    },
   ];
 
   return (
@@ -474,7 +465,8 @@ export default function AdminDashboard() {
 
         {/* Developer */}
         <AppText style={[styles.sectionLabel, { color: colors.textMuted, marginTop: Spacing.lg, marginBottom: Spacing.sm }]}>DEVELOPER</AppText>
-        <View style={[styles.breakdownCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle, gap: 0 }]}>
+        <View style={[styles.breakdownCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle, gap: 0, padding: 0, overflow: 'hidden' }]}>
+          {/* Row: Emergency Debug Access */}
           <View style={styles.devRow}>
             <View style={[styles.devIconWrap, { backgroundColor: 'rgba(96,200,255,0.10)' }]}>
               <Bug color="#60C8FF" size={20} strokeWidth={2} />
@@ -489,39 +481,60 @@ export default function AdminDashboard() {
               disabled={debugToggleLoading}
             />
           </View>
-        </View>
 
-        {/* Diagnostics */}
-        <AppText style={[styles.sectionLabel, { color: colors.textMuted, marginTop: Spacing.lg, marginBottom: Spacing.sm }]}>DIAGNOSTICS</AppText>
-        <View style={[styles.breakdownCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle, gap: Spacing.sm }]}>
+          {/* Divider */}
+          <View style={[styles.devDivider, { backgroundColor: colors.borderSubtle }]} />
+
+          {/* Row: Debug Diagnostics (tappable — navigates to /debug) */}
           <TouchableOpacity
-            onPress={runDiagnostics}
-            disabled={diagRunning}
-            style={[styles.diagBtn, { borderColor: 'rgba(105,167,255,0.35)', backgroundColor: 'rgba(105,167,255,0.08)' }]}
+            style={styles.devRow}
+            onPress={() => router.push('/debug' as any)}
             activeOpacity={0.8}
           >
-            {diagRunning
-              ? <ActivityIndicator size="small" color="#69A7FF" />
-              : <Activity color="#69A7FF" size={16} strokeWidth={2.2} />}
-            <AppText style={styles.diagBtnText}>{diagRunning ? 'Running checks…' : 'Run admin RLS checks'}</AppText>
-          </TouchableOpacity>
-          {diag.map(c => (
-            <View key={c.name} style={styles.diagRow}>
-              {c.status === 'pass' ? (
-                <CheckCircle2 color="#33D17A" size={16} strokeWidth={2.2} />
-              ) : c.status === 'fail' ? (
-                <XCircle color={colors.danger} size={16} strokeWidth={2.2} />
-              ) : (
-                <Loader2 color={colors.textMuted} size={16} strokeWidth={2.2} />
-              )}
-              <View style={{ flex: 1 }}>
-                <AppText style={[styles.diagName, { color: colors.text }]}>{c.name}</AppText>
-                {c.detail ? (
-                  <AppText style={[styles.diagDetail, { color: c.status === 'fail' ? colors.danger : colors.textMuted }]}>{c.detail}</AppText>
-                ) : null}
-              </View>
+            <View style={[styles.devIconWrap, { backgroundColor: 'rgba(96,200,255,0.10)' }]}>
+              <Activity color="#60C8FF" size={20} strokeWidth={2} />
             </View>
-          ))}
+            <View style={{ flex: 1 }}>
+              <AppText style={[styles.devLabel, { color: colors.text }]}>Debug Diagnostics</AppText>
+              <AppText style={[styles.devSub, { color: colors.textMuted }]}>Auth state, push tokens, Supabase connectivity, and event log.</AppText>
+            </View>
+            <ChevronRight color={colors.textMuted} size={18} />
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={[styles.devDivider, { backgroundColor: colors.borderSubtle }]} />
+
+          {/* Row: Run admin RLS checks */}
+          <View style={[styles.devRow, { flexDirection: 'column', alignItems: 'stretch', gap: Spacing.sm }]}>
+            <TouchableOpacity
+              onPress={runDiagnostics}
+              disabled={diagRunning}
+              style={[styles.diagBtn, { borderColor: 'rgba(105,167,255,0.35)', backgroundColor: 'rgba(105,167,255,0.08)' }]}
+              activeOpacity={0.8}
+            >
+              {diagRunning
+                ? <ActivityIndicator size="small" color="#69A7FF" />
+                : <Activity color="#69A7FF" size={16} strokeWidth={2.2} />}
+              <AppText style={styles.diagBtnText}>{diagRunning ? 'Running checks…' : 'Run admin RLS checks'}</AppText>
+            </TouchableOpacity>
+            {diag.map(c => (
+              <View key={c.name} style={styles.diagRow}>
+                {c.status === 'pass' ? (
+                  <CheckCircle2 color="#33D17A" size={16} strokeWidth={2.2} />
+                ) : c.status === 'fail' ? (
+                  <XCircle color={colors.danger} size={16} strokeWidth={2.2} />
+                ) : (
+                  <Loader2 color={colors.textMuted} size={16} strokeWidth={2.2} />
+                )}
+                <View style={{ flex: 1 }}>
+                  <AppText style={[styles.diagName, { color: colors.text }]}>{c.name}</AppText>
+                  {c.detail ? (
+                    <AppText style={[styles.diagDetail, { color: c.status === 'fail' ? colors.danger : colors.textMuted }]}>{c.detail}</AppText>
+                  ) : null}
+                </View>
+              </View>
+            ))}
+          </View>
         </View>
       </ScrollView>
     </AppShell>
@@ -598,6 +611,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
     padding: Spacing.card,
+  },
+  devDivider: {
+    height: 1,
+    marginHorizontal: Spacing.card,
   },
   devIconWrap: {
     width: 40,
