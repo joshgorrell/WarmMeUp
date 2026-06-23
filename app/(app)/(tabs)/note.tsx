@@ -1231,6 +1231,15 @@ export default function ChatTab() {
       pathname: '/(app)/vault-viewer',
       params: {
         initialIndex: String(Math.max(0, initialIndex)),
+        id: msg.id,
+        storagePath: msg.media_storage_path,
+        storageBucket: msg.media_storage_bucket ?? 'chat_media',
+        coupleId: msg.couple_id,
+        mediaType: msg.media_type ?? 'photo',
+        allowScreenshot: msg.allow_screenshot ? '1' : '0',
+        allowSave: msg.allow_save ? '1' : '0',
+        allowShare: msg.allow_share ? '1' : '0',
+        signedUri: signedUrls[msg.id] ?? '',
       },
     });
   }, [router, messages, signedUrls]);
