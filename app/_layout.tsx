@@ -22,13 +22,13 @@ if (Platform.OS !== 'web') {
   Image.prefetch(Image.resolveAssetSource(PREFETCH_SLOGAN).uri);
 }
 
-class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; errorMsg: string }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, errorMsg: '' };
   }
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, errorMsg: error?.message ?? String(error) };
   }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[ErrorBoundary]', error, info.componentStack);
@@ -36,13 +36,16 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
   render() {
     if (this.state.hasError) {
       return (
-        <View style={{ flex: 1, backgroundColor: '#07070A', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-          <AppText style={{ color: '#fff', fontSize: 16, textAlign: 'center', paddingHorizontal: 32 }}>
+        <View style={{ flex: 1, backgroundColor: '#07070A', alignItems: 'center', justifyContent: 'center', gap: 20, padding: 24 }}>
+          <AppText style={{ color: '#fff', fontSize: 16, textAlign: 'center' }}>
             Something went wrong.
+          </AppText>
+          <AppText style={{ color: 'rgba(255,100,100,0.9)', fontSize: 12, textAlign: 'center', fontFamily: 'monospace' }}>
+            {this.state.errorMsg}
           </AppText>
           <TouchableOpacity
             onPress={() => {
-              this.setState({ hasError: false });
+              this.setState({ hasError: false, errorMsg: '' });
               try { expoRouter.replace('/(app)/(tabs)/'); } catch {}
             }}
             style={{ backgroundColor: '#FF2E8A', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24 }}
