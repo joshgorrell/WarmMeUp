@@ -501,13 +501,6 @@ export default function SettingsScreen() {
                   onChange={v => update({ screenshot_notify_partner: v })}
                 />
                 <SettingsRow
-                  label="Remind Me When I Screenshot Partner Content"
-                  sub="Shows a reminder on your device when you screenshot their content"
-                  toggle
-                  value={s?.notify_me_on_own_screenshots ?? false}
-                  onChange={v => update({ notify_me_on_own_screenshots: v })}
-                />
-                <SettingsRow
                   label="Community Guidelines"
                   sub="How we keep this space safe and respectful"
                   onPress={() => setShowCommunityGuidelines(true)}
@@ -518,13 +511,6 @@ export default function SettingsScreen() {
                 title="MY VAULT UPLOADS"
                 note="These are your defaults for items you add to the Vault. They only apply to content you upload — your partner controls their own uploads separately."
               >
-                <SettingsRow
-                  label="Allow Screenshots of My Uploads"
-                  sub="Your partner can screenshot items you've shared"
-                  toggle
-                  value={s?.vault_allow_screenshot_default ?? false}
-                  onChange={v => update({ vault_allow_screenshot_default: v })}
-                />
                 <SettingsRow
                   label="Allow Saving My Uploads"
                   sub="Your partner can save your shared items to their phone"
@@ -697,13 +683,6 @@ export default function SettingsScreen() {
               note="These are your defaults for items you add to the Vault. They only apply to content you upload — your partner controls their own uploads separately."
             >
               <SettingsRow
-                label="Allow Screenshots of My Uploads"
-                sub="Your partner can screenshot items you've shared"
-                toggle
-                value={s?.vault_allow_screenshot_default ?? false}
-                onChange={v => update({ vault_allow_screenshot_default: v })}
-              />
-              <SettingsRow
                 label="Allow Saving My Uploads"
                 sub="Your partner can save your shared items to their phone"
                 toggle
@@ -716,20 +695,6 @@ export default function SettingsScreen() {
                 toggle
                 value={s?.vault_allow_share_default ?? false}
                 onChange={v => update({ vault_allow_share_default: v })}
-              />
-              <SettingsRow
-                label="Notify Me if My Content is Screenshotted"
-                sub="You'll get an alert when your partner screenshots something you uploaded"
-                toggle
-                value={s?.screenshot_notify_partner ?? true}
-                onChange={v => update({ screenshot_notify_partner: v })}
-              />
-              <SettingsRow
-                label="Remind Me When I Screenshot Partner Content"
-                sub="A personal reminder on your device when you screenshot their uploads"
-                toggle
-                value={s?.notify_me_on_own_screenshots ?? false}
-                onChange={v => update({ notify_me_on_own_screenshots: v })}
               />
               <SettingsRow
                 label="Auto-Save Chat Media to Vault"

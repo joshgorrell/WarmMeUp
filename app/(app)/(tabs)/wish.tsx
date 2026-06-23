@@ -936,15 +936,12 @@ export default function WishTab() {
               body: JSON.stringify({ couple_id: couple.id, detected_by_user_id: user.id, source_screen: 'wish' }),
             }).catch(() => {});
           });
-          if (settings?.notify_me_on_own_screenshots) {
-            Alert.alert('Screenshot Reminder', "You just screenshotted your partner's content.");
-          }
         }
         lastInactiveAtRef.current = null;
       }
     });
     return () => sub.remove();
-  }, [couple?.id, user?.id, settings?.notify_me_on_own_screenshots]);
+  }, [couple?.id, user?.id]);
 
   useEffect(() => {
     loadWishes();

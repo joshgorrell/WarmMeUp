@@ -43,11 +43,9 @@ export interface UserSettings {
   blur_vault_media: boolean;
   discreet_notifications: boolean;
   notification_copy: string | null;
-  vault_allow_screenshot_default: boolean;
   vault_allow_save_default: boolean;
   vault_allow_share_default: boolean;
   screenshot_notify_partner: boolean;
-  notify_me_on_own_screenshots: boolean;
   theme: 'dark' | 'light' | 'system';
   lock_after_seconds: number | null;
   push_notifications_enabled: boolean;

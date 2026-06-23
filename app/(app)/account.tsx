@@ -1795,12 +1795,10 @@ export default function AccountScreen() {
           }}
         />
         <SettingsRow label="Notify Me if My Content is Screenshotted" sub="You'll be notified when your partner screenshots your content in Chat, Vault, or Wish" toggle value={s?.screenshot_notify_partner ?? true} onChange={v => update({ screenshot_notify_partner: v })} />
-        <SettingsRow label="Remind Me When I Screenshot Partner Content" sub="Shows a reminder on your device when you screenshot their content" toggle value={s?.notify_me_on_own_screenshots ?? false} onChange={v => update({ notify_me_on_own_screenshots: v })} />
       </Section>
 
       <Section title="VAULT PREFERENCES" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately." onInfo={() => setShowVaultSecurityInfo(true)}>
         <SettingsRow label="Blur Vault Photos & Videos" sub="Vault items stay blurred until tapped; re-blurs when you leave the app." toggle value={s?.blur_vault_media ?? s?.blur_media ?? true} onChange={v => update({ blur_vault_media: v })} />
-        <SettingsRow label="Allow Screenshots of My Uploads" sub="Your partner can screenshot items you've added to the Vault" toggle value={s?.vault_allow_screenshot_default ?? false} onChange={v => update({ vault_allow_screenshot_default: v })} />
         <SettingsRow label="Allow Saving My Uploads" sub="Your partner can save your uploads to their phone" toggle value={s?.vault_allow_save_default ?? false} onChange={v => update({ vault_allow_save_default: v })} />
         <SettingsRow label="Allow Sharing My Uploads Outside App" sub="Your partner can share your content externally" toggle value={s?.vault_allow_share_default ?? false} onChange={v => update({ vault_allow_share_default: v })} />
         <SettingsRow label="Auto-Save Chat Media to Vault" sub="Photos and videos you send in Chat are automatically saved to your Vault. Deleting from either place removes both." toggle value={s?.chat_auto_save_to_vault ?? true} onChange={v => update({ chat_auto_save_to_vault: v })} last />

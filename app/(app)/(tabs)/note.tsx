@@ -491,15 +491,12 @@ export default function ChatTab() {
               body: JSON.stringify({ couple_id: couple.id, detected_by_user_id: user.id, source_screen: 'chat' }),
             }).catch(() => {});
           });
-          if (settings?.notify_me_on_own_screenshots) {
-            Alert.alert('Screenshot Reminder', "You just screenshotted your partner's content.");
-          }
         }
         lastInactiveAtRef.current = null;
       }
     });
     return () => sub.remove();
-  }, [blurEnabled, couple?.id, user?.id, settings?.notify_me_on_own_screenshots]);
+  }, [blurEnabled, couple?.id, user?.id]);
 
   // Re-blur when leaving the Chat tab
   useFocusEffect(
@@ -862,7 +859,7 @@ export default function ChatTab() {
       media_storage_path: chatStoragePath,
       media_storage_bucket: hasMedia ? 'chat_media' : null,
       media_type: attachedMedia?.type === 'video' ? 'video' : hasMedia ? 'photo' : null,
-      allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
+      allow_screenshot: false,
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
@@ -884,7 +881,7 @@ export default function ChatTab() {
       media_storage_path: chatStoragePath,
       media_storage_bucket: hasMedia ? 'chat_media' : null,
       media_type: attachedMedia?.type ?? null,
-      allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
+      allow_screenshot: false,
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
@@ -965,7 +962,7 @@ export default function ChatTab() {
             file_path: vaultPath,
             storage_path: vaultPath,
             storage_bucket: 'vault',
-            allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
+            allow_screenshot: false,
             allow_save: settings?.vault_allow_save_default ?? false,
             allow_share: settings?.vault_allow_share_default ?? false,
             chat_message_id: messageId,

@@ -491,7 +491,7 @@ export default function VaultScreen() {
             couple_id: rpcResult.couple_id, uploaded_by_user_id: user.id, media_type: mediaType,
             file_path: actualPath, storage_path: actualPath, storage_bucket: 'vault',
             blurred_thumbnail_path: uploadResult.thumbnailPath ?? null,
-            allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
+            allow_screenshot: false,
             allow_save: settings?.vault_allow_save_default ?? false,
             allow_share: settings?.vault_allow_share_default ?? false,
             chat_message_id: null,
@@ -945,8 +945,7 @@ export default function VaultScreen() {
           <View style={[styles.defaultsRow, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: 'rgba(255,46,138,0.18)' }]}>
             <Shield color="#FF2E8A" size={16} strokeWidth={2} />
             <AppText style={[styles.defaultsText, { color: colors.textSecondary }]}>
-              Screenshot: {settings?.vault_allow_screenshot_default ? 'On' : 'Off'}
-              {'  ·  '}Save: {settings?.vault_allow_save_default ? 'On' : 'Off'}
+              Save: {settings?.vault_allow_save_default ? 'On' : 'Off'}
               {'  ·  '}Share: {settings?.vault_allow_share_default ? 'On' : 'Off'}
             </AppText>
           </View>
