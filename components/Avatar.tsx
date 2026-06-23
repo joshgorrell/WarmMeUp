@@ -39,7 +39,7 @@ export default function Avatar({ name, uri, size = 'md', bgColor }: AvatarProps)
         },
       ]}>
         {uri ? (
-          <Image source={{ uri }} style={{ width: dim, height: dim, borderRadius: dim / 2 }} />
+          <Image source={{ uri }} style={{ width: dim, height: dim, borderRadius: dim / 2 }} resizeMode="cover" />
         ) : (
           <AppText style={[styles.initial, { fontSize }]}>{initial}</AppText>
         )}

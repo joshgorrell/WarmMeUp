@@ -331,8 +331,8 @@ function ChatHeader({
           <Avatar name={partnerName} uri={partnerAvatarUri} size="sm" bgColor="rgba(255,46,138,0.20)" />
           {partnerIsOnline && <View style={chatHeaderStyles.onlineDot} />}
         </View>
-        <View>
-          <AppText style={chatHeaderStyles.name}>{partnerName}</AppText>
+        <View style={chatHeaderStyles.nameWrap}>
+          <AppText style={chatHeaderStyles.name} numberOfLines={1} ellipsizeMode="tail">{partnerName}</AppText>
           {partnerIsOnline && <AppText style={chatHeaderStyles.status}>Active now</AppText>}
         </View>
       </View>
@@ -374,6 +374,11 @@ const chatHeaderStyles = StyleSheet.create({
   },
   avatarWrap: {
     position: 'relative',
+    flexShrink: 0,
+  },
+  nameWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   onlineDot: {
     position: 'absolute',
@@ -402,6 +407,7 @@ const chatHeaderStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    flexShrink: 0,
   },
   iconBtn: {
     width: 40,
