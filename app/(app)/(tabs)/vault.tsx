@@ -544,7 +544,7 @@ export default function VaultScreen() {
         storage_path: actualPath,
         storage_bucket: 'vault',
         blurred_thumbnail_path: uploadResult.thumbnailPath ?? null,
-        allow_screenshot: settings?.vault_allow_screenshot_default ?? false,
+        allow_screenshot: false,
         allow_save: settings?.vault_allow_save_default ?? false,
         allow_share: settings?.vault_allow_share_default ?? false,
         chat_message_id: null,

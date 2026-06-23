@@ -12,7 +12,9 @@ export function logDebugEvent(tag: string, data: Record<string, unknown> = {}): 
   const event: DebugEvent = { tag, timestamp: new Date().toISOString(), data };
   events.unshift(event);
   if (events.length > MAX_EVENTS) events.splice(MAX_EVENTS);
-  console.log(`[${tag}]`, data);
+  if (process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1') {
+    console.log(`[${tag}]`, data);
+  }
   listeners.forEach(fn => fn());
 }
 

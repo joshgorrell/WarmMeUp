@@ -22,9 +22,10 @@
       "node": "20.18.0",
       "env": {
         "NODE_ENV": "production",
-        "EXPO_PUBLIC_DEBUG_ALWAYS_ON": "1",
         "EXPO_PUBLIC_SUPABASE_URL": "https://vdhrcbaggplcktjamwcj.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkaHJjYmFnZ3BsY2t0amFtd2NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMzQ2MjAsImV4cCI6MjA5NDcxMDYyMH0.HvsAb_LANZcGO1fIPVhkeAlGhftbPtgzaEJ7DjsTY8E",
+        "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "appl_REPLACE_WITH_PRODUCTION_IOS_KEY",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_REPLACE_WITH_PRODUCTION_ANDROID_KEY",
         "EXPO_PUBLIC_GIT_SHA": "$EAS_BUILD_GIT_COMMIT_HASH"
       },
       "cache": {

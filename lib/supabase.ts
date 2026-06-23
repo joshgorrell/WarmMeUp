@@ -23,11 +23,6 @@ if (anonKeyEndsWithNewline) {
   console.warn('[Supabase] WARNING: anon key had trailing whitespace/newline — trimmed before use');
 }
 
-console.log('[Supabase] anonKeyLengthRaw:', anonKeyLengthRaw);
-console.log('[Supabase] anonKeyLengthTrimmed:', anonKeyLengthTrimmed);
-console.log('[Supabase] anonKeyEndsWithNewline:', anonKeyEndsWithNewline);
-console.log('[Supabase] anonKeyRawJSON:', JSON.stringify(_rawAnonKey.slice(-6)));
-
 const webStorage = {
   getItem: (key: string) => {
     try { return window.localStorage.getItem(key); } catch { return null; }
@@ -102,9 +97,3 @@ export function getSupabaseDiagnostics() {
 
 const _supabaseUrlHost = supabaseUrl ? (() => { try { return new URL(supabaseUrl).hostname; } catch { return null; } })() : null;
 const _dbProjectRef = _supabaseUrlHost ? _supabaseUrlHost.replace(/\.supabase\.co$/, '') : null;
-console.log('[Supabase] URL:', supabaseUrl ?? 'MISSING');
-console.log('[Supabase] URL host:', _supabaseUrlHost);
-console.log('[Supabase] project ref:', _dbProjectRef);
-console.log('[Supabase] anon key present:', Boolean(supabaseAnonKey));
-console.log('[Supabase] anon key prefix (25):', supabaseAnonKey?.slice(0, 25) ?? 'MISSING');
-console.log('[Supabase] anon key length:', supabaseAnonKey?.length ?? 0);

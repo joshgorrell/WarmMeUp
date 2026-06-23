@@ -237,7 +237,6 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
     });
     console.log('[Subscription] response status:', res.status, res.statusText);
     const rawText = await res.text();
-    console.log('[Subscription] response body:', rawText);
     if (!res.ok) {
       console.warn('[Subscription] non-OK response — returning default');
       return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
@@ -247,7 +246,6 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
       console.warn('[Subscription] JSON parse failed');
       return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
     }
-    console.log('[Subscription] parsed — isPremium:', data.isPremium, 'source:', data.source, 'plan:', data.plan, 'canInvite:', data.canInvite);
     return {
       isPremium: data.isPremium ?? false,
       source: data.source ?? 'none',
@@ -306,10 +304,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // is dead — clear all local state and treat as signed-out.
         if (event === 'INITIAL_SESSION') {
           (async () => {
-            console.log('[AUTH INITIAL_SESSION]', { userId: session.user.id, validating: true });
             const { error } = await supabase.auth.getUser();
             if (error) {
-              console.warn('[AUTH INITIAL_SESSION]', { valid: false, userId: session.user.id, error: error.message });
               // Persist the cleared-session diagnostics BEFORE signOut wipes SecureStore,
               // so the debug screen can tell us exactly why and when the session was cleared.
               if (Platform.OS !== 'web') {
@@ -326,7 +322,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               await supabase.auth.signOut();
               return;
             }
-            console.log('[AUTH INITIAL_SESSION]', { valid: true, userId: session.user.id });
             // Token is valid — proceed with normal startup load.
             setSession(session);
             setUser(session.user);
@@ -376,7 +371,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function loadUserData(userId: string) {
-    console.log('[Auth] loadUserData start uid:', userId, '| SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL ?? '(not set)');
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       const accessToken = currentSession?.access_token ?? '';
@@ -398,7 +392,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setDebugModeEnabled(data?.value === true);
         } catch {}
       })();
-      console.log('[Auth] loadUserData Promise.all done. login_method:', fetchedSettings?.login_method, 'lock_after_seconds:', fetchedSettings?.lock_after_seconds);
 
       // Restore persisted unlock timestamp so lockIfNeeded() respects the grace period
       // across full app restarts, not just background/foreground transitions.
@@ -418,9 +411,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Load subscription info — fire after other data so we don't block the UI gate
       if (accessToken) {
         fetchEffectiveSubscription(accessToken).then(async info => {
-          console.log('[Auth] subscriptionInfo resolved:', JSON.stringify(info));
-          // Safety net: if the edge function still returns canInvite=false for an
-          // admin/super-admin user (e.g. stale Deno container), override client-side.
           const adminOverride = await applyAdminOverrideAsync(info, userId);
           if (adminOverride !== info) {
             console.log('[Auth] admin override applied — canInvite forced true');
@@ -485,8 +475,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('active', true)
         .maybeSingle());
     }
-
-    console.log('[fetchCouple] uid:', userId, 'data:', JSON.stringify(data), 'error:', JSON.stringify(error));
 
     // Only update state if the query succeeded. A network error or unexpected
     // PostgREST error (e.g. multiple rows from a bad RLS policy) returns error!=null
