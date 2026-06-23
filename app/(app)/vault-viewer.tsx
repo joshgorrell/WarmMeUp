@@ -511,64 +511,12 @@ export default function VaultViewerScreen() {
   const { width: screenWidth, height: screenHeight } = useLayout();
   const { user, couple, settings } = useAuth();
 
-  const {
-    initialIndex: initialIndexStr,
-    // Legacy single-item params — kept for deep-link backwards compat
-    id: legacyId,
-    storagePath: legacyStoragePath,
-    storageBucket: legacyStorageBucket,
-    coupleId: legacyCoupleId,
-    mediaType: legacyMediaType,
-    allowScreenshot: legacyAllowScreenshot,
-    allowSave: legacyAllowSave,
-    allowShare: legacyAllowShare,
-    interactionId: legacyInteractionId,
-    timestamp: legacyTimestamp,
-    createdAt: legacyCreatedAt,
-    uploaderName: legacyUploaderName,
-    signedUri: legacySignedUri,
-    thumbUri: legacyThumbUri,
-  } = useLocalSearchParams<{
-    initialIndex?: string;
-    id?: string;
-    storagePath?: string;
-    storageBucket?: string;
-    coupleId?: string;
-    mediaType?: string;
-    allowScreenshot?: string;
-    allowSave?: string;
-    allowShare?: string;
-    interactionId?: string;
-    timestamp?: string;
-    createdAt?: string;
-    uploaderName?: string;
-    signedUri?: string;
-    thumbUri?: string;
-  }>();
+  const { initialIndex: initialIndexStr } = useLocalSearchParams<{ initialIndex?: string }>();
 
-  // Use gallery store if populated; fall back to single-item legacy params
-  const storeItems = getGalleryItems();
-  const items: GalleryItem[] = storeItems.length > 0 ? storeItems : (() => {
-    if (!legacyStoragePath) return [];
-    return [{
-      id: legacyId ?? '',
-      storagePath: legacyStoragePath,
-      storageBucket: legacyStorageBucket ?? 'vault',
-      coupleId: legacyCoupleId ?? null,
-      mediaType: legacyMediaType ?? 'photo',
-      allowScreenshot: legacyAllowScreenshot === '1',
-      allowSave: legacyAllowSave === '1',
-      allowShare: legacyAllowShare === '1',
-      interactionId: legacyInteractionId ?? null,
-      createdAt: legacyCreatedAt ?? legacyTimestamp ?? null,
-      uploaderName: legacyUploaderName ?? null,
-      signedUri: legacySignedUri || null,
-      thumbUri: legacyThumbUri ?? null,
-    }];
-  })();
+  const items: GalleryItem[] = getGalleryItems();
 
   const initialIndex = Math.min(
-    Math.max(0, parseInt(initialIndexStr ?? '0', 10)),
+    Math.max(0, parseInt(initialIndexStr ?? '0', 10) || 0),
     Math.max(0, items.length - 1),
   );
 
@@ -659,7 +607,7 @@ export default function VaultViewerScreen() {
         scrollEnabled={!isZoomed}
         showsHorizontalScrollIndicator={false}
         getItemLayout={getItemLayout}
-        initialScrollIndex={initialIndex}
+        initialScrollIndex={initialIndex > 0 ? initialIndex : undefined}
         onMomentumScrollEnd={(e) => {
           const idx = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
           setActiveIndex(idx);
