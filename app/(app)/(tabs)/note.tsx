@@ -28,6 +28,10 @@ import { useLayout } from '@/hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logDebugEvent } from '@/lib/debugLog';
 import { setGalleryItems, getCachedUrl, setCachedUrl, evictCachedUrl } from '@/lib/mediaGalleryStore';
+import ReAnimated, {
+  useSharedValue, useAnimatedStyle, withSpring,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
@@ -321,7 +325,7 @@ function ChatHeader({
 }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[chatHeaderStyles.container, { paddingTop: insets.top + 10 }]}>
+    <View style={[chatHeaderStyles.container, { paddingTop: insets.top + 6 }]}>
       <TouchableOpacity onPress={onBack} style={chatHeaderStyles.backBtn} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <ChevronLeft color="#fff" size={26} strokeWidth={2} />
       </TouchableOpacity>
@@ -356,7 +360,7 @@ const chatHeaderStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingBottom: 12,
+    paddingBottom: 8,
     position: 'relative',
   },
   backBtn: {
@@ -1221,9 +1225,22 @@ export default function ChatTab() {
     const initialIndex = gallery.findIndex(g => g.id === msg.id);
     setGalleryItems(gallery);
 
+    // Pass the tapped item's data as URL params too — vault-viewer uses these
+    // as a guaranteed fallback if the module-level store is cleared before render.
     router.push({
       pathname: '/(app)/vault-viewer',
-      params: { initialIndex: String(Math.max(0, initialIndex)) },
+      params: {
+        initialIndex: String(Math.max(0, initialIndex)),
+        id: msg.id,
+        storagePath: msg.media_storage_path,
+        storageBucket: msg.media_storage_bucket ?? 'chat_media',
+        coupleId: msg.couple_id,
+        mediaType: msg.media_type ?? 'photo',
+        allowScreenshot: msg.allow_screenshot ? '1' : '0',
+        allowSave: msg.allow_save ? '1' : '0',
+        allowShare: msg.allow_share ? '1' : '0',
+        signedUri: signedUrls[msg.id] ?? '',
+      },
     });
   }, [router, messages, signedUrls]);
 
@@ -1427,7 +1444,7 @@ export default function ChatTab() {
           {/* Compose bar */}
           <View style={[
             styles.compose,
-            { paddingBottom: insets.bottom > 0 ? insets.bottom + 4 : Spacing.sm },
+            { paddingBottom: insets.bottom > 0 ? insets.bottom : 6 },
             !hasPartner && styles.composeHidden,
           ]}>
             {attachedMedia && !editingState && (
@@ -1639,6 +1656,32 @@ const MessageRow = React.memo(function MessageRow({
     outputRange: ['rgba(255,179,71,0)', 'rgba(255,179,71,0.10)'],
   });
 
+  // Swipe-left to reveal timestamp (iOS Messages style)
+  const swipeX = useSharedValue(0);
+  const swipeGesture = Gesture.Pan()
+    .activeOffsetX([-8, 8])
+    .failOffsetY([-10, 10])
+    .onUpdate((e) => {
+      'worklet';
+      if (e.translationX < 0) {
+        swipeX.value = Math.max(e.translationX, -72);
+      } else {
+        swipeX.value = Math.min(e.translationX * 0.3, 0);
+      }
+    })
+    .onEnd(() => {
+      'worklet';
+      swipeX.value = withSpring(0, { damping: 20, stiffness: 200 });
+    });
+
+  const swipeRowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: swipeX.value }],
+  }));
+  const timestampStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, Math.abs(swipeX.value) / 40),
+    transform: [{ translateX: swipeX.value * 0.4 }],
+  }));
+
   const showDivider = !prevCreatedAt ||
     new Date(prevCreatedAt).toDateString() !== new Date(item.created_at).toDateString();
 
@@ -1663,12 +1706,21 @@ const MessageRow = React.memo(function MessageRow({
           <AppText style={[styles.dateText, { color: colors.textMuted }]}>{getDividerLabel(item.created_at)}</AppText>
         </View>
       )}
-      <Animated.View style={[
-        styles.msgRow,
-        isMine ? styles.msgRowRight : styles.msgRowLeft,
-        { backgroundColor: highlightBg, marginBottom },
-      ]}>
-        {/* Avatar placeholder — keeps layout stable for non-last receiver messages */}
+      <View style={styles.msgRowOuter}>
+        {/* Timestamp revealed by swiping left — positioned to the right of the row */}
+        <ReAnimated.View style={[styles.swipeTimestamp, isMine && styles.swipeTimestampRight, timestampStyle]} pointerEvents="none">
+          <AppText style={[styles.bubbleTime, { color: 'rgba(255,255,255,0.40)', fontSize: Math.round(11 * chatFontScale) }]}>
+            {formatTime(item.created_at)}
+          </AppText>
+        </ReAnimated.View>
+        <GestureDetector gesture={swipeGesture}>
+          <ReAnimated.View style={swipeRowStyle}>
+            <Animated.View style={[
+              styles.msgRow,
+              isMine ? styles.msgRowRight : styles.msgRowLeft,
+              { backgroundColor: highlightBg, marginBottom },
+            ]}>
+              {/* Avatar placeholder — keeps layout stable for non-last receiver messages */}
         {!isMine && (
           <View style={[styles.msgAvatar, !showAvatar && styles.msgAvatarHidden, showAvatar && { backgroundColor: 'rgba(255,138,61,0.20)' }]}>
             {showAvatar && (
@@ -1688,12 +1740,7 @@ const MessageRow = React.memo(function MessageRow({
             activeOpacity={1}
           >
             {isMine && !mediaOnly ? (
-              <LinearGradient
-                colors={['#E8196E', '#FF5A3D']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.bubble, radii, isMenuOpen && styles.bubbleMenuOpen]}
-              >
+              <View style={[styles.bubble, styles.bubbleOutbound, radii, isMenuOpen && styles.bubbleMenuOpen]}>
                 {hasMedia && (
                   <MediaBubble
                     msg={item}
@@ -1717,32 +1764,34 @@ const MessageRow = React.memo(function MessageRow({
                     {item.content_text}
                   </AppText>
                 ) : null}
-                <View style={[styles.bubbleMeta, hasMedia && styles.bubbleMetaMedia]}>
-                  <AppText style={[styles.bubbleTime, {
-                    color: 'rgba(255,255,255,0.65)',
-                    fontSize: Math.round(11 * chatFontScale),
+                {item.edited_at ? (
+                  <AppText style={[styles.editedLabel, {
+                    color: 'rgba(255,255,255,0.45)',
+                    fontSize: Math.round(10 * chatFontScale),
+                    alignSelf: 'flex-end',
                   }]}>
-                    {formatTime(item.created_at)}
+                    edited
                   </AppText>
-                  {item.edited_at && (
-                    <AppText style={[styles.editedLabel, {
-                      color: 'rgba(255,255,255,0.45)',
-                      fontSize: Math.round(10 * chatFontScale),
-                    }]}>
-                      edited
-                    </AppText>
-                  )}
-                </View>
-              </LinearGradient>
+                ) : null}
+              </View>
             ) : (
               <View style={[
                 styles.bubble,
                 radii,
                 isMine
                   ? [styles.bubbleOutboundMediaOnly, isMenuOpen && styles.bubbleMenuOpen]
-                  : [styles.bubbleInbound, isMenuOpen && styles.bubbleMenuOpen],
+                  : isMenuOpen && styles.bubbleMenuOpen,
                 hasMedia && styles.bubbleMediaOnly,
+                !isMine && !hasMedia && styles.bubbleInboundPad,
               ]}>
+                {!isMine && (
+                  <LinearGradient
+                    colors={['#FF4D8D', '#FF6A5B']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[StyleSheet.absoluteFill, radii]}
+                  />
+                )}
                 {hasMedia && (
                   <MediaBubble
                     msg={item}
@@ -1759,29 +1808,22 @@ const MessageRow = React.memo(function MessageRow({
                 )}
                 {item.content_text ? (
                   <AppText style={[styles.bubbleText, styles.mediaCaption, {
-                    color: colors.text,
+                    color: isMine ? 'rgba(255,255,255,0.55)' : '#fff',
                     fontSize: Math.round(15 * chatFontScale),
                     lineHeight: Math.round(15 * chatFontScale * 1.45),
                   }]}>
                     {item.content_text}
                   </AppText>
                 ) : null}
-                <View style={[styles.bubbleMeta, hasMedia && styles.bubbleMetaMedia]}>
-                  <AppText style={[styles.bubbleTime, {
-                    color: isMine ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.45)',
-                    fontSize: Math.round(11 * chatFontScale),
+                {item.edited_at ? (
+                  <AppText style={[styles.editedLabel, {
+                    color: 'rgba(255,255,255,0.45)',
+                    fontSize: Math.round(10 * chatFontScale),
+                    alignSelf: 'flex-end',
                   }]}>
-                    {formatTime(item.created_at)}
+                    edited
                   </AppText>
-                  {item.edited_at && (
-                    <AppText style={[styles.editedLabel, {
-                      color: isMine ? 'rgba(255,255,255,0.38)' : 'rgba(255,255,255,0.35)',
-                      fontSize: Math.round(10 * chatFontScale),
-                    }]}>
-                      edited
-                    </AppText>
-                  )}
-                </View>
+                ) : null}
               </View>
             )}
           </TouchableOpacity>
@@ -1812,6 +1854,9 @@ const MessageRow = React.memo(function MessageRow({
           )}
         </View>
       </Animated.View>
+          </ReAnimated.View>
+        </GestureDetector>
+      </View>
     </>
   );
 });
@@ -1839,6 +1884,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Medium',
     letterSpacing: 0.4,
+  },
+
+  // Message row outer — holds both the swipe-revealed timestamp and the sliding row
+  msgRowOuter: {
+    position: 'relative',
+    overflow: 'visible',
+  },
+
+  // Timestamp shown when swiping left
+  swipeTimestamp: {
+    position: 'absolute',
+    right: 0,
+    bottom: 8,
+    paddingRight: 4,
+  },
+  swipeTimestampRight: {
+    right: 0,
   },
 
   // Message row
@@ -1886,9 +1948,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     gap: 4,
+    overflow: 'hidden',
   },
-  bubbleInbound: {
-    backgroundColor: '#1E1E26',
+  bubbleOutbound: {
+    backgroundColor: '#2A2A34',
+  },
+  bubbleInboundPad: {
+    // ensure padding is applied for text-only inbound (gradient is absolute)
   },
   bubbleOutboundMediaOnly: {
     backgroundColor: 'transparent',
@@ -2025,7 +2091,7 @@ const styles = StyleSheet.create({
   // Compose
   compose: {
     paddingHorizontal: 12,
-    paddingTop: 10,
+    paddingTop: 6,
     backgroundColor: '#050408',
   },
   previewRow: {
