@@ -562,7 +562,7 @@ export default function VaultViewerScreen() {
       interactionId: legacyInteractionId ?? null,
       createdAt: legacyCreatedAt ?? legacyTimestamp ?? null,
       uploaderName: legacyUploaderName ?? null,
-      signedUri: legacySignedUri ?? null,
+      signedUri: legacySignedUri || null,
       thumbUri: legacyThumbUri ?? null,
     }];
   })();

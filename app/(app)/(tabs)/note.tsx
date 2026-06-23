@@ -229,7 +229,7 @@ function MediaBubble({
             source={{ uri: retryUrl ?? signedUrl! }}
             style={[
               StyleSheet.absoluteFill,
-              isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.15)' } as any : undefined,
+              isBlurred && Platform.OS === 'web' ? { filter: 'blur(18px)', transform: 'scale(1.1)' } as any : undefined,
             ]}
             contentFit="cover"
             cachePolicy="memory-disk"
@@ -259,7 +259,7 @@ function MediaBubble({
           />
           {/* Native blur via BlurView — matches vault blur quality; blurRadius on expo-image is broken on iOS */}
           {isBlurred && Platform.OS !== 'web' && (
-            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={35} tint="dark" style={StyleSheet.absoluteFill} />
           )}
         </>
       ) : (
@@ -1239,7 +1239,7 @@ export default function ChatTab() {
         allowScreenshot: msg.allow_screenshot ? '1' : '0',
         allowSave: msg.allow_save ? '1' : '0',
         allowShare: msg.allow_share ? '1' : '0',
-        signedUri: signedUrls[msg.id] ?? '',
+        signedUri: signedUrls[msg.id] || undefined,
       },
     });
   }, [router, messages, signedUrls]);
