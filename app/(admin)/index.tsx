@@ -337,6 +337,15 @@ export default function AdminDashboard() {
       border: 'rgba(255,179,71,0.25)',
       route: '/(admin)/greetings',
     },
+    {
+      label: 'Debug Diagnostics',
+      sub: 'Open the full diagnostic screen',
+      icon: <Bug color="#60C8FF" size={22} strokeWidth={2} />,
+      color: '#60C8FF',
+      bg: 'rgba(96,200,255,0.10)',
+      border: 'rgba(96,200,255,0.25)',
+      route: '/debug',
+    },
   ];
 
   return (
@@ -472,7 +481,7 @@ export default function AdminDashboard() {
             </View>
             <View style={{ flex: 1 }}>
               <AppText style={[styles.devLabel, { color: colors.text }]}>Emergency Debug Access</AppText>
-              <AppText style={[styles.devSub, { color: colors.textMuted }]}>Super admin: 5 rapid taps on splash or weather. Any user: 5-second hold on header logo. Non-super-admins see a limited safe view only.</AppText>
+              <AppText style={[styles.devSub, { color: colors.textMuted }]}>Any admin: 5 rapid taps on splash, unlock, or weather screen. Any user (pre-login): 5-second hold on login logo.</AppText>
             </View>
             <Toggle
               value={debugModeEnabled}

@@ -435,7 +435,7 @@ export default function StatsAdmin() {
                 </View>
                 <View style={styles.miniStat}>
                   <AppText style={[styles.miniNum, { color: '#FF8A3D' }]}>{cs.tell_me}</AppText>
-                  <AppText style={[styles.miniLabel, { color: colors.textMuted }]}>Wish</AppText>
+                  <AppText style={[styles.miniLabel, { color: colors.textMuted }]}>Ask</AppText>
                 </View>
                 <View style={styles.miniStat}>
                   <AppText style={[styles.miniNum, { color: '#E8637A' }]}>{cs.wish}</AppText>

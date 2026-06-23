@@ -6,7 +6,7 @@ import {
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
-import { ChevronRight, Users, X, Check, TriangleAlert as AlertTriangle, RefreshCw } from 'lucide-react-native';
+import { ChevronRight, Users, X, Check, TriangleAlert as AlertTriangle, RefreshCw, Heart, Lock } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
@@ -146,7 +146,10 @@ export default function CouplesAdmin() {
                 activeOpacity={0.8}
               >
                 <View style={[styles.avatarPair, { backgroundColor: c.active ? 'rgba(255,46,138,0.10)' : 'rgba(255,90,95,0.10)' }]}>
-                  <AppText style={styles.avatarEmoji}>{c.active ? '❤️' : '🔒'}</AppText>
+                  {c.active
+                    ? <Heart color="#FF2E8A" size={20} strokeWidth={2} fill="rgba(255,46,138,0.35)" />
+                    : <Lock color="#FF5A5F" size={20} strokeWidth={2} />
+                  }
                 </View>
                 <View style={{ flex: 1 }}>
                   <AppText style={[styles.coupleName, { color: colors.text }]}>
@@ -284,7 +287,6 @@ const styles = StyleSheet.create({
     padding: Spacing.card,
   },
   avatarPair: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  avatarEmoji: { fontSize: 20 },
   coupleName: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', marginBottom: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   statusBadge: { borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2 },

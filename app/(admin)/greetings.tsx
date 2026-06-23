@@ -146,24 +146,24 @@ export default function GreetingsScreen() {
 
   return (
     <AppShell scrollable={false} noTopPadding>
-      <ScreenHeader onBack={() => router.back()} />
+      <ScreenHeader
+        title="Greeting Subtitles"
+        onBack={() => router.back()}
+        rightSlot={
+          <TouchableOpacity
+            style={[styles.addBtn, { backgroundColor: 'rgba(255,179,71,0.12)', borderColor: 'rgba(255,179,71,0.35)' }]}
+            onPress={openAdd}
+            activeOpacity={0.8}
+          >
+            <Plus color="#FFB347" size={18} strokeWidth={2.2} />
+            <AppText style={styles.addBtnText}>Add</AppText>
+          </TouchableOpacity>
+        }
+      />
 
-      <View style={styles.titleRow}>
-        <View>
-          <AppText style={[styles.title, { color: colors.text }]}>Greeting Subtitles</AppText>
-          <AppText style={[styles.subtitle, { color: colors.textMuted }]}>
-            {activeCount} of {phrases.length} active — shown randomly on the home screen
-          </AppText>
-        </View>
-        <TouchableOpacity
-          style={[styles.addBtn, { backgroundColor: 'rgba(255,179,71,0.12)', borderColor: 'rgba(255,179,71,0.35)' }]}
-          onPress={openAdd}
-          activeOpacity={0.8}
-        >
-          <Plus color="#FFB347" size={18} strokeWidth={2.2} />
-          <AppText style={styles.addBtnText}>Add</AppText>
-        </TouchableOpacity>
-      </View>
+      <AppText style={[styles.subtitle, { color: colors.textMuted, paddingHorizontal: Spacing.screen, marginBottom: Spacing.sm }]}>
+        {activeCount} of {phrases.length} active — shown randomly on the home screen
+      </AppText>
 
       {error && (
         <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,60,60,0.08)', borderColor: 'rgba(255,60,60,0.25)' }]}>
@@ -323,15 +323,6 @@ export default function GreetingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.screen,
-    paddingBottom: Spacing.md,
-    gap: Spacing.md,
-  },
-  title: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold', marginBottom: 2 },
   subtitle: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
   addBtn: {
     flexDirection: 'row',
