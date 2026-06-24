@@ -233,7 +233,8 @@ export default function TransitionScreen() {
         routed.current = true;
         const hasActiveCouple = coupleRef.current?.active === true;
         const isPrivileged = isAdminRef.current || isSuperAdminRef.current;
-        const dest = isPrivileged || hasActiveCouple || canInviteRef.current ? '/(app)/(tabs)' : '/(auth)/pair';
+        // If subscription is still loading at deadline, route to paywall — never bypass it.
+        const dest = isPrivileged || hasActiveCouple ? '/(app)/(tabs)' : '/(auth)/pair';
         console.warn(`[TRANSITION ROUTED] +${elapsed()}ms HARD DEADLINE — fallback to ${dest}`, { elapsedMs: elapsed() });
         router.replace(dest);
       }

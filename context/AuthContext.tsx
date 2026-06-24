@@ -8,6 +8,7 @@ import { maybeArchiveAndResetScores } from '@/lib/points';
 import { registerForPushNotifications, savePushToken, clearPushToken } from '@/lib/notifications';
 import { secureKey } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
+import { logInRevenueCat, logOutRevenueCat } from '@/lib/purchases';
 
 /**
  * Single source of truth for whether the unlock gate must be shown.
@@ -408,6 +409,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (token) savePushToken(userId, token);
       });
 
+      // Log the Supabase user ID into RevenueCat so server-side verification can
+      // look up this subscriber by their Supabase UUID.
+      logInRevenueCat(userId);
+
       // Load subscription info — fire after other data so we don't block the UI gate
       if (accessToken) {
         fetchEffectiveSubscription(accessToken).then(async info => {
@@ -622,6 +627,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (userId) {
       clearPushToken(userId).catch(() => {});
       clearUnlockedAt(userId).catch(() => {});
+      logOutRevenueCat().catch(() => {});
     }
     supabase.auth.signOut().catch(() => {});
   }, [user]);

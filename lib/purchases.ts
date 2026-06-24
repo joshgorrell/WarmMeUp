@@ -9,7 +9,15 @@ async function ensureConfigured(): Promise<typeof import('react-native-purchases
   const iosKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
   const androidKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
   const apiKey = Platform.OS === 'ios' ? iosKey : androidKey;
-  if (!apiKey) return null;
+
+  if (!apiKey) {
+    console.error(
+      `[RevenueCat] Missing API key for platform "${Platform.OS}". ` +
+      `Set EXPO_PUBLIC_REVENUECAT_${Platform.OS.toUpperCase()}_KEY in your EAS build environment. ` +
+      `Paywall will remain locked.`
+    );
+    return null;
+  }
 
   if (!configured) {
     if (!configurePromise) {
@@ -18,8 +26,9 @@ async function ensureConfigured(): Promise<typeof import('react-native-purchases
           const Purchases = (await import('react-native-purchases')).default;
           Purchases.configure({ apiKey });
           configured = true;
-        } catch {
-          // Native module unavailable (simulator / web bundle fallback)
+          console.log(`[RevenueCat] Configured for platform "${Platform.OS}"`);
+        } catch (err: any) {
+          console.warn('[RevenueCat] configure() failed — native module may be unavailable:', err?.message);
         } finally {
           configurePromise = null;
         }
@@ -32,4 +41,28 @@ async function ensureConfigured(): Promise<typeof import('react-native-purchases
   return (await import('react-native-purchases')).default;
 }
 
-export { ensureConfigured };
+async function logInRevenueCat(userId: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const Purchases = await ensureConfigured();
+    if (!Purchases) return;
+    const { created } = await Purchases.logIn(userId);
+    console.log(`[RevenueCat] logIn userId=${userId} created=${created}`);
+  } catch (err: any) {
+    console.warn('[RevenueCat] logIn failed:', err?.message);
+  }
+}
+
+async function logOutRevenueCat(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const Purchases = await ensureConfigured();
+    if (!Purchases) return;
+    await Purchases.logOut();
+    console.log('[RevenueCat] logged out');
+  } catch (err: any) {
+    console.warn('[RevenueCat] logOut failed:', err?.message);
+  }
+}
+
+export { ensureConfigured, logInRevenueCat, logOutRevenueCat };

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { ensureConfigured } from '@/lib/purchases';
+import { planFromProductId } from '@/lib/productIds';
 
 export type SubscriptionPlan = 'Free' | 'Monthly' | 'Annual';
 export type SubscriptionStatus = 'Active' | 'Inactive' | 'Trial';
@@ -33,11 +34,9 @@ function formatDate(dateString: string | null): string | null {
   }
 }
 
-function derivePlan(productIdentifier: string | undefined): SubscriptionPlan {
-  if (!productIdentifier) return 'Free';
-  const id = productIdentifier.toLowerCase();
-  if (id.includes('annual') || id.includes('yearly') || id.includes('year')) return 'Annual';
-  if (id.includes('monthly') || id.includes('month')) return 'Monthly';
+function serverPlanToDisplayPlan(serverPlan: string): SubscriptionPlan {
+  if (serverPlan === 'yearly' || serverPlan === 'annual') return 'Annual';
+  if (serverPlan === 'monthly') return 'Monthly';
   return 'Monthly';
 }
 
@@ -70,6 +69,25 @@ async function fetchEffectiveSubscription(): Promise<{
   }
 }
 
+async function notifyServerOfRestore(): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+    const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+    await fetch(`${baseUrl}/functions/v1/confirm-subscription`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        Apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+  } catch (err: any) {
+    console.warn('[useSubscription] notifyServerOfRestore failed:', err?.message);
+  }
+}
+
 export function useSubscription(): SubscriptionState {
   const [plan, setPlan] = useState<SubscriptionPlan>('Free');
   const [status, setStatus] = useState<SubscriptionStatus>('Inactive');
@@ -84,50 +102,58 @@ export function useSubscription(): SubscriptionState {
     try {
       // Primary: server-authoritative check via Edge Function (handles partner sharing)
       const effective = await fetchEffectiveSubscription();
+      console.log('[useSubscription] effective subscription:', JSON.stringify({
+        isPremium: effective?.isPremium,
+        source: effective?.source,
+        plan: effective?.plan,
+      }));
+
       if (effective?.isPremium) {
         setIsPremium(true);
         setPremiumSource(effective.source);
         setRenewalDate(formatDate(effective.expiresAt));
-        const serverPlan = effective.plan ?? '';
-        if (serverPlan === 'yearly' || serverPlan === 'annual') setPlan('Annual');
-        else if (serverPlan === 'monthly') setPlan('Monthly');
-        else setPlan('Monthly');
+        setPlan(serverPlanToDisplayPlan(effective.plan ?? ''));
         setStatus('Active');
         setIsOnTrial(false);
         return;
       }
 
-      // Secondary: RevenueCat receipt check (native only, own subscription)
+      // Secondary: RevenueCat local entitlement check (native only, own subscription)
       if (Platform.OS !== 'web') {
         try {
           const Purchases = await ensureConfigured();
           if (Purchases) {
             const info = await Purchases.getCustomerInfo();
             const entitlement = info.entitlements.active['premium'];
+            console.log('[useSubscription] RC local entitlement active:', !!entitlement,
+              'productId:', entitlement?.productIdentifier ?? 'none');
             if (entitlement) {
               const onTrial = entitlement.periodType === 'TRIAL';
               setIsOnTrial(onTrial);
               setStatus(onTrial ? 'Trial' : 'Active');
-              setPlan(derivePlan(entitlement.productIdentifier));
+              const derivedPlan = planFromProductId(entitlement.productIdentifier);
+              setPlan(derivedPlan === 'yearly' ? 'Annual' : 'Monthly');
               setRenewalDate(formatDate(entitlement.expirationDate));
               setIsPremium(true);
               setPremiumSource('self');
               return;
             }
           }
-        } catch {
-          // RevenueCat unavailable — fall through to inactive state
+        } catch (err: any) {
+          console.warn('[useSubscription] RC getCustomerInfo failed:', err?.message);
         }
       }
 
       // No active subscription from either source
+      console.log('[useSubscription] no active premium from any source');
       setPlan('Free');
       setStatus('Inactive');
       setIsOnTrial(false);
       setIsPremium(false);
       setPremiumSource('none');
       setRenewalDate(null);
-    } catch {
+    } catch (err: any) {
+      console.warn('[useSubscription] fetchCustomerInfo error:', err?.message);
       setPlan('Free');
       setStatus('Inactive');
       setIsOnTrial(false);
@@ -156,14 +182,12 @@ export function useSubscription(): SubscriptionState {
       }
       const info = await Purchases.restorePurchases();
       const entitlement = info.entitlements.active['premium'];
+      console.log('[useSubscription] restore result — premium active:', !!entitlement,
+        'productId:', entitlement?.productIdentifier ?? 'none');
       if (entitlement) {
-        const onTrial = entitlement.periodType === 'TRIAL';
-        setIsOnTrial(onTrial);
-        setStatus(onTrial ? 'Trial' : 'Active');
-        setPlan(derivePlan(entitlement.productIdentifier));
-        setRenewalDate(formatDate(entitlement.expirationDate));
-        setIsPremium(true);
-        setPremiumSource('self');
+        // Notify server to re-verify via RevenueCat REST API and sync Supabase.
+        await notifyServerOfRestore();
+        await fetchCustomerInfo();
         Alert.alert('Purchases Restored', 'Your subscription has been restored.');
       } else {
         Alert.alert('No Purchases Found', 'No active subscription was found for your account.');
@@ -171,7 +195,7 @@ export function useSubscription(): SubscriptionState {
     } catch (e: any) {
       Alert.alert('Restore Failed', e?.message ?? 'Could not restore purchases. Please try again.');
     }
-  }, []);
+  }, [fetchCustomerInfo]);
 
   const openManageSubscription = useCallback(async () => {
     await Linking.openURL('https://apps.apple.com/account/subscriptions');
