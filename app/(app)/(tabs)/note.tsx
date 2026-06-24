@@ -601,37 +601,58 @@ export default function ChatTab() {
         .limit(PAGE_SIZE);
       if (data) {
         const sorted = [...data].reverse();
-        // Build the full URL map synchronously before setting state — combines
-        // embedded media_url rows and the module-level cross-nav cache — so
-        // React 18 batches setMessages + setSignedUrls into a single render
-        // and media bubbles never flash the shimmer placeholder on load.
-        const initialUrlMap: Record<string, string> = {};
+        // Build the URL map from embedded media_url and the module-level cache.
+        // For anything still missing, await the Supabase storage signed-URL fetch
+        // so that setMessages + setSignedUrls fire together in one batched render.
+        const urlMap: Record<string, string> = {};
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of sorted) {
           if (m.media_url) {
-            initialUrlMap[m.id] = m.media_url;
+            urlMap[m.id] = m.media_url;
             if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url);
           } else if (m.media_storage_path) {
             const cached = getCachedUrl(m.media_storage_path);
             if (cached) {
-              initialUrlMap[m.id] = cached;
+              urlMap[m.id] = cached;
             } else {
               needsNetworkFetch.push(m);
             }
           }
         }
-        setMessages(sorted);
-        if (Object.keys(initialUrlMap).length > 0) {
-          setSignedUrls(prev => ({ ...prev, ...initialUrlMap }));
+        if (needsNetworkFetch.length > 0) {
+          const byBucket: Record<string, ChatMessage[]> = {};
+          for (const m of needsNetworkFetch) {
+            const bucket = m.media_storage_bucket ?? 'chat_media';
+            if (!byBucket[bucket]) byBucket[bucket] = [];
+            byBucket[bucket].push(m);
+          }
+          await Promise.all(
+            Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
+              const paths = bucketMsgs.map(m => m.media_storage_path!);
+              const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+              const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
+              for (const m of bucketMsgs) {
+                const signed = pathToUrl.get(m.media_storage_path!) ?? null;
+                if (signed) {
+                  urlMap[m.id] = signed;
+                  setCachedUrl(m.media_storage_path!, signed);
+                }
+              }
+            })
+          );
         }
-        if (needsNetworkFetch.length > 0) fetchSignedUrls(needsNetworkFetch);
+        // Single batched render: messages and all available URLs arrive together.
+        setMessages(sorted);
+        if (Object.keys(urlMap).length > 0) {
+          setSignedUrls(prev => ({ ...prev, ...urlMap }));
+        }
         oldestCreatedAtRef.current = sorted[0]?.created_at ?? null;
         setHasMore(data.length === PAGE_SIZE);
       }
     } finally {
       setChatLoading(false);
     }
-  }, [couple?.id, fetchSignedUrls]);
+  }, [couple?.id]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!couple?.id || loadingOlder || !hasMore || !oldestCreatedAtRef.current) return;
@@ -647,26 +668,47 @@ export default function ChatTab() {
         .limit(PAGE_SIZE);
       if (data && data.length > 0) {
         const sorted = [...data].reverse();
-        const initialUrlMap: Record<string, string> = {};
+        const urlMap: Record<string, string> = {};
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of sorted) {
           if (m.media_url) {
-            initialUrlMap[m.id] = m.media_url;
+            urlMap[m.id] = m.media_url;
             if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url);
           } else if (m.media_storage_path) {
             const cached = getCachedUrl(m.media_storage_path);
             if (cached) {
-              initialUrlMap[m.id] = cached;
+              urlMap[m.id] = cached;
             } else {
               needsNetworkFetch.push(m);
             }
           }
         }
-        setMessages(prev => [...sorted, ...prev]);
-        if (Object.keys(initialUrlMap).length > 0) {
-          setSignedUrls(prev => ({ ...prev, ...initialUrlMap }));
+        if (needsNetworkFetch.length > 0) {
+          const byBucket: Record<string, ChatMessage[]> = {};
+          for (const m of needsNetworkFetch) {
+            const bucket = m.media_storage_bucket ?? 'chat_media';
+            if (!byBucket[bucket]) byBucket[bucket] = [];
+            byBucket[bucket].push(m);
+          }
+          await Promise.all(
+            Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
+              const paths = bucketMsgs.map(m => m.media_storage_path!);
+              const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+              const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
+              for (const m of bucketMsgs) {
+                const signed = pathToUrl.get(m.media_storage_path!) ?? null;
+                if (signed) {
+                  urlMap[m.id] = signed;
+                  setCachedUrl(m.media_storage_path!, signed);
+                }
+              }
+            })
+          );
         }
-        if (needsNetworkFetch.length > 0) fetchSignedUrls(needsNetworkFetch);
+        setMessages(prev => [...sorted, ...prev]);
+        if (Object.keys(urlMap).length > 0) {
+          setSignedUrls(prev => ({ ...prev, ...urlMap }));
+        }
         oldestCreatedAtRef.current = sorted[0].created_at;
         setHasMore(data.length === PAGE_SIZE);
       } else {
@@ -675,7 +717,7 @@ export default function ChatTab() {
     } finally {
       setLoadingOlder(false);
     }
-  }, [couple?.id, loadingOlder, hasMore, fetchSignedUrls]);
+  }, [couple?.id, loadingOlder, hasMore]);
 
   useEffect(() => {
     if (!couple?.id) { setChatLoading(false); return; }

@@ -337,20 +337,14 @@ function MediaPage({
           </View>
         ) : !isVideo ? (
           <>
-            {!imageLoaded && (
-              <>
-                {item.thumbUri ? (
-                  <ExpoImage
-                    source={{ uri: item.thumbUri }}
-                    style={{ width: screenWidth, height: screenWidth, opacity: 0.4 }}
-                    contentFit="cover"
-                    blurRadius={12}
-                    cachePolicy="memory-disk"
-                  />
-                ) : (
-                  <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" style={StyleSheet.absoluteFillObject} />
-                )}
-              </>
+            {item.thumbUri && !imageLoaded && (
+              <ExpoImage
+                source={{ uri: item.thumbUri }}
+                style={[StyleSheet.absoluteFillObject, { opacity: 0.4 }]}
+                contentFit="cover"
+                blurRadius={12}
+                cachePolicy="memory-disk"
+              />
             )}
             <GestureDetector gesture={imageGesture}>
               <Animated.View style={[{ width: imgW, height: imgH, overflow: 'hidden' }, imageAnimStyle]}>
@@ -364,6 +358,7 @@ function MediaPage({
                     if (src?.width && src?.height) setImageNativeSize({ w: src.width, h: src.height });
                     setImageLoaded(true);
                   }}
+                  onError={() => setImageLoaded(true)}
                 />
               </Animated.View>
             </GestureDetector>
