@@ -123,6 +123,11 @@ function WishCard({
           </AppText>
 
           <View style={styles.wishCardMeta}>
+            {wish.status === 'draft' && isMine && (
+              <View style={styles.draftBadge}>
+                <AppText style={styles.draftBadgeText}>Draft</AppText>
+              </View>
+            )}
             {wish.category ? (
               <View style={[styles.categoryBadge, { backgroundColor: 'rgba(232,99,122,0.12)', borderColor: 'rgba(232,99,122,0.28)' }]}>
                 <AppText style={styles.categoryBadgeText}>
@@ -1013,11 +1018,8 @@ export default function WishTab() {
   const hasPartner = !!couple?.user_b_id;
 
   // Filter lists
-  // Solo users: "Mine" shows all their non-fulfilled wishes (including status='shared')
-  // Paired users: "Mine" shows only drafts; shared wishes go to "Ours"
-  const myWishes = hasPartner
-    ? wishes.filter(w => w.created_by_user_id === user?.id && w.status === 'draft')
-    : wishes.filter(w => w.created_by_user_id === user?.id && w.status !== 'fulfilled');
+  // "Mine" shows every wish you created that hasn't been granted — drafts and shared alike.
+  const myWishes = wishes.filter(w => w.created_by_user_id === user?.id && w.status !== 'fulfilled');
   const theirWishes = wishes.filter(w => w.created_by_user_id !== user?.id && w.status !== 'fulfilled');
   // "Ours" only makes sense once there's a partner — solo users see all their own wishes under "Mine"
   const sharedWishes = hasPartner ? wishes.filter(w => w.status === 'shared') : [];
@@ -1191,6 +1193,8 @@ const styles = StyleSheet.create({
   wishCardMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   categoryBadge: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 2 },
   categoryBadgeText: { fontSize: 10, fontFamily: 'Inter-Medium', color: WISH_ACCENT, letterSpacing: 0.2 },
+  draftBadge: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.pill, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.18)' },
+  draftBadgeText: { fontSize: 10, fontFamily: 'Inter-Medium', color: 'rgba(255,255,255,0.45)', letterSpacing: 0.2 },
   wishAge: { fontSize: 10, fontFamily: 'Inter-Regular' },
   wishSubtitle: { fontSize: 11, fontFamily: 'Inter-Regular', lineHeight: 15 },
   moreBtn: { padding: 4, marginLeft: 4, flexShrink: 0 },
