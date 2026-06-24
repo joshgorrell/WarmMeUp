@@ -183,13 +183,20 @@ function MediaPage({
     transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
   }));
 
-  // ─── Signed URL (lazy if not pre-populated) ────────────────────────────────
+  // ─── Signed URL — always refresh from storagePath to avoid expired URLs ─────
   useEffect(() => {
-    if (item.signedUri || !item.storagePath) return;
+    if (!item.storagePath) return;
     supabase.storage.from(item.storageBucket ?? 'vault').createSignedUrl(item.storagePath, 12 * 60 * 60).then(({ data }) => {
       if (isMountedRef.current && data?.signedUrl) setMediaUri(data.signedUrl);
     });
-  }, [item.storagePath, item.storageBucket, item.signedUri]);
+  }, [item.storagePath, item.storageBucket]);
+
+  // Reset error/loaded flags when a new URL arrives so the image retries
+  useEffect(() => {
+    if (!mediaUri) return;
+    setImgLoadError(false);
+    setImageLoaded(false);
+  }, [mediaUri]);
 
   // ─── Video component ───────────────────────────────────────────────────────
   useEffect(() => {
