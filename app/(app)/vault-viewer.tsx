@@ -353,10 +353,10 @@ function MediaPage({
               </>
             )}
             <GestureDetector gesture={imageGesture}>
-              <Animated.View style={[{ width: imgW, height: imgH }, imageAnimStyle]}>
+              <Animated.View style={[{ width: imgW, height: imgH, overflow: 'hidden' }, imageAnimStyle]}>
                 <ExpoImage
                   source={{ uri: mediaUri }}
-                  style={StyleSheet.absoluteFill}
+                  style={{ width: imgW, height: imgH }}
                   contentFit="contain"
                   cachePolicy="memory-disk"
                   onLoad={(e: any) => {
