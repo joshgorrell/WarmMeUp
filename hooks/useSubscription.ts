@@ -6,7 +6,7 @@ import { planFromProductId } from '@/lib/productIds';
 
 export type SubscriptionPlan = 'Free' | 'Monthly' | 'Annual';
 export type SubscriptionStatus = 'Active' | 'Inactive' | 'Trial';
-export type SubscriptionSource = 'self' | 'partner' | 'none';
+export type SubscriptionSource = 'self' | 'partner' | 'none' | 'admin_grant' | 'admin' | 'super_admin';
 
 interface SubscriptionState {
   plan: SubscriptionPlan;
@@ -34,10 +34,10 @@ function formatDate(dateString: string | null): string | null {
   }
 }
 
-function serverPlanToDisplayPlan(serverPlan: string): SubscriptionPlan {
+function serverPlanToDisplayPlan(serverPlan: string | null): SubscriptionPlan {
   if (serverPlan === 'yearly' || serverPlan === 'annual') return 'Annual';
   if (serverPlan === 'monthly') return 'Monthly';
-  return 'Monthly';
+  return 'Free';
 }
 
 async function fetchEffectiveSubscription(): Promise<{

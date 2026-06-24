@@ -20,9 +20,18 @@ interface AdminGrantRow {
   entitlement_type: string;
   expires_at: string | null;
   active: boolean;
+  can_invite: boolean;
 }
 
-function isActive(row: SubscriptionRow | null): boolean {
+interface AccessResult {
+  hasPremium: boolean;
+  source: string;
+  plan: string | null;
+  expiresAt: string | null;
+  canInvite: boolean;
+}
+
+function isSubActive(row: SubscriptionRow | null): boolean {
   if (!row) return false;
   if (row.status !== "active") return false;
   if (row.expires_at && new Date(row.expires_at) < new Date()) return false;
@@ -40,13 +49,11 @@ function isGrantActive(grant: AdminGrantRow | null): boolean {
   return true;
 }
 
-// Returns true if the given user has any form of active premium access:
-// admin flag, super_admin flag, active subscription, or active admin_grant.
 async function userHasPremiumAccess(
   adminClient: ReturnType<typeof createClient>,
   userId: string
-): Promise<{ hasPremium: boolean; source: string; plan: string | null; expiresAt: string | null }> {
-  // 1. Admin / super_admin flags
+): Promise<AccessResult> {
+  // 1. admin / super_admin profile flags — always canInvite, no paid plan
   const { data: profile } = await adminClient
     .from("profiles")
     .select("is_admin, is_super_admin")
@@ -54,36 +61,42 @@ async function userHasPremiumAccess(
     .maybeSingle();
 
   if (profile?.is_super_admin === true) {
-    return { hasPremium: true, source: "super_admin", plan: "admin", expiresAt: null };
+    return { hasPremium: true, source: "super_admin", plan: null, expiresAt: null, canInvite: true };
   }
   if (profile?.is_admin === true) {
-    return { hasPremium: true, source: "admin", plan: "admin", expiresAt: null };
+    return { hasPremium: true, source: "admin", plan: null, expiresAt: null, canInvite: true };
   }
 
-  // 2. Active subscription
+  // 2. Active paid RevenueCat subscription — always canInvite
   const { data: sub } = await adminClient
     .from("subscriptions")
     .select("user_id, plan, status, expires_at, trial_started_at")
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (isActive(sub) && isPaidPlan(sub!.plan)) {
-    return { hasPremium: true, source: "self", plan: sub!.plan, expiresAt: sub!.expires_at };
+  if (isSubActive(sub) && isPaidPlan(sub!.plan)) {
+    return { hasPremium: true, source: "self", plan: sub!.plan, expiresAt: sub!.expires_at, canInvite: true };
   }
 
-  // 3. Admin grant
+  // 3. Admin grant — canInvite is controlled by the grant row's can_invite column
   const { data: grant } = await adminClient
     .from("admin_grants")
-    .select("user_id, entitlement_type, expires_at, active")
+    .select("user_id, entitlement_type, expires_at, active, can_invite")
     .eq("user_id", userId)
     .eq("active", true)
     .maybeSingle();
 
   if (isGrantActive(grant)) {
-    return { hasPremium: true, source: "admin_grant", plan: grant!.entitlement_type, expiresAt: grant!.expires_at };
+    return {
+      hasPremium: true,
+      source: "admin_grant",
+      plan: null,
+      expiresAt: grant!.expires_at,
+      canInvite: grant!.can_invite,
+    };
   }
 
-  return { hasPremium: false, source: "none", plan: null, expiresAt: null };
+  return { hasPremium: false, source: "none", plan: null, expiresAt: null, canInvite: false };
 }
 
 Deno.serve(async (req: Request) => {
@@ -117,11 +130,10 @@ Deno.serve(async (req: Request) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // --- Check current user's own access (admin flags, subscription, admin_grant) ---
+    // Check the requesting user's own access sources first.
     const ownAccess = await userHasPremiumAccess(adminClient, user.id);
 
     if (ownAccess.hasPremium) {
-      const isAdminSource = ownAccess.source === "admin" || ownAccess.source === "super_admin";
       return new Response(
         JSON.stringify({
           isPremium: true,
@@ -130,31 +142,26 @@ Deno.serve(async (req: Request) => {
           expiresAt: ownAccess.expiresAt,
           isOnTrial: false,
           trialExpiresAt: null,
-          canInvite: true,
           trialExpired: false,
-          checkedSuperAdmin: true,
-          checkedAdminGrant: !isAdminSource,
-          adminGrantFound: ownAccess.source === "admin_grant",
-          finalSource: ownAccess.source,
-          finalCanInvite: true,
-          finalIsPremium: true,
-          _v: "2026-06-21",
+          canInvite: ownAccess.canInvite,
+          _v: "2026-06-24",
           _ts: new Date().toISOString(),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // --- Check own trial subscription (for trialExpired flag) ---
+    // Check own subscription row for trialExpired signal.
     const { data: ownSub } = await adminClient
       .from("subscriptions")
       .select("user_id, plan, status, expires_at, trial_started_at")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    // --- Check partner's access via active couple ---
-    // Partner access includes: admin flags, active paid subscription, OR admin_grant.
-    // This ensures User B gets premium when User A holds any form of active entitlement.
+    // Check partner access via active couple.
+    // A partner inherits premium from any of the partner's own access sources
+    // (paid sub, admin grant, admin/super_admin flag). Partner users can never
+    // generate invite codes — canInvite is always false for source=partner.
     const { data: couple } = await adminClient
       .from("couples")
       .select("user_a_id, user_b_id")
@@ -175,16 +182,9 @@ Deno.serve(async (req: Request) => {
               expiresAt: partnerAccess.expiresAt,
               isOnTrial: false,
               trialExpiresAt: null,
-              canInvite: false,
               trialExpired: false,
-              checkedSuperAdmin: true,
-              checkedAdminGrant: true,
-              adminGrantFound: false,
-              partnerAccessSource: partnerAccess.source,
-              finalSource: "partner",
-              finalCanInvite: false,
-              finalIsPremium: true,
-              _v: "2026-06-21",
+              canInvite: false,
+              _v: "2026-06-24",
               _ts: new Date().toISOString(),
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -193,8 +193,8 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // --- No active subscription from any source ---
-    const trialExpired = ownSub !== null && !isActive(ownSub);
+    // No active premium from any source.
+    const trialExpired = ownSub !== null && !isSubActive(ownSub);
 
     return new Response(
       JSON.stringify({
@@ -204,21 +204,15 @@ Deno.serve(async (req: Request) => {
         expiresAt: null,
         isOnTrial: false,
         trialExpiresAt: ownSub?.expires_at ?? null,
-        canInvite: false,
         trialExpired,
-        checkedSuperAdmin: true,
-        checkedAdminGrant: true,
-        adminGrantFound: false,
-        finalSource: "none",
-        finalCanInvite: false,
-        finalIsPremium: false,
-        _v: "2026-06-21",
+        canInvite: false,
+        _v: "2026-06-24",
         _ts: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    return new Response(JSON.stringify({ error: "Internal server error", _detail: String(err), _v: "2026-06-21", _ts: new Date().toISOString() }), {
+    return new Response(JSON.stringify({ error: "Internal server error", detail: String(err) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

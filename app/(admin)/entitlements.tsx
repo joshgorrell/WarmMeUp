@@ -27,6 +27,7 @@ interface AdminGrant {
   expires_at: string | null;
   notes: string | null;
   active: boolean;
+  can_invite: boolean;
   granted_by: string | null;
   created_at: string;
   profile?: { display_name: string; email?: string };
@@ -65,6 +66,7 @@ export default function EntitlementsScreen() {
   const [grantType, setGrantType] = useState('free_access');
   const [grantExpiry, setGrantExpiry] = useState('');
   const [grantNotes, setGrantNotes] = useState('');
+  const [grantCanInvite, setGrantCanInvite] = useState(true);
   const [grantLoading, setGrantLoading] = useState(false);
   const [showTypeMenu, setShowTypeMenu] = useState(false);
 
@@ -121,6 +123,7 @@ export default function EntitlementsScreen() {
     setSearchError(null);
     setGrantNotes('');
     setGrantExpiry('');
+    setGrantCanInvite(true);
 
     try {
       let matchedId: string | null = null;
@@ -242,6 +245,7 @@ export default function EntitlementsScreen() {
         notes: grantNotes.trim() || null,
         active: true,
         granted_by: user.id,
+        can_invite: grantCanInvite,
       });
 
       if (error) {
@@ -261,6 +265,7 @@ export default function EntitlementsScreen() {
       setSearchEmail('');
       setGrantExpiry('');
       setGrantNotes('');
+      setGrantCanInvite(true);
       await loadActiveGrants();
     } catch (err: any) {
       Alert.alert('Error', err?.message ?? 'Failed to grant access.');
@@ -425,6 +430,20 @@ export default function EntitlementsScreen() {
             />
 
             <TouchableOpacity
+              style={[styles.canInviteRow, { borderColor: colors.borderSubtle, backgroundColor: colors.bg1 }]}
+              onPress={() => setGrantCanInvite(v => !v)}
+              activeOpacity={0.8}
+            >
+              <View style={{ flex: 1 }}>
+                <AppText style={[styles.canInviteLabel, { color: colors.text }]}>Can invite a partner</AppText>
+                <AppText style={[styles.canInviteHint, { color: colors.textMuted }]}>Allow this user to generate an invite code</AppText>
+              </View>
+              <View style={[styles.toggleTrack, { backgroundColor: grantCanInvite ? '#33D17A' : colors.borderSubtle }]}>
+                <View style={[styles.toggleThumb, { transform: [{ translateX: grantCanInvite ? 18 : 2 }] }]} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[styles.grantBtn, { backgroundColor: grantLoading ? 'rgba(51,209,122,0.4)' : '#33D17A' }]}
               onPress={handleGrant}
               disabled={grantLoading}
@@ -475,7 +494,7 @@ export default function EntitlementsScreen() {
                     {grant.profile?.display_name ?? grant.user_id.slice(0, 16) + '…'}
                   </AppText>
                   <AppText style={[styles.grantMeta, { color: colors.textMuted }]}>
-                    {ENTITLEMENT_TYPES.find(t => t.value === grant.entitlement_type)?.label ?? grant.entitlement_type} · expires {formatExpiry(grant.expires_at)}
+                    {ENTITLEMENT_TYPES.find(t => t.value === grant.entitlement_type)?.label ?? grant.entitlement_type} · expires {formatExpiry(grant.expires_at)} · {grant.can_invite ? 'can invite' : 'no invite'}
                   </AppText>
                   {grant.notes ? (
                     <AppText style={[styles.grantNotes, { color: colors.textSecondary }]}>{grant.notes}</AppText>
@@ -592,4 +611,34 @@ const styles = StyleSheet.create({
   grantMeta: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', marginTop: 2 },
   grantNotes: { fontSize: 11, fontFamily: 'Inter-Regular', marginTop: 2, fontStyle: 'italic' },
   revokeBtn: { padding: 4, marginTop: 2 },
+  canInviteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  canInviteLabel: { fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
+  canInviteHint: { fontSize: 11, fontFamily: 'Inter-Regular', marginTop: 1 },
+  toggleTrack: {
+    width: 40,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  toggleThumb: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
 });
