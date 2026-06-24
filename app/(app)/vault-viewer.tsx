@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ActivityIndicator,
   Platform, Share, AppState, Modal, Animated as RNAnimated,
-  Pressable, FlatList,
+  Pressable, FlatList, Image,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import AppText from '@/components/AppText';
@@ -62,6 +62,7 @@ function MediaPage({
 
   const [mediaUri, setMediaUri] = useState<string | null>(item.signedUri ?? null);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imgLoadError, setImgLoadError] = useState(false);
   const [imageNativeSize, setImageNativeSize] = useState<{ w: number; h: number } | null>(null);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [videoTapped, setVideoTapped] = useState(false);
@@ -337,31 +338,47 @@ function MediaPage({
           </View>
         ) : !isVideo ? (
           <>
-            {item.thumbUri && !imageLoaded && (
-              <ExpoImage
-                source={{ uri: item.thumbUri }}
-                style={[StyleSheet.absoluteFillObject, { opacity: 0.4 }]}
-                contentFit="cover"
-                blurRadius={12}
-                cachePolicy="memory-disk"
+            {imgLoadError ? (
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <AppText style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>Image could not be loaded</AppText>
+              </View>
+            ) : Platform.OS === 'web' ? (
+              <Image
+                source={{ uri: mediaUri ?? '' }}
+                style={{ width: imgW, height: Math.max(imgH, 1) }}
+                resizeMode="contain"
+                onLoad={() => setImageLoaded(true)}
+                onError={() => { setImageLoaded(true); setImgLoadError(true); }}
               />
+            ) : (
+              <>
+                {item.thumbUri && !imageLoaded && (
+                  <ExpoImage
+                    source={{ uri: item.thumbUri }}
+                    style={[StyleSheet.absoluteFillObject, { opacity: 0.4 }]}
+                    contentFit="cover"
+                    blurRadius={12}
+                    cachePolicy="memory-disk"
+                  />
+                )}
+                <GestureDetector gesture={imageGesture}>
+                  <Animated.View style={[{ width: imgW, height: imgH, overflow: 'hidden' }, imageAnimStyle]}>
+                    <ExpoImage
+                      source={{ uri: mediaUri }}
+                      style={{ width: imgW, height: imgH }}
+                      contentFit="contain"
+                      cachePolicy="memory-disk"
+                      onLoad={(e: any) => {
+                        const src = e.source;
+                        if (src?.width && src?.height) setImageNativeSize({ w: src.width, h: src.height });
+                        setImageLoaded(true);
+                      }}
+                      onError={() => { setImageLoaded(true); setImgLoadError(true); }}
+                    />
+                  </Animated.View>
+                </GestureDetector>
+              </>
             )}
-            <GestureDetector gesture={imageGesture}>
-              <Animated.View style={[{ width: imgW, height: imgH, overflow: 'hidden' }, imageAnimStyle]}>
-                <ExpoImage
-                  source={{ uri: mediaUri }}
-                  style={{ width: imgW, height: imgH }}
-                  contentFit="contain"
-                  cachePolicy="memory-disk"
-                  onLoad={(e: any) => {
-                    const src = e.source;
-                    if (src?.width && src?.height) setImageNativeSize({ w: src.width, h: src.height });
-                    setImageLoaded(true);
-                  }}
-                  onError={() => setImageLoaded(true)}
-                />
-              </Animated.View>
-            </GestureDetector>
           </>
         ) : (
           <View style={{ width: availW, height: availH, alignItems: 'center', justifyContent: 'center' }}>
@@ -661,6 +678,7 @@ export default function VaultViewerScreen() {
         removeClippedSubviews
         windowSize={3}
         maxToRenderPerBatch={3}
+        style={{ width: screenWidth, height: screenHeight }}
       />
 
       {/* Top chrome — back button + position counter */}
