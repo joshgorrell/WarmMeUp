@@ -601,19 +601,30 @@ export default function ChatTab() {
         .limit(PAGE_SIZE);
       if (data) {
         const sorted = [...data].reverse();
-        setMessages(sorted);
-        // Pre-populate signedUrls from embedded media_url where available.
-        const withUrl = sorted.filter(m => m.media_url);
-        if (withUrl.length > 0) {
-          const urlMap = Object.fromEntries(withUrl.map(m => [m.id, m.media_url!]));
-          setSignedUrls(prev => ({ ...prev, ...urlMap }));
-          // Also seed the cross-nav cache so navigating away and back is instant
-          for (const m of withUrl) {
-            if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url!);
+        // Build the full URL map synchronously before setting state — combines
+        // embedded media_url rows and the module-level cross-nav cache — so
+        // React 18 batches setMessages + setSignedUrls into a single render
+        // and media bubbles never flash the shimmer placeholder on load.
+        const initialUrlMap: Record<string, string> = {};
+        const needsNetworkFetch: ChatMessage[] = [];
+        for (const m of sorted) {
+          if (m.media_url) {
+            initialUrlMap[m.id] = m.media_url;
+            if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url);
+          } else if (m.media_storage_path) {
+            const cached = getCachedUrl(m.media_storage_path);
+            if (cached) {
+              initialUrlMap[m.id] = cached;
+            } else {
+              needsNetworkFetch.push(m);
+            }
           }
         }
-        const needsFetch = sorted.filter(m => m.media_storage_path && !m.media_url);
-        if (needsFetch.length > 0) fetchSignedUrls(needsFetch);
+        setMessages(sorted);
+        if (Object.keys(initialUrlMap).length > 0) {
+          setSignedUrls(prev => ({ ...prev, ...initialUrlMap }));
+        }
+        if (needsNetworkFetch.length > 0) fetchSignedUrls(needsNetworkFetch);
         oldestCreatedAtRef.current = sorted[0]?.created_at ?? null;
         setHasMore(data.length === PAGE_SIZE);
       }
@@ -636,17 +647,26 @@ export default function ChatTab() {
         .limit(PAGE_SIZE);
       if (data && data.length > 0) {
         const sorted = [...data].reverse();
-        setMessages(prev => [...sorted, ...prev]);
-        const withUrl = sorted.filter(m => m.media_url);
-        if (withUrl.length > 0) {
-          const urlMap = Object.fromEntries(withUrl.map(m => [m.id, m.media_url!]));
-          setSignedUrls(prev => ({ ...prev, ...urlMap }));
-          for (const m of withUrl) {
-            if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url!);
+        const initialUrlMap: Record<string, string> = {};
+        const needsNetworkFetch: ChatMessage[] = [];
+        for (const m of sorted) {
+          if (m.media_url) {
+            initialUrlMap[m.id] = m.media_url;
+            if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url);
+          } else if (m.media_storage_path) {
+            const cached = getCachedUrl(m.media_storage_path);
+            if (cached) {
+              initialUrlMap[m.id] = cached;
+            } else {
+              needsNetworkFetch.push(m);
+            }
           }
         }
-        const needsFetch = sorted.filter(m => m.media_storage_path && !m.media_url);
-        if (needsFetch.length > 0) fetchSignedUrls(needsFetch);
+        setMessages(prev => [...sorted, ...prev]);
+        if (Object.keys(initialUrlMap).length > 0) {
+          setSignedUrls(prev => ({ ...prev, ...initialUrlMap }));
+        }
+        if (needsNetworkFetch.length > 0) fetchSignedUrls(needsNetworkFetch);
         oldestCreatedAtRef.current = sorted[0].created_at;
         setHasMore(data.length === PAGE_SIZE);
       } else {
