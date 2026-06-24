@@ -19,8 +19,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-
-const AnimatedExpoImage = Animated.createAnimatedComponent(ExpoImage);
 import { awardPoints } from '@/lib/points';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
@@ -355,17 +353,19 @@ function MediaPage({
               </>
             )}
             <GestureDetector gesture={imageGesture}>
-              <AnimatedExpoImage
-                source={{ uri: mediaUri }}
-                style={[{ width: imgW, height: imgH }, imageAnimStyle]}
-                contentFit="contain"
-                cachePolicy="memory-disk"
-                onLoad={(e: any) => {
-                  const src = e.source;
-                  if (src?.width && src?.height) setImageNativeSize({ w: src.width, h: src.height });
-                  setImageLoaded(true);
-                }}
-              />
+              <Animated.View style={[{ width: imgW, height: imgH }, imageAnimStyle]}>
+                <ExpoImage
+                  source={{ uri: mediaUri }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="contain"
+                  cachePolicy="memory-disk"
+                  onLoad={(e: any) => {
+                    const src = e.source;
+                    if (src?.width && src?.height) setImageNativeSize({ w: src.width, h: src.height });
+                    setImageLoaded(true);
+                  }}
+                />
+              </Animated.View>
             </GestureDetector>
           </>
         ) : (
