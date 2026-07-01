@@ -14,9 +14,9 @@ interface CurrentMomentCardProps {
 }
 
 function typeIcon(type: string) {
-  if (type === 'dice') return <Dice6 color="#FFB347" size={32} strokeWidth={2} />;
-  if (type === 'dare') return <Zap color="#FF2E8A" size={32} strokeWidth={2} />;
-  return <MessageCircle color="#FF8A3D" size={32} strokeWidth={2} />;
+  if (type === 'dice') return <Dice6 color="#FFB347" size={18} strokeWidth={2} />;
+  if (type === 'dare') return <Zap color="#FF2E8A" size={18} strokeWidth={2} />;
+  return <MessageCircle color="#FF8A3D" size={18} strokeWidth={2} />;
 }
 
 function typeLabel(type: string): string {
@@ -34,28 +34,10 @@ export default function CurrentMomentCard({ interaction, onSeeAll, onDismiss }: 
       colors={['rgba(255,90,61,0.55)', 'rgba(255,46,138,0.55)']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={[styles.border, { marginBottom: Spacing.lg }]}
+      style={[styles.border, { marginBottom: Spacing.sm }]}
     >
       <View style={[styles.card, { backgroundColor: 'rgba(17,16,24,0.95)' }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerRight}>
-            {onSeeAll && (
-              <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7} style={styles.seeAll}>
-                <AppText style={[styles.seeAllText, { color: colors.textSecondary }]}>See All</AppText>
-                <ChevronRight color={colors.textMuted} size={14} />
-              </TouchableOpacity>
-            )}
-            {onDismiss && (
-              <TouchableOpacity onPress={onDismiss} activeOpacity={0.7} style={styles.dismissBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <X color={colors.textMuted} size={16} strokeWidth={2} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {/* Body */}
-        <View style={styles.body}>
+        <View style={styles.row}>
           <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,255,255,0.07)' }]}>
             {typeIcon(interaction.type)}
           </View>
@@ -64,7 +46,7 @@ export default function CurrentMomentCard({ interaction, onSeeAll, onDismiss }: 
               {typeLabel(interaction.type)}
             </AppText>
             {interaction.content_text && (
-              <AppText style={[styles.result, { color: colors.text }]} numberOfLines={2}>
+              <AppText style={[styles.result, { color: colors.text }]} numberOfLines={1}>
                 {interaction.content_text}
               </AppText>
             )}
@@ -75,6 +57,19 @@ export default function CurrentMomentCard({ interaction, onSeeAll, onDismiss }: 
               <AppText style={[styles.declineReason, { color: colors.textSecondary }]}>
                 "{interaction.decline_reason}"
               </AppText>
+            )}
+          </View>
+          <View style={styles.actions}>
+            {onSeeAll && (
+              <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7} style={styles.seeAll}>
+                <AppText style={[styles.seeAllText, { color: colors.textSecondary }]}>See All</AppText>
+                <ChevronRight color={colors.textMuted} size={13} />
+              </TouchableOpacity>
+            )}
+            {onDismiss && (
+              <TouchableOpacity onPress={onDismiss} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X color={colors.textMuted} size={14} strokeWidth={2} />
+              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -98,58 +93,52 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: Radius.lg - 1,
-    padding: Spacing.card,
-    gap: 14,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
   },
-  header: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    gap: Spacing.sm,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  info: { flex: 1, gap: 2 },
+  meta: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular' },
+  result: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Bold',
+    lineHeight: 18,
+  },
+  statusText: {
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-SemiBold',
+  },
+  declineReason: {
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    fontStyle: 'italic',
+    lineHeight: 16,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
   },
   seeAll: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  dismissBtn: {
-    padding: 2,
-  },
   seeAllText: {
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     fontFamily: 'Inter-Regular',
-  },
-  body: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  iconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  info: { flex: 1, gap: 3 },
-  meta: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
-  result: {
-    fontSize: FontSize.body,
-    fontFamily: 'Inter-Bold',
-    lineHeight: 22,
-  },
-  statusText: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-  },
-  declineReason: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    fontStyle: 'italic',
-    lineHeight: 18,
   },
 });

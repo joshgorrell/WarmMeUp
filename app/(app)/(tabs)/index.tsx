@@ -489,6 +489,13 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </View>
+      {activeInteraction && (
+        <CurrentMomentCard
+          interaction={activeInteraction}
+          onSeeAll={() => router.push('/(app)/activity')}
+          onDismiss={handleDismissInteraction}
+        />
+      )}
       {recentActivity.length > 0 ? (
         <View style={[styles.activityCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
           {recentActivity.map((item, i) => (
@@ -546,16 +553,6 @@ export default function HomeScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
               >
                 {greetingBlock}
-                {activeInteraction && (
-                  <>
-                    <CurrentMomentCard
-                      interaction={activeInteraction}
-                      onSeeAll={() => router.push('/(app)/activity')}
-                      onDismiss={handleDismissInteraction}
-                    />
-                    <View style={{ height: Spacing.lg }} />
-                  </>
-                )}
               </ScrollView>
               <View style={styles.tabletScorePin}>
                 {scoreBar}
@@ -577,16 +574,6 @@ export default function HomeScreen() {
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
             >
               {greetingBlock}
-              {activeInteraction && (
-                <>
-                  <CurrentMomentCard
-                    interaction={activeInteraction}
-                    onSeeAll={() => router.push('/(app)/activity')}
-                    onDismiss={handleDismissInteraction}
-                  />
-                  <View style={{ height: Spacing.lg }} />
-                </>
-              )}
               {activitySection}
             </ScrollView>
             {scoreBar}
