@@ -2,10 +2,9 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Sparkles, ChevronRight, Dice6, Zap, MessageCircle, X } from 'lucide-react-native';
+import { ChevronRight, Dice6, Zap, MessageCircle, X } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
-import { Gradient, FontSize, Spacing, Radius } from '@/constants/theme';
-import Badge from './Badge';
+import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { Interaction } from '@/lib/types';
 
 interface CurrentMomentCardProps {
@@ -40,11 +39,6 @@ export default function CurrentMomentCard({ interaction, onSeeAll, onDismiss }: 
       <View style={[styles.card, { backgroundColor: 'rgba(17,16,24,0.95)' }]}>
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Sparkles color={Gradient.primaryMid} size={16} strokeWidth={2} />
-            <AppText style={[styles.headerTitle, { color: colors.text }]}>Current Moment</AppText>
-            <Badge label="Active" variant="active" gradientBorder />
-          </View>
           <View style={styles.headerRight}>
             {onSeeAll && (
               <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7} style={styles.seeAll}>
@@ -110,16 +104,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  headerTitle: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
+    justifyContent: 'flex-end',
   },
   seeAll: {
     flexDirection: 'row',
