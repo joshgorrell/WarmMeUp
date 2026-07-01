@@ -161,21 +161,38 @@ Deno.serve(async (req: Request) => {
       }),
     });
 
-    // Clear stale token if Expo reports the device is no longer registered.
+    // Inspect Expo ticket for delivery errors.
+    let ticket: any = null;
     try {
       const pushJson = await pushRes.json() as any;
-      const ticket = pushJson?.data;
-      if (ticket?.status === "error" && ticket?.details?.error === "DeviceNotRegistered") {
-        await adminClient.from("profiles").update({ push_token: null }).eq("id", partnerId);
-      }
-    } catch {}
+      ticket = pushJson?.data ?? null;
+    } catch (e: any) {
+      console.error("[notify-partner] Failed to parse Expo push response:", e?.message ?? String(e));
+    }
 
-    return new Response(JSON.stringify({ ok: true }), {
+    if (ticket?.status === "error") {
+      const expoError = ticket?.details?.error ?? "unknown";
+      if (expoError === "DeviceNotRegistered") {
+        console.warn(`[notify-partner] DeviceNotRegistered for partner=${partnerId} — clearing push_token`);
+        await adminClient.from("profiles").update({ push_token: null }).eq("id", partnerId);
+      } else if (expoError === "InvalidCredentials") {
+        console.error(`[notify-partner] InvalidCredentials — push credentials for this platform are missing or expired. Check APNs/FCM credentials at expo.dev for project cfde070c-187f-4d7e-b643-a20446ff95ab`);
+      } else if (expoError === "MismatchSenderId") {
+        console.error(`[notify-partner] MismatchSenderId — FCM sender ID mismatch. Ensure google-services.json matches the FCM credentials uploaded to expo.dev`);
+      } else {
+        console.error(`[notify-partner] Expo push error: ${expoError}`, JSON.stringify(ticket));
+      }
+    } else if (!pushRes.ok) {
+      console.error(`[notify-partner] Expo push HTTP ${pushRes.status} — non-ok response`);
+    }
+
+    return new Response(JSON.stringify({ ok: true, expo_status: ticket?.status ?? null }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (_err) {
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
+  } catch (err: any) {
+    console.error("[notify-partner] Unhandled error:", err?.message ?? String(err));
+    return new Response(JSON.stringify({ error: "Internal server error", detail: err?.message ?? String(err) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

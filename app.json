@@ -37,13 +37,16 @@
     },
     "android": {
       "backgroundColor": "#050507",
+      "package": "app.warmmeup",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
         "READ_MEDIA_IMAGES",
         "READ_MEDIA_VIDEO",
         "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT"
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
