@@ -41,7 +41,7 @@ export default function VerifyEmailScreen() {
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
-        setError('Could not verify your session. Please try signing in again.');
+        setError('Connection error. Check your network and try again.');
         return;
       }
       if (!user.email_confirmed_at) {

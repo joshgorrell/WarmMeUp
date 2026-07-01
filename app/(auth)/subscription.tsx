@@ -67,7 +67,7 @@ export default function SubscriptionScreen() {
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const { reason: reasonParam } = useLocalSearchParams<{ reason?: string }>();
   const reason = reasonParam as Reason;
-  const { refreshSubscription } = useAuth();
+  const { refreshSubscription, subscriptionInfo } = useAuth();
 
   const [selected, setSelected] = useState<Plan>('yearly');
   const [loading, setLoading] = useState(false);
@@ -223,7 +223,7 @@ export default function SubscriptionScreen() {
       {canDismiss && (
         <TouchableOpacity
           style={[styles.dismissBtn, { top: insets.top + 12 }]}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/(app)/(tabs)')}
           activeOpacity={0.7}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
@@ -341,6 +341,21 @@ export default function SubscriptionScreen() {
           <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} style={styles.restoreBtn} disabled={loading}>
             <AppText style={styles.restoreText}>Restore Purchase</AppText>
           </TouchableOpacity>
+
+          {canDismiss && (
+            <TouchableOpacity
+              style={styles.continueTrialBtn}
+              onPress={() => router.replace('/(app)/(tabs)')}
+              activeOpacity={0.7}
+              disabled={loading}
+            >
+              <AppText style={styles.continueTrialText}>
+                {subscriptionInfo.isOnTrial && subscriptionInfo.trialExpiresAt
+                  ? `Continue with free trial · expires ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+                  : 'Continue — subscribe later'}
+              </AppText>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -583,5 +598,17 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     textDecorationLine: 'underline',
+  },
+  continueTrialBtn: {
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignSelf: 'center',
+  },
+  continueTrialText: {
+    color: 'rgba(255,255,255,0.36)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
   },
 });
