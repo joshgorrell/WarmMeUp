@@ -155,7 +155,7 @@ function WeatherLoading({ shimmer, pinPulse, dotCount }: {
 
 export default function WeatherScreen() {
   const router = useRouter();
-  const { session, loading, user, profile, settings, unlockedAtMs, refreshSettings, unlockApp, isAuthenticatingRef, debugModeEnabled, refreshSubscription } = useAuth();
+  const { session, loading, user, profile, settings, unlockedAtMs, refreshSettings, unlockApp, isAuthenticatingRef, debugModeEnabled, globalDebugAccessEnabled, refreshSubscription } = useAuth();
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debugLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -254,13 +254,14 @@ export default function WeatherScreen() {
     }
   }, [weather]);
 
-  // Emergency debug access: 5 rapid taps on temperature OR 5-second hold.
-  // Super admin only (or debug mode enabled / __DEV__). Normal admins excluded by design.
   const canAccessDebug =
     __DEV__ ||
     profile?.is_super_admin === true ||
     debugModeEnabled ||
+    globalDebugAccessEnabled ||
     process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
+
+  const debugTarget = globalDebugAccessEnabled ? '/debug-access' : '/debug';
 
   const handleDebugTap = () => {
     if (!canAccessDebug) return;
@@ -268,7 +269,7 @@ export default function WeatherScreen() {
     if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
     if (debugTapCount.current >= DEBUG_TAP_TARGET) {
       debugTapCount.current = 0;
-      router.replace('/debug');
+      router.replace(debugTarget);
       return;
     }
     debugTapTimer.current = setTimeout(() => {
@@ -280,9 +281,9 @@ export default function WeatherScreen() {
     if (!canAccessDebug) return;
     debugLongPressTimer.current = setTimeout(() => {
       debugLongPressTimer.current = null;
-      router.replace('/debug');
+      router.replace(debugTarget);
     }, 5000);
-  }, [canAccessDebug, router]);
+  }, [canAccessDebug, debugTarget, router]);
 
   const handleDebugLongPressOut = useCallback(() => {
     if (debugLongPressTimer.current) {

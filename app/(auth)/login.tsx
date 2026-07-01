@@ -139,7 +139,7 @@ export default function LoginScreen() {
 
   // Hidden 5-second logo hold — intentional no-auth emergency escape hatch to debug screen
   const handleLogoHold = () => {
-    router.push('/debug');
+    router.push('/debug-access');
   };
 
   const handleLogin = async () => {

@@ -19,7 +19,7 @@ import { useLayout } from '@/hooks/useLayout';
 
 export default function UnlockScreen() {
   const router = useRouter();
-  const { user, profile, settings, unlockApp, isAuthenticatingRef, debugModeEnabled } = useAuth();
+  const { user, profile, settings, unlockApp, isAuthenticatingRef, debugModeEnabled, globalDebugAccessEnabled } = useAuth();
   const { available: bioAvailable, biometricLabel, authenticate } = useBiometricAuth();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
@@ -194,8 +194,8 @@ export default function UnlockScreen() {
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canAccessDebug = useMemo(
-    () => __DEV__ || profile?.is_admin === true || debugModeEnabled || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1',
-    [profile?.is_admin, debugModeEnabled],
+    () => __DEV__ || profile?.is_admin === true || debugModeEnabled || globalDebugAccessEnabled || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1',
+    [profile?.is_admin, debugModeEnabled, globalDebugAccessEnabled],
   );
   const handleDebugTap = useCallback(() => {
     if (!canAccessDebug) return;
@@ -203,11 +203,11 @@ export default function UnlockScreen() {
     if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
     if (debugTapCount.current >= 5) {
       debugTapCount.current = 0;
-      router.replace('/debug');
+      router.replace(globalDebugAccessEnabled ? '/debug-access' : '/debug');
       return;
     }
     debugTapTimer.current = setTimeout(() => { debugTapCount.current = 0; }, 10000);
-  }, [canAccessDebug, router]);
+  }, [canAccessDebug, globalDebugAccessEnabled, router]);
 
   const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
 

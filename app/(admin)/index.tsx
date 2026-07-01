@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { logDebugEvent } from '@/lib/debugLog';
@@ -8,6 +8,7 @@ import {
   FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity,
   CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2,
   Star, UserCog, Bug, ShieldCheck, MessageSquare, TriangleAlert as AlertTriangle,
+  RefreshCw, X as XIcon, Clock,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -16,6 +17,12 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
 import Toggle from '@/components/Toggle';
+import {
+  adminSetGlobalDebugAccess,
+  generateSupportCode,
+  hashSupportCode,
+  GlobalDebugStatus,
+} from '@/lib/globalDebugAccess';
 
 interface StatEntry {
   value: number | null;
@@ -59,6 +66,15 @@ export default function AdminDashboard() {
   const [diagRunning, setDiagRunning] = useState(false);
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [debugToggleLoading, setDebugToggleLoading] = useState(false);
+
+  // Global Debug Access state
+  const [globalDebugEnabled, setGlobalDebugEnabled] = useState(false);
+  const [globalDebugExpiresAt, setGlobalDebugExpiresAt] = useState<string | null>(null);
+  const [globalDebugCode, setGlobalDebugCode] = useState<string | null>(null);
+  const [globalDebugLoading, setGlobalDebugLoading] = useState(false);
+  const [globalDebugExpiry, setGlobalDebugExpiry] = useState<'15m' | '1h' | '24h' | 'never'>('1h');
+  const [globalDebugError, setGlobalDebugError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -72,6 +88,7 @@ export default function AdminDashboard() {
     if (!authLoading && user?.id) {
       fetchStats();
       fetchDebugMode();
+      fetchGlobalDebugMode();
     }
   }, [authLoading, user?.id]));
 
@@ -80,6 +97,7 @@ export default function AdminDashboard() {
     if (!authLoading && user?.id) {
       fetchStats();
       fetchDebugMode();
+      fetchGlobalDebugMode();
     }
   }, [authLoading, user?.id]);
 
@@ -92,6 +110,22 @@ export default function AdminDashboard() {
     if (data) setDebugModeEnabled(data.value === true);
   };
 
+  const fetchGlobalDebugMode = async () => {
+    const { data } = await supabase
+      .from('app_config')
+      .select('value')
+      .eq('key', 'global_debug_access')
+      .maybeSingle();
+    if (data?.value) {
+      const val = data.value;
+      const enabled = val?.enabled === true;
+      const expiresAt: string | null = val?.expires_at ?? null;
+      const expired = expiresAt ? Date.now() > new Date(expiresAt).getTime() : false;
+      setGlobalDebugEnabled(enabled && !expired);
+      setGlobalDebugExpiresAt(expired ? null : expiresAt);
+    }
+  };
+
   const toggleDebugMode = async (next: boolean) => {
     setDebugToggleLoading(true);
     setDebugModeEnabled(next);
@@ -102,6 +136,102 @@ export default function AdminDashboard() {
       .eq('key', 'debug_mode_enabled');
     setDebugToggleLoading(false);
   };
+
+  const expiryMs = (expiry: typeof globalDebugExpiry): number | null => {
+    if (expiry === 'never') return null;
+    const map = { '15m': 15 * 60 * 1000, '1h': 60 * 60 * 1000, '24h': 24 * 60 * 60 * 1000 };
+    return map[expiry];
+  };
+
+  const toggleGlobalDebugAccess = async (next: boolean) => {
+    setGlobalDebugLoading(true);
+    setGlobalDebugError(null);
+    try {
+      if (next) {
+        const rawCode = generateSupportCode();
+        const hash = await hashSupportCode(rawCode);
+        const ms = expiryMs(globalDebugExpiry);
+        const expiresAt = ms ? new Date(Date.now() + ms).toISOString() : null;
+        const { error } = await adminSetGlobalDebugAccess({
+          enabled: true,
+          supportCodeHash: hash,
+          expiresAt,
+          action: 'enabled',
+        });
+        if (error) {
+          setGlobalDebugError(error);
+        } else {
+          setGlobalDebugEnabled(true);
+          setGlobalDebugExpiresAt(expiresAt);
+          setGlobalDebugCode(rawCode);
+        }
+      } else {
+        const { error } = await adminSetGlobalDebugAccess({ enabled: false, action: 'disabled' });
+        if (error) {
+          setGlobalDebugError(error);
+        } else {
+          setGlobalDebugEnabled(false);
+          setGlobalDebugExpiresAt(null);
+          setGlobalDebugCode(null);
+        }
+      }
+    } finally {
+      setGlobalDebugLoading(false);
+    }
+  };
+
+  const regenerateCode = async () => {
+    setGlobalDebugLoading(true);
+    setGlobalDebugError(null);
+    try {
+      const rawCode = generateSupportCode();
+      const hash = await hashSupportCode(rawCode);
+      const ms = expiryMs(globalDebugExpiry);
+      const expiresAt = ms ? new Date(Date.now() + ms).toISOString() : null;
+      const { error } = await adminSetGlobalDebugAccess({
+        enabled: true,
+        supportCodeHash: hash,
+        expiresAt,
+        action: 'code_regenerated',
+      });
+      if (error) {
+        setGlobalDebugError(error);
+      } else {
+        setGlobalDebugCode(rawCode);
+        setGlobalDebugExpiresAt(expiresAt);
+      }
+    } finally {
+      setGlobalDebugLoading(false);
+    }
+  };
+
+  // Live countdown when expiry is set
+  useEffect(() => {
+    if (!globalDebugExpiresAt) {
+      setCountdown(null);
+      return;
+    }
+    const update = () => {
+      const diff = new Date(globalDebugExpiresAt).getTime() - Date.now();
+      if (diff <= 0) {
+        setCountdown('Expired');
+        setGlobalDebugEnabled(false);
+        setGlobalDebugExpiresAt(null);
+        setGlobalDebugCode(null);
+        return;
+      }
+      const totalSecs = Math.floor(diff / 1000);
+      const h = Math.floor(totalSecs / 3600);
+      const m = Math.floor((totalSecs % 3600) / 60);
+      const s = totalSecs % 60;
+      if (h > 0) setCountdown(`${h}h ${m}m remaining`);
+      else if (m > 0) setCountdown(`${m}m ${s}s remaining`);
+      else setCountdown(`${s}s remaining`);
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [globalDebugExpiresAt]);
 
   const fetchOneStat = async (
     key: keyof Stats,
@@ -466,14 +596,117 @@ export default function AdminDashboard() {
         {/* Developer */}
         <AppText style={[styles.sectionLabel, { color: colors.textMuted, marginTop: Spacing.lg, marginBottom: Spacing.sm }]}>DEVELOPER</AppText>
         <View style={[styles.breakdownCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle, gap: 0, padding: 0, overflow: 'hidden' }]}>
-          {/* Row: Emergency Debug Access */}
+
+          {/* Row: Global Debug Access toggle */}
           <View style={styles.devRow}>
-            <View style={[styles.devIconWrap, { backgroundColor: 'rgba(96,200,255,0.10)' }]}>
-              <Bug color="#60C8FF" size={20} strokeWidth={2} />
+            <View style={[styles.devIconWrap, { backgroundColor: globalDebugEnabled ? 'rgba(96,200,255,0.18)' : 'rgba(96,200,255,0.08)' }]}>
+              <Bug color={globalDebugEnabled ? '#60C8FF' : 'rgba(96,200,255,0.55)'} size={20} strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
-              <AppText style={[styles.devLabel, { color: colors.text }]}>Emergency Debug Access</AppText>
-              <AppText style={[styles.devSub, { color: colors.textMuted }]}>Any admin: 5 rapid taps on splash, unlock, or weather screen. Any user (pre-login): 5-second hold on login logo.</AppText>
+              <AppText style={[styles.devLabel, { color: colors.text }]}>Global Debug Access</AppText>
+              <AppText style={[styles.devSub, { color: colors.textMuted }]}>
+                {globalDebugEnabled
+                  ? countdown ? `ON — ${countdown}` : 'ON — no expiry'
+                  : 'When enabled, any user can open Debug Diagnostics before login.'}
+              </AppText>
+            </View>
+            <Toggle
+              value={globalDebugEnabled}
+              onChange={toggleGlobalDebugAccess}
+              disabled={globalDebugLoading}
+            />
+          </View>
+
+          {/* Global Debug expanded panel — shown when enabled */}
+          {globalDebugEnabled && (
+            <>
+              <View style={[styles.devDivider, { backgroundColor: colors.borderSubtle }]} />
+              <View style={[styles.devRow, { flexDirection: 'column', alignItems: 'stretch', gap: Spacing.sm }]}>
+
+                {/* Support Code */}
+                {globalDebugCode ? (
+                  <View style={styles.codeBox}>
+                    <AppText style={styles.codeLabel}>SUPPORT CODE</AppText>
+                    <AppText style={styles.codeValue}>{globalDebugCode}</AppText>
+                    <AppText style={[styles.codeNote, { color: colors.textMuted }]}>
+                      Share this code with the user. It will not be shown again after you leave this screen.
+                    </AppText>
+                  </View>
+                ) : (
+                  <View style={styles.codeBox}>
+                    <AppText style={styles.codeLabel}>SUPPORT CODE</AppText>
+                    <AppText style={[styles.codeNote, { color: colors.textMuted }]}>
+                      Code was set. Use "Regenerate Code" to issue a new one.
+                    </AppText>
+                  </View>
+                )}
+
+                {/* Expiry selector */}
+                <AppText style={[styles.codeLabel, { color: colors.textMuted }]}>EXPIRY</AppText>
+                <View style={styles.expiryRow}>
+                  {(['15m', '1h', '24h', 'never'] as const).map((opt) => (
+                    <TouchableOpacity
+                      key={opt}
+                      style={[
+                        styles.expiryChip,
+                        { borderColor: globalDebugExpiry === opt ? '#60C8FF' : colors.borderSubtle },
+                        globalDebugExpiry === opt && { backgroundColor: 'rgba(96,200,255,0.12)' },
+                      ]}
+                      onPress={() => setGlobalDebugExpiry(opt)}
+                      activeOpacity={0.75}
+                    >
+                      <AppText style={[styles.expiryChipText, { color: globalDebugExpiry === opt ? '#60C8FF' : colors.textMuted }]}>
+                        {opt === 'never' ? 'No expiry' : opt}
+                      </AppText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Action buttons */}
+                <View style={styles.debugActionRow}>
+                  <TouchableOpacity
+                    style={[styles.debugActionBtn, { borderColor: 'rgba(96,200,255,0.35)', backgroundColor: 'rgba(96,200,255,0.08)' }]}
+                    onPress={regenerateCode}
+                    disabled={globalDebugLoading}
+                    activeOpacity={0.8}
+                  >
+                    {globalDebugLoading
+                      ? <ActivityIndicator size="small" color="#60C8FF" />
+                      : <RefreshCw color="#60C8FF" size={14} strokeWidth={2.2} />
+                    }
+                    <AppText style={[styles.debugActionBtnText, { color: '#60C8FF' }]}>Regenerate Code</AppText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.debugActionBtn, { borderColor: 'rgba(255,90,61,0.35)', backgroundColor: 'rgba(255,90,61,0.08)' }]}
+                    onPress={() => toggleGlobalDebugAccess(false)}
+                    disabled={globalDebugLoading}
+                    activeOpacity={0.8}
+                  >
+                    <XIcon color="#FF5A3D" size={14} strokeWidth={2.2} />
+                    <AppText style={[styles.debugActionBtnText, { color: '#FF5A3D' }]}>Disable Now</AppText>
+                  </TouchableOpacity>
+                </View>
+
+                {globalDebugError ? (
+                  <AppText style={{ color: '#FF5A3D', fontSize: 11, fontFamily: 'Inter-Regular' }}>
+                    Error: {globalDebugError}
+                  </AppText>
+                ) : null}
+              </View>
+            </>
+          )}
+
+          <View style={[styles.devDivider, { backgroundColor: colors.borderSubtle }]} />
+
+          {/* Row: Legacy debug mode toggle (admin-only 5-tap) */}
+          <View style={styles.devRow}>
+            <View style={[styles.devIconWrap, { backgroundColor: 'rgba(255,179,71,0.08)' }]}>
+              <ShieldCheck color="#FFB347" size={20} strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText style={[styles.devLabel, { color: colors.text }]}>Admin Debug Mode</AppText>
+              <AppText style={[styles.devSub, { color: colors.textMuted }]}>5 rapid taps on splash, unlock, or weather screen (admins only).</AppText>
             </View>
             <Toggle
               value={debugModeEnabled}
@@ -626,4 +859,65 @@ const styles = StyleSheet.create({
   },
   devLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', marginBottom: 2 },
   devSub: { fontSize: 11, fontFamily: 'Inter-Regular', lineHeight: 16 },
+  codeBox: {
+    backgroundColor: 'rgba(96,200,255,0.06)',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(96,200,255,0.20)',
+    padding: Spacing.md,
+    alignItems: 'center',
+    gap: 4,
+  },
+  codeLabel: {
+    fontSize: 9,
+    fontFamily: 'Inter-SemiBold',
+    letterSpacing: 1.2,
+    color: 'rgba(96,200,255,0.55)',
+    textTransform: 'uppercase',
+  },
+  codeValue: {
+    fontSize: 32,
+    fontFamily: 'Inter-Bold',
+    color: '#60C8FF',
+    letterSpacing: 10,
+  },
+  codeNote: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 15,
+  },
+  expiryRow: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  expiryChip: {
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  expiryChipText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+  },
+  debugActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  debugActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    paddingVertical: 9,
+  },
+  debugActionBtnText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+  },
 });

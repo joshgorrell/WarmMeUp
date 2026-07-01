@@ -47,7 +47,7 @@ export default function WelcomeScreen() {
         <View style={styles.hero}>
           <View style={styles.glow} />
           <TouchableOpacity
-            onLongPress={() => router.push('/debug')}
+            onLongPress={() => router.push('/debug-access')}
             delayLongPress={5000}
             activeOpacity={1}
             style={{ alignItems: 'center' }}

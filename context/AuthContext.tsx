@@ -111,6 +111,8 @@ interface AuthContextType {
   setVaultUnlocked: (unlocked: boolean) => void;
   /** True when the admin has enabled the hidden 5-tap emergency debug entry points. */
   debugModeEnabled: boolean;
+  /** True when Global Debug Access is enabled (all users, pre-login). */
+  globalDebugAccessEnabled: boolean;
   /**
    * Increments every time Reset Points completes. Screens subscribe via useEffect
    * to this value and re-fetch scores when it changes.
@@ -145,6 +147,7 @@ const AuthContext = createContext<AuthContextType>({
   vaultUnlocked: false,
   setVaultUnlocked: () => {},
   debugModeEnabled: false,
+  globalDebugAccessEnabled: false,
   scoreResetAt: 0,
   notifyScoreReset: () => {},
   justPairedPartnerName: null,
@@ -275,6 +278,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [appLocked, setAppLocked] = useState(false);
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
+  const [globalDebugAccessEnabled, setGlobalDebugAccessEnabled] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo>(DEFAULT_SUBSCRIPTION_INFO);
   const [justPairedPartnerName, setJustPairedPartnerName] = useState<string | null>(null);
   const [scoreResetAt, setScoreResetAt] = useState(0);
@@ -382,15 +386,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetchSettings(userId),
       ]);
 
-      // Load global config flag — non-blocking, safe to fail
+      // Load global config flags — non-blocking, safe to fail
       (async () => {
         try {
           const { data } = await supabase
             .from('app_config')
-            .select('value')
-            .eq('key', 'debug_mode_enabled')
-            .maybeSingle();
-          setDebugModeEnabled(data?.value === true);
+            .select('key, value')
+            .in('key', ['debug_mode_enabled', 'global_debug_access']);
+          if (Array.isArray(data)) {
+            for (const row of data) {
+              if (row.key === 'debug_mode_enabled') {
+                setDebugModeEnabled(row.value === true);
+              } else if (row.key === 'global_debug_access') {
+                const val = row.value;
+                const enabled = val?.enabled === true;
+                const expiresAt: string | null = val?.expires_at ?? null;
+                const expired = expiresAt ? Date.now() > new Date(expiresAt).getTime() : false;
+                setGlobalDebugAccessEnabled(enabled && !expired);
+              }
+            }
+          }
         } catch {}
       })();
 
@@ -673,7 +688,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled, justPairedPartnerName, clearJustPaired, scoreResetAt, notifyScoreReset: () => setScoreResetAt(n => n + 1) }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled, globalDebugAccessEnabled, justPairedPartnerName, clearJustPaired, scoreResetAt, notifyScoreReset: () => setScoreResetAt(n => n + 1) }}
     >
       {children}
     </AuthContext.Provider>

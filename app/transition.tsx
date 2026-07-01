@@ -47,7 +47,7 @@ const DEBUG_TAP_WINDOW_MS = 10000;
 
 export default function TransitionScreen() {
   const router = useRouter();
-  const { couple, partnerProfile, settings, user, isAdmin, isSuperAdmin, loading, subscriptionInfo, debugModeEnabled } = useAuth();
+  const { couple, partnerProfile, settings, user, isAdmin, isSuperAdmin, loading, subscriptionInfo, debugModeEnabled, globalDebugAccessEnabled } = useAuth();
   const { width } = useWindowDimensions();
   const logoW = Math.min(width * 0.5, 200);
   const bgOpacity = useRef(new Animated.Value(0)).current;
@@ -72,20 +72,22 @@ export default function TransitionScreen() {
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debugModeRef = useRef(debugModeEnabled);
   debugModeRef.current = debugModeEnabled;
+  const globalDebugRef = useRef(globalDebugAccessEnabled);
+  globalDebugRef.current = globalDebugAccessEnabled;
   // Timing reference for elapsed-ms logs
   const startMs = useRef(Date.now());
   const elapsed = () => Date.now() - startMs.current;
 
   // Emergency debug access: 5 rapid taps on splash logo (admin or super-admin).
   const handleDebugTap = () => {
-    const canDebug = __DEV__ || isAdminRef.current || isSuperAdminRef.current || debugModeRef.current || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
+    const canDebug = __DEV__ || isAdminRef.current || isSuperAdminRef.current || debugModeRef.current || globalDebugRef.current || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
     if (!canDebug) return;
     debugTapCount.current += 1;
     if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
     if (debugTapCount.current >= DEBUG_TAP_TARGET) {
       debugTapCount.current = 0;
       routed.current = true;
-      router.replace('/debug');
+      router.replace(globalDebugRef.current ? '/debug-access' : '/debug');
       return;
     }
     debugTapTimer.current = setTimeout(() => {
