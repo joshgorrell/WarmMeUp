@@ -254,7 +254,15 @@ export default function RegisterScreen() {
     const fullName = `${fn} ${ln}`;
     setLoading(true);
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+      const redirectTo = Platform.OS === 'web'
+        ? (typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined)
+        : 'warmup://auth/callback';
+
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: redirectTo },
+      });
       if (signUpError) throw signUpError;
       if (data.user) {
         await supabase

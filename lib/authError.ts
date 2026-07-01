@@ -1,3 +1,5 @@
+import { logDebugEvent } from './debugLog';
+
 export function friendlyAuthError(e: unknown): string {
   const raw: string =
     e instanceof Error
@@ -6,7 +8,10 @@ export function friendlyAuthError(e: unknown): string {
       ? (e as any).message
       : String(e);
 
-  console.error('[friendlyAuthError] raw:', raw, 'status:', (e as any)?.status, 'code:', (e as any)?.code);
+  const status = (e as any)?.status ?? null;
+  const code = (e as any)?.code ?? null;
+  console.error('[friendlyAuthError] raw:', raw, 'status:', status, 'code:', code);
+  logDebugEvent('AUTH_ERROR_RAW', { raw, status, code });
 
   const lower = raw.toLowerCase();
 
