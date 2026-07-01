@@ -46,8 +46,15 @@ export default function WelcomeScreen() {
         {/* Hero: logo + wordmark + tagline */}
         <View style={styles.hero}>
           <View style={styles.glow} />
-          <WarmupLogo size={logoSize} />
-          <WarmupWordmark size={wordmarkSize} style={styles.wordmark} />
+          <TouchableOpacity
+            onLongPress={() => router.push('/debug')}
+            delayLongPress={5000}
+            activeOpacity={1}
+            style={{ alignItems: 'center' }}
+          >
+            <WarmupLogo size={logoSize} />
+            <WarmupWordmark size={wordmarkSize} style={styles.wordmark} />
+          </TouchableOpacity>
           <Image
             source={TAGLINE_SOURCE}
             style={{ width: taglineWidth, height: taglineHeight, marginTop: 20, alignSelf: 'center' }}
