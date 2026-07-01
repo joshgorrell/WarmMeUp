@@ -10,12 +10,16 @@ export function friendlyAuthError(e: unknown): string {
 
   const status = (e as any)?.status ?? null;
   const code = (e as any)?.code ?? null;
-  console.error('[friendlyAuthError] raw:', raw, 'status:', status, 'code:', code);
-  logDebugEvent('AUTH_ERROR_RAW', { raw, status, code });
+  const name: string = (e as any)?.name ?? '';
+  console.error('[friendlyAuthError] raw:', raw, 'status:', status, 'code:', code, 'name:', name);
+  logDebugEvent('AUTH_ERROR_RAW', { raw, status, code, name });
 
   const lower = raw.toLowerCase();
+  const lowerName = name.toLowerCase();
 
   if (
+    lowerName.includes('fetch') ||
+    lowerName.includes('network') ||
     lower.includes('aborted') ||
     lower.includes('timeout') ||
     lower.includes('network') ||

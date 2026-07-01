@@ -695,7 +695,7 @@ export default function RegisterScreen() {
               style={[styles.createBtn, !formReady && styles.createBtnDisabled]}
               onPress={handleRegister}
               activeOpacity={0.85}
-              disabled={loading || oauthLoading !== null}
+              disabled={loading || oauthLoading !== null || !formReady}
             >
               {formReady ? (
                 <LinearGradient
