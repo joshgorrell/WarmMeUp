@@ -8,7 +8,7 @@ import {
   FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity,
   CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2,
   Star, UserCog, Bug, ShieldCheck, MessageSquare, TriangleAlert as AlertTriangle,
-  RefreshCw, X as XIcon, Clock,
+  RefreshCw, X as XIcon, Clock, Bot,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -66,6 +66,7 @@ export default function AdminDashboard() {
   const [diagRunning, setDiagRunning] = useState(false);
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [debugToggleLoading, setDebugToggleLoading] = useState(false);
+  const [signupAlert, setSignupAlert] = useState<boolean>(false);
 
   // Global Debug Access state
   const [globalDebugEnabled, setGlobalDebugEnabled] = useState(false);
@@ -89,6 +90,7 @@ export default function AdminDashboard() {
       fetchStats();
       fetchDebugMode();
       fetchGlobalDebugMode();
+      fetchSignupAlert();
     }
   }, [authLoading, user?.id]));
 
@@ -98,8 +100,18 @@ export default function AdminDashboard() {
       fetchStats();
       fetchDebugMode();
       fetchGlobalDebugMode();
+      fetchSignupAlert();
     }
   }, [authLoading, user?.id]);
+
+  const fetchSignupAlert = async () => {
+    const { data } = await supabase
+      .from('app_config')
+      .select('value')
+      .eq('key', 'aiops_signup_alert')
+      .maybeSingle();
+    if (mountedRef.current) setSignupAlert(!!data?.value);
+  };
 
   const fetchDebugMode = async () => {
     const { data } = await supabase
@@ -467,6 +479,15 @@ export default function AdminDashboard() {
       border: 'rgba(255,179,71,0.25)',
       route: '/(admin)/greetings',
     },
+    {
+      label: 'AI Ops',
+      sub: 'Daily brief, signup health, issue backlog',
+      icon: <Bot color="#4A90E2" size={22} strokeWidth={2} />,
+      color: '#4A90E2',
+      bg: 'rgba(74,144,226,0.10)',
+      border: 'rgba(74,144,226,0.25)',
+      route: '/(admin)/ai-ops',
+    },
   ];
 
   return (
@@ -494,6 +515,20 @@ export default function AdminDashboard() {
               Stats failed to load — tap to retry
             </AppText>
             <AppText style={[styles.errorBannerDetail, { color: colors.danger }]}>{statsError}</AppText>
+          </TouchableOpacity>
+        ) : null}
+
+        {/* AI Ops signup pipeline alert */}
+        {signupAlert ? (
+          <TouchableOpacity
+            style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,61,0.10)', borderColor: 'rgba(255,90,61,0.30)' }]}
+            onPress={() => router.push('/(admin)/ai-ops' as any)}
+            activeOpacity={0.8}
+          >
+            <AlertTriangle color="#FF5A3D" size={15} strokeWidth={2.2} />
+            <AppText style={[styles.errorBannerText, { color: '#FF5A3D' }]}>
+              Signup pipeline issue detected — tap to view AI Ops
+            </AppText>
           </TouchableOpacity>
         ) : null}
 
