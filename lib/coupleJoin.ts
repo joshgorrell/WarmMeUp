@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { logDebugEvent } from '@/lib/debugLog';
 
 export type JoinResult =
   | { ok: true; partnerName: string | null; coupleId: string }
@@ -21,26 +22,27 @@ export async function completePendingJoin(
   const coupleId: string = joinResult.couple_id;
   const userAId: string = joinResult.user_a_id;
 
-  const { data: subA } = await supabase
-    .from('subscriptions')
-    .select('id')
-    .eq('user_id', userAId)
-    .eq('status', 'active')
-    .maybeSingle();
-  const { data: subB } = await supabase
-    .from('subscriptions')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .maybeSingle();
+  // Stamp subscription_owner_id so the couple inherits whichever partner has an active paid plan.
+  // Errors here are non-fatal: the join already succeeded. Log them for diagnostics.
+  const [{ data: subA, error: subAError }, { data: subB, error: subBError }] = await Promise.all([
+    supabase.from('subscriptions').select('id').eq('user_id', userAId).eq('status', 'active').maybeSingle(),
+    supabase.from('subscriptions').select('id').eq('user_id', userId).eq('status', 'active').maybeSingle(),
+  ]);
+  if (subAError) logDebugEvent('JOIN_SUB_QUERY_ERROR', { which: 'userA', message: subAError.message });
+  if (subBError) logDebugEvent('JOIN_SUB_QUERY_ERROR', { which: 'userB', message: subBError.message });
+
   const subscriptionOwnerId = subA ? userAId : subB ? userId : null;
   if (subscriptionOwnerId) {
-    await supabase
+    const { error: stampError } = await supabase
       .from('couples')
       .update({ subscription_owner_id: subscriptionOwnerId })
       .eq('id', coupleId);
+    if (stampError) {
+      logDebugEvent('JOIN_SUB_STAMP_ERROR', { coupleId, subscriptionOwnerId, message: stampError.message });
+    }
   }
 
+  // Clean up User B's own solo placeholder
   await supabase
     .from('couples')
     .delete()
@@ -48,10 +50,14 @@ export async function completePendingJoin(
     .is('user_b_id', null)
     .neq('id', coupleId);
 
-  await supabase.from('scores').upsert([
+  // Seed scores rows so the points system works from day one.
+  const { error: scoresError } = await supabase.from('scores').upsert([
     { couple_id: coupleId, user_id: userAId, points: 0 },
     { couple_id: coupleId, user_id: userId, points: 0 },
   ]);
+  if (scoresError) {
+    logDebugEvent('JOIN_SCORES_UPSERT_ERROR', { coupleId, message: scoresError.message });
+  }
 
   const { data: partnerProfile } = await supabase
     .from('profiles')

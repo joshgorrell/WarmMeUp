@@ -279,14 +279,17 @@ export default function PairScreen() {
       const coupleId: string = joinResult.couple_id;
       const userAId: string = joinResult.user_a_id;
 
-      // Stamp subscription_owner_id
-      const { data: subA } = await supabase
-        .from('subscriptions').select('id').eq('user_id', userAId).eq('status', 'active').maybeSingle();
-      const { data: subB } = await supabase
-        .from('subscriptions').select('id').eq('user_id', user.id).eq('status', 'active').maybeSingle();
+      // Stamp subscription_owner_id — non-fatal, log errors and continue.
+      const [{ data: subA, error: subAError }, { data: subB, error: subBError }] = await Promise.all([
+        supabase.from('subscriptions').select('id').eq('user_id', userAId).eq('status', 'active').maybeSingle(),
+        supabase.from('subscriptions').select('id').eq('user_id', user.id).eq('status', 'active').maybeSingle(),
+      ]);
+      if (subAError) logDebugEvent('JOIN_SUB_QUERY_ERROR', { which: 'userA', message: subAError.message });
+      if (subBError) logDebugEvent('JOIN_SUB_QUERY_ERROR', { which: 'userB', message: subBError.message });
       const subOwnerId = subA ? userAId : subB ? user.id : null;
       if (subOwnerId) {
-        await supabase.from('couples').update({ subscription_owner_id: subOwnerId }).eq('id', coupleId);
+        const { error: stampError } = await supabase.from('couples').update({ subscription_owner_id: subOwnerId }).eq('id', coupleId);
+        if (stampError) logDebugEvent('JOIN_SUB_STAMP_ERROR', { coupleId, subOwnerId, message: stampError.message });
       }
 
       // Clean up User B's own solo placeholder (active or inactive)
@@ -297,10 +300,11 @@ export default function PairScreen() {
         .is('user_b_id', null)
         .neq('id', coupleId);
 
-      await supabase.from('scores').upsert([
+      const { error: scoresError } = await supabase.from('scores').upsert([
         { couple_id: coupleId, user_id: userAId, points: 0 },
         { couple_id: coupleId, user_id: user.id, points: 0 },
       ]);
+      if (scoresError) logDebugEvent('JOIN_SCORES_UPSERT_ERROR', { coupleId, message: scoresError.message });
 
       // Notify User A (fire-and-forget)
       const { data: sessionData } = await supabase.auth.getSession();
