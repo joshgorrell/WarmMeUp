@@ -248,63 +248,45 @@ export default function PairScreen() {
     setError('');
     setLoading(true);
     try {
-      // Prevent double-connecting
-      const { data: existingPaired } = await supabase
-        .from('couples')
-        .select('id')
-        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-        .not('user_b_id', 'is', null)
-        .maybeSingle();
-      if (existingPaired) {
-        setError("You're already connected to a partner.");
+      const { data: joinResult, error: joinError } = await supabase
+        .rpc('join_couple', { invite_code: normalized });
+
+      if (joinError) {
+        setError('Something went wrong. Please try again.');
         return;
       }
 
-      const { data: targetCouple } = await supabase
-        .rpc('get_couple_by_invite_code', { code: normalized });
-
-      if (!targetCouple) {
-        setError('Invalid code. Check with your partner.');
-        return;
-      }
-      if (targetCouple.user_a_id === user.id) {
-        setError("That's your own code! Share it with your partner.");
-        return;
-      }
-      if (targetCouple.user_b_id && targetCouple.user_b_id !== user.id) {
-        setError('This code has already been used.');
-        return;
-      }
-
-      const { error: updateError } = await supabase
-        .from('couples')
-        .update({ user_b_id: user.id, active: true, invite_code_used_at: new Date().toISOString() })
-        .eq('id', targetCouple.id)
-        .is('user_b_id', null);
-
-      if (updateError) {
-        // Re-fetch to provide an accurate error message
-        const { data: refetched } = await supabase
-          .from('couples')
-          .select('user_b_id')
-          .eq('id', targetCouple.id)
-          .maybeSingle();
-        if (refetched?.user_b_id && refetched.user_b_id !== user.id) {
-          setError('This code was just used by someone else.');
-        } else {
-          setError('Something went wrong. Please try again.');
+      if (!joinResult.ok) {
+        switch (joinResult.reason) {
+          case 'already_connected':
+            setError("You're already connected to a partner.");
+            break;
+          case 'not_found':
+            setError('Invalid code. Check with your partner.');
+            break;
+          case 'self':
+            setError("That's your own code! Share it with your partner.");
+            break;
+          case 'already_full':
+            setError('This code has already been used.');
+            break;
+          default:
+            setError('Something went wrong. Please try again.');
         }
         return;
       }
 
+      const coupleId: string = joinResult.couple_id;
+      const userAId: string = joinResult.user_a_id;
+
       // Stamp subscription_owner_id
       const { data: subA } = await supabase
-        .from('subscriptions').select('id').eq('user_id', targetCouple.user_a_id).eq('status', 'active').maybeSingle();
+        .from('subscriptions').select('id').eq('user_id', userAId).eq('status', 'active').maybeSingle();
       const { data: subB } = await supabase
         .from('subscriptions').select('id').eq('user_id', user.id).eq('status', 'active').maybeSingle();
-      const subOwnerId = subA ? targetCouple.user_a_id : subB ? user.id : null;
+      const subOwnerId = subA ? userAId : subB ? user.id : null;
       if (subOwnerId) {
-        await supabase.from('couples').update({ subscription_owner_id: subOwnerId }).eq('id', targetCouple.id);
+        await supabase.from('couples').update({ subscription_owner_id: subOwnerId }).eq('id', coupleId);
       }
 
       // Clean up User B's own solo placeholder (active or inactive)
@@ -313,11 +295,11 @@ export default function PairScreen() {
         .delete()
         .eq('user_a_id', user.id)
         .is('user_b_id', null)
-        .neq('id', targetCouple.id);
+        .neq('id', coupleId);
 
       await supabase.from('scores').upsert([
-        { couple_id: targetCouple.id, user_id: targetCouple.user_a_id, points: 0 },
-        { couple_id: targetCouple.id, user_id: user.id, points: 0 },
+        { couple_id: coupleId, user_id: userAId, points: 0 },
+        { couple_id: coupleId, user_id: user.id, points: 0 },
       ]);
 
       // Notify User A (fire-and-forget)
@@ -327,7 +309,7 @@ export default function PairScreen() {
         fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ event_type: 'partner_joined', couple_id: targetCouple.id }),
+          body: JSON.stringify({ event_type: 'partner_joined', couple_id: coupleId }),
         }).catch(() => {});
       }
 
@@ -337,7 +319,7 @@ export default function PairScreen() {
         const { data: partnerProf } = await supabase
           .from('profiles')
           .select('display_name')
-          .eq('id', targetCouple.user_a_id)
+          .eq('id', userAId)
           .maybeSingle();
         router.replace({
           pathname: '/(auth)/paired-celebration',

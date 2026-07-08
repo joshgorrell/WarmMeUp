@@ -9,47 +9,22 @@ export async function completePendingJoin(
   code: string,
   onJoined?: () => Promise<void>,
 ): Promise<JoinResult> {
-  const { data: existingCouple } = await supabase
-    .from('couples')
-    .select('id, active')
-    .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
-    .eq('active', true)
-    .maybeSingle();
-  if (existingCouple) return { ok: false, reason: 'already_connected' };
+  const { data: joinResult, error: joinError } = await supabase
+    .rpc('join_couple', { invite_code: code.toUpperCase().trim() });
 
-  const { data: targetCouple, error: fetchError } = await supabase
-    .rpc('get_couple_by_invite_code', { code: code.toUpperCase().trim() });
+  if (joinError) return { ok: false, reason: 'error' };
 
-  if (fetchError || !targetCouple) return { ok: false, reason: 'not_found' };
-
-  if (targetCouple.user_a_id === userId) return { ok: false, reason: 'self' };
-
-  if (targetCouple.user_b_id && targetCouple.user_b_id !== userId) {
-    return { ok: false, reason: 'already_full' };
+  if (!joinResult.ok) {
+    return { ok: false, reason: joinResult.reason as 'not_found' | 'already_full' | 'self' | 'already_connected' | 'error' };
   }
 
-  const { error: updateError } = await supabase
-    .from('couples')
-    .update({ user_b_id: userId, active: true })
-    .eq('id', targetCouple.id)
-    .is('user_b_id', null);
-
-  if (updateError) {
-    const { data: refetched } = await supabase
-      .from('couples')
-      .select('user_b_id')
-      .eq('id', targetCouple.id)
-      .maybeSingle();
-    if (refetched?.user_b_id && refetched.user_b_id !== userId) {
-      return { ok: false, reason: 'already_full' };
-    }
-    return { ok: false, reason: 'error' };
-  }
+  const coupleId: string = joinResult.couple_id;
+  const userAId: string = joinResult.user_a_id;
 
   const { data: subA } = await supabase
     .from('subscriptions')
     .select('id')
-    .eq('user_id', targetCouple.user_a_id)
+    .eq('user_id', userAId)
     .eq('status', 'active')
     .maybeSingle();
   const { data: subB } = await supabase
@@ -58,15 +33,12 @@ export async function completePendingJoin(
     .eq('user_id', userId)
     .eq('status', 'active')
     .maybeSingle();
-  const subscriptionOwnerId = subA ? targetCouple.user_a_id : subB ? userId : null;
+  const subscriptionOwnerId = subA ? userAId : subB ? userId : null;
   if (subscriptionOwnerId) {
-    const { error: subUpdateError } = await supabase
+    await supabase
       .from('couples')
       .update({ subscription_owner_id: subscriptionOwnerId })
-      .eq('id', targetCouple.id);
-    if (subUpdateError) {
-      console.warn('[completePendingJoin] subscription_owner_id update failed:', subUpdateError.message);
-    }
+      .eq('id', coupleId);
   }
 
   await supabase
@@ -74,23 +46,22 @@ export async function completePendingJoin(
     .delete()
     .eq('user_a_id', userId)
     .is('user_b_id', null)
-    .neq('id', targetCouple.id);
+    .neq('id', coupleId);
 
   await supabase.from('scores').upsert([
-    { couple_id: targetCouple.id, user_id: targetCouple.user_a_id, points: 0 },
-    { couple_id: targetCouple.id, user_id: userId, points: 0 },
+    { couple_id: coupleId, user_id: userAId, points: 0 },
+    { couple_id: coupleId, user_id: userId, points: 0 },
   ]);
 
   const { data: partnerProfile } = await supabase
     .from('profiles')
     .select('display_name')
-    .eq('id', targetCouple.user_a_id)
+    .eq('id', userAId)
     .maybeSingle();
 
-  // Notify caller (typically refreshSubscription) so User B immediately inherits partner's sub
   if (onJoined) {
     onJoined().catch(() => {});
   }
 
-  return { ok: true, partnerName: partnerProfile?.display_name ?? null, coupleId: targetCouple.id };
+  return { ok: true, partnerName: partnerProfile?.display_name ?? null, coupleId };
 }
