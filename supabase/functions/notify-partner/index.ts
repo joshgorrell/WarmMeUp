@@ -149,23 +149,37 @@ Deno.serve(async (req: Request) => {
       ? notifCopy
       : `${senderName} ${EVENT_LABELS[event_type] ?? "has new activity for you"}`;
 
+    const expoPayload = {
+      to: partnerProfile.push_token,
+      title,
+      body: bodyText,
+      data: { event_type, couple_id, target_route: target_route ?? null, item_id: item_id ?? null },
+      sound: "default",
+    };
+
+    // Log the exact payload for server-side diagnostics (token truncated for privacy)
+    console.log("[notify-partner] Sending push payload:", JSON.stringify({
+      to_prefix: (partnerProfile.push_token ?? "").slice(0, 30) + "...",
+      title: expoPayload.title,
+      body: expoPayload.body,
+      sound: expoPayload.sound,
+      data: expoPayload.data,
+    }));
+
     const pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: partnerProfile.push_token,
-        title,
-        body: bodyText,
-        data: { event_type, couple_id, target_route: target_route ?? null, item_id: item_id ?? null },
-        sound: "default",
-      }),
+      body: JSON.stringify(expoPayload),
     });
 
     // Inspect Expo ticket for delivery errors.
     let ticket: any = null;
+    let ticketId: string | null = null;
     try {
       const pushJson = await pushRes.json() as any;
       ticket = pushJson?.data ?? null;
+      ticketId = ticket?.id ?? null;
+      console.log("[notify-partner] Expo ticket:", JSON.stringify(ticket));
     } catch (e: any) {
       console.error("[notify-partner] Failed to parse Expo push response:", e?.message ?? String(e));
     }
@@ -186,7 +200,11 @@ Deno.serve(async (req: Request) => {
       console.error(`[notify-partner] Expo push HTTP ${pushRes.status} — non-ok response`);
     }
 
-    return new Response(JSON.stringify({ ok: true, expo_status: ticket?.status ?? null }), {
+    return new Response(JSON.stringify({
+      ok: true,
+      expo_status: ticket?.status ?? null,
+      ticket_id: ticketId,
+    }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

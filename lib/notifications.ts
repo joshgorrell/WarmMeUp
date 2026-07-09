@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { supabase } from './supabase';
+import { logDebugEvent } from './debugLog';
 
 export type NotifyEventType =
   | 'new_message'
@@ -86,12 +87,6 @@ export async function clearPushToken(userId: string) {
   ]);
 }
 
-/**
- * Fire-and-forget: call the notify-partner Edge Function.
- * Pass partnerUserId to skip the call entirely when the user has no partner yet
- * (avoids a 404 on solo / pending-pair couples).
- * Silently swallows errors — never block the UI on this.
- */
 export async function notifyPartner(payload: {
   event_type: NotifyEventType;
   couple_id: string;
@@ -110,15 +105,32 @@ export async function notifyPartner(payload: {
     if (!baseUrl.startsWith('https://')) return;
     const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
     const url = `${baseUrl}/functions/v1/notify-partner`;
-    fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-        Apikey: anonKey,
-      },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+          Apikey: anonKey,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      logDebugEvent('PUSH_SEND_RESULT', {
+        event_type: payload.event_type,
+        http_status: res.status,
+        expo_status: data?.expo_status ?? null,
+        ticket_id: data?.ticket_id ?? null,
+        skipped: data?.skipped ?? null,
+        error: data?.error ?? null,
+      });
+    } catch (fetchErr: any) {
+      logDebugEvent('PUSH_SEND_ERROR', {
+        event_type: payload.event_type,
+        message: fetchErr?.message ?? String(fetchErr),
+      });
+    }
   } catch {
     // Never throw — notifications are best-effort
   }

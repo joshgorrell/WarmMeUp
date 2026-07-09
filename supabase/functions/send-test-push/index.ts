@@ -121,28 +121,42 @@ Deno.serve(async (req: Request) => {
     }
 
     // Send via Expo push API
+    const expoPayload = {
+      to: targetProfile!.push_token,
+      title: "Warm Me Up",
+      body: target === "self"
+        ? "[Debug] Self push test — end-to-end"
+        : "[Debug] Partner push test — forced by admin",
+      data: { event_type: "debug_test", couple_id },
+      sound: "default",
+    };
+
+    console.log("[send-test-push] Sending payload:", JSON.stringify({
+      to_prefix: (targetProfile!.push_token ?? "").slice(0, 30) + "...",
+      title: expoPayload.title,
+      body: expoPayload.body,
+      sound: expoPayload.sound,
+      data: expoPayload.data,
+    }));
+
     const pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: targetProfile!.push_token,
-        title: "Warm Me Up",
-        body: target === "self"
-          ? "[Debug] Self push test — end-to-end"
-          : "[Debug] Partner push test — forced by admin",
-        data: { event_type: "debug_test", couple_id },
-        sound: "default",
-      }),
+      body: JSON.stringify(expoPayload),
     });
 
     let expoTicket: any = null;
     let expoStatus: string | null = null;
     let expoError: string | null = null;
+    let ticketId: string | null = null;
 
     try {
       const pushJson = await pushRes.json() as any;
       expoTicket = pushJson?.data ?? null;
       expoStatus = expoTicket?.status ?? null;
+      ticketId = expoTicket?.id ?? null;
+
+      console.log("[send-test-push] Expo ticket:", JSON.stringify(expoTicket));
 
       // Clear stale token if Expo reports the device is gone
       if (expoTicket?.status === "error" && expoTicket?.details?.error === "DeviceNotRegistered") {
@@ -150,6 +164,35 @@ Deno.serve(async (req: Request) => {
       }
     } catch (e: any) {
       expoError = e?.message ?? "Failed to parse Expo response";
+    }
+
+    // Query Expo receipt API after a short delay so APNs/FCM can process the delivery.
+    // This is the only way to detect APNs-level rejection after Expo accepts the ticket.
+    let receiptStatus: string | null = null;
+    let receiptDetails: any = null;
+    let receiptError: string | null = null;
+
+    if (ticketId && expoStatus === "ok") {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      try {
+        const receiptRes = await fetch("https://exp.host/--/api/v2/push/getReceipts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: [ticketId] }),
+        });
+        if (receiptRes.ok) {
+          const receiptJson = await receiptRes.json() as any;
+          const receipt = receiptJson?.data?.[ticketId];
+          receiptStatus = receipt?.status ?? null;
+          receiptDetails = receipt?.details ?? null;
+          receiptError = receipt?.details?.error ?? null;
+          console.log("[send-test-push] Expo receipt:", JSON.stringify(receipt));
+        } else {
+          receiptError = `Receipt API HTTP ${receiptRes.status}`;
+        }
+      } catch (e: any) {
+        receiptError = e?.message ?? "Failed to query receipt";
+      }
     }
 
     return json({
@@ -161,6 +204,10 @@ Deno.serve(async (req: Request) => {
       expo_status: expoStatus,
       expo_ticket: expoTicket,
       expo_error: expoError,
+      ticket_id: ticketId,
+      receipt_status: receiptStatus,
+      receipt_details: receiptDetails,
+      receipt_error: receiptError,
     });
   } catch (err: any) {
     return json({ error: "Internal server error", detail: err?.message ?? String(err) }, 500);

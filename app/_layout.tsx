@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, View, TouchableOpacity, AppState, AppStateStatus, Platform, Image } from 'react-native';
 import AppText from '@/components/AppText';
 import type { NotificationData } from '@/lib/notifications';
+import { logDebugEvent } from '@/lib/debugLog';
 
 // Warm the image decode cache as early as possible — before the transition/unlock screens mount.
 // resolveAssetSource works on both native (file URI) and web (network URL).
@@ -148,14 +149,28 @@ function NotificationHandler() {
     if (Platform.OS === 'web') return;
 
     // Handle taps on notifications received while app is backgrounded / closed
-    const sub = Notifications.addNotificationResponseReceivedListener(response => {
+    const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data as unknown as NotificationData | undefined;
       if (data && typeof data.event_type === 'string') {
         pendingNotificationRoute.current = data;
       }
     });
 
-    return () => sub.remove();
+    // Log every notification that arrives while app is in foreground — confirms device-side receipt
+    const receivedSub = Notifications.addNotificationReceivedListener(notification => {
+      const { title, body, data } = notification.request.content;
+      logDebugEvent('PUSH_RECEIVED_FOREGROUND', {
+        title: title ?? null,
+        body: body ?? null,
+        event_type: (data as any)?.event_type ?? null,
+        identifier: notification.request.identifier,
+      });
+    });
+
+    return () => {
+      responseSub.remove();
+      receivedSub.remove();
+    };
   }, []);
 
   return null;
