@@ -331,16 +331,30 @@ export default function DebugScreen() {
 
   type PushTestSubResult = {
     status: 'idle' | 'loading' | 'success' | 'error';
+    step: string | null;
     send_status: number | null;
     expo_status: string | null;
     skipped_reason: string | null;
     error: string | null;
+    expo_ticket_id: string | null;
+    expo_payload_sent: string | null;
+    receipt_request_started: string | null;
+    receipt_request_finished: string | null;
+    receipt_timeout: boolean | null;
+    receipt_status: string | null;
+    receipt_details: string | null;
+    receipt_error: string | null;
+    receipt_response: string | null;
   };
   const PUSH_TEST_SUB_IDLE: PushTestSubResult = {
-    status: 'idle', send_status: null, expo_status: null, skipped_reason: null, error: null,
+    status: 'idle', step: null, send_status: null, expo_status: null, skipped_reason: null, error: null,
+    expo_ticket_id: null, expo_payload_sent: null,
+    receipt_request_started: null, receipt_request_finished: null,
+    receipt_timeout: null, receipt_status: null, receipt_details: null, receipt_error: null, receipt_response: null,
   };
   const [pushTest, setPushTest] = useState<{
     running: boolean;
+    step: string | null;
     ranAt: string | null;
     permission_status: string | null;
     token_present: boolean | null;
@@ -352,6 +366,7 @@ export default function DebugScreen() {
     top_error: string | null;
   }>({
     running: false,
+    step: null,
     ranAt: null,
     permission_status: null,
     token_present: null,
@@ -1142,20 +1157,22 @@ export default function DebugScreen() {
     const EAS_PROJECT_ID = 'cfde070c-187f-4d7e-b643-a20446ff95ab';
     const resetState = {
       running: true,
+      step: 'start' as string | null,
       ranAt: new Date().toISOString(),
       permission_status: null as string | null,
       token_present: null as boolean | null,
       token_saved_to_db: null as boolean | null,
       partner_token_present: null as boolean | null,
       partner_enabled: null as boolean | null,
-      self: { status: 'idle' as const, send_status: null, expo_status: null, skipped_reason: null, error: null },
-      partner: { status: 'idle' as const, send_status: null, expo_status: null, skipped_reason: null, error: null },
+      self: { ...PUSH_TEST_SUB_IDLE, status: 'idle' as const },
+      partner: { ...PUSH_TEST_SUB_IDLE, status: 'idle' as const },
       top_error: null as string | null,
     };
     setPushTest(resetState);
 
     try {
       // Step 1: Re-register and refresh token
+      setPushTest(p => ({ ...p, step: 'checking_permission' }));
       const { status: existing } = await Notifications.getPermissionsAsync();
       let finalStatus = existing;
       if (existing !== 'granted') {
@@ -1166,28 +1183,30 @@ export default function DebugScreen() {
 
       if (finalStatus !== 'granted') {
         setPushTest(p => ({
-          ...p, running: false, token_present: false, token_saved_to_db: false,
+          ...p, running: false, step: 'done', token_present: false, token_saved_to_db: false,
           top_error: 'Push permission not granted',
         }));
         return;
       }
 
+      setPushTest(p => ({ ...p, step: 'getting_token' }));
       let token: string | null = null;
       try {
         const t = await Notifications.getExpoPushTokenAsync({ projectId: EAS_PROJECT_ID });
         token = t.data ?? null;
       } catch (e: any) {
-        setPushTest(p => ({ ...p, running: false, token_present: false, token_saved_to_db: false, top_error: `getExpoPushTokenAsync failed: ${e?.message ?? String(e)}` }));
+        setPushTest(p => ({ ...p, running: false, step: 'done', token_present: false, token_saved_to_db: false, top_error: `getExpoPushTokenAsync failed: ${e?.message ?? String(e)}` }));
         return;
       }
       setPushTest(p => ({ ...p, token_present: token !== null }));
 
       if (!token) {
-        setPushTest(p => ({ ...p, running: false, token_saved_to_db: false, top_error: 'No token returned from Expo' }));
+        setPushTest(p => ({ ...p, running: false, step: 'done', token_saved_to_db: false, top_error: 'No token returned from Expo' }));
         return;
       }
 
       // Step 2: Save token to DB
+      setPushTest(p => ({ ...p, step: 'saving_token' }));
       await savePushToken(userId, token);
 
       // Verify it was saved
@@ -1203,71 +1222,110 @@ export default function DebugScreen() {
       const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        setPushTest(p => ({ ...p, running: false, top_error: 'No active session' }));
+        setPushTest(p => ({ ...p, running: false, step: 'done', top_error: 'No active session' }));
         return;
       }
 
+      // Edge call with 15s client-side abort so the UI never hangs permanently
+      const EDGE_TIMEOUT_MS = 15_000;
       const callEdge = async (target: 'self' | 'partner', forceFlag: boolean) => {
-        const res = await fetch(`${baseUrl}/functions/v1/send-test-push`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-            Apikey: anonKey,
-          },
-          body: JSON.stringify({ target, couple_id: couple.id, force: forceFlag }),
-        });
-        const body = await res.json() as any;
-        return { httpStatus: res.status, body };
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), EDGE_TIMEOUT_MS);
+        try {
+          const res = await fetch(`${baseUrl}/functions/v1/send-test-push`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+              Apikey: anonKey,
+            },
+            body: JSON.stringify({ target, couple_id: couple.id, force: forceFlag }),
+            signal: controller.signal,
+          });
+          const body = await res.json() as any;
+          return { httpStatus: res.status as number | null, body };
+        } catch (e: any) {
+          const isAbort = e?.name === 'AbortError';
+          return {
+            httpStatus: null as number | null,
+            body: { ok: false, error: isAbort ? `Timed out after ${EDGE_TIMEOUT_MS / 1000}s — edge function did not respond` : (e?.message ?? String(e)) },
+          };
+        } finally {
+          clearTimeout(timer);
+        }
       };
 
-      // Step 3: Self send
-      setPushTest(p => ({ ...p, self: { ...p.self, status: 'loading' } }));
+      // Step 3: Self send (includes Expo push + 3s receipt delay inside edge function)
+      setPushTest(p => ({ ...p, step: 'sending_self', self: { ...p.self, status: 'loading', step: 'sending_to_expo' } }));
       try {
         const { httpStatus, body } = await callEdge('self', false);
         setPushTest(p => ({
           ...p,
+          step: 'self_done',
           self: {
             status: httpStatus === 200 && body?.ok ? 'success' : 'error',
+            step: 'done',
             send_status: httpStatus,
             expo_status: body?.expo_status ?? null,
             skipped_reason: body?.skipped ?? null,
             error: body?.error ?? null,
+            expo_ticket_id: body?.ticket_id ?? null,
+            expo_payload_sent: body?.expo_payload_sent ?? null,
+            receipt_request_started: body?.receipt_request_started ?? null,
+            receipt_request_finished: body?.receipt_request_finished ?? null,
+            receipt_timeout: body?.receipt_timeout ?? null,
+            receipt_status: body?.receipt_status ?? null,
+            receipt_details: body?.receipt_details ?? null,
+            receipt_error: body?.receipt_error ?? null,
+            receipt_response: body?.receipt_response ?? null,
           },
         }));
       } catch (e: any) {
         setPushTest(p => ({
           ...p,
-          self: { status: 'error', send_status: null, expo_status: null, skipped_reason: null, error: e?.message ?? String(e) },
+          step: 'self_done',
+          self: { ...PUSH_TEST_SUB_IDLE, status: 'error', step: 'done', error: e?.message ?? String(e) },
         }));
       }
 
       // Step 4: Partner send — read partner token/enabled from response
-      setPushTest(p => ({ ...p, partner: { ...p.partner, status: 'loading' } }));
+      setPushTest(p => ({ ...p, step: 'sending_partner', partner: { ...p.partner, status: 'loading', step: 'sending_to_expo' } }));
       try {
         const { httpStatus, body } = await callEdge('partner', force);
         setPushTest(p => ({
           ...p,
+          step: 'partner_done',
           partner_token_present: body?.token_present ?? null,
           partner_enabled: body?.partner_enabled ?? null,
           partner: {
             status: httpStatus === 200 && body?.ok ? 'success' : 'error',
+            step: 'done',
             send_status: httpStatus,
             expo_status: body?.expo_status ?? null,
             skipped_reason: body?.skipped ?? null,
             error: body?.error ?? null,
+            expo_ticket_id: body?.ticket_id ?? null,
+            expo_payload_sent: body?.expo_payload_sent ?? null,
+            receipt_request_started: body?.receipt_request_started ?? null,
+            receipt_request_finished: body?.receipt_request_finished ?? null,
+            receipt_timeout: body?.receipt_timeout ?? null,
+            receipt_status: body?.receipt_status ?? null,
+            receipt_details: body?.receipt_details ?? null,
+            receipt_error: body?.receipt_error ?? null,
+            receipt_response: body?.receipt_response ?? null,
           },
         }));
       } catch (e: any) {
         setPushTest(p => ({
           ...p,
-          partner: { status: 'error', send_status: null, expo_status: null, skipped_reason: null, error: e?.message ?? String(e) },
+          step: 'partner_done',
+          partner: { ...PUSH_TEST_SUB_IDLE, status: 'error', step: 'done', error: e?.message ?? String(e) },
         }));
       }
     } catch (e: any) {
       setPushTest(p => ({ ...p, top_error: e?.message ?? String(e) }));
     } finally {
-      setPushTest(p => ({ ...p, running: false }));
+      setPushTest(p => ({ ...p, running: false, step: p.step === 'start' ? 'done' : p.step }));
     }
   };
 
@@ -1737,17 +1795,36 @@ export default function DebugScreen() {
         {/* ── Push Test Results (populated after running tests) ── */}
         {pushTest.ranAt !== null && (
           <>
+            <Row label="push_test.running" value={pushTest.running} />
+            <Row label="push_test.step" value={pushTest.step} />
             <Row label="push_test.ranAt" value={pushTest.ranAt} />
             <Row label="push_test.permission_status" value={pushTest.permission_status} />
             <Row label="push_test.token_present" value={pushTest.token_present} />
             <Row label="push_test.token_saved_to_db" value={pushTest.token_saved_to_db} />
+            <Row label="push_test.self.status" value={pushTest.self.status} />
+            <Row label="push_test.self.step" value={pushTest.self.step} />
             <Row label="push_test.self.send_status" value={pushTest.self.send_status} />
+            <Row label="push_test.self.expo_payload_sent" value={pushTest.self.expo_payload_sent} />
             <Row label="push_test.self.expo_status" value={pushTest.self.expo_status} />
+            <Row label="push_test.self.skipped_reason" value={pushTest.self.skipped_reason} />
+            <Row label="push_test.self.error" value={pushTest.self.error} />
+            <Row label="push_test.self.expo_ticket_id" value={pushTest.self.expo_ticket_id} />
+            <Row label="push_test.self.receipt_request_started" value={pushTest.self.receipt_request_started} />
+            <Row label="push_test.self.receipt_request_finished" value={pushTest.self.receipt_request_finished} />
+            <Row label="push_test.self.receipt_timeout" value={pushTest.self.receipt_timeout} />
+            <Row label="push_test.self.receipt_status" value={pushTest.self.receipt_status} />
+            <Row label="push_test.self.receipt_details" value={pushTest.self.receipt_details} />
+            <Row label="push_test.self.receipt_error" value={pushTest.self.receipt_error} />
+            <Row label="push_test.self.receipt_response" value={pushTest.self.receipt_response} />
             <Row label="push_test.partner.token_present" value={pushTest.partner_token_present} />
             <Row label="push_test.partner.enabled" value={pushTest.partner_enabled} />
+            <Row label="push_test.partner.status" value={pushTest.partner.status} />
+            <Row label="push_test.partner.step" value={pushTest.partner.step} />
             <Row label="push_test.partner.send_status" value={pushTest.partner.send_status} />
+            <Row label="push_test.partner.expo_payload_sent" value={pushTest.partner.expo_payload_sent} />
             <Row label="push_test.partner.expo_status" value={pushTest.partner.expo_status} />
             <Row label="push_test.partner.skipped_reason" value={pushTest.partner.skipped_reason} />
+            <Row label="push_test.partner.error" value={pushTest.partner.error} />
             <Row label="push_test.error" value={pushTest.top_error} />
           </>
         )}

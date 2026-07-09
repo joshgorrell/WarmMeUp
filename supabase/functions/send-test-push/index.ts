@@ -82,7 +82,6 @@ Deno.serve(async (req: Request) => {
     // For partner target, respect push_notifications_enabled unless force=true AND caller is super_admin
     if (target === "partner" && !notificationsEnabled) {
       if (force) {
-        // Verify super_admin before bypassing
         const { data: callerProfile } = await adminClient
           .from("profiles")
           .select("is_super_admin")
@@ -129,15 +128,22 @@ Deno.serve(async (req: Request) => {
         : "[Debug] Partner push test — forced by admin",
       data: { event_type: "debug_test", couple_id },
       sound: "default",
+      priority: "high",
+      channelId: "default",
     };
 
-    console.log("[send-test-push] Sending payload:", JSON.stringify({
-      to_prefix: (targetProfile!.push_token ?? "").slice(0, 30) + "...",
+    // Payload echoed back in response for diagnostics (token omitted)
+    const expoPayloadSent = JSON.stringify({
       title: expoPayload.title,
       body: expoPayload.body,
       sound: expoPayload.sound,
+      priority: expoPayload.priority,
+      channelId: expoPayload.channelId,
       data: expoPayload.data,
-    }));
+      to_prefix: (targetProfile!.push_token ?? "").slice(0, 30) + "...",
+    });
+
+    console.log("[send-test-push] step=send_to_expo payload:", expoPayloadSent);
 
     const pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",
@@ -156,7 +162,7 @@ Deno.serve(async (req: Request) => {
       expoStatus = expoTicket?.status ?? null;
       ticketId = expoTicket?.id ?? null;
 
-      console.log("[send-test-push] Expo ticket:", JSON.stringify(expoTicket));
+      console.log("[send-test-push] step=got_ticket ticket:", JSON.stringify(expoTicket));
 
       // Clear stale token if Expo reports the device is gone
       if (expoTicket?.status === "error" && expoTicket?.details?.error === "DeviceNotRegistered") {
@@ -167,31 +173,69 @@ Deno.serve(async (req: Request) => {
     }
 
     // Query Expo receipt API after a short delay so APNs/FCM can process the delivery.
-    // This is the only way to detect APNs-level rejection after Expo accepts the ticket.
+    // Wrapped in a 10-second timeout so the function never hangs on a slow receipt API.
     let receiptStatus: string | null = null;
     let receiptDetails: any = null;
     let receiptError: string | null = null;
+    let receiptRequestStarted: string | null = null;
+    let receiptRequestFinished: string | null = null;
+    let receiptTimedOut = false;
+    let receiptResponse: string | null = null;
 
     if (ticketId && expoStatus === "ok") {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      try {
+      receiptRequestStarted = new Date().toISOString();
+      console.log("[send-test-push] step=receipt_delay starting 3s delay");
+
+      type ReceiptResult =
+        | { timedOut: false; receipt: any; error: null }
+        | { timedOut: false; receipt: null; error: string }
+        | { timedOut: true; receipt: null; error: string };
+
+      const receiptWork = async (): Promise<ReceiptResult> => {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        console.log("[send-test-push] step=receipt_fetch querying getReceipts");
         const receiptRes = await fetch("https://exp.host/--/api/v2/push/getReceipts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ids: [ticketId] }),
         });
-        if (receiptRes.ok) {
-          const receiptJson = await receiptRes.json() as any;
-          const receipt = receiptJson?.data?.[ticketId];
-          receiptStatus = receipt?.status ?? null;
-          receiptDetails = receipt?.details ?? null;
-          receiptError = receipt?.details?.error ?? null;
-          console.log("[send-test-push] Expo receipt:", JSON.stringify(receipt));
-        } else {
-          receiptError = `Receipt API HTTP ${receiptRes.status}`;
+        if (!receiptRes.ok) {
+          return { timedOut: false, receipt: null, error: `Receipt API HTTP ${receiptRes.status}` };
         }
-      } catch (e: any) {
-        receiptError = e?.message ?? "Failed to query receipt";
+        const receiptJson = await receiptRes.json() as any;
+        const r = receiptJson?.data?.[ticketId as string] ?? null;
+        if (r === null) {
+          return { timedOut: false, receipt: null, error: "receipt_not_ready_after_5s" };
+        }
+        return { timedOut: false, receipt: r, error: null };
+      };
+
+      const result = await Promise.race<ReceiptResult>([
+        receiptWork().catch((e: any): ReceiptResult => ({
+          timedOut: false,
+          receipt: null,
+          error: e?.message ?? String(e),
+        })),
+        new Promise<ReceiptResult>((resolve) =>
+          setTimeout(
+            () => resolve({ timedOut: true, receipt: null, error: "Receipt lookup timed out after 10s" }),
+            10_000,
+          )
+        ),
+      ]);
+
+      receiptRequestFinished = new Date().toISOString();
+      receiptTimedOut = result.timedOut;
+
+      if (result.receipt !== null) {
+        receiptStatus = result.receipt?.status ?? null;
+        receiptDetails = result.receipt?.details ?? null;
+        receiptError = result.receipt?.details?.error ?? null;
+        receiptResponse = JSON.stringify(result.receipt);
+        console.log("[send-test-push] step=receipt_done receipt:", receiptResponse);
+      } else {
+        receiptError = result.error ?? "No receipt returned";
+        console.warn("[send-test-push] step=receipt_failed error:", receiptError, "timedOut:", receiptTimedOut);
       }
     }
 
@@ -205,9 +249,14 @@ Deno.serve(async (req: Request) => {
       expo_ticket: expoTicket,
       expo_error: expoError,
       ticket_id: ticketId,
+      expo_payload_sent: expoPayloadSent,
       receipt_status: receiptStatus,
-      receipt_details: receiptDetails,
+      receipt_details: receiptDetails !== null ? JSON.stringify(receiptDetails) : null,
       receipt_error: receiptError,
+      receipt_request_started: receiptRequestStarted,
+      receipt_request_finished: receiptRequestFinished,
+      receipt_timeout: receiptTimedOut,
+      receipt_response: receiptResponse,
     });
   } catch (err: any) {
     return json({ error: "Internal server error", detail: err?.message ?? String(err) }, 500);

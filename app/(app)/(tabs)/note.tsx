@@ -795,6 +795,14 @@ export default function ChatTab() {
   }, [messages.length]);
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      listRef.current?.scrollToEnd({ animated: false });
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
     if (!deepLinkMessageId || messages.length === 0) return;
     if (handledMsgLinkRef.current === deepLinkMessageId) return;
     const idx = messages.findIndex(m => m.id === deepLinkMessageId);
@@ -1927,7 +1935,7 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: Spacing.screen,
     paddingTop: Spacing.md,
-    paddingBottom: 20,
+    paddingBottom: 80,
   },
   loadingOlderWrap: { alignItems: 'center', paddingVertical: Spacing.sm },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl, gap: Spacing.sm },
