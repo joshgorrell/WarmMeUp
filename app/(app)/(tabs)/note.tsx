@@ -1822,7 +1822,7 @@ const MessageRow = React.memo(function MessageRow({
                     onLongPress={onLongPress}
                     bubbleWidth={mediaBubbleWidth}
                     bubbleHeight={mediaBubbleHeight}
-                    radii={item.content_text ? { ...radii, borderBottomLeftRadius: 6, borderBottomRightRadius: 6 } : radii}
+                    radii={item.content_text ? { ...radii, borderBottomLeftRadius: 4, borderBottomRightRadius: 4 } : radii}
                   />
                 )}
                 {item.content_text ? (
@@ -1854,15 +1854,7 @@ const MessageRow = React.memo(function MessageRow({
                 hasMedia && styles.bubbleMediaOnly,
                 !isMine && !hasMedia && styles.bubbleInboundPad,
               ]}>
-                {!isMine && !mediaOnly && (
-                  <LinearGradient
-                    colors={['#FF4D8D', '#FF6A5B']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={[StyleSheet.absoluteFill, radii]}
-                  />
-                )}
-                {hasMedia && (
+                  {hasMedia && (
                   <MediaBubble
                     msg={item}
                     blurEnabled={blurEnabled}
@@ -1873,12 +1865,12 @@ const MessageRow = React.memo(function MessageRow({
                     onLongPress={onLongPress}
                     bubbleWidth={mediaBubbleWidth}
                     bubbleHeight={mediaBubbleHeight}
-                    radii={item.content_text ? { ...radii, borderBottomLeftRadius: 6, borderBottomRightRadius: 6 } : radii}
+                    radii={item.content_text ? { ...radii, borderBottomLeftRadius: 4, borderBottomRightRadius: 4 } : radii}
                   />
                 )}
                 {item.content_text ? (
                   <AppText style={[styles.bubbleText, styles.mediaCaption, {
-                    color: isMine ? 'rgba(255,255,255,0.55)' : '#fff',
+                    color: '#fff',
                     fontSize: Math.round(15 * chatFontScale),
                     lineHeight: Math.round(15 * chatFontScale * 1.45),
                   }]}>
@@ -1933,7 +1925,7 @@ const MessageRow = React.memo(function MessageRow({
 
 const styles = StyleSheet.create({
   list: {
-    paddingHorizontal: Spacing.screen,
+    paddingHorizontal: 10,
     paddingTop: Spacing.md,
     paddingBottom: 80,
   },
@@ -2024,7 +2016,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2A2A34',
   },
   bubbleInboundPad: {
-    // ensure padding is applied for text-only inbound (gradient is absolute)
+    backgroundColor: '#1E1D28',
   },
   bubbleOutboundMediaOnly: {
     backgroundColor: 'transparent',
@@ -2160,8 +2152,10 @@ const styles = StyleSheet.create({
 
   // Compose
   compose: {
-    paddingHorizontal: 12,
-    paddingTop: 6,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
     backgroundColor: '#050408',
   },
   previewRow: {
@@ -2188,10 +2182,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
