@@ -133,6 +133,7 @@ export default function HomeScreen() {
 
   const loadStreak = async () => {
     if (!couple?.id) return;
+    if (!(couple?.streaks_enabled ?? true)) { setStreak(0); return; }
     const { data } = await supabase
       .from('interactions')
       .select('created_at')
@@ -500,6 +501,7 @@ export default function HomeScreen() {
   const total = myScore + partnerScore;
   const myPct = total > 0 ? myScore / total : 0.5;
   const pointsEnabled = (couple?.points_enabled ?? true) && hasPartner;
+  const streaksEnabled = (couple?.streaks_enabled ?? true) && hasPartner;
   const hPad = contentPadding;
 
   // Anniversary labels
@@ -533,8 +535,8 @@ export default function HomeScreen() {
       <HomeMiniCard
         icon={<Flame color="#FF5A3D" size={16} strokeWidth={2} />}
         label="Day streak"
-        value={String(streak)}
-        sub={streak === 1 ? 'Keep it going!' : streak === 0 ? 'Start today' : 'On fire'}
+        value={streaksEnabled ? String(streak) : '—'}
+        sub={!streaksEnabled ? 'Hidden' : streak === 1 ? 'Keep it going!' : streak === 0 ? 'Start today' : 'On fire'}
         onPress={() => router.push('/(app)/my-stats')}
       />
       <HomeMiniCard
