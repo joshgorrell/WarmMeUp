@@ -26,6 +26,7 @@ import { Wish, WishReaction, WishCategory } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
 import BottomSheet from '@/components/BottomSheet';
+import { REACTION_EMOJIS } from '@/components/MediaActionRow';
 import { FontSize, Spacing, Radius, Gradient as GradientColors } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 
@@ -48,7 +49,7 @@ const CATEGORIES: { label: WishCategory; emoji: string }[] = [
   { label: 'Someday',     emoji: '🌙' },
 ];
 
-const REACTIONS = ['❤️', '🔥', '😍', '🤩'];
+const REACTIONS = REACTION_EMOJIS as readonly string[];
 
 type TabKey = 'mine' | 'shared' | 'theirs' | 'granted';
 

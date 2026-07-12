@@ -8,7 +8,6 @@ interface HomeMiniCardProps {
   icon: React.ReactNode;
   label: string;
   value: string;
-  sub: string;
   onPress: () => void;
   style?: ViewStyle;
 }
@@ -17,7 +16,6 @@ export default function HomeMiniCard({
   icon,
   label,
   value,
-  sub,
   onPress,
   style,
 }: HomeMiniCardProps) {
@@ -42,9 +40,6 @@ export default function HomeMiniCard({
       <AppText style={[styles.label, { color: colors.textMuted }]} numberOfLines={1}>
         {label}
       </AppText>
-      <AppText style={[styles.sub, { color: colors.textMuted }]} numberOfLines={1}>
-        {sub}
-      </AppText>
     </TouchableOpacity>
   );
 }
@@ -56,7 +51,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: Spacing.sm + 2,
     gap: 3,
-    minHeight: 96,
   },
   iconWrap: {
     width: 30,
@@ -74,11 +68,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 10,
     fontFamily: 'Inter-Medium',
-    lineHeight: 13,
-  },
-  sub: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
     lineHeight: 13,
   },
 });

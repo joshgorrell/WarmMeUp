@@ -512,24 +512,20 @@ export default function HomeScreen() {
   // Anniversary labels
   const anniversaryDate = couple?.anniversary_date ? new Date(couple.anniversary_date) : null;
   let anniversaryLabel = '—';
-  let anniversarySub = 'Not set';
   if (anniversaryDate) {
     const now = new Date();
     const years = now.getFullYear() - anniversaryDate.getFullYear();
     const months = now.getMonth() - anniversaryDate.getMonth();
     const totalMonths = years * 12 + months;
-    if (totalMonths < 0) { anniversaryLabel = '—'; anniversarySub = 'Not set'; }
+    if (totalMonths < 0) { anniversaryLabel = '—'; }
     else if (totalMonths === 0) {
       const days = Math.max(0, Math.floor((now.getTime() - anniversaryDate.getTime()) / 86400000));
       anniversaryLabel = `${days}d`;
-      anniversarySub = 'Just started';
     } else if (years < 1) {
       anniversaryLabel = `${totalMonths}mo`;
-      anniversarySub = 'Together';
     } else {
       const remMonths = totalMonths % 12;
       anniversaryLabel = remMonths === 0 ? `${years}y` : `${years}y ${remMonths}m`;
-      anniversarySub = 'Anniversary';
     }
   }
 
@@ -541,21 +537,18 @@ export default function HomeScreen() {
         icon={<Flame color="#FF5A3D" size={16} strokeWidth={2} />}
         label="Day streak"
         value={streaksEnabled ? String(streak) : '—'}
-        sub={!streaksEnabled ? 'Hidden' : streak === 1 ? 'Keep it going!' : streak === 0 ? 'Start today' : 'On fire'}
         onPress={() => router.push('/(app)/my-stats')}
       />
       <HomeMiniCard
         icon={<Heart color="#FF2E8A" size={16} strokeWidth={2} />}
         label="Together"
         value={anniversaryLabel}
-        sub={anniversarySub}
         onPress={() => router.push('/(app)/account')}
       />
       <HomeMiniCard
         icon={loveSent ? <CheckCheck color="#33D17A" size={16} strokeWidth={2} /> : <Send color="#FFB347" size={16} strokeWidth={2} />}
         label={loveSent ? `${loveSentEmoji} Sent!` : 'Send love'}
         value={loveSent ? loveSentEmoji : 'Tap'}
-        sub={loveSent ? 'They\'ll know' : hasPartner ? 'Quick nudge' : 'Pair first'}
         onPress={() => { if (hasPartner) setShowLovePicker(true); }}
       />
     </View>

@@ -930,18 +930,20 @@ export default function AccountScreen() {
       return;
     }
 
-    const date = new Date(y, m - 1, d);
-    if (date.getDate() !== d || date.getMonth() !== m - 1) {
+    // Validate the date exists (e.g. Feb 30 doesn't)
+    const check = new Date(y, m - 1, d);
+    if (check.getDate() !== d || check.getMonth() !== m - 1) {
       setAnniversaryError('That date doesn\'t exist.');
       return;
     }
-    if (date > new Date()) {
+    // Build ISO string directly to avoid UTC timezone offset shifting the day
+    const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    if (isoDate > new Date().toISOString().split('T')[0]) {
       setAnniversaryError("Date can't be in the future.");
       return;
     }
 
     setSavingAnniversary(true);
-    const isoDate = date.toISOString().split('T')[0];
     const { error } = await supabase
       .from('couples')
       .update({ anniversary_date: isoDate })

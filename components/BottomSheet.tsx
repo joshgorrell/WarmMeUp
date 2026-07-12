@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   View, Modal, TouchableOpacity, Pressable, StyleSheet, ScrollView,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,13 +63,17 @@ export default function BottomSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay} pointerEvents="box-none">
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        pointerEvents="box-none"
+      >
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
         />
         {inner}
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
