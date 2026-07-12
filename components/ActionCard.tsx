@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { View, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Animated, ViewStyle } from 'react-native';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Lock } from 'lucide-react-native';
@@ -15,6 +15,7 @@ interface ActionCardProps {
   variant?: 'default' | 'active' | 'locked';
   badge?: string;
   width?: number | string;
+  style?: ViewStyle;
 }
 
 export default function ActionCard({
@@ -25,6 +26,7 @@ export default function ActionCard({
   variant = 'default',
   badge,
   width,
+  style,
 }: ActionCardProps) {
   const { colors } = useTheme();
   const scale = useRef(new Animated.Value(1)).current;
@@ -49,6 +51,7 @@ export default function ActionCard({
         { transform: [{ scale }] },
         width ? { width: width as any } : null,
         isActive && styles.activeGlow,
+        style,
       ]}
     >
       <TouchableOpacity

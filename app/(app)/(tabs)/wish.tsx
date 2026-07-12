@@ -316,7 +316,7 @@ function WishDetailSheet({
               <AppText style={[styles.detailActionLabel, { color: WISH_GOLD }]}>{isMine ? 'Granted' : 'Grant'}</AppText>
             </TouchableOpacity>
           )}
-          {isMine && (
+          {(wish.status === 'shared' || wish.status === 'draft') && (
             <TouchableOpacity
               onPress={() => closeAnd(() => onEdit(wish))}
               style={[styles.detailActionBtn, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.12)' }]}
@@ -493,9 +493,8 @@ function WishForm({
     setError('');
     try {
       const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-      const payload = {
+      const basePayload = {
         couple_id: couple.id,
-        created_by_user_id: user.id,
         title: title.trim(),
         description: desc.trim() || null,
         category: category ?? null,
@@ -509,7 +508,7 @@ function WishForm({
       let result: Wish;
       if (initial) {
         const { data, error: updateError } = await supabase
-          .from('wishes').update(payload).eq('id', initial.id).select().single();
+          .from('wishes').update(basePayload).eq('id', initial.id).select().single();
         if (updateError) throw updateError;
         result = data;
         // Log activity event for wish edit
@@ -524,11 +523,12 @@ function WishForm({
           }).then(() => {}, () => {});
         }
       } else {
+        const insertPayload = { ...basePayload, created_by_user_id: user.id };
         const { data, error: insertError } = await supabase
-          .from('wishes').insert(payload).select().single();
+          .from('wishes').insert(insertPayload).select().single();
         if (insertError) throw insertError;
         result = data;
-        logDebugEvent('WISH SAVE SUCCESS', { wishId: result.id, hasImage: !!imgPath, status: payload.status });
+        logDebugEvent('WISH SAVE SUCCESS', { wishId: result.id, hasImage: !!imgPath, status: insertPayload.status });
         logDebugEvent('WISH LAST CREATED ID', { id: result.id });
         // Log activity event for new wish creation
         if (partnerId) {

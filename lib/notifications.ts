@@ -17,6 +17,7 @@ export type NotifyEventType =
   | 'dice_roll'
   | 'dice_accepted'
   | 'dice_completed'
+  | 'send_love'
   | 'partner_disconnected';
 
 export interface NotificationData {

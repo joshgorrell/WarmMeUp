@@ -23,6 +23,7 @@ export interface Couple {
   streaks_enabled: boolean;
   subscription_owner_id: string | null;
   disconnected_at: string | null;
+  anniversary_date: string | null;
   created_at: string;
 }
 

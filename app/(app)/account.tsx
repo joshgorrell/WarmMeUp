@@ -744,6 +744,12 @@ export default function AccountScreen() {
   const [enterCode, setEnterCode] = useState('');
   const [enterCodeLoading, setEnterCodeLoading] = useState(false);
   const [enterCodeError, setEnterCodeError] = useState<string | null>(null);
+
+  // Anniversary date picker
+  const [showAnniversarySheet, setShowAnniversarySheet] = useState(false);
+  const [anniversaryInput, setAnniversaryInput] = useState('');
+  const [anniversaryError, setAnniversaryError] = useState<string | null>(null);
+  const [savingAnniversary, setSavingAnniversary] = useState(false);
   const [deleteAccountStep, setDeleteAccountStep] = useState<1 | 2>(1);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
@@ -894,6 +900,55 @@ export default function AccountScreen() {
     await refreshSettings();
     setOptimistic({});
   }, [user, refreshSettings]);
+
+  // ── Anniversary helpers ─────────────────────────────────────────
+  const handleSaveAnniversary = async () => {
+    if (!couple?.id) return;
+    setAnniversaryError(null);
+
+    if (!anniversaryInput.trim()) {
+      setAnniversaryError('Enter a date in YYYY-MM-DD format.');
+      return;
+    }
+
+    const parsed = new Date(anniversaryInput.trim());
+    if (isNaN(parsed.getTime())) {
+      setAnniversaryError('Invalid date. Use YYYY-MM-DD.');
+      return;
+    }
+    if (parsed > new Date()) {
+      setAnniversaryError('Date can\'t be in the future.');
+      return;
+    }
+
+    setSavingAnniversary(true);
+    const isoDate = parsed.toISOString().split('T')[0];
+    const { error } = await supabase
+      .from('couples')
+      .update({ anniversary_date: isoDate })
+      .eq('id', couple.id);
+    setSavingAnniversary(false);
+
+    if (error) {
+      setAnniversaryError('Could not save. Try again.');
+      return;
+    }
+    patchCouple({ anniversary_date: isoDate });
+    setShowAnniversarySheet(false);
+  };
+
+  const handleClearAnniversary = async () => {
+    if (!couple?.id) return;
+    setSavingAnniversary(true);
+    const { error } = await supabase
+      .from('couples')
+      .update({ anniversary_date: null })
+      .eq('id', couple.id);
+    setSavingAnniversary(false);
+    if (error) return;
+    patchCouple({ anniversary_date: null });
+    setShowAnniversarySheet(false);
+  };
 
   // ── Partner helpers ──────────────────────────────────────────────
   const handleCopyCode = () => {
@@ -1508,6 +1563,32 @@ export default function AccountScreen() {
           ) : null}
         </TouchableOpacity>
       ) : null}
+
+      {/* Anniversary date card — only when paired */}
+      {couple?.user_b_id && (
+        <TouchableOpacity
+          style={[styles.anniversaryCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+          onPress={() => {
+            setAnniversaryInput(couple?.anniversary_date ?? '');
+            setAnniversaryError(null);
+            setShowAnniversarySheet(true);
+          }}
+          activeOpacity={0.75}
+        >
+          <View style={[styles.anniversaryIcon, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
+            <Heart color="#FF2E8A" size={16} strokeWidth={2} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>ANNIVERSARY DATE</AppText>
+            <AppText style={[styles.anniversaryValue, { color: colors.text }]}>
+              {couple?.anniversary_date
+                ? new Date(couple.anniversary_date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+                : 'Set your anniversary'}
+            </AppText>
+          </View>
+          <ChevronRight color={colors.textMuted} size={15} strokeWidth={2} />
+        </TouchableOpacity>
+      )}
 
       {/* Enter a partner's code — always visible for solo users */}
       {!couple?.user_b_id && (
@@ -2254,6 +2335,58 @@ export default function AccountScreen() {
         </View>
       </BottomSheet>
 
+      {/* Anniversary date sheet */}
+      <BottomSheet
+        visible={showAnniversarySheet}
+        onClose={() => { if (!savingAnniversary) { setShowAnniversarySheet(false); setAnniversaryError(null); } }}
+        title="Anniversary Date"
+        subtitle="When did your relationship begin?"
+      >
+        <View style={styles.enterCodeSheet}>
+          <AppTextInput
+            style={[styles.enterCodeInput, { color: colors.text, borderColor: anniversaryError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card }]}
+            value={anniversaryInput}
+            onChangeText={t => { setAnniversaryInput(t); setAnniversaryError(null); }}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="default"
+          />
+          {anniversaryError ? (
+            <AppText style={styles.enterCodeError}>{anniversaryError}</AppText>
+          ) : null}
+          <TouchableOpacity
+            style={[styles.enterCodeBtn, (!anniversaryInput.trim() || savingAnniversary) && { opacity: 0.5 }]}
+            onPress={handleSaveAnniversary}
+            activeOpacity={0.85}
+            disabled={!anniversaryInput.trim() || savingAnniversary}
+          >
+            <LinearGradient
+              colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.enterCodeBtnGrad}
+            >
+              {savingAnniversary
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <AppText style={styles.enterCodeBtnText}>Save</AppText>
+              }
+            </LinearGradient>
+          </TouchableOpacity>
+          {couple?.anniversary_date && (
+            <TouchableOpacity
+              onPress={handleClearAnniversary}
+              activeOpacity={0.7}
+              disabled={savingAnniversary}
+              style={{ paddingVertical: Spacing.sm, alignItems: 'center' }}
+            >
+              <AppText style={[styles.enterCodeError, { color: colors.textMuted }]}>Remove date</AppText>
+            </TouchableOpacity>
+          )}
+        </View>
+      </BottomSheet>
+
       {/* ── Delete Account Modal ───────────────────────────────────── */}
       <Modal
         visible={deleteAccountOpen}
@@ -2630,6 +2763,27 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
+  },
+  anniversaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 14,
+    marginBottom: Spacing.sm,
+  },
+  anniversaryIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  anniversaryValue: {
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-SemiBold',
   },
   enterCodeBtn: {
     borderRadius: Radius.pill,

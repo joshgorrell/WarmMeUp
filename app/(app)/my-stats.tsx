@@ -189,14 +189,28 @@ export default function MyStatsScreen() {
 
   const loadStreak = useCallback(async () => {
     if (!couple?.id) return;
-    const { data } = await supabase
-      .from('interactions')
-      .select('created_at')
-      .eq('couple_id', couple.id)
-      .order('created_at', { ascending: false })
-      .limit(200);
-    if (!data || data.length === 0) { setStreak(0); return; }
-    const activeDays = new Set(data.map((r: { created_at: string }) => new Date(r.created_at).toDateString()));
+    const [interactionsRes, eventsRes] = await Promise.all([
+      supabase
+        .from('interactions')
+        .select('created_at')
+        .eq('couple_id', couple.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(200),
+      supabase
+        .from('point_events')
+        .select('created_at')
+        .eq('couple_id', couple.id)
+        .eq('reason', 'send_love')
+        .order('created_at', { ascending: false })
+        .limit(50),
+    ]);
+    const rows = [
+      ...((interactionsRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
+      ...((eventsRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
+    ];
+    if (rows.length === 0) { setStreak(0); return; }
+    const activeDays = new Set(rows.map((ts: string) => new Date(ts).toDateString()));
     let days = 0;
     const cursor = new Date();
     cursor.setHours(0, 0, 0, 0);

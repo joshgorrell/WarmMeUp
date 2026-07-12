@@ -246,6 +246,8 @@ Deno.serve(async (req: Request) => {
       partner_enabled: notificationsEnabled,
       expo_http_status: pushRes.status,
       expo_status: expoStatus,
+      expo_ticket_status: expoStatus,
+      expo_ticket_id: ticketId,
       expo_ticket: expoTicket,
       expo_error: expoError,
       ticket_id: ticketId,

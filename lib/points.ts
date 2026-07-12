@@ -12,6 +12,7 @@ const DEFAULTS: Record<string, number> = {
   chat_message: 1,
   chat_media: 10,
   vault_upload: 10,
+  send_love: 1,
 };
 
 let configCache: Record<string, number> | null = null;

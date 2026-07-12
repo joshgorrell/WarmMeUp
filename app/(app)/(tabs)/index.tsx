@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert,
+  Animated, Platform,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles, CheckCheck } from 'lucide-react-native';
+import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles, CheckCheck, Flame, Send } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -15,11 +16,14 @@ import { Spacing, Radius, FontSize, Gradient } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
+import ActionCard from '@/components/ActionCard';
+import HomeMiniCard from '@/components/HomeMiniCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
 import { useLayout } from '@/hooks/useLayout';
 import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
-import { reversePoints } from '@/lib/points';
+import { reversePoints, awardPoints, getPointValue } from '@/lib/points';
+import { notifyPartner } from '@/lib/notifications';
 
 function getTimeGreeting() {
   const h = new Date().getHours();
@@ -63,6 +67,9 @@ export default function HomeScreen() {
   const [activeInteraction, setActiveInteraction] = useState<Interaction | null>(null);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [streak, setStreak] = useState(0);
+  const [sendingLove, setSendingLove] = useState(false);
+  const [loveSent, setLoveSent] = useState(false);
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
   const isMountedRef = useRef(true);
@@ -117,7 +124,28 @@ export default function HomeScreen() {
 
   const loadAll = async () => {
     if (!couple?.id || !user) return;
-    await Promise.all([loadScores(), loadActiveInteraction(), loadRecentActivity()]);
+    await Promise.all([loadScores(), loadActiveInteraction(), loadRecentActivity(), loadStreak()]);
+  };
+
+  const loadStreak = async () => {
+    if (!couple?.id) return;
+    const { data } = await supabase
+      .from('interactions')
+      .select('created_at')
+      .eq('couple_id', couple.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (!data || data.length === 0) { setStreak(0); return; }
+    const activeDays = new Set(data.map((r: { created_at: string }) => new Date(r.created_at).toDateString()));
+    let days = 0;
+    const cursor = new Date();
+    cursor.setHours(0, 0, 0, 0);
+    while (activeDays.has(cursor.toDateString())) {
+      days++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    setStreak(days);
   };
 
   const loadScores = async () => {
@@ -409,6 +437,28 @@ export default function HomeScreen() {
     }
   }, [activeInteraction, couple?.id, user?.id]);
 
+  const handleSendLove = async () => {
+    if (!couple?.id || !user?.id || !hasPartner || sendingLove) return;
+    setSendingLove(true);
+    try {
+      const pts = await getPointValue('send_love');
+      if (pts > 0) {
+        await awardPoints(couple.id, user.id, pts, 'send_love');
+      }
+      await notifyPartner({
+        event_type: 'send_love',
+        couple_id: couple.id,
+        partnerUserId: partnerProfile?.id,
+      });
+      setLoveSent(true);
+      setTimeout(() => setLoveSent(false), 2500);
+      loadStreak();
+    } catch {
+      // silently fail — not critical
+    }
+    setSendingLove(false);
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadAll();
@@ -421,6 +471,95 @@ export default function HomeScreen() {
   const myPct = total > 0 ? myScore / total : 0.5;
   const pointsEnabled = (couple?.points_enabled ?? true) && hasPartner;
   const hPad = contentPadding;
+
+  // Anniversary labels
+  const anniversaryDate = couple?.anniversary_date ? new Date(couple.anniversary_date) : null;
+  let anniversaryLabel = '—';
+  let anniversarySub = 'Not set';
+  if (anniversaryDate) {
+    const now = new Date();
+    const years = now.getFullYear() - anniversaryDate.getFullYear();
+    const months = now.getMonth() - anniversaryDate.getMonth();
+    const totalMonths = years * 12 + months;
+    if (totalMonths < 0) { anniversaryLabel = '—'; anniversarySub = 'Not set'; }
+    else if (totalMonths === 0) {
+      const days = Math.max(0, Math.floor((now.getTime() - anniversaryDate.getTime()) / 86400000));
+      anniversaryLabel = `${days}d`;
+      anniversarySub = 'Just started';
+    } else if (years < 1) {
+      anniversaryLabel = `${totalMonths}mo`;
+      anniversarySub = 'Together';
+    } else {
+      const remMonths = totalMonths % 12;
+      anniversaryLabel = remMonths === 0 ? `${years}y` : `${years}y ${remMonths}m`;
+      anniversarySub = 'Anniversary';
+    }
+  }
+
+  // Action zone cards
+  const actionZone = (
+    <View style={styles.actionZone}>
+      <View style={styles.actionRow}>
+        <ActionCard
+          icon={<Dice6 color="#FFB347" size={28} strokeWidth={2} />}
+          title="Roll Dice"
+          subtitle="Let chance decide"
+          onPress={() => router.push('/(app)/(tabs)/dice')}
+          style={styles.actionCardItem}
+        />
+        <ActionCard
+          icon={<Zap color="#FF5A3D" size={28} strokeWidth={2} />}
+          title="Dare"
+          subtitle="Challenge your partner"
+          onPress={() => router.push('/(app)/(tabs)/dare')}
+          style={styles.actionCardItem}
+        />
+      </View>
+      <View style={styles.actionRow}>
+        <ActionCard
+          icon={<Star color="#FF2E8A" size={28} strokeWidth={2} />}
+          title="Wish"
+          subtitle="Ask for something"
+          onPress={() => router.push('/(app)/(tabs)/wish')}
+          style={styles.actionCardItem}
+        />
+        <ActionCard
+          icon={<MessageCircle color="#69A7FF" size={28} strokeWidth={2} />}
+          title="Note"
+          subtitle="Leave a message"
+          onPress={() => router.push('/(app)/(tabs)/note')}
+          style={styles.actionCardItem}
+        />
+      </View>
+    </View>
+  );
+
+  // Ambient zone — streak, time together, send love
+  const ambientZone = (
+    <View style={styles.ambientZone}>
+      <HomeMiniCard
+        icon={<Flame color="#FF5A3D" size={16} strokeWidth={2} />}
+        label="Day streak"
+        value={String(streak)}
+        sub={streak === 1 ? 'Keep it going!' : streak === 0 ? 'Start today' : 'On fire'}
+        onPress={() => router.push('/(app)/my-stats')}
+      />
+      <HomeMiniCard
+        icon={<Heart color="#FF2E8A" size={16} strokeWidth={2} />}
+        label="Together"
+        value={anniversaryLabel}
+        sub={anniversarySub}
+        onPress={() => router.push('/(app)/account')}
+      />
+      <HomeMiniCard
+        icon={loveSent ? <CheckCheck color="#33D17A" size={16} strokeWidth={2} /> : <Send color="#FFB347" size={16} strokeWidth={2} />}
+        label={loveSent ? 'Sent!' : 'Send love'}
+        value={loveSent ? 'Done' : 'Tap'}
+        sub={loveSent ? 'They\'ll know' : hasPartner ? 'Quick nudge' : 'Pair first'}
+        onPress={handleSendLove}
+      />
+    </View>
+  );
 
   // Shared greeting block, used in both phone and tablet layouts
   const greetingBlock = (
@@ -437,6 +576,8 @@ export default function HomeScreen() {
       <AppText style={[styles.greetingSub, { color: colors.textSecondary }]}>
         {greetingSub}
       </AppText>
+      {actionZone}
+      {ambientZone}
     </View>
   );
 
@@ -592,6 +733,22 @@ const styles = StyleSheet.create({
   // Phone layout
   scroll: {
     paddingBottom: Spacing.md,
+  },
+  actionZone: {
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  actionCardItem: {
+    flex: 1,
+  },
+  ambientZone: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
   },
   scrollNoScore: {
     paddingBottom: Spacing.xl,

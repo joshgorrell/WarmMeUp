@@ -1269,7 +1269,7 @@ export default function DebugScreen() {
             expo_status: body?.expo_status ?? null,
             skipped_reason: body?.skipped ?? null,
             error: body?.error ?? null,
-            expo_ticket_id: body?.ticket_id ?? null,
+            expo_ticket_id: body?.expo_ticket_id ?? body?.ticket_id ?? null,
             expo_payload_sent: body?.expo_payload_sent ?? null,
             receipt_request_started: body?.receipt_request_started ?? null,
             receipt_request_finished: body?.receipt_request_finished ?? null,
@@ -1304,7 +1304,7 @@ export default function DebugScreen() {
             expo_status: body?.expo_status ?? null,
             skipped_reason: body?.skipped ?? null,
             error: body?.error ?? null,
-            expo_ticket_id: body?.ticket_id ?? null,
+            expo_ticket_id: body?.expo_ticket_id ?? body?.ticket_id ?? null,
             expo_payload_sent: body?.expo_payload_sent ?? null,
             receipt_request_started: body?.receipt_request_started ?? null,
             receipt_request_finished: body?.receipt_request_finished ?? null,
@@ -1823,6 +1823,14 @@ export default function DebugScreen() {
             <Row label="push_test.partner.send_status" value={pushTest.partner.send_status} />
             <Row label="push_test.partner.expo_payload_sent" value={pushTest.partner.expo_payload_sent} />
             <Row label="push_test.partner.expo_status" value={pushTest.partner.expo_status} />
+            <Row label="push_test.partner.expo_ticket_id" value={pushTest.partner.expo_ticket_id} />
+            <Row label="push_test.partner.receipt_request_started" value={pushTest.partner.receipt_request_started} />
+            <Row label="push_test.partner.receipt_request_finished" value={pushTest.partner.receipt_request_finished} />
+            <Row label="push_test.partner.receipt_timeout" value={pushTest.partner.receipt_timeout} />
+            <Row label="push_test.partner.receipt_status" value={pushTest.partner.receipt_status} />
+            <Row label="push_test.partner.receipt_details" value={pushTest.partner.receipt_details} />
+            <Row label="push_test.partner.receipt_error" value={pushTest.partner.receipt_error} />
+            <Row label="push_test.partner.receipt_response" value={pushTest.partner.receipt_response} />
             <Row label="push_test.partner.skipped_reason" value={pushTest.partner.skipped_reason} />
             <Row label="push_test.partner.error" value={pushTest.partner.error} />
             <Row label="push_test.error" value={pushTest.top_error} />
@@ -2281,15 +2289,26 @@ export default function DebugScreen() {
             </View>
           )}
 
-          {!pushTest.running && pushTest.ranAt !== null && (
-            <View style={[
-              styles.rpcCard,
-              pushTest.top_error ? styles.rpcCardError :
-              (pushTest.self.expo_status === 'ok' ? { backgroundColor: '#0d1f2b', borderColor: '#1a4a6a' } : styles.rpcCardError),
-            ]}>
+          {!pushTest.running && pushTest.ranAt !== null && (() => {
+            const selfReceiptOk = pushTest.self.receipt_status === 'ok';
+            const selfReceiptErr = pushTest.self.receipt_status === 'error' || (pushTest.self.receipt_error ?? '') !== '';
+            const selfTicketOk = pushTest.self.expo_status === 'ok';
+            const partnerReceiptOk = pushTest.partner.receipt_status === 'ok';
+            const partnerReceiptErr = pushTest.partner.receipt_status === 'error' || (pushTest.partner.receipt_error ?? '') !== '';
+            const partnerTicketOk = pushTest.partner.expo_status === 'ok';
+            const anyReceiptOk = selfReceiptOk || partnerReceiptOk;
+            const anyReceiptErr = selfReceiptErr || partnerReceiptErr;
+            const cardStyle = pushTest.top_error || anyReceiptErr
+              ? styles.rpcCardError
+              : anyReceiptOk
+                ? { backgroundColor: '#0d1f2b', borderColor: '#1a4a6a' }
+                : { backgroundColor: '#2b2b0d', borderColor: '#6a6a1a' };
+            const cardColor = pushTest.top_error || anyReceiptErr ? '#FF6B6B' : anyReceiptOk ? '#5DADE2' : '#FFA040';
+            return (
+            <View style={[styles.rpcCard, cardStyle]}>
               <View style={styles.rpcCardHeader}>
-                <AppText style={[styles.rpcCardStatus, { color: pushTest.top_error ? '#FF6B6B' : '#5DADE2' }]}>
-                  PUSH TEST — {pushTest.top_error ? 'ERROR' : 'DONE'}
+                <AppText style={[styles.rpcCardStatus, { color: cardColor }]}>
+                  PUSH TEST — {pushTest.top_error || anyReceiptErr ? 'ERROR' : anyReceiptOk ? 'DELIVERED' : 'PENDING'}
                 </AppText>
                 <AppText style={styles.rpcCardTs} selectable>{pushTest.ranAt?.substring(11, 19)}</AppText>
               </View>
@@ -2298,26 +2317,43 @@ export default function DebugScreen() {
                 ['token_present', pushTest.token_present],
                 ['token_saved_to_db', pushTest.token_saved_to_db],
                 ['self.send_status', pushTest.self.send_status],
-                ['self.expo_status', pushTest.self.expo_status],
+                ['self.expo_ticket_status', pushTest.self.expo_status],
+                ['self.expo_ticket_id', pushTest.self.expo_ticket_id],
+                ['self.expo_receipt_status', pushTest.self.receipt_status],
+                ['self.expo_receipt_error', pushTest.self.receipt_error],
+                ['self.expo_receipt_details', pushTest.self.receipt_details],
+                ['self.expo_receipt_timeout', pushTest.self.receipt_timeout],
+                ['self.expo_payload_sent', pushTest.self.expo_payload_sent],
                 ['self.skipped', pushTest.self.skipped_reason],
                 ['self.error', pushTest.self.error],
                 ['partner.token_present', pushTest.partner_token_present],
                 ['partner.enabled', pushTest.partner_enabled],
                 ['partner.send_status', pushTest.partner.send_status],
-                ['partner.expo_status', pushTest.partner.expo_status],
+                ['partner.expo_ticket_status', pushTest.partner.expo_status],
+                ['partner.expo_ticket_id', pushTest.partner.expo_ticket_id],
+                ['partner.expo_receipt_status', pushTest.partner.receipt_status],
+                ['partner.expo_receipt_error', pushTest.partner.receipt_error],
+                ['partner.expo_receipt_details', pushTest.partner.receipt_details],
+                ['partner.expo_receipt_timeout', pushTest.partner.receipt_timeout],
+                ['partner.expo_payload_sent', pushTest.partner.expo_payload_sent],
                 ['partner.skipped', pushTest.partner.skipped_reason],
                 ['partner.error', pushTest.partner.error],
                 ['top_error', pushTest.top_error],
-              ] as [string, string | number | boolean | null][]).filter(([, v]) => v !== null).map(([label, value]) => (
+              ] as [string, string | number | boolean | null][]).filter(([, v]) => v !== null && v !== '').map(([label, value]) => {
+                const isError = value === false || (typeof value === 'string' && (value.includes('error') || value.includes('Error') || value === 'DeviceNotRegistered' || value === 'InvalidCredentials'));
+                const isOk = typeof value === 'string' && (value === 'ok' || value === '200');
+                return (
                 <View key={label} style={styles.rpcCardField}>
                   <AppText style={styles.rpcCardFieldLabel}>{label}</AppText>
-                  <AppText style={[styles.rpcCardFieldValue, value === false || (typeof value === 'string' && value.includes('error')) ? { color: '#FF6B6B' } : {}]} selectable>
+                  <AppText style={[styles.rpcCardFieldValue, isError ? { color: '#FF6B6B' } : isOk ? { color: '#5DADE2' } : {}]} selectable>
                     {String(value)}
                   </AppText>
                 </View>
-              ))}
+                );
+              })}
             </View>
-          )}
+            );
+          })()}
 
           {profile?.is_super_admin === true && (
             <>
