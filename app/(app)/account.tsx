@@ -2,15 +2,8 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, Share, Alert, Platform,
-  ActivityIndicator, Modal, Image, Linking, Animated,
+  ActivityIndicator, Modal, Image, Linking, Animated, TextInput,
 } from 'react-native';
-
-// Native date picker — loaded only on native platforms, web uses HTML input
-let DateTimePicker: React.ComponentType<any> | null = null;
-if (Platform.OS !== 'web') {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  DateTimePicker = require('@react-native-community/datetimepicker').default;
-}
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import * as ImagePicker from 'expo-image-picker';
@@ -755,7 +748,9 @@ export default function AccountScreen() {
   // Anniversary date picker
   const [showAnniversarySheet, setShowAnniversarySheet] = useState(false);
   const [anniversaryDate, setAnniversaryDate] = useState<Date | null>(null);
-  const [showAnniversaryPicker, setShowAnniversaryPicker] = useState(false);
+  const [annivMonth, setAnnivMonth] = useState('');
+  const [annivDay, setAnnivDay] = useState('');
+  const [annivYear, setAnnivYear] = useState('');
   const [anniversaryError, setAnniversaryError] = useState<string | null>(null);
   const [savingAnniversary, setSavingAnniversary] = useState(false);
   const [deleteAccountStep, setDeleteAccountStep] = useState<1 | 2>(1);
@@ -910,10 +905,36 @@ export default function AccountScreen() {
   }, [user, refreshSettings]);
 
   // ── Anniversary helpers ─────────────────────────────────────────
-  const handleSaveAnniversary = async (date: Date) => {
+  const handleSaveAnniversary = async () => {
     if (!couple?.id) return;
     setAnniversaryError(null);
 
+    const m = parseInt(annivMonth, 10);
+    const d = parseInt(annivDay, 10);
+    const y = parseInt(annivYear, 10);
+
+    if (!annivMonth || !annivDay || !annivYear || isNaN(m) || isNaN(d) || isNaN(y)) {
+      setAnniversaryError('Please enter a complete date.');
+      return;
+    }
+    if (m < 1 || m > 12) {
+      setAnniversaryError('Month must be 1–12.');
+      return;
+    }
+    if (d < 1 || d > 31) {
+      setAnniversaryError('Day must be 1–31.');
+      return;
+    }
+    if (y < 1900 || y > new Date().getFullYear()) {
+      setAnniversaryError('Year must be 1900–' + new Date().getFullYear() + '.');
+      return;
+    }
+
+    const date = new Date(y, m - 1, d);
+    if (date.getDate() !== d || date.getMonth() !== m - 1) {
+      setAnniversaryError('That date doesn\'t exist.');
+      return;
+    }
     if (date > new Date()) {
       setAnniversaryError("Date can't be in the future.");
       return;
@@ -1569,6 +1590,9 @@ export default function AccountScreen() {
           onPress={() => {
             const existing = couple?.anniversary_date ? new Date(couple.anniversary_date) : null;
             setAnniversaryDate(existing);
+            setAnnivMonth(existing ? String(existing.getMonth() + 1).padStart(2, '0') : '');
+            setAnnivDay(existing ? String(existing.getDate()).padStart(2, '0') : '');
+            setAnnivYear(existing ? String(existing.getFullYear()) : '');
             setAnniversaryError(null);
             setShowAnniversarySheet(true);
           }}
@@ -2342,81 +2366,57 @@ export default function AccountScreen() {
         subtitle="When did your relationship begin?"
       >
         <View style={styles.enterCodeSheet}>
-          {Platform.OS === 'web' ? (
-            <input
-              type="date"
-              value={anniversaryDate ? anniversaryDate.toISOString().split('T')[0] : ''}
-              max={new Date().toISOString().split('T')[0]}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val) {
-                  setAnniversaryDate(new Date(val + 'T00:00:00'));
-                  setAnniversaryError(null);
-                }
-              }}
-              style={{
-                width: '100%',
-                padding: '14px 16px',
-                borderRadius: '14px',
-                border: `1px solid ${anniversaryError ? '#FF5A5F' : colors.borderSubtle}`,
-                backgroundColor: colors.card,
-                color: colors.text,
-                fontSize: '18px',
-                fontFamily: 'Inter-Bold',
-                textAlign: 'center',
-                outline: 'none',
-              }}
-            />
-          ) : (
-            <View>
-              <TouchableOpacity
-                style={[styles.enterCodeInput, { borderColor: anniversaryError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card }]}
-                onPress={() => setShowAnniversaryPicker(v => !v)}
-                activeOpacity={0.8}
-              >
-                <AppText style={{ color: anniversaryDate ? colors.text : colors.textMuted, fontSize: FontSize.body, fontFamily: 'Inter-SemiBold', textAlign: 'center' }}>
-                  {anniversaryDate
-                    ? anniversaryDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-                    : 'Tap to choose date'}
-                </AppText>
-              </TouchableOpacity>
-
-              {showAnniversaryPicker && DateTimePicker && (
-                <View style={styles.inlinePickerWrap}>
-                  <View style={styles.inlinePickerHeader}>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setShowAnniversaryPicker(false);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <AppText style={styles.inlinePickerDone}>Done</AppText>
-                    </TouchableOpacity>
-                  </View>
-                  <DateTimePicker
-                    value={anniversaryDate || new Date()}
-                    mode="date"
-                    display="spinner"
-                    maximumDate={new Date()}
-                    minimumDate={new Date(1900, 0, 1)}
-                    onChange={(_event: any, date?: Date) => {
-                      if (date) setAnniversaryDate(date);
-                    }}
-                    textColor="#fff"
-                    style={styles.inlinePicker}
-                  />
-                </View>
-              )}
+          <View style={styles.dateFieldRow}>
+            <View style={styles.dateFieldCol}>
+              <AppText style={[styles.dateFieldLabel, { color: colors.textMuted }]}>Month</AppText>
+              <TextInput
+                style={[styles.dateFieldInput, { borderColor: anniversaryError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card, color: colors.text }]}
+                value={annivMonth}
+                onChangeText={(v) => { setAnnivMonth(v.replace(/[^0-9]/g, '').slice(0, 2)); setAnniversaryError(null); }}
+                placeholder="MM"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                maxLength={2}
+                returnKeyType="next"
+              />
             </View>
-          )}
+            <AppText style={[styles.dateFieldSlash, { color: colors.textMuted }]}>/</AppText>
+            <View style={styles.dateFieldCol}>
+              <AppText style={[styles.dateFieldLabel, { color: colors.textMuted }]}>Day</AppText>
+              <TextInput
+                style={[styles.dateFieldInput, { borderColor: anniversaryError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card, color: colors.text }]}
+                value={annivDay}
+                onChangeText={(v) => { setAnnivDay(v.replace(/[^0-9]/g, '').slice(0, 2)); setAnniversaryError(null); }}
+                placeholder="DD"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                maxLength={2}
+                returnKeyType="next"
+              />
+            </View>
+            <AppText style={[styles.dateFieldSlash, { color: colors.textMuted }]}>/</AppText>
+            <View style={styles.dateFieldColWide}>
+              <AppText style={[styles.dateFieldLabel, { color: colors.textMuted }]}>Year</AppText>
+              <TextInput
+                style={[styles.dateFieldInput, { borderColor: anniversaryError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card, color: colors.text }]}
+                value={annivYear}
+                onChangeText={(v) => { setAnnivYear(v.replace(/[^0-9]/g, '').slice(0, 4)); setAnniversaryError(null); }}
+                placeholder="YYYY"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                maxLength={4}
+                returnKeyType="done"
+              />
+            </View>
+          </View>
           {anniversaryError ? (
             <AppText style={styles.enterCodeError}>{anniversaryError}</AppText>
           ) : null}
           <TouchableOpacity
-            style={[styles.enterCodeBtn, (!anniversaryDate || savingAnniversary) && { opacity: 0.5 }]}
-            onPress={() => { if (anniversaryDate) handleSaveAnniversary(anniversaryDate); }}
+            style={[styles.enterCodeBtn, savingAnniversary && { opacity: 0.5 }]}
+            onPress={handleSaveAnniversary}
             activeOpacity={0.85}
-            disabled={!anniversaryDate || savingAnniversary}
+            disabled={savingAnniversary}
           >
             <LinearGradient
               colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
@@ -2442,24 +2442,6 @@ export default function AccountScreen() {
           )}
         </View>
       </BottomSheet>
-
-      {/* Android anniversary date picker — native dialog */}
-      {Platform.OS === 'android' && showAnniversaryPicker && DateTimePicker && (
-        <DateTimePicker
-          value={anniversaryDate || new Date()}
-          mode="date"
-          display="spinner"
-          maximumDate={new Date()}
-          minimumDate={new Date(1900, 0, 1)}
-          onChange={(event: any, date?: Date) => {
-            setShowAnniversaryPicker(false);
-            if (event.type === 'set' && date) {
-              setAnniversaryDate(date);
-              handleSaveAnniversary(date);
-            }
-          }}
-        />
-      )}
 
       {/* ── Delete Account Modal ───────────────────────────────────── */}
       <Modal
@@ -2892,28 +2874,38 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
     textDecorationColor: '#2a2a2f',
   },
-  inlinePickerWrap: {
-    marginTop: Spacing.sm,
-    borderRadius: Radius.md,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    overflow: 'hidden',
-  },
-  inlinePickerHeader: {
+  dateFieldRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'flex-end',
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
   },
-  inlinePickerDone: {
-    color: '#FF7A45',
-    fontSize: FontSize.body,
+  dateFieldCol: {
+    flex: 1,
+    gap: 6,
+  },
+  dateFieldColWide: {
+    flex: 1.5,
+    gap: 6,
+  },
+  dateFieldLabel: {
+    fontSize: FontSize.xs,
     fontFamily: 'Inter-SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  inlinePicker: {
-    height: 200,
+  dateFieldSlash: {
+    fontSize: FontSize.h2,
+    fontFamily: 'Inter-Bold',
+    paddingBottom: 12,
+  },
+  dateFieldInput: {
+    height: 52,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.sm,
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Bold',
+    textAlign: 'center',
   },
 });
