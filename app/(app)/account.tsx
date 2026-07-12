@@ -2368,17 +2368,46 @@ export default function AccountScreen() {
               }}
             />
           ) : (
-            <TouchableOpacity
-              style={[styles.enterCodeInput, { borderColor: anniversaryError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card }]}
-              onPress={() => setShowAnniversaryPicker(true)}
-              activeOpacity={0.8}
-            >
-              <AppText style={{ color: anniversaryDate ? colors.text : colors.textMuted, fontSize: FontSize.body, fontFamily: 'Inter-SemiBold', textAlign: 'center' }}>
-                {anniversaryDate
-                  ? anniversaryDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-                  : 'Tap to choose date'}
-              </AppText>
-            </TouchableOpacity>
+            <View>
+              <TouchableOpacity
+                style={[styles.enterCodeInput, { borderColor: anniversaryError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card }]}
+                onPress={() => setShowAnniversaryPicker(v => !v)}
+                activeOpacity={0.8}
+              >
+                <AppText style={{ color: anniversaryDate ? colors.text : colors.textMuted, fontSize: FontSize.body, fontFamily: 'Inter-SemiBold', textAlign: 'center' }}>
+                  {anniversaryDate
+                    ? anniversaryDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                    : 'Tap to choose date'}
+                </AppText>
+              </TouchableOpacity>
+
+              {showAnniversaryPicker && DateTimePicker && (
+                <View style={styles.inlinePickerWrap}>
+                  <View style={styles.inlinePickerHeader}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setShowAnniversaryPicker(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <AppText style={styles.inlinePickerDone}>Done</AppText>
+                    </TouchableOpacity>
+                  </View>
+                  <DateTimePicker
+                    value={anniversaryDate || new Date()}
+                    mode="date"
+                    display="spinner"
+                    maximumDate={new Date()}
+                    minimumDate={new Date(1900, 0, 1)}
+                    onChange={(_event: any, date?: Date) => {
+                      if (date) setAnniversaryDate(date);
+                    }}
+                    textColor="#fff"
+                    style={styles.inlinePicker}
+                  />
+                </View>
+              )}
+            </View>
           )}
           {anniversaryError ? (
             <AppText style={styles.enterCodeError}>{anniversaryError}</AppText>
@@ -2413,40 +2442,6 @@ export default function AccountScreen() {
           )}
         </View>
       </BottomSheet>
-
-      {/* iOS anniversary date picker — spinner in bottom sheet */}
-      {Platform.OS === 'ios' && showAnniversaryPicker && DateTimePicker && (
-        <Modal
-          visible
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowAnniversaryPicker(false)}
-        >
-          <View style={styles.pickerOverlay}>
-            <View style={styles.pickerSheet}>
-              <View style={styles.pickerHeader}>
-                <TouchableOpacity onPress={() => {
-                  setShowAnniversaryPicker(false);
-                  if (anniversaryDate) handleSaveAnniversary(anniversaryDate);
-                }} activeOpacity={0.7}>
-                  <AppText style={styles.pickerDone}>Done</AppText>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={anniversaryDate || new Date()}
-                mode="date"
-                display="spinner"
-                maximumDate={new Date()}
-                minimumDate={new Date(1900, 0, 1)}
-                onChange={(_event: any, date?: Date) => {
-                  if (date) setAnniversaryDate(date);
-                }}
-                textColor="#fff"
-              />
-            </View>
-          </View>
-        </Modal>
-      )}
 
       {/* Android anniversary date picker — native dialog */}
       {Platform.OS === 'android' && showAnniversaryPicker && DateTimePicker && (
@@ -2897,31 +2892,28 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
     textDecorationColor: '#2a2a2f',
   },
-  pickerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
-  },
-  pickerSheet: {
-    backgroundColor: '#1A1020',
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
+  inlinePickerWrap: {
+    marginTop: Spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
-    borderBottomWidth: 0,
-    borderColor: 'rgba(255,255,255,0.10)',
-    paddingBottom: 32,
+    borderColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
   },
-  pickerHeader: {
+  inlinePickerHeader: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  pickerDone: {
+  inlinePickerDone: {
     color: '#FF7A45',
     fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',
-    paddingHorizontal: Spacing.sm,
+  },
+  inlinePicker: {
+    height: 200,
   },
 });
