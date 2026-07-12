@@ -4,6 +4,13 @@ import {
   View, StyleSheet, ScrollView, TouchableOpacity, Share, Alert, Platform,
   ActivityIndicator, Modal, Image, Linking, Animated,
 } from 'react-native';
+
+// Native date picker — loaded only on native platforms, web uses HTML input
+let DateTimePicker: React.ComponentType<any> | null = null;
+if (Platform.OS !== 'web') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import * as ImagePicker from 'expo-image-picker';
@@ -747,7 +754,8 @@ export default function AccountScreen() {
 
   // Anniversary date picker
   const [showAnniversarySheet, setShowAnniversarySheet] = useState(false);
-  const [anniversaryInput, setAnniversaryInput] = useState('');
+  const [anniversaryDate, setAnniversaryDate] = useState<Date | null>(null);
+  const [showAnniversaryPicker, setShowAnniversaryPicker] = useState(false);
   const [anniversaryError, setAnniversaryError] = useState<string | null>(null);
   const [savingAnniversary, setSavingAnniversary] = useState(false);
   const [deleteAccountStep, setDeleteAccountStep] = useState<1 | 2>(1);
@@ -902,27 +910,17 @@ export default function AccountScreen() {
   }, [user, refreshSettings]);
 
   // ── Anniversary helpers ─────────────────────────────────────────
-  const handleSaveAnniversary = async () => {
+  const handleSaveAnniversary = async (date: Date) => {
     if (!couple?.id) return;
     setAnniversaryError(null);
 
-    if (!anniversaryInput.trim()) {
-      setAnniversaryError('Enter a date in YYYY-MM-DD format.');
-      return;
-    }
-
-    const parsed = new Date(anniversaryInput.trim());
-    if (isNaN(parsed.getTime())) {
-      setAnniversaryError('Invalid date. Use YYYY-MM-DD.');
-      return;
-    }
-    if (parsed > new Date()) {
-      setAnniversaryError('Date can\'t be in the future.');
+    if (date > new Date()) {
+      setAnniversaryError("Date can't be in the future.");
       return;
     }
 
     setSavingAnniversary(true);
-    const isoDate = parsed.toISOString().split('T')[0];
+    const isoDate = date.toISOString().split('T')[0];
     const { error } = await supabase
       .from('couples')
       .update({ anniversary_date: isoDate })
@@ -1569,7 +1567,8 @@ export default function AccountScreen() {
         <TouchableOpacity
           style={[styles.anniversaryCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
           onPress={() => {
-            setAnniversaryInput(couple?.anniversary_date ?? '');
+            const existing = couple?.anniversary_date ? new Date(couple.anniversary_date) : null;
+            setAnniversaryDate(existing);
             setAnniversaryError(null);
             setShowAnniversarySheet(true);
           }}
@@ -2343,24 +2342,52 @@ export default function AccountScreen() {
         subtitle="When did your relationship begin?"
       >
         <View style={styles.enterCodeSheet}>
-          <AppTextInput
-            style={[styles.enterCodeInput, { color: colors.text, borderColor: anniversaryError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card }]}
-            value={anniversaryInput}
-            onChangeText={t => { setAnniversaryInput(t); setAnniversaryError(null); }}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="default"
-          />
+          {Platform.OS === 'web' ? (
+            <input
+              type="date"
+              value={anniversaryDate ? anniversaryDate.toISOString().split('T')[0] : ''}
+              max={new Date().toISOString().split('T')[0]}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  setAnniversaryDate(new Date(val + 'T00:00:00'));
+                  setAnniversaryError(null);
+                }
+              }}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                borderRadius: '14px',
+                border: `1px solid ${anniversaryError ? '#FF5A5F' : colors.borderSubtle}`,
+                backgroundColor: colors.card,
+                color: colors.text,
+                fontSize: '18px',
+                fontFamily: 'Inter-Bold',
+                textAlign: 'center',
+                outline: 'none',
+              }}
+            />
+          ) : (
+            <TouchableOpacity
+              style={[styles.enterCodeInput, { borderColor: anniversaryError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card }]}
+              onPress={() => setShowAnniversaryPicker(true)}
+              activeOpacity={0.8}
+            >
+              <AppText style={{ color: anniversaryDate ? colors.text : colors.textMuted, fontSize: FontSize.body, fontFamily: 'Inter-SemiBold', textAlign: 'center' }}>
+                {anniversaryDate
+                  ? anniversaryDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+                  : 'Tap to choose date'}
+              </AppText>
+            </TouchableOpacity>
+          )}
           {anniversaryError ? (
             <AppText style={styles.enterCodeError}>{anniversaryError}</AppText>
           ) : null}
           <TouchableOpacity
-            style={[styles.enterCodeBtn, (!anniversaryInput.trim() || savingAnniversary) && { opacity: 0.5 }]}
-            onPress={handleSaveAnniversary}
+            style={[styles.enterCodeBtn, (!anniversaryDate || savingAnniversary) && { opacity: 0.5 }]}
+            onPress={() => { if (anniversaryDate) handleSaveAnniversary(anniversaryDate); }}
             activeOpacity={0.85}
-            disabled={!anniversaryInput.trim() || savingAnniversary}
+            disabled={!anniversaryDate || savingAnniversary}
           >
             <LinearGradient
               colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
@@ -2386,6 +2413,58 @@ export default function AccountScreen() {
           )}
         </View>
       </BottomSheet>
+
+      {/* iOS anniversary date picker — spinner in bottom sheet */}
+      {Platform.OS === 'ios' && showAnniversaryPicker && DateTimePicker && (
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowAnniversaryPicker(false)}
+        >
+          <View style={styles.pickerOverlay}>
+            <View style={styles.pickerSheet}>
+              <View style={styles.pickerHeader}>
+                <TouchableOpacity onPress={() => {
+                  setShowAnniversaryPicker(false);
+                  if (anniversaryDate) handleSaveAnniversary(anniversaryDate);
+                }} activeOpacity={0.7}>
+                  <AppText style={styles.pickerDone}>Done</AppText>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={anniversaryDate || new Date()}
+                mode="date"
+                display="spinner"
+                maximumDate={new Date()}
+                minimumDate={new Date(1900, 0, 1)}
+                onChange={(_event: any, date?: Date) => {
+                  if (date) setAnniversaryDate(date);
+                }}
+                textColor="#fff"
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Android anniversary date picker — native dialog */}
+      {Platform.OS === 'android' && showAnniversaryPicker && DateTimePicker && (
+        <DateTimePicker
+          value={anniversaryDate || new Date()}
+          mode="date"
+          display="spinner"
+          maximumDate={new Date()}
+          minimumDate={new Date(1900, 0, 1)}
+          onChange={(event: any, date?: Date) => {
+            setShowAnniversaryPicker(false);
+            if (event.type === 'set' && date) {
+              setAnniversaryDate(date);
+              handleSaveAnniversary(date);
+            }
+          }}
+        />
+      )}
 
       {/* ── Delete Account Modal ───────────────────────────────────── */}
       <Modal
@@ -2817,5 +2896,32 @@ const styles = StyleSheet.create({
     color: '#2a2a2f',
     textDecorationLine: 'underline',
     textDecorationColor: '#2a2a2f',
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    backgroundColor: '#1A1020',
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: 'rgba(255,255,255,0.10)',
+    paddingBottom: 32,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  pickerDone: {
+    color: '#FF7A45',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-SemiBold',
+    paddingHorizontal: Spacing.sm,
   },
 });
