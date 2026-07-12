@@ -717,13 +717,15 @@ export default function HomeScreen() {
           <>
             <ScrollView
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={[styles.scroll, !pointsEnabled && styles.scrollNoScore, { paddingHorizontal: hPad }]}
+              contentContainerStyle={[styles.scroll, { paddingHorizontal: hPad }]}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
             >
               {greetingText}
               {activitySection}
-              {ambientZone}
             </ScrollView>
+            <View style={[styles.ambientZonePinned, { paddingHorizontal: hPad }]}>
+              {ambientZone}
+            </View>
             {scoreBar}
           </>
         )}
@@ -768,7 +770,10 @@ const styles = StyleSheet.create({
   ambientZone: {
     flexDirection: 'row',
     gap: Spacing.sm,
-    marginTop: Spacing.md,
+  },
+  ambientZonePinned: {
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
   },
   scrollNoScore: {
     paddingBottom: Spacing.xl,
