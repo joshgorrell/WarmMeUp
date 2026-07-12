@@ -46,6 +46,14 @@ export default function MediaActionRow({
   const [vaultFeedback, setVaultFeedback] = useState<VaultFeedback>('idle');
   const vaultIconScale = useRef(new Animated.Value(1)).current;
   const vaultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [reactedEmoji, setReactedEmoji] = useState<string | null>(null);
+  const emojiScales = useRef<Record<string, Animated.Value>>({});
+  const getEmojiScale = (emoji: string) => {
+    if (!emojiScales.current[emoji]) {
+      emojiScales.current[emoji] = new Animated.Value(1);
+    }
+    return emojiScales.current[emoji];
+  };
 
   useEffect(() => {
     if (Platform.OS !== 'web') {
@@ -116,15 +124,28 @@ export default function MediaActionRow({
         <View style={styles.reactionRow}>
           {REACTION_EMOJIS.map(emoji => {
             const isActive = myReaction === emoji;
+            const scale = getEmojiScale(emoji);
             return (
               <TouchableOpacity
                 key={emoji}
-                style={[styles.emojiBtn, isActive && styles.emojiBtnActive]}
-                onPress={() => { onDismiss(); onReact(emoji); }}
+                style={[styles.emojiBtn, isActive && styles.emojiBtnActive, reactedEmoji === emoji && styles.emojiBtnReacted]}
+                onPress={() => {
+                  if (Platform.OS !== 'web') {
+                    import('expo-haptics').then(Haptics => {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                    });
+                  }
+                  Animated.sequence([
+                    Animated.timing(scale, { toValue: 1.35, duration: 80, useNativeDriver: true }),
+                    Animated.spring(scale, { toValue: 1, friction: 3, tension: 200, useNativeDriver: true }),
+                  ]).start();
+                  setReactedEmoji(emoji);
+                  setTimeout(() => { onDismiss(); onReact(emoji); }, 150);
+                }}
                 activeOpacity={0.65}
                 hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
               >
-                <AppText style={styles.emojiText}>{emoji}</AppText>
+                <Animated.Text style={[styles.emojiText, { transform: [{ scale }] }]}>{emoji}</Animated.Text>
               </TouchableOpacity>
             );
           })}
@@ -265,6 +286,10 @@ const styles = StyleSheet.create({
   },
   emojiBtnActive: {
     backgroundColor: 'rgba(255,46,138,0.20)',
+  },
+  emojiBtnReacted: {
+    backgroundColor: 'rgba(255,46,138,0.35)',
+    transform: [{ scale: 1.1 }],
   },
   emojiText: {
     fontSize: 22,
