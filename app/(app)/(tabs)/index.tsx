@@ -16,7 +16,7 @@ import { Spacing, Radius, FontSize, Gradient } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
-import ActionCard from '@/components/ActionCard';
+
 import HomeMiniCard from '@/components/HomeMiniCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
@@ -497,43 +497,6 @@ export default function HomeScreen() {
   }
 
   // Action zone cards
-  const actionZone = (
-    <View style={styles.actionZone}>
-      <View style={styles.actionRow}>
-        <ActionCard
-          icon={<Dice6 color="#FFB347" size={28} strokeWidth={2} />}
-          title="Roll Dice"
-          subtitle="Let chance decide"
-          onPress={() => router.push('/(app)/(tabs)/dice')}
-          style={styles.actionCardItem}
-        />
-        <ActionCard
-          icon={<Zap color="#FF5A3D" size={28} strokeWidth={2} />}
-          title="Dare"
-          subtitle="Challenge your partner"
-          onPress={() => router.push('/(app)/(tabs)/dare')}
-          style={styles.actionCardItem}
-        />
-      </View>
-      <View style={styles.actionRow}>
-        <ActionCard
-          icon={<Star color="#FF2E8A" size={28} strokeWidth={2} />}
-          title="Wish"
-          subtitle="Ask for something"
-          onPress={() => router.push('/(app)/(tabs)/wish')}
-          style={styles.actionCardItem}
-        />
-        <ActionCard
-          icon={<MessageCircle color="#69A7FF" size={28} strokeWidth={2} />}
-          title="Note"
-          subtitle="Leave a message"
-          onPress={() => router.push('/(app)/(tabs)/note')}
-          style={styles.actionCardItem}
-        />
-      </View>
-    </View>
-  );
-
   // Ambient zone — streak, time together, send love
   const ambientZone = (
     <View style={styles.ambientZone}>
@@ -579,11 +542,10 @@ export default function HomeScreen() {
     </View>
   );
 
-  // Full greeting block with action + ambient zones (tablet layout)
+  // Full greeting block with ambient zone (tablet layout)
   const greetingBlock = (
     <>
       {greetingText}
-      {actionZone}
       {ambientZone}
     </>
   );
@@ -723,7 +685,6 @@ export default function HomeScreen() {
             >
               {greetingText}
               {activitySection}
-              {actionZone}
               {ambientZone}
             </ScrollView>
             {scoreBar}
@@ -742,17 +703,6 @@ const styles = StyleSheet.create({
   // Phone layout
   scroll: {
     paddingBottom: Spacing.md,
-  },
-  actionZone: {
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  actionCardItem: {
-    flex: 1,
   },
   ambientZone: {
     flexDirection: 'row',
