@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert,
-  Animated, Platform,
+  Animated, Platform, Modal, Pressable,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -16,7 +16,6 @@ import { Spacing, Radius, FontSize, Gradient } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
-import BottomSheet from '@/components/BottomSheet';
 import { REACTION_EMOJIS } from '@/components/MediaActionRow';
 
 import HomeMiniCard from '@/components/HomeMiniCard';
@@ -468,6 +467,11 @@ export default function HomeScreen() {
       if (pts > 0) {
         await awardPoints(couple.id, user.id, pts, 'send_love');
       }
+      await supabase.from('chat_messages').insert({
+        couple_id: couple.id,
+        sender_id: user.id,
+        content_text: emoji,
+      });
       await supabase.from('activity_events').insert({
         couple_id: couple.id,
         actor_user_id: user.id,
@@ -478,6 +482,7 @@ export default function HomeScreen() {
       await notifyPartner({
         event_type: 'send_love',
         couple_id: couple.id,
+        target_route: '/(app)/(tabs)/note',
         partnerUserId: partnerProfile?.id,
         emoji,
       });
@@ -724,26 +729,29 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* Send love emoji picker */}
-      <BottomSheet
+      {/* Send love compact emoji picker */}
+      <Modal
         visible={showLovePicker}
-        onClose={() => setShowLovePicker(false)}
-        title="Send Love"
-        subtitle={hasPartner ? `Nudge ${partnerProfile?.display_name ?? 'your partner'}` : 'Pair with a partner first'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLovePicker(false)}
       >
-        <View style={styles.emojiGrid}>
-          {REACTION_EMOJIS.map((emoji) => (
-            <TouchableOpacity
-              key={emoji}
-              style={styles.emojiCell}
-              onPress={() => handleSendLove(emoji)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.emojiText}>{emoji}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </BottomSheet>
+        <Pressable style={lovePickerStyles.overlay} onPress={() => setShowLovePicker(false)}>
+          <Pressable style={lovePickerStyles.card} onPress={(e) => e.stopPropagation()}>
+            {REACTION_EMOJIS.map((emoji) => (
+              <TouchableOpacity
+                key={emoji}
+                style={lovePickerStyles.emojiBtn}
+                onPress={() => handleSendLove(emoji)}
+                activeOpacity={0.65}
+                hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+              >
+                <Text style={lovePickerStyles.emojiText}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </AppShell>
   );
 }
@@ -938,24 +946,37 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 2,
   },
-  emojiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-    paddingBottom: 20,
+});
+
+const lovePickerStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  emojiCell: {
-    width: '31%',
-    aspectRatio: 1,
-    borderRadius: Radius.lg,
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(16,14,24,0.97)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 2,
+  },
+  emojiBtn: {
+    flex: 0,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10,
   },
   emojiText: {
-    fontSize: 36,
+    fontSize: 22,
+    lineHeight: 28,
   },
 });

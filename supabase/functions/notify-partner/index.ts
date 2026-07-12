@@ -26,7 +26,7 @@ const EVENT_LABELS: Record<string, string> = {
   dice_roll: "sent you a dice challenge",
   dice_accepted: "accepted your dice challenge",
   dice_completed: "completed your dice challenge",
-  send_love: "sent you some love",
+  send_love: "sent you",
   partner_disconnected: "ended the partner connection",
   partner_joined: "just joined! Your space is ready.",
 };

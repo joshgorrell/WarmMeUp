@@ -30,6 +30,8 @@ function resolveNotificationRoute(data: NotificationData): string | null {
     case 'dice_accepted':
     case 'dice_completed':
       return '/(app)/(tabs)/dice';
+    case 'send_love':
+      return '/(app)/(tabs)/note';
     default:
       return null;
   }
