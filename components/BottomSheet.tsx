@@ -33,7 +33,6 @@ export default function BottomSheet({
   const inner = (
     <View
       style={[styles.sheet, { backgroundColor: bg }]}
-      onStartShouldSetResponder={() => true}
     >
       <View style={styles.handle} />
 
@@ -63,7 +62,7 @@ export default function BottomSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={styles.overlay} pointerEvents="box-none">
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
