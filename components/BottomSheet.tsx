@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Modal, TouchableOpacity, StyleSheet, ScrollView,
+  View, Modal, TouchableOpacity, Pressable, StyleSheet, ScrollView,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -63,13 +63,13 @@ export default function BottomSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
+      <View style={styles.overlay}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+        />
         {inner}
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 }

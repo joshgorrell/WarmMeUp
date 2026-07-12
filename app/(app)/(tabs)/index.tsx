@@ -17,6 +17,7 @@ import AppShell from '@/components/AppShell';
 import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
 import BottomSheet from '@/components/BottomSheet';
+import { REACTION_EMOJIS } from '@/components/MediaActionRow';
 
 import HomeMiniCard from '@/components/HomeMiniCard';
 import Avatar from '@/components/Avatar';
@@ -73,7 +74,6 @@ export default function HomeScreen() {
   const [loveSent, setLoveSent] = useState(false);
   const [loveSentEmoji, setLoveSentEmoji] = useState('❤️');
   const [showLovePicker, setShowLovePicker] = useState(false);
-  const LOVE_EMOJIS = ['❤️', '🔥', '💋', '🥰', '😘', '💕'];
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
   const isMountedRef = useRef(true);
@@ -730,7 +730,7 @@ export default function HomeScreen() {
         subtitle={hasPartner ? `Nudge ${partnerProfile?.display_name ?? 'your partner'}` : 'Pair with a partner first'}
       >
         <View style={styles.emojiGrid}>
-          {LOVE_EMOJIS.map((emoji) => (
+          {REACTION_EMOJIS.map((emoji) => (
             <TouchableOpacity
               key={emoji}
               style={styles.emojiCell}
