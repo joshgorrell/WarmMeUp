@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert,
+  View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert,
   Animated, Platform,
 } from 'react-native';
 import AppText from '@/components/AppText';
@@ -16,6 +16,7 @@ import { Spacing, Radius, FontSize, Gradient } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
+import BottomSheet from '@/components/BottomSheet';
 
 import HomeMiniCard from '@/components/HomeMiniCard';
 import Avatar from '@/components/Avatar';
@@ -70,6 +71,9 @@ export default function HomeScreen() {
   const [streak, setStreak] = useState(0);
   const [sendingLove, setSendingLove] = useState(false);
   const [loveSent, setLoveSent] = useState(false);
+  const [loveSentEmoji, setLoveSentEmoji] = useState('❤️');
+  const [showLovePicker, setShowLovePicker] = useState(false);
+  const LOVE_EMOJIS = ['❤️', '🔥', '💋', '🥰', '😘', '💕'];
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
   const isMountedRef = useRef(true);
@@ -316,6 +320,22 @@ export default function HomeScreen() {
         return;
       }
 
+      if (ev.event_type === 'send_love') {
+        const emoji = ev.metadata?.emoji ?? '❤️';
+        items.push({
+          id: `love_${ev.id}`,
+          sourceTable: 'activity_events',
+          sourceId: ev.id,
+          label: `${partnerName} sent you ${emoji}`,
+          sub: 'Send love',
+          time: timeAgo(ev.created_at),
+          icon: <AppText style={{ fontSize: 16, lineHeight: 20 }}>{emoji}</AppText>,
+          color: '#FF2E8A',
+          _rawTime: ev.created_at,
+        });
+        return;
+      }
+
       if (ev.event_type === 'media_reaction') {
         const emoji = ev.metadata?.emoji ?? '❤️';
         const sourceTable = ev.metadata?.source_table;
@@ -437,18 +457,28 @@ export default function HomeScreen() {
     }
   }, [activeInteraction, couple?.id, user?.id]);
 
-  const handleSendLove = async () => {
+  const handleSendLove = async (emoji: string) => {
     if (!couple?.id || !user?.id || !hasPartner || sendingLove) return;
+    setShowLovePicker(false);
     setSendingLove(true);
+    setLoveSentEmoji(emoji);
     try {
       const pts = await getPointValue('send_love');
       if (pts > 0) {
         await awardPoints(couple.id, user.id, pts, 'send_love');
       }
+      await supabase.from('activity_events').insert({
+        couple_id: couple.id,
+        actor_user_id: user.id,
+        target_user_id: partnerProfile?.id,
+        event_type: 'send_love',
+        metadata: { emoji },
+      });
       await notifyPartner({
         event_type: 'send_love',
         couple_id: couple.id,
         partnerUserId: partnerProfile?.id,
+        emoji,
       });
       setLoveSent(true);
       setTimeout(() => setLoveSent(false), 2500);
@@ -516,10 +546,10 @@ export default function HomeScreen() {
       />
       <HomeMiniCard
         icon={loveSent ? <CheckCheck color="#33D17A" size={16} strokeWidth={2} /> : <Send color="#FFB347" size={16} strokeWidth={2} />}
-        label={loveSent ? 'Sent!' : 'Send love'}
-        value={loveSent ? 'Done' : 'Tap'}
+        label={loveSent ? `${loveSentEmoji} Sent!` : 'Send love'}
+        value={loveSent ? loveSentEmoji : 'Tap'}
         sub={loveSent ? 'They\'ll know' : hasPartner ? 'Quick nudge' : 'Pair first'}
-        onPress={handleSendLove}
+        onPress={() => { if (hasPartner) setShowLovePicker(true); }}
       />
     </View>
   );
@@ -691,6 +721,27 @@ export default function HomeScreen() {
           </>
         )}
       </View>
+
+      {/* Send love emoji picker */}
+      <BottomSheet
+        visible={showLovePicker}
+        onClose={() => setShowLovePicker(false)}
+        title="Send Love"
+        subtitle={hasPartner ? `Nudge ${partnerProfile?.display_name ?? 'your partner'}` : 'Pair with a partner first'}
+      >
+        <View style={styles.emojiGrid}>
+          {LOVE_EMOJIS.map((emoji) => (
+            <TouchableOpacity
+              key={emoji}
+              style={styles.emojiCell}
+              onPress={() => handleSendLove(emoji)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.emojiText}>{emoji}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </BottomSheet>
     </AppShell>
   );
 }
@@ -884,5 +935,25 @@ const styles = StyleSheet.create({
   barFill: {
     height: '100%',
     borderRadius: 2,
+  },
+  emojiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    paddingBottom: 20,
+  },
+  emojiCell: {
+    width: '31%',
+    aspectRatio: 1,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  emojiText: {
+    fontSize: 36,
   },
 });

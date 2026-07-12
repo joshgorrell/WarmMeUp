@@ -1581,7 +1581,7 @@ export default function AccountScreen() {
             <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>ANNIVERSARY DATE</AppText>
             <AppText style={[styles.anniversaryValue, { color: colors.text }]}>
               {couple?.anniversary_date
-                ? new Date(couple.anniversary_date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+                ? new Date(couple.anniversary_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
                 : 'Set your anniversary'}
             </AppText>
           </View>
@@ -2375,7 +2375,7 @@ export default function AccountScreen() {
             >
               <AppText style={{ color: anniversaryDate ? colors.text : colors.textMuted, fontSize: FontSize.body, fontFamily: 'Inter-SemiBold', textAlign: 'center' }}>
                 {anniversaryDate
-                  ? anniversaryDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+                  ? anniversaryDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
                   : 'Tap to choose date'}
               </AppText>
             </TouchableOpacity>

@@ -65,11 +65,12 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { event_type, couple_id, target_route, item_id } = body as {
+    const { event_type, couple_id, target_route, item_id, emoji } = body as {
       event_type: string;
       couple_id: string;
       target_route?: string;
       item_id?: string;
+      emoji?: string;
     };
 
     if (!event_type || !couple_id) {
@@ -146,9 +147,11 @@ Deno.serve(async (req: Request) => {
     const notifCopy = partnerSettings?.notification_copy ?? "New activity";
 
     const title = "Warm Me Up";
+    const eventLabel = EVENT_LABELS[event_type] ?? "has new activity for you";
+    const suffix = emoji ? ` ${emoji}` : "";
     const bodyText = isDiscreet
-      ? notifCopy
-      : `${senderName} ${EVENT_LABELS[event_type] ?? "has new activity for you"}`;
+      ? (emoji ? `${notifCopy} ${emoji}` : notifCopy)
+      : `${senderName} ${eventLabel}${suffix}`;
 
     const expoPayload = {
       to: partnerProfile.push_token,
