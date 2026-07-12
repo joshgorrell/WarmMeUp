@@ -561,8 +561,8 @@ export default function HomeScreen() {
     </View>
   );
 
-  // Shared greeting block, used in both phone and tablet layouts
-  const greetingBlock = (
+  // Greeting text only (phone layout places activity between this and the zones)
+  const greetingText = (
     <View style={styles.greeting}>
       <AppText
         style={[styles.greetingTitle, { color: colors.text }]}
@@ -576,9 +576,16 @@ export default function HomeScreen() {
       <AppText style={[styles.greetingSub, { color: colors.textSecondary }]}>
         {greetingSub}
       </AppText>
+    </View>
+  );
+
+  // Full greeting block with action + ambient zones (tablet layout)
+  const greetingBlock = (
+    <>
+      {greetingText}
       {actionZone}
       {ambientZone}
-    </View>
+    </>
   );
 
   // Score bar, pinned to bottom of left column on tablet
@@ -714,8 +721,10 @@ export default function HomeScreen() {
               contentContainerStyle={[styles.scroll, !pointsEnabled && styles.scrollNoScore, { paddingHorizontal: hPad }]}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
             >
-              {greetingBlock}
+              {greetingText}
               {activitySection}
+              {actionZone}
+              {ambientZone}
             </ScrollView>
             {scoreBar}
           </>
