@@ -3,7 +3,7 @@ import {
   View, StyleSheet, TouchableOpacity, Platform, Animated,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { Trash2, Pencil, Copy, Lock, Check } from 'lucide-react-native';
+import { Trash2, Pencil, Copy, Lock, Check, Reply } from 'lucide-react-native';
 import { MediaReaction } from '@/lib/types';
 
 type VaultFeedback = 'idle' | 'saved' | 'already';
@@ -23,6 +23,7 @@ type Props = {
   onDelete?: () => void;
   onEdit?: () => void;
   onCopy?: () => void;
+  onReply?: () => void;
   onDismiss: () => void;
 };
 
@@ -39,6 +40,7 @@ export default function MediaActionRow({
   onDelete,
   onEdit,
   onCopy,
+  onReply,
   onDismiss,
 }: Props) {
   const scaleAnim = useRef(new Animated.Value(0.82)).current;
@@ -156,8 +158,20 @@ export default function MediaActionRow({
 
         {/* Row 2 — Actions */}
         <View style={styles.actionRow}>
+          {onReply && (
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => { onDismiss(); onReply(); }}
+              activeOpacity={0.65}
+            >
+              <Reply color="rgba(255,255,255,0.70)" size={15} strokeWidth={2} />
+              <AppText style={styles.actionLabel}>Reply</AppText>
+            </TouchableOpacity>
+          )}
+
           {isMedia ? (
             <>
+              {onReply && <View style={styles.actionDivider} />}
               <TouchableOpacity
                 style={[
                   styles.actionBtn,
@@ -210,19 +224,22 @@ export default function MediaActionRow({
           ) : (
             <>
               {onCopy && (
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => { onDismiss(); onCopy(); }}
-                  activeOpacity={0.65}
-                >
-                  <Copy color="rgba(255,255,255,0.70)" size={15} strokeWidth={2} />
-                  <AppText style={styles.actionLabel}>Copy</AppText>
-                </TouchableOpacity>
+                <>
+                  {onReply && <View style={styles.actionDivider} />}
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => { onDismiss(); onCopy(); }}
+                    activeOpacity={0.65}
+                  >
+                    <Copy color="rgba(255,255,255,0.70)" size={15} strokeWidth={2} />
+                    <AppText style={styles.actionLabel}>Copy</AppText>
+                  </TouchableOpacity>
+                </>
               )}
 
               {isMine && onEdit && (
                 <>
-                  {onCopy && <View style={styles.actionDivider} />}
+                  {(onReply || onCopy) && <View style={styles.actionDivider} />}
                   <TouchableOpacity
                     style={styles.actionBtn}
                     onPress={() => { onDismiss(); onEdit(); }}
@@ -236,7 +253,7 @@ export default function MediaActionRow({
 
               {isMine && onDelete && (
                 <>
-                  {(onCopy || onEdit) && <View style={styles.actionDivider} />}
+                  {(onReply || onCopy || onEdit) && <View style={styles.actionDivider} />}
                   <TouchableOpacity
                     style={styles.actionBtn}
                     onPress={() => { onDismiss(); onDelete?.(); }}

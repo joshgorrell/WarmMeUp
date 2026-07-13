@@ -446,6 +446,7 @@ export default function ChatTab() {
   // undefined = not yet fetched, null = failed, string = ready
   const [signedUrls, setSignedUrls] = useState<Record<string, string | null>>({});
   const [editingState, setEditingState] = useState<EditingState | null>(null);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [pillSize, setPillSize] = useState<{ w: number; h: number } | null>(null);
@@ -819,6 +820,14 @@ export default function ChatTab() {
     }, 150);
   }, [deepLinkMessageId, messages.length]);
 
+  const handleJumpToMessage = useCallback((msgId: string) => {
+    const idx = messages.findIndex(m => m.id === msgId);
+    if (idx < 0) return;
+    listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+    setHighlightedId(msgId);
+    setTimeout(() => setHighlightedId(null), 2000);
+  }, [messages]);
+
   const pickMedia = async (source: 'library' | 'camera') => {
     try {
       const ImagePicker = await import('expo-image-picker');
@@ -943,6 +952,7 @@ export default function ChatTab() {
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
+      reply_to: replyingTo?.id ?? null,
       created_at: new Date().toISOString(),
       edited_at: null,
       deleted_at: null,
@@ -965,6 +975,7 @@ export default function ChatTab() {
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
+      reply_to: replyingTo?.id ?? null,
     };
     logDebugEvent('chat_message_insert_media_field', {
       media_url_present: !!payload.media_url,
@@ -1020,6 +1031,7 @@ export default function ChatTab() {
     const capturedMedia = attachedMedia;
     setText('');
     setAttachedMedia(null);
+    setReplyingTo(null);
     setSending(false);
 
     const coupleId = couple.id;
@@ -1129,9 +1141,21 @@ export default function ChatTab() {
 
   const handleStartEdit = (msg: ChatMessage) => {
     handleDismissMenu();
+    setReplyingTo(null);
     setEditingState({ messageId: msg.id, originalText: msg.content_text ?? '' });
     setText(msg.content_text ?? '');
     setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const handleStartReply = (msg: ChatMessage) => {
+    handleDismissMenu();
+    setEditingState(null);
+    setReplyingTo(msg);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
   };
 
   const handleDeleteMessage = (msg: ChatMessage) => {
@@ -1367,6 +1391,7 @@ export default function ChatTab() {
     const hasMedia = !!item.media_storage_path;
     const isMenuOpen = activeMenuId === item.id;
     const itemReactions = reactionsMap[item.id] ?? [];
+    const repliedMessage = item.reply_to ? messages.find(m => m.id === item.reply_to) : null;
 
     const prevMsg = (item.__prevCreatedAt && item.__prevSenderId) ? { created_at: item.__prevCreatedAt, sender_id: item.__prevSenderId } as ChatMessage : null;
     const nextMsg = (item.__nextCreatedAt && item.__nextSenderId) ? { created_at: item.__nextCreatedAt, sender_id: item.__nextSenderId } as ChatMessage : null;
@@ -1398,9 +1423,12 @@ export default function ChatTab() {
         onReactQuick={(emoji) => reactOnMessage(item.id, emoji, item.sender_id)}
         prevCreatedAt={index > 0 ? (item as any).__prevCreatedAt : undefined}
         highlighted={item.id === highlightedId}
+        repliedMessage={repliedMessage}
+        replySenderName={repliedMessage ? (repliedMessage.sender_id === user?.id ? 'You' : (partnerProfile?.first_name || partnerProfile?.display_name || 'Partner')) : undefined}
+        onJumpToMessage={handleJumpToMessage}
       />
     );
-  }, [user?.id, profile?.display_name, partnerProfile?.display_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, chatFontScale, reactOnMessage, highlightedId]);
+  }, [user?.id, profile?.display_name, partnerProfile?.display_name, partnerProfile?.first_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, chatFontScale, reactOnMessage, highlightedId, messages]);
 
   const messagesWithPrev = useMemo(() =>
     messages.map((m, i) => ({
@@ -1507,6 +1535,24 @@ export default function ChatTab() {
               <AppText style={[styles.editBannerText, { color: '#FF8A3D' }]}>Editing message</AppText>
               <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <X color="#FF8A3D" size={15} strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Reply banner */}
+          {replyingTo && (
+            <View style={[styles.replyBanner, { backgroundColor: 'rgba(232,25,110,0.10)', borderTopColor: 'rgba(232,25,110,0.25)' }]}>
+              <View style={styles.replyBannerAccent} />
+              <View style={styles.replyBannerInfo}>
+                <AppText style={styles.replyBannerName}>
+                  {replyingTo.sender_id === user?.id ? 'You' : (partnerProfile?.first_name || partnerProfile?.display_name || 'Partner')}
+                </AppText>
+                <AppText style={styles.replyBannerPreview} numberOfLines={1} ellipsizeMode="tail">
+                  {replyingTo.content_text ?? (replyingTo.media_type === 'video' ? 'Video' : 'Photo')}
+                </AppText>
+              </View>
+              <TouchableOpacity onPress={handleCancelReply} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X color={colors.textMuted} size={15} strokeWidth={2.5} />
               </TouchableOpacity>
             </View>
           )}
@@ -1644,6 +1690,7 @@ export default function ChatTab() {
                 onDelete={() => handleDeleteMessage(activeMsg)}
                 onEdit={!hasMedia ? () => handleStartEdit(activeMsg) : undefined}
                 onCopy={!hasMedia ? () => handleCopy(activeMsg) : undefined}
+                onReply={() => handleStartReply(activeMsg)}
                 onDismiss={handleDismissMenu}
               />
             </Pressable>
@@ -1659,6 +1706,39 @@ export default function ChatTab() {
         onDismiss={() => setConfirmSheet(null)}
       />
     </View>
+  );
+}
+
+function ReplyQuote({
+  msg,
+  senderName,
+  isMine,
+  onPress,
+}: {
+  msg: ChatMessage;
+  senderName?: string;
+  isMine: boolean;
+  onPress?: (id: string) => void;
+}) {
+  const hasMedia = !!msg.media_storage_path;
+  const preview = msg.content_text ?? (msg.media_type === 'video' ? 'Video' : hasMedia ? 'Photo' : '');
+  const accentColor = isMine ? 'rgba(255,255,255,0.55)' : '#E8196E';
+
+  return (
+    <Pressable
+      onPress={() => onPress?.(msg.id)}
+      style={styles.replyQuoteContainer}
+    >
+      <View style={[styles.replyQuoteAccent, { backgroundColor: accentColor }]} />
+      <View style={styles.replyQuoteTextCol}>
+        <AppText style={[styles.replyQuoteSender, { color: accentColor }]} numberOfLines={1} ellipsizeMode="tail">
+          {senderName ?? 'Partner'}
+        </AppText>
+        <AppText style={styles.replyQuotePreview} numberOfLines={1} ellipsizeMode="tail">
+          {preview || '\u00A0'}
+        </AppText>
+      </View>
+    </Pressable>
   );
 }
 
@@ -1686,6 +1766,9 @@ const MessageRow = React.memo(function MessageRow({
   onReactQuick,
   prevCreatedAt,
   highlighted,
+  repliedMessage,
+  replySenderName,
+  onJumpToMessage,
 }: {
   item: ChatMessage & { __prevCreatedAt?: string | null };
   isMine: boolean;
@@ -1710,6 +1793,9 @@ const MessageRow = React.memo(function MessageRow({
   onReactQuick: (emoji: string) => void;
   prevCreatedAt?: string | null;
   highlighted?: boolean;
+  repliedMessage?: ChatMessage | null;
+  replySenderName?: string;
+  onJumpToMessage?: (id: string) => void;
 }) {
   const highlightAnim = React.useRef(new Animated.Value(0)).current;
   React.useEffect(() => {
@@ -1811,6 +1897,14 @@ const MessageRow = React.memo(function MessageRow({
           >
             {isMine && !mediaOnly ? (
               <View style={[styles.bubble, styles.bubbleOutbound, radii, isMenuOpen && styles.bubbleMenuOpen]}>
+                {repliedMessage && (
+                  <ReplyQuote
+                    msg={repliedMessage}
+                    senderName={replySenderName}
+                    isMine={isMine}
+                    onPress={onJumpToMessage}
+                  />
+                )}
                 {hasMedia && (
                   <MediaBubble
                     msg={item}
@@ -1854,6 +1948,14 @@ const MessageRow = React.memo(function MessageRow({
                 hasMedia && styles.bubbleMediaOnly,
                 !isMine && !hasMedia && styles.bubbleInboundPad,
               ]}>
+                  {repliedMessage && (
+                    <ReplyQuote
+                      msg={repliedMessage}
+                      senderName={replySenderName}
+                      isMine={isMine}
+                      onPress={onJumpToMessage}
+                    />
+                  )}
                   {hasMedia && (
                   <MediaBubble
                     msg={item}
@@ -2096,6 +2198,71 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   editBannerText: { flex: 1, fontSize: 12, fontFamily: 'Inter-Medium' },
+
+  // Reply banner
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: Spacing.screen,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+  },
+  replyBannerAccent: {
+    width: 3,
+    height: 24,
+    borderRadius: 2,
+    backgroundColor: '#E8196E',
+    flexShrink: 0,
+  },
+  replyBannerInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  replyBannerName: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#E8196E',
+  },
+  replyBannerPreview: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: 'rgba(255,255,255,0.55)',
+  },
+
+  // Reply quote block (inside bubble)
+  replyQuoteContainer: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 6,
+    marginBottom: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+  },
+  replyQuoteAccent: {
+    width: 2.5,
+    borderRadius: 2,
+    flexShrink: 0,
+  },
+  replyQuoteTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 0,
+  },
+  replyQuoteSender: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    lineHeight: 14,
+  },
+  replyQuotePreview: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: 'rgba(255,255,255,0.50)',
+    lineHeight: 16,
+  },
 
   // Media bubble
   mediaTap: {

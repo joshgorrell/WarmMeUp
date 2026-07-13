@@ -106,6 +106,7 @@ export interface ChatMessage {
   allow_save: boolean;
   allow_share: boolean;
   vault_item_id: string | null;
+  reply_to: string | null;
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
