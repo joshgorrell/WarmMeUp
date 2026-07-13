@@ -8,7 +8,7 @@ import { MediaReaction } from '@/lib/types';
 
 type VaultFeedback = 'idle' | 'saved' | 'already';
 
-export const REACTION_EMOJIS = ['❤️', '🔥', '🌶️', '🍑', '😍', '🤩', '😈', '🫠', '😂'] as const;
+export const REACTION_EMOJIS = ['❤️', '🔥', '🌶️', '🍑', '🍆', '😍', '🤩', '😈', '🫠', '😂'] as const;
 
 type Props = {
   reactions: MediaReaction[];
@@ -239,7 +239,7 @@ export default function MediaActionRow({
                   {(onCopy || onEdit) && <View style={styles.actionDivider} />}
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => { onDismiss(); onDelete(); }}
+                    onPress={() => { onDismiss(); onDelete?.(); }}
                     activeOpacity={0.65}
                   >
                     <Trash2 color="#FF4444" size={15} strokeWidth={2} />
