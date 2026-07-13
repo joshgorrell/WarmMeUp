@@ -955,6 +955,7 @@ const lovePickerStyles = StyleSheet.create({
   },
   card: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: 'rgba(16,14,24,0.97)',
@@ -964,10 +965,11 @@ const lovePickerStyles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
     gap: 2,
+    maxWidth: '92%',
   },
   emojiBtn: {
-    flex: 0,
-    width: 40,
+    flex: 1,
+    minWidth: 0,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
