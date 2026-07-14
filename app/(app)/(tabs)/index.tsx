@@ -133,15 +133,28 @@ export default function HomeScreen() {
   const loadStreak = async () => {
     if (!couple?.id) return;
     if (!(couple?.streaks_enabled ?? true)) { setStreak(0); return; }
-    const { data } = await supabase
-      .from('interactions')
-      .select('created_at')
-      .eq('couple_id', couple.id)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(200);
-    if (!data || data.length === 0) { setStreak(0); return; }
-    const activeDays = new Set(data.map((r: { created_at: string }) => new Date(r.created_at).toDateString()));
+    const [interactionsRes, chatRes] = await Promise.all([
+      supabase
+        .from('interactions')
+        .select('created_at')
+        .eq('couple_id', couple.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(200),
+      supabase
+        .from('chat_messages')
+        .select('created_at')
+        .eq('couple_id', couple.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(200),
+    ]);
+    const rows = [
+      ...((interactionsRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
+      ...((chatRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
+    ];
+    if (rows.length === 0) { setStreak(0); return; }
+    const activeDays = new Set(rows.map((ts: string) => new Date(ts).toDateString()));
     let days = 0;
     const cursor = new Date();
     cursor.setHours(0, 0, 0, 0);

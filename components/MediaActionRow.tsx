@@ -8,7 +8,7 @@ import { MediaReaction } from '@/lib/types';
 
 type VaultFeedback = 'idle' | 'saved' | 'already';
 
-export const REACTION_EMOJIS = ['❤️', '🔥', '🌶️', '🍑', '🍆', '😍', '🤩', '😈', '🫠', '😂'] as const;
+export const REACTION_EMOJIS = ['❤️', '😘', '🔥', '🌶️', '🍑', '🍆', '😍', '🤩', '😈', '😂'] as const;
 
 type Props = {
   reactions: MediaReaction[];
@@ -23,7 +23,7 @@ type Props = {
   onDelete?: () => void;
   onEdit?: () => void;
   onCopy?: () => void;
-  onReply?: () => void;
+  onReply?: (emoji: string) => void;
   onDismiss: () => void;
 };
 
@@ -161,7 +161,7 @@ export default function MediaActionRow({
           {onReply && (
             <TouchableOpacity
               style={styles.actionBtn}
-              onPress={() => { onDismiss(); onReply(); }}
+              onPress={() => { onDismiss(); onReply(''); }}
               activeOpacity={0.65}
             >
               <Reply color="rgba(255,255,255,0.70)" size={15} strokeWidth={2} />
@@ -228,7 +228,7 @@ export default function MediaActionRow({
                   {onReply && <View style={styles.actionDivider} />}
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => { onDismiss(); onCopy(); }}
+                    onPress={() => { onDismiss(); onCopy?.(); }}
                     activeOpacity={0.65}
                   >
                     <Copy color="rgba(255,255,255,0.70)" size={15} strokeWidth={2} />
@@ -242,7 +242,7 @@ export default function MediaActionRow({
                   {(onReply || onCopy) && <View style={styles.actionDivider} />}
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => { onDismiss(); onEdit(); }}
+                    onPress={() => { onDismiss(); onEdit?.(); }}
                     activeOpacity={0.65}
                   >
                     <Pencil color="rgba(255,255,255,0.70)" size={15} strokeWidth={2} />

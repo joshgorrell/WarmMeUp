@@ -189,7 +189,7 @@ export default function MyStatsScreen() {
 
   const loadStreak = useCallback(async () => {
     if (!couple?.id) return;
-    const [interactionsRes, eventsRes] = await Promise.all([
+    const [interactionsRes, eventsRes, chatRes] = await Promise.all([
       supabase
         .from('interactions')
         .select('created_at')
@@ -204,10 +204,18 @@ export default function MyStatsScreen() {
         .eq('reason', 'send_love')
         .order('created_at', { ascending: false })
         .limit(50),
+      supabase
+        .from('chat_messages')
+        .select('created_at')
+        .eq('couple_id', couple.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(200),
     ]);
     const rows = [
       ...((interactionsRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
       ...((eventsRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
+      ...((chatRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
     ];
     if (rows.length === 0) { setStreak(0); return; }
     const activeDays = new Set(rows.map((ts: string) => new Date(ts).toDateString()));
