@@ -745,7 +745,11 @@ export default function HomeScreen() {
         onRequestClose={() => setShowLovePicker(false)}
       >
         <Pressable style={lovePickerStyles.overlay} onPress={() => setShowLovePicker(false)}>
-          <Pressable style={lovePickerStyles.card} onPress={(e) => e.stopPropagation()}>
+          <View
+            style={lovePickerStyles.card}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={(e) => e.stopPropagation()}
+          >
             {REACTION_EMOJIS.map((emoji) => (
               <TouchableOpacity
                 key={emoji}
@@ -757,7 +761,7 @@ export default function HomeScreen() {
                 <Text style={lovePickerStyles.emojiText}>{emoji}</Text>
               </TouchableOpacity>
             ))}
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
     </AppShell>
