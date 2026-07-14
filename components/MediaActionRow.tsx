@@ -8,7 +8,7 @@ import { MediaReaction } from '@/lib/types';
 
 type VaultFeedback = 'idle' | 'saved' | 'already';
 
-export const REACTION_EMOJIS = ['❤️', '😘', '🔥', '🌶️', '🍑', '🍆', '😍', '🤩', '😈', '😂'] as const;
+export const REACTION_EMOJIS = ['❤️', '😘', '🔥', '🌶️', '🍑', '🍆', '😍', '🤩', '💦', '😂'] as const;
 
 type Props = {
   reactions: MediaReaction[];
