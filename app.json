@@ -32,7 +32,8 @@
         "NSPhotoLibraryAddUsageDescription": "Warm Me Up saves photos to your library from the Vault.",
         "NSFaceIDUsageDescription": "Warm Me Up uses Face ID to protect your private content.",
         "NSLocationWhenInUseUsageDescription": "Warm Me Up uses your location only to show local weather on the privacy lock screen.",
-        "NSMicrophoneUsageDescription": "Warm Me Up uses the microphone to record video with audio in Chat and the Vault."
+        "NSMicrophoneUsageDescription": "Warm Me Up uses the microphone to record video with audio in Chat and the Vault.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -84,7 +85,8 @@
       ],
       "expo-camera",
       "expo-build-properties",
-      "expo-updates"
+      "expo-updates",
+      "./plugins/withPrivacyManifest"
     ],
     "experiments": {
       "typedRoutes": true
