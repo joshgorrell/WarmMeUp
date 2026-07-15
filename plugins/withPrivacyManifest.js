@@ -138,20 +138,21 @@ const PRIVACY_MANIFEST = `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 function withPrivacyManifest(config) {
-  return withXcodeProject(config, (project) => {
+  return withXcodeProject(config, (modConfig) => {
     const manifestPath = path.join(
-      project.modRequest.platformProjectRoot,
+      modConfig.modRequest.platformProjectRoot,
       'PrivacyInfo.xcprivacy'
     );
     fs.writeFileSync(manifestPath, PRIVACY_MANIFEST);
 
+    const project = modConfig.modResults;
     const target = project.getFirstTarget().firstTarget;
     const group = project.findPBXGroupKeyByComment(target.name);
     if (group) {
       project.addResourceFile('PrivacyInfo.xcprivacy', { target: target.uuid }, group);
     }
 
-    return project;
+    return modConfig;
   });
 }
 
