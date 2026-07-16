@@ -147,7 +147,62 @@ function withPrivacyManifest(config) {
 
     const project = modConfig.modResults;
     const target = project.getFirstTarget().firstTarget;
-    project.addResourceFile('PrivacyInfo.xcprivacy', { target: target.uuid });
+
+    // Check if already added
+    const fileRefSection = project.pbxFileReferenceSection();
+    const alreadyExists = Object.values(fileRefSection).some(
+      (ref) => ref && ref.path === 'PrivacyInfo.xcprivacy'
+    );
+    if (alreadyExists) return modConfig;
+
+    // Generate UUIDs for the file reference and build file
+    const fileRefUuid = project.generateUuid();
+    const buildFileUuid = project.generateUuid();
+
+    // Add PBXFileReference
+    fileRefSection[fileRefUuid] = {
+      isa: 'PBXFileReference',
+      lastKnownFileType: 'text.xml',
+      path: 'PrivacyInfo.xcprivacy',
+      sourceTree: '"<group>"',
+      uuid: fileRefUuid,
+    };
+
+    // Add PBXBuildFile
+    const buildFileSection = project.pbxBuildFileSection();
+    buildFileSection[buildFileUuid] = {
+      isa: 'PBXBuildFile',
+      fileRef: fileRefUuid,
+      fileRef_comment: 'PrivacyInfo.xcprivacy',
+      uuid: buildFileUuid,
+    };
+
+    // Add to the target's resources build phase
+    const resourcesPhases = project.hash.project.objects.PBXResourcesBuildPhase;
+    if (resourcesPhases) {
+      for (const key of Object.keys(resourcesPhases)) {
+        if (key.startsWith('_')) continue;
+        const phase = resourcesPhases[key];
+        if (phase && phase.isa === 'PBXResourcesBuildPhase') {
+          phase.files = phase.files || [];
+          phase.files.push({
+            value: buildFileUuid,
+            comment: 'PrivacyInfo.xcprivacy in Resources',
+          });
+        }
+      }
+    }
+
+    // Add to the main group so it appears in Xcode's project navigator
+    const groups = project.hash.project.objects.PBXGroup;
+    const mainGroupKey = project.hash.project.mainGroup;
+    if (groups && mainGroupKey && groups[mainGroupKey]) {
+      groups[mainGroupKey].children = groups[mainGroupKey].children || [];
+      groups[mainGroupKey].children.push({
+        value: fileRefUuid,
+        comment: 'PrivacyInfo.xcprivacy',
+      });
+    }
 
     return modConfig;
   });
