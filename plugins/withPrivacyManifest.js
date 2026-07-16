@@ -147,10 +147,7 @@ function withPrivacyManifest(config) {
 
     const project = modConfig.modResults;
     const target = project.getFirstTarget().firstTarget;
-    const group = project.findPBXGroupKeyByComment(target.name);
-    if (group) {
-      project.addResourceFile('PrivacyInfo.xcprivacy', { target: target.uuid }, group);
-    }
+    project.addResourceFile('PrivacyInfo.xcprivacy', { target: target.uuid });
 
     return modConfig;
   });
