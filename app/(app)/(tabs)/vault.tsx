@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated, Linking,
+  RefreshControl, AppState, AppStateStatus, ActivityIndicator, Platform, Alert, Animated, Linking, InteractionManager,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
@@ -505,6 +505,11 @@ export default function VaultScreen() {
           }
           awardPoints(rpcResult.couple_id, user.id, 5, 'Vault media added');
           await load();
+          // Newest items appear at the top of the grid; snap back to the top so
+          // the freshly uploaded item is immediately visible.
+          InteractionManager.runAfterInteractions(() => {
+            scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+          });
         } catch (e: any) {
           Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
         } finally {
@@ -568,6 +573,11 @@ export default function VaultScreen() {
       awardPoints(couple.id, user.id, 5, 'Vault media added');
       notifyPartner({ event_type: 'new_vault_item', couple_id: couple.id, target_route: '/(app)/(tabs)/vault', partnerUserId: partnerProfile?.id });
       await load();
+      // Newest items appear at the top of the grid; snap back to the top so
+      // the freshly uploaded item is immediately visible.
+      InteractionManager.runAfterInteractions(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      });
     } catch (e: any) {
       Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
     } finally {

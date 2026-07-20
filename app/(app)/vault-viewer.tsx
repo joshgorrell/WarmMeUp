@@ -31,6 +31,136 @@ const BADGE_HIDE_MS = 400;
 const BADGE_AUTO_HIDE_DELAY = 2500;
 const SPRING = { damping: 22, stiffness: 220 } as const;
 
+// ─── Web zoomable image (pinch / pan / double-tap via pointer events) ────────────
+// On native, MediaPage uses react-native-gesture-handler pinch/pan. On web those
+// gestures don't fire reliably, so we implement zoom with raw pointer events and
+// CSS transforms. Screenshot detection (AppState listener above) and all
+// allow_screenshot / allow_save / allow_share permissions remain in effect.
+function WebZoomableImage({
+  uri,
+  width,
+  height,
+  onLoad,
+  onError,
+  onZoomChange,
+}: {
+  uri: string;
+  width: number;
+  height: number;
+  onLoad: () => void;
+  onError: () => void;
+  onZoomChange: (zoomed: boolean) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const startDist = useRef(0);
+  const startScale = useRef(1);
+  const startCenter = useRef({ x: 0, y: 0 });
+  const startTx = useRef(0);
+  const startTy = useRef(0);
+  const panning = useRef(false);
+  const lastPan = useRef({ x: 0, y: 0 });
+
+  const reset = useCallback(() => {
+    setScale(1);
+    setTx(0);
+    setTy(0);
+    onZoomChange(false);
+  }, [onZoomChange]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const [p1, p2] = [...pointers.current.values()];
+      startDist.current = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      startScale.current = scale;
+      startCenter.current = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      startTx.current = tx;
+      startTy.current = ty;
+    } else if (pointers.current.size === 1 && scale > 1) {
+      panning.current = true;
+      lastPan.current = { x: e.clientX, y: e.clientY };
+    }
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const [p1, p2] = [...pointers.current.values()];
+      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      const newScale = Math.max(1, Math.min(startScale.current * (dist / (startDist.current || 1)), 6));
+      setScale(newScale);
+      onZoomChange(newScale > 1);
+    } else if (panning.current) {
+      setTx(startTx.current + (e.clientX - lastPan.current.x));
+      setTy(startTy.current + (e.clientY - lastPan.current.y));
+      lastPan.current = { x: e.clientX, y: e.clientY };
+    }
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) startDist.current = 0;
+    if (pointers.current.size === 0) {
+      panning.current = false;
+      if (scale <= 1.05) reset();
+    }
+  };
+
+  const onDoubleClick = () => {
+    if (scale > 1) {
+      reset();
+    } else {
+      setScale(2.5);
+      onZoomChange(true);
+    }
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onDoubleClick={onDoubleClick}
+      style={{
+        width,
+        height,
+        touchAction: 'none',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: scale > 1 ? 'grab' : 'default',
+      }}
+    >
+      <img
+        src={uri}
+        alt=""
+        onLoad={onLoad}
+        onError={onError}
+        draggable={false}
+        style={{
+          maxWidth: '100%',
+          maxHeight: '100%',
+          objectFit: 'contain',
+          transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
+          transformOrigin: 'center center',
+          transition: pointers.current.size === 0 ? 'transform 0.2s ease-out' : 'none',
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }}
+      />
+    </div>
+  );
+}
+
 // ─── Single media page ────────────────────────────────────────────────────────
 
 function MediaPage({
@@ -350,12 +480,13 @@ function MediaPage({
                 <AppText style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>Image could not be loaded</AppText>
               </View>
             ) : Platform.OS === 'web' ? (
-              <Image
-                source={{ uri: mediaUri ?? '' }}
-                style={{ width: imgW, height: Math.max(imgH, 1) }}
-                resizeMode="contain"
+              <WebZoomableImage
+                uri={mediaUri ?? ''}
+                width={imgW}
+                height={Math.max(imgH, 1)}
                 onLoad={() => setImageLoaded(true)}
                 onError={() => { setImageLoaded(true); setImgLoadError(true); }}
+                onZoomChange={notifyZoom}
               />
             ) : (
               <>

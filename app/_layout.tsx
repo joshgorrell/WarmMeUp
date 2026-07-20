@@ -13,6 +13,8 @@ import { StyleSheet, View, TouchableOpacity, AppState, AppStateStatus, Platform,
 import AppText from '@/components/AppText';
 import type { NotificationData } from '@/lib/notifications';
 import { logDebugEvent } from '@/lib/debugLog';
+import { emitIncoming } from '@/lib/incomingEvents';
+import IncomingSlash from '@/components/IncomingSlash';
 
 // Warm the image decode cache as early as possible — before the transition/unlock screens mount.
 // resolveAssetSource works on both native (file URI) and web (network URL).
@@ -165,6 +167,10 @@ function NotificationHandler() {
         event_type: (data as any)?.event_type ?? null,
         identifier: notification.request.identifier,
       });
+      // Subtle pink slash at the top edge when a new item arrives while the app is open.
+      if (AppState.currentState === 'active') {
+        emitIncoming();
+      }
     });
 
     return () => {
@@ -289,6 +295,7 @@ export default function RootLayout() {
             <Stack.Screen name="(admin)" />
             <Stack.Screen name="+not-found" />
           </Stack>
+          <IncomingSlash />
           <PrivacyOverlay />
           <SessionGuard />
           <BackgroundLockManager />

@@ -3,6 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, Share, Alert, Platform,
   ActivityIndicator, Modal, Image, Linking, Animated, TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -1901,7 +1902,7 @@ export default function AccountScreen() {
             update({ vault_face_id_required: additional });
           }}
         />
-        <SettingsRow label="Notify Me if My Content is Screenshotted" sub="You'll be notified when your partner screenshots your content in Chat, Vault, or Wish" toggle value={s?.screenshot_notify_partner ?? true} onChange={v => update({ screenshot_notify_partner: v })} />
+        <SettingsRow label="Notify Me if My Content is Screenshotted" sub="Get a push notification when your partner screenshots your content in Chat, Vault, or Wish. Screenshots are always recorded in your Activity feed." toggle value={s?.screenshot_notify_partner ?? true} onChange={v => update({ screenshot_notify_partner: v })} />
       </Section>
 
       <Section title="VAULT PREFERENCES" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately." onInfo={() => setShowVaultSecurityInfo(true)}>
@@ -2089,6 +2090,10 @@ export default function AccountScreen() {
             </View>
           }
         />
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingHorizontal: contentPadding }]}
           showsVerticalScrollIndicator={false}
@@ -2137,6 +2142,7 @@ export default function AccountScreen() {
 
           <View style={{ height: 60 }} />
         </ScrollView>
+        </KeyboardAvoidingView>
       </AppShell>
 
       {/* ── Reset Points Modal ────────────────────────────────────── */}

@@ -65,12 +65,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { event_type, couple_id, target_route, item_id, emoji } = body as {
+    const { event_type, couple_id, target_route, item_id, emoji, message_text } = body as {
       event_type: string;
       couple_id: string;
       target_route?: string;
       item_id?: string;
       emoji?: string;
+      message_text?: string;
     };
 
     if (!event_type || !couple_id) {
@@ -149,9 +150,17 @@ Deno.serve(async (req: Request) => {
     const title = "Warm Me Up";
     const eventLabel = EVENT_LABELS[event_type] ?? "has new activity for you";
     const suffix = emoji ? ` ${emoji}` : "";
+    // When Discreet is OFF and this is a chat message with a text caption,
+    // show the actual message body (truncated for push preview readability).
+    // Media-only messages (no caption) fall back to the generic event label.
+    // Never include media references — text only.
+    const trimmedText = (message_text ?? "").trim();
+    const showText = !isDiscreet && event_type === "new_message" && trimmedText.length > 0;
     const bodyText = isDiscreet
       ? (emoji ? `${notifCopy} ${emoji}` : notifCopy)
-      : `${senderName} ${eventLabel}${suffix}`;
+      : showText
+        ? `${senderName}: ${trimmedText.slice(0, 200)}`
+        : `${senderName} ${eventLabel}${suffix}`;
 
     const expoPayload = {
       to: partnerProfile.push_token,

@@ -439,7 +439,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} constrainContent>
       <ScreenHeader title="Settings" onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingHorizontal: contentPadding }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -495,7 +495,7 @@ export default function SettingsScreen() {
                 />
                 <SettingsRow
                   label="Notify Me if My Content is Screenshotted"
-                  sub="You'll be notified when your partner screenshots your content in Chat, Vault, or Wish"
+                  sub="Get a push notification when your partner screenshots your content in Chat, Vault, or Wish. Screenshots are always recorded in your Activity feed."
                   toggle
                   value={s?.screenshot_notify_partner ?? true}
                   onChange={v => update({ screenshot_notify_partner: v })}

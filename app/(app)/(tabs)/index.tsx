@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert,
-  Animated, Platform, Modal, Pressable,
+  Animated, Platform, Modal, Pressable, ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -73,6 +73,11 @@ export default function HomeScreen() {
   const [loveSent, setLoveSent] = useState(false);
   const [loveSentEmoji, setLoveSentEmoji] = useState('❤️');
   const [showLovePicker, setShowLovePicker] = useState(false);
+  const [loveBurstEmoji, setLoveBurstEmoji] = useState<string | null>(null);
+  const burstScale = useRef(new Animated.Value(0.3));
+  const burstOpacity = useRef(new Animated.Value(0));
+  const burstY = useRef(new Animated.Value(0));
+  const [loading, setLoading] = useState(true);
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
   const isMountedRef = useRef(true);
@@ -95,28 +100,34 @@ export default function HomeScreen() {
     router.push(pendingTab as any);
   }, []);
 
+  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedReload = useCallback(() => {
+    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+    reloadTimerRef.current = setTimeout(() => loadAll(), 300);
+  }, []);
+
   useEffect(() => {
     if (!couple?.id || !user) return;
-    loadAll();
+    loadAll().then(() => { if (isMountedRef.current) setLoading(false); });
 
     const channel = supabase
       .channel(`home_${couple.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `couple_id=eq.${couple.id}` }, (payload) => {
-        console.log('[POINTS_REALTIME_EVENT]', payload);
-        loadAll();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, loadAll)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, loadAll)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, loadAll)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_views', filter: `couple_id=eq.${couple.id}` }, loadAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_views', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [couple?.id, user]);
 
   // Reload scores when returning to the Home tab so stale state is never shown.
   useFocusEffect(useCallback(() => {
-    if (couple?.id && user) loadAll();
+    if (couple?.id && user) { loadAll().then(() => { if (isMountedRef.current) setLoading(false); }); }
   }, [couple?.id, user]));
 
   // Reload immediately when Reset Points completes (scoreResetAt increments in AuthContext).
@@ -500,6 +511,25 @@ export default function HomeScreen() {
         emoji,
       });
       setLoveSent(true);
+      setLoveBurstEmoji(emoji);
+      burstScale.current.setValue(0.3);
+      burstOpacity.current.setValue(0);
+      burstY.current.setValue(0);
+      Animated.parallel([
+        Animated.sequence([
+          Animated.spring(burstScale.current, { toValue: 1.3, tension: 60, friction: 7, useNativeDriver: true }),
+          Animated.spring(burstScale.current, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(burstOpacity.current, { toValue: 1, duration: 120, useNativeDriver: true }),
+          Animated.timing(burstOpacity.current, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(burstOpacity.current, { toValue: 0, duration: 300, useNativeDriver: true }),
+        ]),
+        Animated.timing(burstY.current, { toValue: -50, duration: 850, useNativeDriver: true }),
+      ]).start(() => {
+        setLoveBurstEmoji(null);
+        router.push('/(app)/(tabs)/note');
+      });
       setTimeout(() => setLoveSent(false), 2500);
       loadStreak();
     } catch {
@@ -558,12 +588,28 @@ export default function HomeScreen() {
         value={anniversaryLabel}
         onPress={() => router.push('/(app)/account')}
       />
-      <HomeMiniCard
-        icon={loveSent ? <CheckCheck color="#33D17A" size={16} strokeWidth={2} /> : <Send color="#FFB347" size={16} strokeWidth={2} />}
-        label={loveSent ? `${loveSentEmoji} Sent!` : 'Send love'}
-        value={loveSent ? loveSentEmoji : 'Tap'}
-        onPress={() => { if (hasPartner) setShowLovePicker(true); }}
-      />
+      <View style={styles.loveCardWrap}>
+        <HomeMiniCard
+          icon={loveSent ? <CheckCheck color="#33D17A" size={16} strokeWidth={2} /> : <Send color="#FFB347" size={16} strokeWidth={2} />}
+          label={loveSent ? `${loveSentEmoji} Sent!` : 'Send love'}
+          value={loveSent ? loveSentEmoji : 'Tap'}
+          onPress={() => { if (hasPartner) setShowLovePicker(true); }}
+        />
+        {loveBurstEmoji && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.loveBurst,
+              {
+                transform: [{ scale: burstScale.current }, { translateY: burstY.current }],
+                opacity: burstOpacity.current,
+              },
+            ]}
+          >
+            <Text style={styles.loveBurstEmoji}>{loveBurstEmoji}</Text>
+          </Animated.View>
+        )}
+      </View>
     </View>
   );
 
@@ -686,6 +732,23 @@ export default function HomeScreen() {
       ) : null}
     </View>
   );
+
+  if (loading && !greetingText) {
+    return (
+      <AppShell scrollable={false}>
+        <BrandHeader
+          avatarName={profile?.display_name}
+          avatarUri={profile?.avatar_url}
+          onAvatarPress={() => router.push('/(app)/account')}
+        />
+        <View style={styles.body}>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator size="large" color="#FF2E8A" />
+          </View>
+        </View>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell scrollable={false}>
@@ -960,6 +1023,22 @@ const styles = StyleSheet.create({
   barFill: {
     height: '100%',
     borderRadius: 2,
+  },
+  loveCardWrap: {
+    flex: 1,
+    position: 'relative',
+  },
+  loveBurst: {
+    position: 'absolute',
+    top: -8,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  loveBurstEmoji: {
+    fontSize: 36,
+    lineHeight: 44,
   },
 });
 

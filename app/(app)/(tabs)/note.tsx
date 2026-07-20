@@ -464,6 +464,10 @@ export default function ChatTab() {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const prevMsgCountRef = useRef(0);
   const lastInactiveAtRef = useRef<number | null>(null);
+  // Timestamp of the most recent send; used by onContentSizeChange to re-pin
+  // the list to the bottom once large media bubbles finish laying out.
+  const justSentAtRef = useRef(0);
+  const lastContentHeightRef = useRef(0);
 
   const blurEnabled = settings?.blur_chat_media ?? settings?.blur_media ?? true;
   const chatFontScale = settings?.chat_font_scale ?? 1.0;
@@ -857,12 +861,20 @@ export default function ChatTab() {
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
       const resolvedMime = resolveAssetMimeType(asset);
-      setAttachedMedia({
+      const media: AttachedMedia = {
         uri: asset.uri,
         type: isVideo ? 'video' : 'photo',
         mimeType: resolvedMime,
         fileName: `chat_${Date.now()}.${mimeToExtension(resolvedMime)}`,
-      });
+      };
+      // iMessage-style: if no caption is in progress, send immediately on
+      // picker confirm — no second tap required. If the user is mid-caption,
+      // attach for preview so they can finish typing then tap send.
+      if (text.trim().length === 0 && !editingState) {
+        await sendMediaMessage(media, '');
+      } else {
+        setAttachedMedia(media);
+      }
     } catch (e: any) {
       Alert.alert('Media Error', e?.message ?? 'Could not open media picker.');
     }
@@ -896,21 +908,27 @@ export default function ChatTab() {
     }
   };
 
-  const handleSend = async () => {
-    if (editingState) {
-      await handleSaveEdit();
-      return;
-    }
-    const hasText = text.trim().length > 0;
-    const hasMedia = attachedMedia !== null;
-    if (!hasText && !hasMedia) return;
+  // Core send routine. Accepts explicit media/caption overrides so it can be
+  // called directly from the picker (iMessage-style one-tap send) without
+  // relying on the `attachedMedia`/`text` state, which avoids async state-race
+  // issues. When called with no args, falls back to the state values for the
+  // manual compose-then-tap-send flow.
+  const sendMediaMessage = async (
+    mediaOverride?: AttachedMedia | null,
+    captionOverride?: string,
+  ): Promise<void> => {
     if (!couple?.id || !user || !hasPartner) return;
+    const media = mediaOverride !== undefined ? mediaOverride : attachedMedia;
+    const caption = captionOverride !== undefined ? captionOverride.trim() : text.trim();
+    const hasText = caption.length > 0;
+    const hasMedia = media !== null;
+    if (!hasText && !hasMedia) return;
     setSending(true);
 
     let chatStoragePath: string | null = null;
 
-    if (hasMedia && attachedMedia) {
-      chatStoragePath = await uploadChatMedia(attachedMedia, couple.id, user.id);
+    if (hasMedia && media) {
+      chatStoragePath = await uploadChatMedia(media, couple.id, user.id);
       if (!chatStoragePath) {
         setSending(false);
         return;
@@ -933,7 +951,7 @@ export default function ChatTab() {
     }
 
     // Capture local URI before any state resets — used as immediate preview fallback.
-    const localMediaUri = attachedMedia?.uri ?? null;
+    const localMediaUri = media?.uri ?? null;
 
     // Optimistic display — show the message in the sender's own list immediately
     // using a temporary ID. The local file URI is used as the image source so the
@@ -943,11 +961,11 @@ export default function ChatTab() {
       id: tempId,
       couple_id: couple.id,
       sender_id: user.id,
-      content_text: hasText ? text.trim() : null,
+      content_text: hasText ? caption : null,
       media_url: preSignedMediaUrl,
       media_storage_path: chatStoragePath,
       media_storage_bucket: hasMedia ? 'chat_media' : null,
-      media_type: attachedMedia?.type === 'video' ? 'video' : hasMedia ? 'photo' : null,
+      media_type: media?.type === 'video' ? 'video' : hasMedia ? 'photo' : null,
       allow_screenshot: false,
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
@@ -958,6 +976,12 @@ export default function ChatTab() {
       deleted_at: null,
     };
     setMessages(prev => [...prev, optimisticMsg]);
+    // Mark that a send just happened so onContentSizeChange re-pins to the
+    // bottom once the (possibly large) media bubble finishes laying out.
+    justSentAtRef.current = Date.now();
+    // Clear after 3s so partner messages arriving later don't force-scroll
+    // while the user is reading older messages.
+    setTimeout(() => { justSentAtRef.current = 0; }, 3000);
     // Use the local file URI immediately for the sender's own preview.
     if (localMediaUri) {
       setSignedUrls(prev => ({ ...prev, [tempId]: localMediaUri }));
@@ -966,11 +990,11 @@ export default function ChatTab() {
     const payload = {
       couple_id: couple.id,
       sender_id: user.id,
-      content_text: hasText ? text.trim() : null,
+      content_text: hasText ? caption : null,
       media_url: preSignedMediaUrl,
       media_storage_path: chatStoragePath,
       media_storage_bucket: hasMedia ? 'chat_media' : null,
-      media_type: attachedMedia?.type ?? null,
+      media_type: media?.type ?? null,
       allow_screenshot: false,
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
@@ -1028,10 +1052,14 @@ export default function ChatTab() {
       });
     }
 
-    const capturedMedia = attachedMedia;
-    setText('');
-    setAttachedMedia(null);
-    setReplyingTo(null);
+    const capturedMedia = media;
+    // Only clear composer state when this send was driven by the compose bar
+    // (no overrides) — a direct picker send has nothing to clear.
+    if (mediaOverride === undefined) {
+      setText('');
+      setAttachedMedia(null);
+      setReplyingTo(null);
+    }
     setSending(false);
 
     const coupleId = couple.id;
@@ -1080,7 +1108,15 @@ export default function ChatTab() {
       }
     });
 
-    notifyPartner({ event_type: 'new_message', couple_id: coupleId, target_route: '/(app)/(tabs)/note', partnerUserId: partnerProfile?.id });
+    notifyPartner({ event_type: 'new_message', couple_id: coupleId, target_route: '/(app)/(tabs)/note', partnerUserId: partnerProfile?.id, message_text: hasText ? caption : undefined });
+  };
+
+  const handleSend = async () => {
+    if (editingState) {
+      await handleSaveEdit();
+      return;
+    }
+    await sendMediaMessage();
   };
 
   const handleSaveEdit = async () => {
@@ -1515,6 +1551,15 @@ export default function ChatTab() {
               }}
               scrollEventThrottle={200}
               onScrollBeginDrag={handleDismissMenu}
+              onContentSizeChange={(_w, h) => {
+                // Re-pin to bottom after a send once large media bubbles finish
+                // laying out. Guarded by justSentAtRef so it never fights the
+                // user when they scroll up to read older messages.
+                if (justSentAtRef.current > 0 && h > lastContentHeightRef.current) {
+                  listRef.current?.scrollToEnd({ animated: false });
+                }
+                lastContentHeightRef.current = h;
+              }}
               onScrollToIndexFailed={({ index }) => {
                 setTimeout(() => {
                   listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });

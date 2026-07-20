@@ -110,7 +110,7 @@ Deno.serve(async (req: Request) => {
 
     const [{ data: partnerProfile }, { data: partnerSettings }, { data: detectorProfile }] = await Promise.all([
       adminClient.from("profiles").select("push_token, display_name").eq("id", partnerId).maybeSingle(),
-      adminClient.from("user_settings").select("push_notifications_enabled, discreet_notifications, notification_copy").eq("user_id", partnerId).maybeSingle(),
+      adminClient.from("user_settings").select("push_notifications_enabled, discreet_notifications, notification_copy, screenshot_notify_partner").eq("user_id", partnerId).maybeSingle(),
       adminClient.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
     ]);
 
@@ -125,8 +125,14 @@ Deno.serve(async (req: Request) => {
       read: false,
     });
 
-    // Send push notification if the partner has opted in and has a token
-    if (partnerSettings?.push_notifications_enabled && partnerProfile?.push_token) {
+    // Send push notification if the partner has opted in to screenshot alerts
+    // AND has push enabled AND has a token. The activity_events row above is
+    // always written so the in-app Activity feed records the screenshot regardless.
+    if (
+      (partnerSettings?.screenshot_notify_partner ?? true) &&
+      partnerSettings?.push_notifications_enabled &&
+      partnerProfile?.push_token
+    ) {
       const detectorName = detectorProfile?.display_name ?? "Your partner";
       const isDiscreet = partnerSettings?.discreet_notifications ?? true;
       const notifCopy = partnerSettings?.notification_copy ?? "New activity";

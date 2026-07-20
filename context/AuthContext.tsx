@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { supabase } from '@/lib/supabase';
@@ -10,6 +10,7 @@ import { secureKey } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
 import { logInRevenueCat, logOutRevenueCat } from '@/lib/purchases';
 import { saveDiagnosticsSnapshot } from '@/lib/diagnosticsSnapshot';
+import { emitIncoming } from '@/lib/incomingEvents';
 
 /**
  * Single source of truth for whether the unlock gate must be shown.
@@ -614,6 +615,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profileChannel) supabase.removeChannel(profileChannel);
     };
   }, [couple?.id, couple?.user_b_id, user?.id]);
+
+  // Realtime fallback: when a partner sends something (chat, dare/dice/ask,
+  // vault upload, wish) and a push doesn't arrive or arrives late, play the
+  // subtle incoming slash. Only fires while the app is in the foreground;
+  // backgrounded/locked events are handled by the push tap-to-navigate flow.
+  useEffect(() => {
+    if (!couple?.id || !user?.id) return;
+    const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
+    if (!partnerId) return;
+
+    const isForeground = () => AppState.currentState === 'active';
+
+    const incomingChannel = supabase
+      .channel(`incoming:${couple.id}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
+        (payload: any) => {
+          if (!isForeground()) return;
+          if (payload?.new?.sender_id === user.id) return;
+          emitIncoming();
+        })
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` },
+        (payload: any) => {
+          if (!isForeground()) return;
+          if (payload?.new?.sender_id === user.id) return;
+          emitIncoming();
+        })
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'vault_items', filter: `couple_id=eq.${couple.id}` },
+        (payload: any) => {
+          if (!isForeground()) return;
+          if (payload?.new?.uploaded_by_user_id === user.id) return;
+          emitIncoming();
+        })
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'wishes', filter: `couple_id=eq.${couple.id}` },
+        (payload: any) => {
+          if (!isForeground()) return;
+          if (payload?.new?.created_by_user_id === user.id) return;
+          emitIncoming();
+        })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(incomingChannel);
+    };
+  }, [couple?.id, user?.id]);
 
   const patchCouple = useCallback((patch: Partial<Couple>) => {
     setCouple(prev => prev ? { ...prev, ...patch } : prev);

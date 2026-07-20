@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput,
-  ActivityIndicator,
+  ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MessageSquare, Dice6, Swords, Star, Image as ImageIcon, Bell, Trophy, Flame, Check, TriangleAlert as AlertTriangle } from 'lucide-react-native';
@@ -63,24 +63,42 @@ interface Counts {
 // ─── Storage folder deletion helper ──────────────────────────────
 
 async function deleteStorageFolder(bucket: string, coupleId: string) {
-  try {
-    const { data: userFolders } = await supabase.storage.from(bucket).list(coupleId);
-    if (!userFolders?.length) return;
-    for (const folder of userFolders) {
-      let offset = 0;
-      const PAGE = 100;
-      while (true) {
-        const { data: files } = await supabase.storage
-          .from(bucket)
-          .list(`${coupleId}/${folder.name}`, { limit: PAGE, offset });
-        if (!files?.length) break;
-        await supabase.storage
-          .from(bucket)
-          .remove(files.map(f => `${coupleId}/${folder.name}/${f.name}`));
-        if (files.length < PAGE) break;
-        offset += PAGE;
+  const PAGE = 100;
+
+  async function deleteAllInPath(prefix: string) {
+    let offset = 0;
+    while (true) {
+      const { data: entries, error } = await supabase.storage
+        .from(bucket)
+        .list(prefix, { limit: PAGE, offset });
+      if (error || !entries?.length) break;
+
+      // Separate files from sub-folders.  Supabase returns id === null for
+      // folders and a non-null id for actual file objects.
+      const files = entries.filter(e => e.id != null);
+      const folders = entries.filter(e => e.id == null);
+
+      if (files.length) {
+        const paths = files.map(f => `${prefix}/${f.name}`);
+        await supabase.storage.from(bucket).remove(paths);
       }
+
+      // Recurse into sub-folders so deeply nested files are also cleared.
+      for (const folder of folders) {
+        await deleteAllInPath(`${prefix}/${folder.name}`);
+      }
+
+      // Do NOT advance offset after deleting — deletion shifts remaining
+      // entries down, so always re-list from 0 until fewer than PAGE remain.
+      if (entries.length < PAGE) break;
+      // If everything we listed was a folder (no files deleted), advance to
+      // avoid an infinite loop on folders we can't delete via the API.
+      if (files.length === 0) offset += PAGE;
     }
+  }
+
+  try {
+    await deleteAllInPath(coupleId);
   } catch {}
 }
 
@@ -247,6 +265,25 @@ export default function DeleteContentScreen() {
     });
   };
 
+  const successScale = useRef(new Animated.Value(0)).current;
+
+  const animateSuccess = useCallback(() => {
+    successScale.setValue(0);
+    Animated.spring(successScale, {
+      toValue: 1,
+      friction: 6,
+      tension: 80,
+      useNativeDriver: true,
+    }).start();
+  }, [successScale]);
+
+  const redirectHome = useCallback(() => {
+    setTimeout(() => {
+      try { router.dismissAll(); } catch {}
+      router.replace('/(app)/(tabs)');
+    }, 1500);
+  }, [router]);
+
   const handleDeleteSelected = async () => {
     if (!couple?.id || selected.size === 0) return;
     setDeleting(true);
@@ -263,6 +300,8 @@ export default function DeleteContentScreen() {
       }
       setSelected(new Set());
       setDeleteDone(true);
+      animateSuccess();
+      redirectHome();
       await loadCounts();
     } finally {
       setDeleting(false);
@@ -278,6 +317,8 @@ export default function DeleteContentScreen() {
         await notifyPartnerOfDeletion(couple.id, user.id, partnerProfile.id, ['all']);
       }
       setBurnDone(true);
+      animateSuccess();
+      redirectHome();
       setCounts({ chat: 0, dice: 0, dare: 0, wish: 0, vault: 0, activity: 0, points: 0 });
       setSelected(new Set());
     } finally {
@@ -406,7 +447,10 @@ export default function DeleteContentScreen() {
         animationType="fade"
         onRequestClose={() => { if (!deleting) { setConfirmOpen(false); setDeleteDone(false); } }}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalCard, { borderColor: 'rgba(255,59,48,0.18)' }]}>
             {!deleteDone ? (
               <>
@@ -420,7 +464,7 @@ export default function DeleteContentScreen() {
                 <View style={styles.modalBtns}>
                   <TouchableOpacity
                     style={[styles.modalCancelBtn, { borderColor: colors.borderSubtle }]}
-                    onPress={() => setConfirmOpen(false)}
+                    onPress={() => { Keyboard.dismiss(); setConfirmOpen(false); }}
                     disabled={deleting}
                     activeOpacity={0.7}
                   >
@@ -428,7 +472,7 @@ export default function DeleteContentScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.modalDeleteBtn}
-                    onPress={handleDeleteSelected}
+                    onPress={() => { Keyboard.dismiss(); handleDeleteSelected(); }}
                     disabled={deleting}
                     activeOpacity={0.8}
                   >
@@ -441,24 +485,17 @@ export default function DeleteContentScreen() {
               </>
             ) : (
               <>
-                <View style={[styles.modalIcon, { backgroundColor: 'rgba(51,209,122,0.12)' }]}>
+                <Animated.View style={[styles.modalIcon, { backgroundColor: 'rgba(51,209,122,0.12)', transform: [{ scale: successScale }] }]}>
                   <Check color="#33D17A" size={28} strokeWidth={2} />
-                </View>
+                </Animated.View>
                 <AppText style={[styles.modalTitle, { color: colors.text }]}>Done</AppText>
                 <AppText style={[styles.modalBody, { color: colors.textSecondary }]}>
-                  Selected content has been permanently deleted.
+                  Selected content has been permanently deleted.{'\n'}Taking you home...
                 </AppText>
-                <TouchableOpacity
-                  style={[styles.modalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]}
-                  onPress={() => { setConfirmOpen(false); setDeleteDone(false); }}
-                  activeOpacity={0.7}
-                >
-                  <AppText style={[styles.modalCancelText, { color: colors.textSecondary }]}>Done</AppText>
-                </TouchableOpacity>
               </>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Burn It All confirmation modal ── */}
@@ -468,7 +505,10 @@ export default function DeleteContentScreen() {
         animationType="fade"
         onRequestClose={() => { if (!burning) { setBurnOpen(false); setBurnDone(false); setBurnInput(''); } }}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalCard, { borderColor: 'rgba(255,59,48,0.30)' }]}>
             {!burnDone ? (
               <>
@@ -502,7 +542,7 @@ export default function DeleteContentScreen() {
                 <View style={styles.modalBtns}>
                   <TouchableOpacity
                     style={[styles.modalCancelBtn, { borderColor: colors.borderSubtle }]}
-                    onPress={() => { setBurnOpen(false); setBurnInput(''); }}
+                    onPress={() => { Keyboard.dismiss(); setBurnOpen(false); setBurnInput(''); }}
                     disabled={burning}
                     activeOpacity={0.7}
                   >
@@ -510,7 +550,7 @@ export default function DeleteContentScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.burnConfirmBtn, burnInput !== 'BURN IT ALL' && styles.burnConfirmBtnDisabled]}
-                    onPress={handleBurnItAll}
+                    onPress={() => { Keyboard.dismiss(); handleBurnItAll(); }}
                     disabled={burning || burnInput !== 'BURN IT ALL'}
                     activeOpacity={0.8}
                   >
@@ -523,24 +563,17 @@ export default function DeleteContentScreen() {
               </>
             ) : (
               <>
-                <View style={[styles.modalIcon, { backgroundColor: 'rgba(51,209,122,0.12)' }]}>
+                <Animated.View style={[styles.modalIcon, { backgroundColor: 'rgba(51,209,122,0.12)', transform: [{ scale: successScale }] }]}>
                   <Check color="#33D17A" size={28} strokeWidth={2} />
-                </View>
+                </Animated.View>
                 <AppText style={[styles.modalTitle, { color: colors.text }]}>All Clear</AppText>
                 <AppText style={[styles.modalBody, { color: colors.textSecondary }]}>
-                  Everything has been permanently deleted. Your account is fresh and ready.
+                  Everything has been permanently deleted.{'\n'}Taking you home...
                 </AppText>
-                <TouchableOpacity
-                  style={[styles.modalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]}
-                  onPress={() => { setBurnOpen(false); setBurnDone(false); setBurnInput(''); }}
-                  activeOpacity={0.7}
-                >
-                  <AppText style={[styles.modalCancelText, { color: colors.textSecondary }]}>Done</AppText>
-                </TouchableOpacity>
               </>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </AppShell>
   );

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -96,7 +97,8 @@ export default function PointsConfigAdmin() {
           <ActivityIndicator color="#FFB347" />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={[styles.noticeBanner, { backgroundColor: 'rgba(255,179,71,0.08)', borderColor: 'rgba(255,179,71,0.25)' }]}>
             <AppText style={[styles.noticeText, { color: colors.textSecondary }]}>
               Changes apply to all new point events immediately. Existing earned points are not affected.
@@ -168,6 +170,7 @@ export default function PointsConfigAdmin() {
             </View>
           ))}
         </ScrollView>
+        </KeyboardAvoidingView>
       )}
     </AppShell>
   );

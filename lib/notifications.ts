@@ -95,6 +95,7 @@ export async function notifyPartner(payload: {
   item_id?: string;
   partnerUserId?: string | null;
   emoji?: string;
+  message_text?: string;
 }) {
   // No partner connected yet — nothing to notify
   if ('partnerUserId' in payload && !payload.partnerUserId) return;

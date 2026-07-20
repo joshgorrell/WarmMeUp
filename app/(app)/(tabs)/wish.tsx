@@ -1041,6 +1041,8 @@ export default function WishTab() {
     loadWishes();
     const ch = supabase.channel(`wish_tab_${couple.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wishes', filter: `couple_id=eq.${couple.id}` }, loadWishes)
+      // wish_reactions has no couple_id column; RLS enforces couple isolation
+      // so only this couple's reactions arrive here.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wish_reactions' }, loadWishes)
       .subscribe();
     return () => { supabase.removeChannel(ch); };

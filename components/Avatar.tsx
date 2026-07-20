@@ -6,7 +6,7 @@ import { Gradient, FontSize } from '@/constants/theme';
 
 type AvatarSize = 'sm' | 'md' | 'lg';
 
-const SIZE_MAP: Record<AvatarSize, number> = { sm: 32, md: 48, lg: 72 };
+const SIZE_MAP: Record<AvatarSize, number> = { sm: 40, md: 48, lg: 72 };
 const FONT_MAP: Record<AvatarSize, number> = { sm: 12, md: 18, lg: 28 };
 const RING = 2;
 
