@@ -114,7 +114,7 @@ Users acknowledge all digital communication carries some level of risk.`,
     title: '7. Privacy Features; No Warranty of Privacy or Security',
     body: `Warm Me Up includes features intended to enhance user privacy, including but not limited to Vault, Stealth Mode, biometric authentication (where supported), screenshot notifications (where supported), and other privacy-related controls. These features are designed to help users better manage their privacy, but they do not guarantee confidentiality, anonymity, security, or protection against unauthorized access, disclosure, interception, copying, recording, or misuse.
 
-No software application, mobile device, operating system, network, cloud service, or method of electronic communication can guarantee absolute privacy or security. Accordingly, Warm Me Up is provided on an "AS IS" and "AS AVAILABLE" basis, and Electronic Life LLC expressly disclaims any representation, warranty, or guarantee that any communication, photograph, video, file, or other content transmitted, stored, or viewed through the Service will remain private, confidential, secure, or inaccessible to third parties.
+No software application, mobile device, operating system, network, cloud service, or method of electronic communication can guarantee absolute privacy or security. Accordingly, Warm Me Up is provided on an "AS IS" and "AS AVAILABLE" basis, and the app owner expressly disclaims any representation, warranty, or guarantee that any communication, photograph, video, file, or other content transmitted, stored, or viewed through the Service will remain private, confidential, secure, or inaccessible to third parties.
 
 By using the Service, you acknowledge and accept these inherent limitations and assume responsibility for the content you choose to create, upload, transmit, store, or share.`,
   },
@@ -124,7 +124,7 @@ By using the Service, you acknowledge and accept these inherent limitations and 
 
 Users are also responsible for maintaining the security of their own devices, operating systems, passwords, passcodes, biometric authentication, account credentials, backups, and physical access to their devices.
 
-Electronic Life LLC is not responsible for loss of privacy or unauthorized disclosure resulting from:
+The app owner is not responsible for loss of privacy or unauthorized disclosure resulting from:
 
 \u2022 another user sharing content voluntarily or involuntarily;
 \u2022 screenshots or screen recordings (whether detectable or not);
@@ -136,7 +136,7 @@ Electronic Life LLC is not responsible for loss of privacy or unauthorized discl
 \u2022 cloud backups;
 \u2022 shared devices or accounts;
 \u2022 unauthorized access resulting from a user's own actions or omissions; or
-\u2022 other circumstances beyond Electronic Life LLC's reasonable control.`,
+\u2022 other circumstances beyond the app owner's reasonable control.`,
   },
   {
     title: '9. Prohibited Content & Conduct',

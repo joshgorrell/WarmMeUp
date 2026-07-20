@@ -128,7 +128,7 @@ Deleted accounts cannot be recovered.`,
   },
   {
     title: '7. Security',
-    body: `Electronic Life LLC implements administrative, technical, and organizational safeguards that are designed to help protect personal information, including:
+    body: `The developer implements administrative, technical, and organizational safeguards that are designed to help protect personal information, including:
 
 \u2022 encrypted data transmission (HTTPS/TLS)
 \u2022 access-controlled cloud storage
