@@ -17,6 +17,7 @@ import {
   CircleAlert as AlertCircle, Heart, X,
 } from 'lucide-react-native';
 import WarmupBrand from '@/components/WarmupBrand';
+import CancellationSurveySheet from '@/components/CancellationSurveySheet';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { useAuth } from '@/context/AuthContext';
@@ -73,6 +74,17 @@ export default function SubscriptionScreen() {
   const [loading, setLoading] = useState(false);
   const [packages, setPackages] = useState<Record<string, any>>({});
   const [offeringsLoaded, setOfferingsLoaded] = useState(false);
+  const [showSurvey, setShowSurvey] = useState(false);
+  const surveyShownRef = React.useRef(false);
+
+  // Show cancellation survey when trial expired — once per screen mount
+  useEffect(() => {
+    if (reason === 'expired_trial' && !surveyShownRef.current) {
+      surveyShownRef.current = true;
+      const timer = setTimeout(() => setShowSurvey(true), 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [reason]);
 
   const logoSize = Math.min(Math.round(width * 0.12), 48);
   const canDismiss = !reason;
@@ -358,6 +370,12 @@ export default function SubscriptionScreen() {
           )}
         </View>
       </ScrollView>
+
+      <CancellationSurveySheet
+        visible={showSurvey}
+        onClose={() => setShowSurvey(false)}
+        surveyType="trial_expired"
+      />
     </View>
   );
 }

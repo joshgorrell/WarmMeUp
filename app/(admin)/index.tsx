@@ -437,6 +437,15 @@ export default function AdminDashboard() {
       route: '/(admin)/stats',
     },
     {
+      label: 'Couple Analytics',
+      sub: 'Health scores, trials, cancellations, chat metrics',
+      icon: <Activity color="#FF8A3D" size={22} strokeWidth={2} />,
+      color: '#FF8A3D',
+      bg: 'rgba(255,138,61,0.10)',
+      border: 'rgba(255,138,61,0.25)',
+      route: '/(admin)/analytics',
+    },
+    {
       label: 'Points Config',
       sub: 'Set point values for each action',
       icon: <Star color="#33D17A" size={22} strokeWidth={2} />,
