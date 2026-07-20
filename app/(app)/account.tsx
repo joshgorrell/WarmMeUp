@@ -8,7 +8,7 @@ import {
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, ShieldOff, Mail, Lock, Trash2, RotateCcw, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders, RefreshCw, Dice6, Flame } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -676,7 +676,20 @@ export default function AccountScreen() {
   const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
   const { contentPadding } = useLayout();
 
-  const [activeTab, setActiveTab] = useState<AccountTab>('profile');
+  const params = useLocalSearchParams<{ tab?: string; section?: string }>();
+  const [activeTab, setActiveTab] = useState<AccountTab>(params.tab === 'settings' ? 'settings' : 'profile');
+
+  // Deep-link scroll target (e.g. from Vault "Manage in My Profile")
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [vaultSectionY, setVaultSectionY] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (params.section !== 'vault' || activeTab !== 'settings' || vaultSectionY === null) return;
+    const id = setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: Math.max(0, vaultSectionY - 20), animated: false });
+    }, 50);
+    return () => clearTimeout(id);
+  }, [params.section, activeTab, vaultSectionY]);
 
   // Profile tab state
   const [copied, setCopied] = useState(false);
@@ -1896,12 +1909,14 @@ export default function AccountScreen() {
         <SettingsRow label="Notify Me if My Content is Screenshotted" sub="Get a push notification when your partner screenshots your content in Chat, Vault, or Wish. Screenshots are always recorded in your Activity feed." toggle value={s?.screenshot_notify_partner ?? true} onChange={v => update({ screenshot_notify_partner: v })} />
       </Section>
 
-      <Section title="VAULT PREFERENCES" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately." onInfo={() => setShowVaultSecurityInfo(true)}>
-        <SettingsRow label="Blur Vault Photos & Videos" sub="Vault items stay blurred until tapped; re-blurs when you leave the app." toggle value={s?.blur_vault_media ?? s?.blur_media ?? true} onChange={v => update({ blur_vault_media: v })} />
-        <SettingsRow label="Allow Saving My Uploads" sub="Your partner can save your uploads to their phone" toggle value={s?.vault_allow_save_default ?? false} onChange={v => update({ vault_allow_save_default: v })} />
-        <SettingsRow label="Allow Sharing My Uploads Outside App" sub="Your partner can share your content externally" toggle value={s?.vault_allow_share_default ?? false} onChange={v => update({ vault_allow_share_default: v })} />
-        <SettingsRow label="Auto-Save Chat Media to Vault" sub="Photos and videos you send in Chat are automatically saved to your Vault. Deleting from either place removes both." toggle value={s?.chat_auto_save_to_vault ?? true} onChange={v => update({ chat_auto_save_to_vault: v })} last />
-      </Section>
+      <View onLayout={(e) => setVaultSectionY(e.nativeEvent.layout.y)}>
+        <Section title="VAULT PREFERENCES" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately." onInfo={() => setShowVaultSecurityInfo(true)}>
+          <SettingsRow label="Blur Vault Photos & Videos" sub="Vault items stay blurred until tapped; re-blurs when you leave the app." toggle value={s?.blur_vault_media ?? s?.blur_media ?? true} onChange={v => update({ blur_vault_media: v })} />
+          <SettingsRow label="Allow Saving My Uploads" sub="Your partner can save your uploads to their phone" toggle value={s?.vault_allow_save_default ?? false} onChange={v => update({ vault_allow_save_default: v })} />
+          <SettingsRow label="Allow Sharing My Uploads Outside App" sub="Your partner can share your content externally" toggle value={s?.vault_allow_share_default ?? false} onChange={v => update({ vault_allow_share_default: v })} />
+          <SettingsRow label="Auto-Save Chat Media to Vault" sub="Photos and videos you send in Chat are automatically saved to your Vault. Deleting from either place removes both." toggle value={s?.chat_auto_save_to_vault ?? true} onChange={v => update({ chat_auto_save_to_vault: v })} last />
+        </Section>
+      </View>
 
       <Section title="CHAT">
         <SettingsRow label="Blur Chat Photos & Videos" sub="Photos and videos sent in Chat stay blurred until tapped; re-blurs when you leave the app." toggle value={s?.blur_chat_media ?? s?.blur_media ?? true} onChange={v => update({ blur_chat_media: v })} />
@@ -2086,6 +2101,7 @@ export default function AccountScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={[styles.scroll, { paddingHorizontal: contentPadding }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"

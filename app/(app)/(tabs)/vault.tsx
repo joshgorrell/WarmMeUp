@@ -997,7 +997,7 @@ export default function VaultScreen() {
           </View>
 
           <TouchableOpacity
-            onPress={() => { setShowAdd(false); router.push('/(app)/account'); }}
+            onPress={() => { setShowAdd(false); router.push({ pathname: '/(app)/account', params: { tab: 'settings', section: 'vault' } }); }}
             activeOpacity={0.7}
             style={styles.manageLink}
           >
