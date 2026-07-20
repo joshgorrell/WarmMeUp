@@ -30,10 +30,35 @@ import {
 } from '@/lib/inviteCode';
 import { previewInvite, getPendingPartnerProfile } from '@/lib/coupleJoin';
 import { logDebugEvent } from '@/lib/debugLog';
+import { ensureConfigured } from '@/lib/purchases';
+import { MONTHLY_PRODUCT_ID, ANNUAL_PRODUCT_ID } from '@/lib/productIds';
 import PairHelpModal from '@/components/PairHelpModal';
 
 const DEEP_LINK_SCHEME = process.env.EXPO_PUBLIC_DEEP_LINK_SCHEME ?? 'warmup';
 const JOIN_COOLDOWN_MS = 3000;
+
+const PLANS: {
+  id: 'monthly' | 'yearly';
+  label: string;
+  price: string;
+  period: string;
+  sub: string;
+}[] = [
+  {
+    id: 'monthly',
+    label: 'Monthly',
+    price: '$9.99',
+    period: 'per month',
+    sub: 'Billed monthly · cancel anytime',
+  },
+  {
+    id: 'yearly',
+    label: 'Yearly',
+    price: '$99.99',
+    period: 'per year',
+    sub: 'Save 17% · just $8.33/mo',
+  },
+];
 
 type ActiveModal = 'invite' | 'join' | null;
 type WaitingState = 'idle' | 'waiting' | 'accepted' | 'declined';
@@ -72,7 +97,7 @@ function HeartOutline({
 export default function PairScreen() {
   const router = useRouter();
   const { prefilledCode } = useLocalSearchParams<{ prefilledCode?: string }>();
-  const { user, couple, refreshCouple, settings, subscriptionInfo } = useAuth();
+  const { user, couple, refreshCouple, settings, subscriptionInfo, refreshSubscription } = useAuth();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
   const headingSize = Math.min(Math.round(width * 0.086), 36);
@@ -111,6 +136,10 @@ export default function PairScreen() {
   const [pendingPartnerAvatar, setPendingPartnerAvatar] = useState<string | null>(null);
   const [helpVisible, setHelpVisible] = useState(false);
   const [helpVariant, setHelpVariant] = useState<HelpVariant>('joiner');
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscribeError, setSubscribeError] = useState('');
+  const [packages, setPackages] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (!user) return;
@@ -192,7 +221,11 @@ export default function PairScreen() {
     try {
       const { data: result, error } = await supabase.rpc('accept_partner');
       if (error || !result?.ok) {
-        setError('Could not accept right now. Try again.');
+        if (result?.reason === 'no_subscription') {
+          setError('Your subscription has ended. Subscribe to confirm your partner.');
+        } else {
+          setError('Could not accept right now. Try again.');
+        }
         return;
       }
       await refreshCouple();
@@ -219,6 +252,95 @@ export default function PairScreen() {
       setError(e.message || 'Something went wrong.');
     } finally {
       setAcceptLoading(false);
+    }
+  };
+
+  // Inline subscribe-and-invite: purchase a plan without leaving the modal,
+  // then auto-generate the invite code so the user sees it immediately.
+  const handleSubscribeAndInvite = async () => {
+    if (subscribing) return;
+
+    if (Platform.OS === 'web') {
+      setActiveModal(null);
+      router.push('/(auth)/subscription');
+      return;
+    }
+
+    setSubscribing(true);
+    setSubscribeError('');
+    try {
+      const Purchases = await ensureConfigured();
+      if (!Purchases) {
+        setSubscribeError('Purchases are not available on this device.');
+        return;
+      }
+
+      // Load offerings if not already loaded
+      let pkgMap = packages;
+      if (Object.keys(pkgMap).length === 0) {
+        const offerings = await Purchases.getOfferings();
+        const current = offerings.current;
+        if (current) {
+          pkgMap = {};
+          for (const pkg of current.availablePackages) {
+            const id = pkg.product.identifier;
+            if (id === ANNUAL_PRODUCT_ID) pkgMap['yearly'] = pkg;
+            else if (id === MONTHLY_PRODUCT_ID) pkgMap['monthly'] = pkg;
+          }
+          setPackages(pkgMap);
+        }
+      }
+
+      const pkg = pkgMap[selectedPlan];
+      if (!pkg) {
+        setSubscribeError('This plan is currently unavailable. Please try again later.');
+        return;
+      }
+
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
+      const entitlement = customerInfo.entitlements.active['premium'];
+      if (!entitlement) {
+        setSubscribeError('Purchase completed but premium was not activated. Please try again.');
+        return;
+      }
+
+      // Confirm with server so the subscriptions table updates
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+        await fetch(`${baseUrl}/functions/v1/confirm-subscription`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            Apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        }).catch(() => {});
+      }
+
+      await refreshSubscription();
+
+      // Now generate the invite code — server will allow it since we have premium
+      const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
+      if (rpcError) {
+        if ((rpcError as any)?.message === 'already_paired') {
+          router.replace('/(app)/(tabs)');
+          return;
+        }
+        setSubscribeError('Purchase succeeded but code generation failed. Tap refresh.');
+        return;
+      }
+      const newCode = (result as any)?.invite_code ?? null;
+      if (newCode) {
+        setMyCode(newCode);
+        await refreshCouple();
+      }
+    } catch (e: any) {
+      if (e?.code === '1') return; // user cancelled
+      setSubscribeError(e?.message ?? 'Purchase failed. Please try again.');
+    } finally {
+      setSubscribing(false);
     }
   };
 
@@ -286,6 +408,10 @@ export default function PairScreen() {
         );
         return;
       }
+      // Server enforces subscription — if no subscription, leave the locked state.
+      if ((result as any)?.success === false && (result as any)?.reason === 'no_subscription') {
+        return;
+      }
       const inviteCode = (result as any)?.invite_code ?? null;
       if (!inviteCode) {
         logDebugEvent('INVITE CREATE ERROR', {
@@ -343,6 +469,10 @@ export default function PairScreen() {
       });
       setInviteError(`[${rpcError?.code ?? 'ERR'}] ${rpcError?.message ?? 'Unknown error'}`);
     } else {
+      if ((result as any)?.success === false && (result as any)?.reason === 'no_subscription') {
+        setRefreshing(false);
+        return;
+      }
       const newCode = (result as any)?.invite_code ?? null;
       if (!newCode) {
         setInviteError('Refresh failed — no code returned. Please try again.');
@@ -841,10 +971,44 @@ export default function PairScreen() {
                   <AppText style={styles.lockedCodeText}>Subscribe to unlock</AppText>
                 </View>
 
+                <View style={styles.inlinePlanList}>
+                  {PLANS.map((plan) => {
+                    const active = selectedPlan === plan.id;
+                    return (
+                      <TouchableOpacity
+                        key={plan.id}
+                        style={[styles.inlinePlanCard, active && styles.inlinePlanCardActive]}
+                        onPress={() => setSelectedPlan(plan.id)}
+                        activeOpacity={0.8}
+                        disabled={subscribing}
+                      >
+                        <View style={[styles.inlineRadio, active && styles.inlineRadioActive]}>
+                          {active && <View style={styles.inlineRadioDot} />}
+                        </View>
+                        <View style={styles.inlinePlanInfo}>
+                          <AppText style={[styles.inlinePlanLabel, active && styles.inlinePlanLabelActive]}>
+                            {plan.label}
+                          </AppText>
+                          <AppText style={styles.inlinePlanSub}>{plan.sub}</AppText>
+                        </View>
+                        <View style={styles.inlinePlanPriceWrap}>
+                          <AppText style={[styles.inlinePlanPrice, active && styles.inlinePlanPriceActive]}>
+                            {plan.price}
+                          </AppText>
+                          <AppText style={styles.inlinePlanPeriod}>{plan.period}</AppText>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {subscribeError ? <AppText style={styles.joinError}>{subscribeError}</AppText> : null}
+
                 <TouchableOpacity
                   style={styles.actionBtn}
-                  onPress={() => { setActiveModal(null); router.push('/(auth)/subscription'); }}
+                  onPress={handleSubscribeAndInvite}
                   activeOpacity={0.85}
+                  disabled={subscribing}
                 >
                   <LinearGradient
                     colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
@@ -852,8 +1016,22 @@ export default function PairScreen() {
                     end={{ x: 1, y: 0 }}
                     style={styles.actionGrad}
                   >
-                    <AppText style={styles.actionLabel}>Subscribe to Invite</AppText>
+                    {subscribing ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <AppText style={styles.actionLabel}>
+                        {`Subscribe — ${PLANS.find(p => p.id === selectedPlan)!.price}/${selectedPlan === 'monthly' ? 'mo' : 'yr'}`}
+                      </AppText>
+                    )}
                   </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.skipRow}
+                  onPress={() => { setActiveModal(null); router.push('/(auth)/subscription'); }}
+                  activeOpacity={0.6}
+                >
+                  <AppText style={styles.skipText}>View all plans</AppText>
                 </TouchableOpacity>
               </>
             )}
@@ -1236,6 +1414,78 @@ const styles = StyleSheet.create({
   lockedCodeText: {
     color: 'rgba(255,255,255,0.28)',
     fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+  },
+  inlinePlanList: {
+    gap: 8,
+    marginBottom: Spacing.sm,
+  },
+  inlinePlanCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.09)',
+    padding: 12,
+    gap: 10,
+  },
+  inlinePlanCardActive: {
+    borderColor: 'rgba(255,90,61,0.55)',
+    backgroundColor: 'rgba(255,90,61,0.07)',
+  },
+  inlineRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  inlineRadioActive: {
+    borderColor: '#FF5A3D',
+  },
+  inlineRadioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF5A3D',
+  },
+  inlinePlanInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  inlinePlanLabel: {
+    color: 'rgba(255,255,255,0.70)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 2,
+  },
+  inlinePlanLabelActive: {
+    color: '#fff',
+  },
+  inlinePlanSub: {
+    color: 'rgba(255,255,255,0.38)',
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+  },
+  inlinePlanPriceWrap: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
+  },
+  inlinePlanPrice: {
+    color: 'rgba(255,255,255,0.60)',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Bold',
+  },
+  inlinePlanPriceActive: {
+    color: '#fff',
+  },
+  inlinePlanPeriod: {
+    color: 'rgba(255,255,255,0.36)',
+    fontSize: 11,
     fontFamily: 'Inter-Regular',
   },
   codeInput: {
