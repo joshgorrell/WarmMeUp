@@ -308,7 +308,7 @@ export default function StatsAdmin() {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <AppShell>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader title="Interaction Stats" onBack={() => router.back()} />
 
       {/* Preset pills */}

@@ -32,7 +32,8 @@ interface StatEntry {
 }
 
 interface Stats {
-  coupleCount: StatEntry;
+  pairedCount: StatEntry;
+  soloCount: StatEntry;
   userCount: StatEntry;
   interactionCount: StatEntry;
   diceCount: StatEntry;
@@ -43,7 +44,8 @@ interface Stats {
 
 const LOADING_STAT: StatEntry = { value: null, error: null, errorCode: null, loading: true };
 const initialStats = (): Stats => ({
-  coupleCount: { ...LOADING_STAT },
+  pairedCount: { ...LOADING_STAT },
+  soloCount: { ...LOADING_STAT },
   userCount: { ...LOADING_STAT },
   interactionCount: { ...LOADING_STAT },
   diceCount: { ...LOADING_STAT },
@@ -93,16 +95,6 @@ export default function AdminDashboard() {
       fetchSignupAlert();
     }
   }, [authLoading, user?.id]));
-
-  // Also fire when auth finishes hydrating while the screen is already mounted
-  useEffect(() => {
-    if (!authLoading && user?.id) {
-      fetchStats();
-      fetchDebugMode();
-      fetchGlobalDebugMode();
-      fetchSignupAlert();
-    }
-  }, [authLoading, user?.id]);
 
   const fetchSignupAlert = async () => {
     const { data } = await supabase
@@ -284,7 +276,8 @@ export default function AdminDashboard() {
 
     // Fire all 7 queries independently — a failure in one doesn't kill the rest
     await Promise.allSettled([
-      fetchOneStat('coupleCount', () => supabase.from('couples').select('id', { count: 'exact', head: true })),
+      fetchOneStat('pairedCount', () => supabase.from('couples').select('id', { count: 'exact', head: true }).not('user_b_id', 'is', null)),
+      fetchOneStat('soloCount', () => supabase.from('couples').select('id', { count: 'exact', head: true }).is('user_b_id', null)),
       fetchOneStat('userCount', () => supabase.from('profiles').select('id', { count: 'exact', head: true })),
       fetchOneStat('interactionCount', () => supabase.from('interactions').select('id', { count: 'exact', head: true })),
       fetchOneStat('diceCount', () => supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dice')),
@@ -426,13 +419,13 @@ export default function AdminDashboard() {
       route: '/(admin)/prompts',
     },
     {
-      label: 'Couples',
-      sub: 'View and manage all couple accounts',
+      label: 'Users Dashboard',
+      sub: 'View users, couples, subscribers, and trials',
       icon: <Users color="#FF2E8A" size={22} strokeWidth={2} />,
       color: '#FF2E8A',
       bg: 'rgba(255,46,138,0.10)',
       border: 'rgba(255,46,138,0.25)',
-      route: '/(admin)/couples',
+      route: '/(admin)/users-dashboard',
     },
     {
       label: 'Interaction Stats',
@@ -452,15 +445,7 @@ export default function AdminDashboard() {
       border: 'rgba(51,209,122,0.25)',
       route: '/(admin)/points-config',
     },
-    {
-      label: 'Users & Roles',
-      sub: 'View all users and manage admin roles',
-      icon: <UserCog color="#60C8FF" size={22} strokeWidth={2} />,
-      color: '#60C8FF',
-      bg: 'rgba(96,200,255,0.10)',
-      border: 'rgba(96,200,255,0.25)',
-      route: '/(admin)/users',
-    },
+
     {
       label: 'Entitlements',
       sub: 'Grant or revoke free premium access to users',
@@ -534,26 +519,26 @@ export default function AdminDashboard() {
 
         {/* Stats row — each card is independently tappable to retry */}
         <View style={styles.statsRow}>
-          {(['coupleCount', 'userCount', 'interactionCount'] as const).map((key, i) => {
+          {([
+            { key: 'pairedCount', label: 'Paired', query: () => supabase.from('couples').select('id', { count: 'exact', head: true }).not('user_b_id', 'is', null) },
+            { key: 'soloCount', label: 'Solo', query: () => supabase.from('couples').select('id', { count: 'exact', head: true }).is('user_b_id', null) },
+            { key: 'userCount', label: 'Users', query: () => supabase.from('profiles').select('id', { count: 'exact', head: true }) },
+            { key: 'interactionCount', label: 'Interactions', query: () => supabase.from('interactions').select('id', { count: 'exact', head: true }) },
+          ] as const).map(({ key, label, query }) => {
             const entry = stats[key];
-            const labels = ['Couples', 'Users', 'Interactions'];
             const hasError = !!entry.error;
             return (
               <TouchableOpacity
                 key={key}
                 style={[styles.statCard, { backgroundColor: colors.card, borderColor: hasError ? 'rgba(255,90,90,0.35)' : colors.borderSubtle }]}
-                onPress={() => fetchOneStat(key, () => {
-                  if (key === 'coupleCount') return supabase.from('couples').select('id', { count: 'exact', head: true });
-                  if (key === 'userCount') return supabase.from('profiles').select('id', { count: 'exact', head: true });
-                  return supabase.from('interactions').select('id', { count: 'exact', head: true });
-                })}
+                onPress={() => fetchOneStat(key, query)}
                 activeOpacity={hasError ? 0.7 : 1}
               >
                 {entry.loading
                   ? <ActivityIndicator color={colors.textMuted} size="small" />
                   : <AppText style={[styles.statNum, { color: statColor(entry, colors.text) }]}>{statVal(entry)}</AppText>
                 }
-                <AppText style={[styles.statLabel, { color: hasError ? colors.danger : colors.textMuted }]}>{labels[i]}</AppText>
+                <AppText style={[styles.statLabel, { color: hasError ? colors.danger : colors.textMuted }]}>{label}</AppText>
                 {hasError && (
                   <>
                     {!!entry.errorCode && (
@@ -827,19 +812,19 @@ const styles = StyleSheet.create({
   },
   errorBannerText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   errorBannerDetail: { fontSize: 11, fontFamily: 'Inter-Regular', opacity: 0.8 },
-  statsRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
+  statsRow: { flexDirection: 'row', gap: 6, marginBottom: Spacing.md },
   statCard: {
     flex: 1,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    padding: Spacing.md,
+    padding: Spacing.sm + 2,
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     minHeight: 72,
     justifyContent: 'center',
   },
-  statNum: { fontSize: 28, fontFamily: 'Inter-Bold' },
-  statLabel: { fontSize: 11, fontFamily: 'Inter-Medium', letterSpacing: 0.5 },
+  statNum: { fontSize: 22, fontFamily: 'Inter-Bold' },
+  statLabel: { fontSize: 10, fontFamily: 'Inter-Medium', letterSpacing: 0.3 },
   statError: { fontSize: 10, fontFamily: 'Inter-Regular', textAlign: 'center', marginTop: 1 },
   breakdownCard: {
     borderRadius: Radius.lg,

@@ -90,7 +90,7 @@ export default function PointsConfigAdmin() {
   const isDirty = (key: string) => edited[key] !== undefined;
 
   return (
-    <AppShell>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader title="Points Config" onBack={() => router.back()} />
       {loading ? (
         <View style={styles.loadingWrap}>

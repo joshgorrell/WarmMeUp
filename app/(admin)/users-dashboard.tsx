@@ -7,7 +7,10 @@ import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronRight, UserCog, X, ShieldCheck, ShieldOff, Crown, Activity } from 'lucide-react-native';
+import {
+  ChevronRight, UserCog, X, ShieldCheck, ShieldOff, Crown, Activity,
+  Users, Heart, Lock, Check, TriangleAlert as AlertTriangle, RefreshCw, CreditCard, Gift,
+} from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -17,6 +20,8 @@ import ScreenHeader from '@/components/ScreenHeader';
 import type { DiagnosticsSnapshot } from '@/lib/diagnosticsSnapshot';
 import { buildDiagnosticsReport } from '@/lib/diagnosticsSnapshot';
 import * as Clipboard from 'expo-clipboard';
+
+type TabKey = 'users' | 'couples' | 'subscribers' | 'trials';
 
 interface UserRow {
   id: string;
@@ -29,6 +34,28 @@ interface UserRow {
 interface CoupleContext {
   partnerName: string | null;
   active: boolean;
+}
+
+interface CoupleRow {
+  id: string;
+  user_a_id: string;
+  user_b_id: string | null;
+  invite_code: string;
+  active: boolean;
+  admin_notes: string;
+  created_at: string;
+  user_a_name: string;
+  user_b_name: string | null;
+}
+
+interface SubscriptionRow {
+  user_id: string;
+  plan: string;
+  status: string;
+  started_at: string;
+  expires_at: string | null;
+  trial_started_at: string | null;
+  display_name: string;
 }
 
 interface UserDiagnosticsRow {
@@ -53,17 +80,25 @@ function DiagSection({ title }: { title: string }) {
   return <AppText style={diagStyles.section}>{title}</AppText>;
 }
 
-export default function UsersAdmin() {
+export default function UsersDashboard() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const { profile: myProfile, isSuperAdmin } = useAuth();
+
+  const [activeTab, setActiveTab] = useState<TabKey>('users');
+
   const [users, setUsers] = useState<UserRow[]>([]);
   const [coupleMap, setCoupleMap] = useState<Record<string, CoupleContext>>({});
+  const [couples, setCouples] = useState<CoupleRow[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<UserRow | null>(null);
+
+  const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
+  const [selectedCouple, setSelectedCouple] = useState<CoupleRow | null>(null);
   const [saving, setSaving] = useState(false);
+  const [notes, setNotes] = useState('');
 
   const [diagUser, setDiagUser] = useState<UserRow | null>(null);
   const [diagData, setDiagData] = useState<UserDiagnosticsRow | null>(null);
@@ -71,25 +106,27 @@ export default function UsersAdmin() {
   const [diagError, setDiagError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const fetchUsers = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
-    const [profilesResult, couplesResult] = await Promise.all([
+    const [profilesResult, couplesResult, subsResult] = await Promise.all([
       supabase
         .from('profiles')
         .select('id, display_name, is_admin, is_super_admin, created_at')
         .order('created_at', { ascending: true }),
       supabase
         .from('couples')
-        .select('user_a_id, user_b_id, active'),
+        .select('*')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('subscriptions')
+        .select('user_id, plan, status, started_at, expires_at, trial_started_at')
+        .order('started_at', { ascending: false }),
     ]);
-
-    if (profilesResult.error) {
-      console.error('[ADMIN USERS LOAD ERROR]', profilesResult.error.message);
-    }
 
     const profileList = profilesResult.data ?? [];
     const nameMap = Object.fromEntries(profileList.map(p => [p.id, p.display_name]));
 
+    // Build couple context map for users tab
     const map: Record<string, CoupleContext> = {};
     for (const couple of couplesResult.data ?? []) {
       const { user_a_id, user_b_id, active } = couple;
@@ -100,13 +137,31 @@ export default function UsersAdmin() {
         map[user_b_id] = { partnerName: nameMap[user_a_id] ?? 'Unknown', active };
       }
     }
-
     setUsers(profileList);
     setCoupleMap(map);
+
+    // Enrich couples
+    const enrichedCouples: CoupleRow[] = (couplesResult.data ?? []).map(c => ({
+      ...c,
+      admin_notes: c.admin_notes ?? '',
+      user_a_name: nameMap[c.user_a_id] ?? 'Unknown',
+      user_b_name: c.user_b_id ? (nameMap[c.user_b_id] ?? 'Unknown') : null,
+    }));
+    setCouples(enrichedCouples);
+
+    // Enrich subscriptions
+    const enrichedSubs: SubscriptionRow[] = (subsResult.data ?? []).map(s => ({
+      ...s,
+      display_name: nameMap[s.user_id] ?? 'Unknown',
+    }));
+    setSubscriptions(enrichedSubs);
+
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // ── User actions ──
 
   const handleToggleAdmin = (user: UserRow) => {
     if (!isSuperAdmin) return;
@@ -130,13 +185,12 @@ export default function UsersAdmin() {
             .from('profiles')
             .update({ is_admin: !user.is_admin })
             .eq('id', user.id);
-
           if (error) {
             Alert.alert('Error', 'Could not update admin status. Please try again.');
           } else {
             const updated = { ...user, is_admin: !user.is_admin };
             setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
-            setSelected(updated);
+            setSelectedUser(updated);
           }
           setSaving(false);
         },
@@ -149,7 +203,7 @@ export default function UsersAdmin() {
     setDiagData(null);
     setDiagError(null);
     setDiagLoading(true);
-    setSelected(null);
+    setSelectedUser(null);
 
     const { data, error } = await supabase
       .from('user_diagnostics')
@@ -179,12 +233,98 @@ export default function UsersAdmin() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isSelf = selected?.id === myProfile?.id;
+  // ── Couple actions ──
+
+  const openCoupleDetail = (couple: CoupleRow) => {
+    setSelectedCouple(couple);
+    setNotes(couple.admin_notes ?? '');
+  };
+
+  const handleSaveNotes = async () => {
+    if (!selectedCouple) return;
+    setSaving(true);
+    await supabase.from('couples').update({ admin_notes: notes }).eq('id', selectedCouple.id);
+    setSaving(false);
+    setSelectedCouple(prev => prev ? { ...prev, admin_notes: notes } : null);
+    setCouples(prev => prev.map(c => c.id === selectedCouple.id ? { ...c, admin_notes: notes } : c));
+  };
+
+  const handleToggleActive = (couple: CoupleRow) => {
+    const action = couple.active ? 'deactivate' : 'reactivate';
+    Alert.alert(
+      `${action.charAt(0).toUpperCase() + action.slice(1)} Couple`,
+      `Are you sure you want to ${action} this couple? ${couple.active ? 'They will lose access to the app.' : ''}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: action.charAt(0).toUpperCase() + action.slice(1),
+          style: couple.active ? 'destructive' : 'default',
+          onPress: async () => {
+            await supabase.from('couples').update({ active: !couple.active }).eq('id', couple.id);
+            setCouples(prev => prev.map(c => c.id === couple.id ? { ...c, active: !c.active } : c));
+            setSelectedCouple(prev => prev && prev.id === couple.id ? { ...prev, active: !prev.active } : prev);
+          },
+        },
+      ]
+    );
+  };
+
+  // ── Derived data ──
+
+  const pairedCouples = couples.filter(c => c.user_b_id !== null);
+  const soloCouples = couples.filter(c => c.user_b_id === null);
+  const paidSubs = subscriptions.filter(s => s.plan !== 'trial' && s.status === 'active');
+  const trialSubs = subscriptions.filter(s => s.plan === 'trial' && s.status === 'active');
+
+  const tabs: { key: TabKey; label: string; count: number; icon: React.ReactNode; color: string }[] = [
+    { key: 'users', label: 'Users', count: users.length, icon: <UserCog size={14} color={colors.textMuted} strokeWidth={2} />, color: '#FF2E8A' },
+    { key: 'couples', label: 'Couples', count: pairedCouples.length, icon: <Heart size={14} color={colors.textMuted} strokeWidth={2} />, color: '#FF2E8A' },
+    { key: 'subscribers', label: 'Subscribers', count: paidSubs.length, icon: <CreditCard size={14} color={colors.textMuted} strokeWidth={2} />, color: '#33D17A' },
+    { key: 'trials', label: 'Trials', count: trialSubs.length, icon: <Gift size={14} color={colors.textMuted} strokeWidth={2} />, color: '#FFB347' },
+  ];
+
+  const isSelf = selectedUser?.id === myProfile?.id;
   const snap = diagData?.snapshot;
+
+  const q = search.trim().toLowerCase();
 
   return (
     <AppShell scrollable={false} noTopPadding>
-      <ScreenHeader title="Users & Roles" onBack={() => router.back()} />
+      <ScreenHeader title="Users Dashboard" onBack={() => router.back()} />
+
+      {/* Tab bar */}
+      <View style={[styles.tabBar, { borderColor: colors.borderSubtle }]}>
+        {tabs.map((tab, i) => (
+          <React.Fragment key={tab.key}>
+            {i > 0 && <View style={[styles.tabDivider, { backgroundColor: colors.borderSubtle }]} />}
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                activeTab === tab.key && { backgroundColor: `${tab.color}14` },
+              ]}
+              onPress={() => { setActiveTab(tab.key); setSearch(''); }}
+              activeOpacity={0.7}
+            >
+              {tab.icon}
+              <AppText
+                style={[
+                  styles.tabLabel,
+                  { color: activeTab === tab.key ? tab.color : colors.textMuted },
+                  activeTab === tab.key && { fontFamily: 'Inter-SemiBold' },
+                ]}
+                numberOfLines={1}
+              >
+                {tab.label}
+              </AppText>
+              <View style={[styles.tabBadge, { backgroundColor: activeTab === tab.key ? `${tab.color}22` : 'rgba(120,120,130,0.10)' }]}>
+                <AppText style={[styles.tabBadgeText, { color: activeTab === tab.key ? tab.color : colors.textMuted }]}>
+                  {tab.count}
+                </AppText>
+              </View>
+            </TouchableOpacity>
+          </React.Fragment>
+        ))}
+      </View>
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -196,17 +336,19 @@ export default function UsersAdmin() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Search */}
           <AppTextInput
             style={[styles.searchInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search users…"
+            placeholder={`Search ${activeTab}…`}
             placeholderTextColor={colors.textMuted}
             autoCorrect={false}
             autoCapitalize="none"
           />
-          {(() => {
-            const q = search.trim().toLowerCase();
+
+          {/* ── Users Tab ── */}
+          {activeTab === 'users' && (() => {
             const filtered = q ? users.filter(u => u.display_name.toLowerCase().includes(q)) : users;
             if (filtered.length === 0) return (
               <View style={styles.emptyWrap}>
@@ -222,7 +364,7 @@ export default function UsersAdmin() {
                 <TouchableOpacity
                   key={u.id}
                   style={[styles.userRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-                  onPress={() => setSelected(u)}
+                  onPress={() => setSelectedUser(u)}
                   activeOpacity={0.8}
                 >
                   <View style={[
@@ -272,49 +414,174 @@ export default function UsersAdmin() {
               );
             });
           })()}
+
+          {/* ── Couples Tab ── */}
+          {activeTab === 'couples' && (() => {
+            const filtered = q
+              ? pairedCouples.filter(c =>
+                  c.user_a_name.toLowerCase().includes(q) ||
+                  (c.user_b_name ?? '').toLowerCase().includes(q)
+                )
+              : pairedCouples;
+            if (filtered.length === 0) return (
+              <View style={styles.emptyWrap}>
+                <Heart color={colors.textMuted} size={36} strokeWidth={1.5} />
+                <AppText style={[styles.emptyText, { color: colors.textMuted }]}>
+                  {q ? 'No couples match your search.' : 'No paired couples yet.'}
+                </AppText>
+              </View>
+            );
+            return filtered.map(c => (
+              <TouchableOpacity
+                key={c.id}
+                style={[styles.coupleRow, { backgroundColor: colors.card, borderColor: c.active ? colors.borderSubtle : 'rgba(255,90,95,0.25)' }]}
+                onPress={() => openCoupleDetail(c)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.avatarPair, { backgroundColor: c.active ? 'rgba(255,46,138,0.10)' : 'rgba(255,90,95,0.10)' }]}>
+                  {c.active
+                    ? <Heart color="#FF2E8A" size={20} strokeWidth={2} fill="rgba(255,46,138,0.35)" />
+                    : <Lock color="#FF5A5F" size={20} strokeWidth={2} />
+                  }
+                </View>
+                <View style={{ flex: 1 }}>
+                  <AppText style={[styles.coupleName, { color: colors.text }]}>
+                    {c.user_a_name}{c.user_b_name ? ` & ${c.user_b_name}` : ''}
+                  </AppText>
+                  <View style={styles.metaRow}>
+                    <View style={[styles.statusBadge, { backgroundColor: c.active ? 'rgba(51,209,122,0.12)' : 'rgba(255,90,95,0.12)' }]}>
+                      <AppText style={[styles.statusText, { color: c.active ? '#33D17A' : colors.danger }]}>
+                        {c.active ? 'Active' : 'Inactive'}
+                      </AppText>
+                    </View>
+                    <AppText style={[styles.dateText, { color: colors.textMuted }]}>
+                      {new Date(c.created_at).toLocaleDateString()}
+                    </AppText>
+                  </View>
+                </View>
+                <ChevronRight color={colors.textMuted} size={16} />
+              </TouchableOpacity>
+            ));
+          })()}
+
+          {/* ── Subscribers Tab ── */}
+          {activeTab === 'subscribers' && (() => {
+            const filtered = q
+              ? paidSubs.filter(s => s.display_name.toLowerCase().includes(q))
+              : paidSubs;
+            if (filtered.length === 0) return (
+              <View style={styles.emptyWrap}>
+                <CreditCard color={colors.textMuted} size={36} strokeWidth={1.5} />
+                <AppText style={[styles.emptyText, { color: colors.textMuted }]}>
+                  {q ? 'No subscribers match your search.' : 'No paid subscribers yet.'}
+                </AppText>
+              </View>
+            );
+            return filtered.map(s => (
+              <View
+                key={s.user_id}
+                style={[styles.subRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+              >
+                <View style={[styles.avatarPair, { backgroundColor: 'rgba(51,209,122,0.10)' }]}>
+                  <CreditCard color="#33D17A" size={20} strokeWidth={2} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <AppText style={[styles.userName, { color: colors.text }]}>{s.display_name}</AppText>
+                  <View style={styles.metaRow}>
+                    <View style={[styles.statusBadge, { backgroundColor: 'rgba(51,209,122,0.12)' }]}>
+                      <AppText style={[styles.statusText, { color: '#33D17A' }]}>{s.plan}</AppText>
+                    </View>
+                    <AppText style={[styles.dateText, { color: colors.textMuted }]}>
+                      {s.expires_at
+                        ? `Expires ${new Date(s.expires_at).toLocaleDateString()}`
+                        : 'No expiry'}
+                    </AppText>
+                  </View>
+                </View>
+              </View>
+            ));
+          })()}
+
+          {/* ── Trials Tab ── */}
+          {activeTab === 'trials' && (() => {
+            const filtered = q
+              ? trialSubs.filter(s => s.display_name.toLowerCase().includes(q))
+              : trialSubs;
+            if (filtered.length === 0) return (
+              <View style={styles.emptyWrap}>
+                <Gift color={colors.textMuted} size={36} strokeWidth={1.5} />
+                <AppText style={[styles.emptyText, { color: colors.textMuted }]}>
+                  {q ? 'No trials match your search.' : 'No active trials.'}
+                </AppText>
+              </View>
+            );
+            return filtered.map(s => (
+              <View
+                key={s.user_id}
+                style={[styles.subRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+              >
+                <View style={[styles.avatarPair, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
+                  <Gift color="#FFB347" size={20} strokeWidth={2} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <AppText style={[styles.userName, { color: colors.text }]}>{s.display_name}</AppText>
+                  <View style={styles.metaRow}>
+                    <View style={[styles.statusBadge, { backgroundColor: 'rgba(255,179,71,0.12)' }]}>
+                      <AppText style={[styles.statusText, { color: '#FFB347' }]}>Trial</AppText>
+                    </View>
+                    <AppText style={[styles.dateText, { color: colors.textMuted }]}>
+                      {s.trial_started_at
+                        ? `Started ${new Date(s.trial_started_at).toLocaleDateString()}`
+                        : `Since ${new Date(s.started_at).toLocaleDateString()}`}
+                    </AppText>
+                  </View>
+                </View>
+              </View>
+            ));
+          })()}
         </ScrollView>
       )}
 
-      {/* User Detail Modal */}
-      <Modal visible={!!selected} transparent animationType="slide">
+      {/* ── User Detail Modal ── */}
+      <Modal visible={!!selectedUser} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: isDark ? '#0F0F17' : '#FFF8F3', borderColor: colors.borderSubtle }]}>
             <View style={styles.modalHeader}>
               <AppText style={[styles.modalTitle, { color: colors.text }]}>User Details</AppText>
-              <TouchableOpacity onPress={() => setSelected(null)} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => setSelectedUser(null)} activeOpacity={0.7}>
                 <X color={colors.textMuted} size={22} strokeWidth={2} />
               </TouchableOpacity>
             </View>
 
-            {selected && (
-              <ScrollView showsVerticalScrollIndicator={false}>
+            {selectedUser && (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                   <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>DISPLAY NAME</AppText>
-                  <AppText style={[styles.detailValue, { color: colors.text }]}>{selected.display_name}</AppText>
+                  <AppText style={[styles.detailValue, { color: colors.text }]}>{selectedUser.display_name}</AppText>
                 </View>
 
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                   <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>ROLE</AppText>
                   <AppText style={[styles.detailValue, { color: colors.text }]}>
-                    {selected.is_super_admin ? 'Super Admin' : selected.is_admin ? 'Admin' : 'Regular User'}
+                    {selectedUser.is_super_admin ? 'Super Admin' : selectedUser.is_admin ? 'Admin' : 'Regular User'}
                   </AppText>
                 </View>
 
-                {coupleMap[selected.id] ? (
+                {coupleMap[selectedUser.id] ? (
                   <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                     <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>COUPLE</AppText>
                     <AppText style={[styles.detailValue, { color: colors.text }]}>
-                      {coupleMap[selected.id].partnerName
-                        ? `Paired with ${coupleMap[selected.id].partnerName}`
+                      {coupleMap[selectedUser.id].partnerName
+                        ? `Paired with ${coupleMap[selectedUser.id].partnerName}`
                         : 'Solo (no partner yet)'}
                     </AppText>
                     <View style={[styles.statusBadge, {
-                      backgroundColor: coupleMap[selected.id].active ? 'rgba(51,209,122,0.12)' : 'rgba(255,90,95,0.12)',
+                      backgroundColor: coupleMap[selectedUser.id].active ? 'rgba(51,209,122,0.12)' : 'rgba(255,90,95,0.12)',
                       alignSelf: 'flex-start',
                       marginTop: 4,
                     }]}>
-                      <AppText style={[styles.statusText, { color: coupleMap[selected.id].active ? '#33D17A' : '#FF5A5F' }]}>
-                        {coupleMap[selected.id].active ? 'Active' : 'Inactive'}
+                      <AppText style={[styles.statusText, { color: coupleMap[selectedUser.id].active ? '#33D17A' : '#FF5A5F' }]}>
+                        {coupleMap[selectedUser.id].active ? 'Active' : 'Inactive'}
                       </AppText>
                     </View>
                   </View>
@@ -323,37 +590,35 @@ export default function UsersAdmin() {
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                   <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>MEMBER SINCE</AppText>
                   <AppText style={[styles.detailValue, { color: colors.text }]}>
-                    {new Date(selected.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    {new Date(selectedUser.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                   </AppText>
                 </View>
 
-                {/* Debug Snapshot */}
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: 'rgba(96,200,255,0.07)', borderColor: 'rgba(96,200,255,0.28)', marginBottom: Spacing.sm }]}
-                  onPress={() => openDiagnosticsSnapshot(selected)}
+                  onPress={() => openDiagnosticsSnapshot(selectedUser)}
                   activeOpacity={0.8}
                 >
                   <Activity color="#60C8FF" size={18} strokeWidth={2} />
                   <AppText style={[styles.actionBtnText, { color: '#60C8FF' }]}>View Debug Snapshot</AppText>
                 </TouchableOpacity>
 
-                {/* Grant / Revoke */}
-                {isSuperAdmin && !isSelf && !selected.is_super_admin && (
+                {isSuperAdmin && !isSelf && !selectedUser.is_super_admin && (
                   <TouchableOpacity
                     style={[
                       styles.actionBtn,
                       {
-                        backgroundColor: selected.is_admin ? 'rgba(255,90,95,0.08)' : 'rgba(255,46,138,0.08)',
-                        borderColor: selected.is_admin ? 'rgba(255,90,95,0.30)' : 'rgba(255,46,138,0.30)',
+                        backgroundColor: selectedUser.is_admin ? 'rgba(255,90,95,0.08)' : 'rgba(255,46,138,0.08)',
+                        borderColor: selectedUser.is_admin ? 'rgba(255,90,95,0.30)' : 'rgba(255,46,138,0.30)',
                       },
                     ]}
-                    onPress={() => handleToggleAdmin(selected)}
+                    onPress={() => handleToggleAdmin(selectedUser)}
                     disabled={saving}
                     activeOpacity={0.8}
                   >
                     {saving ? (
-                      <ActivityIndicator color={selected.is_admin ? colors.danger : '#FF2E8A'} size="small" />
-                    ) : selected.is_admin ? (
+                      <ActivityIndicator color={selectedUser.is_admin ? colors.danger : '#FF2E8A'} size="small" />
+                    ) : selectedUser.is_admin ? (
                       <>
                         <ShieldOff color={colors.danger} size={20} strokeWidth={2} />
                         <AppText style={[styles.actionBtnText, { color: colors.danger }]}>Revoke Admin Access</AppText>
@@ -381,7 +646,7 @@ export default function UsersAdmin() {
                     </AppText>
                   </View>
                 )}
-                {isSuperAdmin && selected.is_super_admin && !isSelf && (
+                {isSuperAdmin && selectedUser.is_super_admin && !isSelf && (
                   <View style={[styles.noteBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                     <AppText style={[styles.noteText, { color: colors.textMuted }]}>
                       Super Admin privileges can only be changed directly in the database.
@@ -394,7 +659,91 @@ export default function UsersAdmin() {
         </View>
       </Modal>
 
-      {/* Debug Snapshot Modal */}
+      {/* ── Couple Detail Modal ── */}
+      <Modal visible={!!selectedCouple} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { backgroundColor: isDark ? '#0F0F17' : '#FFF8F3', borderColor: colors.borderSubtle }]}>
+            <View style={styles.modalHeader}>
+              <AppText style={[styles.modalTitle, { color: colors.text }]}>Couple Details</AppText>
+              <TouchableOpacity onPress={() => setSelectedCouple(null)} activeOpacity={0.7}>
+                <X color={colors.textMuted} size={22} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedCouple && (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+                <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+                  <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>USERS</AppText>
+                  <AppText style={[styles.detailValue, { color: colors.text }]}>{selectedCouple.user_a_name}</AppText>
+                  {selectedCouple.user_b_name && (
+                    <AppText style={[styles.detailValue, { color: colors.text }]}>{selectedCouple.user_b_name}</AppText>
+                  )}
+                </View>
+
+                <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+                  <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>INVITE CODE</AppText>
+                  <AppText style={[styles.codeText, { color: colors.text }]}>{selectedCouple.invite_code}</AppText>
+                </View>
+
+                <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+                  <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>PAIRED ON</AppText>
+                  <AppText style={[styles.detailValue, { color: colors.text }]}>
+                    {new Date(selectedCouple.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </AppText>
+                </View>
+
+                <AppText style={[styles.notesLabel, { color: colors.textMuted }]}>ADMIN NOTES</AppText>
+                <AppTextInput
+                  style={[styles.notesInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Add internal notes about this couple…"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[styles.saveNotesBtn, { borderColor: colors.borderSubtle }]}
+                  onPress={handleSaveNotes}
+                  disabled={saving}
+                  activeOpacity={0.8}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={colors.textSecondary} size="small" />
+                  ) : (
+                    <>
+                      <Check color={colors.textSecondary} size={16} strokeWidth={2} />
+                      <AppText style={[styles.saveNotesBtnText, { color: colors.textSecondary }]}>Save Notes</AppText>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.dangerBtn,
+                    {
+                      backgroundColor: selectedCouple.active ? 'rgba(255,90,95,0.08)' : 'rgba(51,209,122,0.08)',
+                      borderColor: selectedCouple.active ? 'rgba(255,90,95,0.30)' : 'rgba(51,209,122,0.30)',
+                    },
+                  ]}
+                  onPress={() => handleToggleActive(selectedCouple)}
+                  activeOpacity={0.8}
+                >
+                  {selectedCouple.active ? (
+                    <AlertTriangle color={colors.danger} size={18} strokeWidth={2} />
+                  ) : (
+                    <RefreshCw color="#33D17A" size={18} strokeWidth={2} />
+                  )}
+                  <AppText style={[styles.dangerBtnText, { color: selectedCouple.active ? colors.danger : '#33D17A' }]}>
+                    {selectedCouple.active ? 'Deactivate Couple' : 'Reactivate Couple'}
+                  </AppText>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Debug Snapshot Modal ── */}
       <Modal visible={!!diagUser} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: isDark ? '#080810' : '#F4F8FF', borderColor: 'rgba(96,200,255,0.18)' }]}>
@@ -479,7 +828,27 @@ export default function UsersAdmin() {
 
 const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingHorizontal: Spacing.screen, gap: Spacing.sm },
+  tabBar: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.screen,
+    paddingBottom: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    borderRadius: Radius.md,
+    minWidth: 0,
+  },
+  tabDivider: { width: 1, alignSelf: 'center', height: 20, marginHorizontal: 2 },
+  tabLabel: { fontSize: 11, fontFamily: 'Inter-Medium' },
+  tabBadge: { borderRadius: Radius.pill, paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center' },
+  tabBadgeText: { fontSize: 9, fontFamily: 'Inter-Bold' },
+  list: { paddingHorizontal: Spacing.screen, paddingTop: Spacing.md, gap: Spacing.sm },
   searchInput: {
     borderRadius: Radius.lg,
     borderWidth: 1,
@@ -490,8 +859,6 @@ const styles = StyleSheet.create({
   },
   emptyWrap: { alignItems: 'center', paddingTop: 60, gap: Spacing.md },
   emptyText: { fontSize: FontSize.body, fontFamily: 'Inter-Regular' },
-  statusBadge: { borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
-  statusText: { fontSize: 10, fontFamily: 'Inter-Bold' },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -500,7 +867,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: Spacing.card,
   },
-  avatarCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  avatarCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: 4 },
   userName: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   youBadge: { borderRadius: Radius.pill, paddingHorizontal: 6, paddingVertical: 2 },
@@ -509,6 +876,26 @@ const styles = StyleSheet.create({
   roleBadge: { borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
   roleText: { fontSize: 10, fontFamily: 'Inter-Bold' },
   dateText: { fontSize: 11, fontFamily: 'Inter-Regular' },
+  coupleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: Spacing.card,
+  },
+  avatarPair: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  coupleName: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', marginBottom: 4 },
+  statusBadge: { borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
+  statusText: { fontSize: 10, fontFamily: 'Inter-Bold' },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: Spacing.card,
+  },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'flex-end' },
   modalSheet: {
     borderTopLeftRadius: Radius.xl,
@@ -523,6 +910,40 @@ const styles = StyleSheet.create({
   detailBlock: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.sm, gap: 4 },
   detailLabel: { fontSize: 10, fontFamily: 'Inter-SemiBold', letterSpacing: 1 },
   detailValue: { fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
+  codeText: { fontSize: 18, fontFamily: 'Inter-Bold', letterSpacing: 4 },
+  notesLabel: { fontSize: 10, fontFamily: 'Inter-SemiBold', letterSpacing: 1, marginBottom: 6 },
+  notesInput: {
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    padding: Spacing.md,
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    minHeight: 80,
+    textAlignVertical: 'top',
+    marginBottom: Spacing.sm,
+  },
+  saveNotesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    height: 44,
+    marginBottom: Spacing.lg,
+  },
+  saveNotesBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  dangerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    height: 52,
+    marginBottom: Spacing.md,
+  },
+  dangerBtnText: { fontSize: FontSize.body, fontFamily: 'Inter-Bold' },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',

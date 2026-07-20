@@ -5,9 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname } from 'expo-router';
 import WarmupLogo from './WarmupLogo';
 import WarmupWordmark from './WarmupWordmark';
+import AppText from './AppText';
 import { useTheme } from '@/context/ThemeContext';
 import { logDebugEvent } from '@/lib/debugLog';
-import { Spacing, Radius } from '@/constants/theme';
+import { Spacing, Radius, FontSize } from '@/constants/theme';
 
 interface ScreenHeaderProps {
   title?: string;
@@ -15,7 +16,7 @@ interface ScreenHeaderProps {
   rightSlot?: React.ReactNode;
 }
 
-export default function ScreenHeader({ onBack, rightSlot }: ScreenHeaderProps) {
+export default function ScreenHeader({ title, onBack, rightSlot }: ScreenHeaderProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -52,8 +53,20 @@ export default function ScreenHeader({ onBack, rightSlot }: ScreenHeaderProps) {
         activeOpacity={0.7}
         style={styles.brand}
       >
-        <WarmupLogo size={26} />
-        <WarmupWordmark size={12} />
+        <WarmupLogo size={title ? 22 : 26} />
+        <WarmupWordmark size={title ? 11 : 12} />
+        {title ? (
+          <>
+            <View style={[styles.brandDivider, { backgroundColor: colors.borderSubtle }]} />
+            <AppText
+              style={[styles.title, { color: colors.text }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {title}
+            </AppText>
+          </>
+        ) : null}
       </TouchableOpacity>
 
       <View style={styles.right}>
@@ -85,6 +98,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    minWidth: 0,
+  },
+  brandDivider: {
+    width: 1,
+    height: 18,
+    marginHorizontal: 2,
+  },
+  title: {
+    fontSize: FontSize.lg,
+    fontFamily: 'Inter-SemiBold',
+    flexShrink: 1,
   },
   right: {
     width: 42,

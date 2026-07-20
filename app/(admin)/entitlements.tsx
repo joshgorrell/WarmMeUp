@@ -94,18 +94,21 @@ export default function EntitlementsScreen() {
         return;
       }
 
-      // Enrich with profile display names
+      // Enrich with profile display names — batch query instead of N+1
       const grants = data ?? [];
-      const enriched = await Promise.all(
-        grants.map(async (g) => {
-          const { data: prof } = await supabase
-            .from('profiles')
-            .select('display_name')
-            .eq('id', g.user_id)
-            .maybeSingle();
-          return { ...g, profile: prof ?? undefined };
-        })
-      );
+      let enriched: AdminGrant[] = grants;
+      if (grants.length > 0) {
+        const userIds = grants.map(g => g.user_id);
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, display_name')
+          .in('id', userIds);
+        const nameMap = new Map((profiles ?? []).map(p => [p.id, p.display_name]));
+        enriched = grants.map(g => ({
+          ...g,
+          profile: nameMap.has(g.user_id) ? { display_name: nameMap.get(g.user_id)! } : undefined,
+        }));
+      }
       setActiveGrants(enriched);
     } catch (err: any) {
       console.error('[ADMIN ENTITLEMENT ERROR]', err?.message);

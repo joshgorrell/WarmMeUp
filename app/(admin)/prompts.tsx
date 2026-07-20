@@ -241,7 +241,7 @@ export default function PromptsAdmin() {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 88 }]}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 96 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Manage Labels section — only shown on Dice tab */}
