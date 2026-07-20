@@ -10,13 +10,14 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw, Check, XCircle, Hourglass } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw, Check, Circle as XCircle, Hourglass, Circle as HelpCircle } from 'lucide-react-native';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -27,13 +28,16 @@ import {
   savePendingCode,
   sanitizeInviteCode,
 } from '@/lib/inviteCode';
+import { previewInvite, getPendingPartnerProfile } from '@/lib/coupleJoin';
 import { logDebugEvent } from '@/lib/debugLog';
+import PairHelpModal from '@/components/PairHelpModal';
 
 const DEEP_LINK_SCHEME = process.env.EXPO_PUBLIC_DEEP_LINK_SCHEME ?? 'warmup';
 const JOIN_COOLDOWN_MS = 3000;
 
 type ActiveModal = 'invite' | 'join' | null;
 type WaitingState = 'idle' | 'waiting' | 'accepted' | 'declined';
+type HelpVariant = 'inviter' | 'joiner' | null;
 
 function HeartOutline({
   size,
@@ -100,11 +104,37 @@ export default function PairScreen() {
   const [waitingCoupleId, setWaitingCoupleId] = useState<string | null>(null);
   const [acceptLoading, setAcceptLoading] = useState(false);
   const lastJoinAttemptRef = useRef(0);
+  const [inviterName, setInviterName] = useState<string | null>(null);
+  const [inviterAvatar, setInviterAvatar] = useState<string | null>(null);
+  const [preAuthPreview, setPreAuthPreview] = useState<{ name: string } | null>(null);
+  const [pendingPartnerName, setPendingPartnerName] = useState<string | null>(null);
+  const [pendingPartnerAvatar, setPendingPartnerAvatar] = useState<string | null>(null);
+  const [helpVisible, setHelpVisible] = useState(false);
+  const [helpVariant, setHelpVariant] = useState<HelpVariant>('joiner');
 
   useEffect(() => {
     if (!user) return;
     loadOrCreateCouple();
   }, [user]);
+
+  // User A: fetch pending partner's profile when a request arrives
+  useEffect(() => {
+    if (!couple?.pending_partner_id || !couple?.pending_partner_status ||
+        (couple.pending_partner_status !== 'pending' && couple.pending_partner_status !== 'b_accepted')) {
+      setPendingPartnerName(null);
+      setPendingPartnerAvatar(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const result = await getPendingPartnerProfile();
+      if (!cancelled && result.ok) {
+        setPendingPartnerName(result.partnerName);
+        setPendingPartnerAvatar(result.partnerAvatar);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [couple?.pending_partner_id, couple?.pending_partner_status]);
 
   useEffect(() => {
     if (couple?.user_b_id) {
@@ -349,6 +379,15 @@ export default function PairScreen() {
     setError('');
     setLoading(true);
     try {
+      // Preview inviter name first so we can show it in the waiting overlay
+      const preview = await previewInvite(normalized);
+      if (!preview.ok) {
+        setError('Invalid code. Check with your partner.');
+        return;
+      }
+      setInviterName(preview.inviterName);
+      setInviterAvatar(preview.inviterAvatar);
+
       const { data: joinResult, error: joinError } = await supabase
         .rpc('request_join', { invite_code: normalized });
 
@@ -411,6 +450,13 @@ export default function PairScreen() {
       return;
     }
 
+    // If already previewed, proceed to registration
+    if (preAuthPreview) {
+      await savePendingCode(normalized);
+      router.push({ pathname: '/(auth)/register', params: { pendingCode: normalized } });
+      return;
+    }
+
     const now = Date.now();
     if (now - lastJoinAttemptRef.current < JOIN_COOLDOWN_MS) {
       setError('Please wait a moment before trying again.');
@@ -421,21 +467,12 @@ export default function PairScreen() {
     setError('');
     setLoading(true);
     try {
-      const { data: targetCouple } = await supabase
-        .rpc('get_couple_by_invite_code', { code: normalized });
-
-      if (!targetCouple) {
+      const result = await previewInvite(normalized);
+      if (!result.ok) {
         setError('Invalid code. Check with your partner.');
         return;
       }
-      if (targetCouple.user_b_id) {
-        setError('This code has already been used.');
-        return;
-      }
-
-      // Persist so the code survives OAuth redirects and app restarts
-      await savePendingCode(normalized);
-      router.push({ pathname: '/(auth)/register', params: { pendingCode: normalized } });
+      setPreAuthPreview({ name: result.inviterName });
     } catch (e: any) {
       setError(e.message || 'Something went wrong.');
     } finally {
@@ -494,8 +531,27 @@ export default function PairScreen() {
                 <AppText style={[styles.sparkle, { bottom: 20, right: '15%', fontSize: 6 }]}>✦</AppText>
               </View>
 
-              <AppText style={[styles.heading, { fontSize: headingSize }]}>Enter your{'\n'}partner's code</AppText>
+              <View style={[styles.headerRow, { justifyContent: 'space-between', marginBottom: Spacing.sm }]}>
+                <AppText style={[styles.heading, { fontSize: headingSize }]}>Enter your{'\n'}partner's code</AppText>
+                <TouchableOpacity
+                  style={styles.helpBtn}
+                  onPress={() => { setHelpVariant('joiner'); setHelpVisible(true); }}
+                  activeOpacity={0.7}
+                >
+                  <HelpCircle color="rgba(255,255,255,0.45)" size={22} strokeWidth={1.8} />
+                </TouchableOpacity>
+              </View>
               <AppText style={styles.sub}>Type in the invite code they sent you.</AppText>
+
+              {preAuthPreview ? (
+                <View style={styles.previewCard}>
+                  <AppText style={styles.previewLabel}>You're connecting with</AppText>
+                  <AppText style={styles.previewName}>{preAuthPreview.name}</AppText>
+                  <AppText style={styles.previewNote}>
+                    Tap Continue to create your account. Your partner will confirm the connection after you join.
+                  </AppText>
+                </View>
+              ) : null}
 
               <View style={styles.inlineJoin}>
                 <AppTextInput
@@ -525,12 +581,14 @@ export default function PairScreen() {
                     end={{ x: 1, y: 0 }}
                     style={styles.actionGrad}
                   >
-                    <AppText style={styles.actionLabel}>{loading ? 'Checking...' : 'Continue'}</AppText>
+                    <AppText style={styles.actionLabel}>{loading ? 'Checking...' : preAuthPreview ? 'Continue' : 'Continue'}</AppText>
                   </LinearGradient>
                 </TouchableOpacity>
 
                 <AppText style={styles.preAuthNote}>
-                  You'll create your account on the next step, then connect automatically.
+                  {preAuthPreview
+                    ? 'Your partner will confirm the connection after you create your account.'
+                    : "You'll see who's inviting you, then create your account."}
                 </AppText>
               </View>
 
@@ -561,7 +619,16 @@ export default function PairScreen() {
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: scrollPaddingTop }]} showsVerticalScrollIndicator={false}>
         <View style={centerStyle}>
-          <AppText style={[styles.heading, { fontSize: headingSize }]}>Connect with{'\n'}your partner</AppText>
+          <View style={[styles.headerRow, { justifyContent: 'space-between', marginBottom: Spacing.sm }]}>
+            <AppText style={[styles.heading, { fontSize: headingSize }]}>Connect with{'\n'}your partner</AppText>
+            <TouchableOpacity
+              style={styles.helpBtn}
+              onPress={() => { setHelpVariant('inviter'); setHelpVisible(true); }}
+              activeOpacity={0.7}
+            >
+              <HelpCircle color="rgba(255,255,255,0.45)" size={22} strokeWidth={1.8} />
+            </TouchableOpacity>
+          </View>
           <AppText style={styles.sub}>This space is just for{'\n'}the two of you.</AppText>
 
           <View style={[styles.heartsWrap, { height: heartsHeight }]} pointerEvents="none">
@@ -711,14 +778,26 @@ export default function PairScreen() {
 
                 <AppText style={styles.waitingText}>Waiting for your partner to join...</AppText>
 
-                {couple?.pending_partner_status === 'pending' && (
+                {(couple?.pending_partner_status === 'pending' || couple?.pending_partner_status === 'b_accepted') && (
                   <View style={styles.pendingRequestCard}>
                     <View style={styles.pendingRequestHeader}>
-                      <UserPlus color="#FF6B3D" size={18} strokeWidth={1.8} />
-                      <AppText style={styles.pendingRequestTitle}>A partner wants to connect</AppText>
+                      {pendingPartnerAvatar ? (
+                        <Image source={{ uri: pendingPartnerAvatar }} style={styles.pendingAvatar} resizeMode="cover" />
+                      ) : (
+                        <View style={styles.pendingAvatarFallback}>
+                          <AppText style={styles.pendingAvatarText}>
+                            {(pendingPartnerName ?? '?')[0]?.toUpperCase()}
+                          </AppText>
+                        </View>
+                      )}
+                      <AppText style={styles.pendingRequestTitle} numberOfLines={1} ellipsizeMode="tail">
+                        {pendingPartnerName ? `${pendingPartnerName} accepted your invite!` : 'A partner wants to connect'}
+                      </AppText>
                     </View>
                     <AppText style={styles.pendingRequestDesc}>
-                      Someone entered your invite code.{'\n'}Confirm only if they're your partner.
+                      {pendingPartnerName
+                        ? `${pendingPartnerName} is ready to join you on Warm Me Up! Confirm to open your shared space.`
+                        : 'Someone entered your invite code.\nConfirm only if they\'re your partner.'}
                     </AppText>
                     <View style={styles.pendingRequestActions}>
                       <TouchableOpacity
@@ -855,7 +934,9 @@ export default function PairScreen() {
             </View>
             <AppText style={styles.waitingOverlayTitle}>Waiting for confirmation</AppText>
             <AppText style={styles.waitingOverlayDesc}>
-              Your partner needs to confirm the connection.{'\n'}Ask them to open the app and accept.
+              {inviterName
+                ? `${inviterName} needs to confirm the connection.\nAsk them to open the app and accept.`
+                : 'Your partner needs to confirm the connection.\nAsk them to open the app and accept.'}
             </AppText>
             <ActivityIndicator color="#FF6B3D" size="small" style={{ marginTop: Spacing.md }} />
             <TouchableOpacity
@@ -868,6 +949,12 @@ export default function PairScreen() {
           </View>
         </View>
       </Modal>
+
+      <PairHelpModal
+        visible={helpVisible}
+        onClose={() => setHelpVisible(false)}
+        variant={helpVariant ?? 'joiner'}
+      />
 
       {/* User B: Declined */}
       <Modal
@@ -901,6 +988,10 @@ export default function PairScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060406' },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   backBtn: {
     position: 'absolute',
     left: Spacing.xl,
@@ -1188,6 +1279,43 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  helpBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    flexShrink: 0,
+  },
+  previewCard: {
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+    backgroundColor: 'rgba(255,122,69,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,122,69,0.25)',
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    gap: 6,
+  },
+  previewLabel: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+  },
+  previewName: {
+    color: '#fff',
+    fontSize: FontSize.lg,
+    fontFamily: 'Inter-Bold',
+  },
+  previewNote: {
+    color: 'rgba(255,255,255,0.42)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 20,
+  },
   pendingRequestCard: {
     marginTop: Spacing.md,
     backgroundColor: 'rgba(255,107,61,0.08)',
@@ -1202,10 +1330,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  pendingAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    flexShrink: 0,
+  },
+  pendingAvatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,122,69,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  pendingAvatarText: {
+    color: '#FF6B3D',
+    fontSize: FontSize.lg,
+    fontFamily: 'Inter-Bold',
+  },
   pendingRequestTitle: {
     color: '#fff',
     fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',
+    flex: 1,
+    minWidth: 0,
   },
   pendingRequestDesc: {
     color: 'rgba(255,255,255,0.42)',

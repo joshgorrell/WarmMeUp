@@ -29,7 +29,7 @@ const EVENT_LABELS: Record<string, string> = {
   send_love: "sent you",
   partner_disconnected: "ended the partner connection",
   partner_joined: "just joined! Your space is ready.",
-  partner_request: "someone wants to connect with you",
+  partner_request: "accepted your invite and is ready to join you!",
 };
 
 // System events shown regardless of discreet_notifications setting
@@ -108,7 +108,7 @@ Deno.serve(async (req: Request) => {
     // For partner_request, the caller is the pending partner (not yet user_b_id).
     // For all other events, the caller must be user_a_id or user_b_id.
     const isCoupleMember = event_type === "partner_request"
-      ? (couple.pending_partner_id === user.id && couple.pending_partner_status === "pending")
+      ? (couple.pending_partner_id === user.id && (couple.pending_partner_status === "pending" || couple.pending_partner_status === "b_accepted"))
       : (couple.user_a_id === user.id || couple.user_b_id === user.id);
     if (!isCoupleMember) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {

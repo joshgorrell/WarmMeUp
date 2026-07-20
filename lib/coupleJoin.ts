@@ -2,10 +2,53 @@ import { supabase } from '@/lib/supabase';
 import { logDebugEvent } from '@/lib/debugLog';
 
 export type JoinResult =
-  | { ok: true; status: 'pending'; coupleId: string }
+  | { ok: true; status: 'b_accepted'; coupleId: string; inviterName: string | null }
   | { ok: false; reason: 'not_found' | 'already_full' | 'self' | 'already_connected' | 'error' };
 
 type JoinReason = 'not_found' | 'already_full' | 'self' | 'already_connected' | 'error';
+
+/**
+ * Preview an invite code without creating a pending request.
+ * Returns the inviter's display name and avatar so User B can see
+ * who they are connecting with before committing.
+ */
+export async function previewInvite(
+  code: string,
+): Promise<{ ok: true; inviterName: string; inviterAvatar: string | null } | { ok: false; reason: string }> {
+  const { data, error } = await supabase
+    .rpc('preview_invite', { invite_code: code.toUpperCase().trim() }) as { data: any; error: any };
+
+  if (error || !data?.ok) {
+    return { ok: false, reason: data?.reason ?? 'error' };
+  }
+
+  return {
+    ok: true,
+    inviterName: data.inviter_name ?? 'Your partner',
+    inviterAvatar: data.inviter_avatar ?? null,
+  };
+}
+
+/**
+ * Fetch the pending partner's profile (name + avatar) for User A.
+ * User A calls this to see who accepted their invite before confirming.
+ */
+export async function getPendingPartnerProfile(): Promise<
+  { ok: true; partnerName: string; partnerAvatar: string | null } | { ok: false }
+> {
+  const { data, error } = await supabase
+    .rpc('get_pending_partner_profile') as { data: any; error: any };
+
+  if (error || !data?.ok) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    partnerName: data.partner_name ?? 'Your partner',
+    partnerAvatar: data.partner_avatar ?? null,
+  };
+}
 
 /**
  * Phase 1 of mutual-consent pairing. Sends a join request to the couple
@@ -42,7 +85,7 @@ export async function completePendingJoin(
     }).catch(() => {});
   }
 
-  return { ok: true, status: 'pending', coupleId: result.couple_id };
+  return { ok: true, status: 'b_accepted', coupleId: result.couple_id, inviterName: result.user_a_id ?? null };
 }
 
 /**
