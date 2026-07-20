@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Pressable, ActivityIndicator, TextInput, Alert,
-  AppState, AppStateStatus, Keyboard, Animated, InteractionManager, BackHandler, Linking,
+  AppState, AppStateStatus, Keyboard, Animated, InteractionManager, BackHandler, Linking, ViewStyle,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { BlurView } from 'expo-blur';
@@ -22,6 +22,9 @@ import Avatar from '@/components/Avatar';
 import { LinearGradient } from 'expo-linear-gradient';
 import MediaActionRow from '@/components/MediaActionRow';
 import ConfirmSheet, { ConfirmAction } from '@/components/ConfirmSheet';
+import BottomSheet from '@/components/BottomSheet';
+import CountdownRing from '@/components/CountdownRing';
+import PillButton from '@/components/PillButton';
 import { useMediaReactions } from '@/hooks/useMediaReactions';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
@@ -148,6 +151,7 @@ function MediaBubble({
   signedUrl,
   onOpen,
   onLongPress,
+  onBurn,
   bubbleWidth,
   bubbleHeight,
   radii,
@@ -159,6 +163,7 @@ function MediaBubble({
   signedUrl: string | null | undefined;
   onOpen: (m: ChatMessage) => void;
   onLongPress: (m: ChatMessage) => void;
+  onBurn: (m: ChatMessage) => void;
   bubbleWidth: number;
   bubbleHeight: number;
   radii: ReturnType<typeof getBubbleRadii>;
@@ -283,6 +288,17 @@ function MediaBubble({
             <EyeOff color="rgba(255,255,255,0.92)" size={20} strokeWidth={2} />
           </View>
         </Animated.View>
+      )}
+      {msg.burns_at && msg.burn_after_seconds && new Date(msg.burns_at).getTime() > Date.now() && (
+        <View style={styles.burnBadge} pointerEvents="none">
+          <View style={styles.burnBadgeBg} />
+          <CountdownRing
+            expiresAt={msg.burns_at}
+            totalSeconds={msg.burn_after_seconds}
+            onExpire={() => onBurn(msg)}
+            size={44}
+          />
+        </View>
       )}
     </Pressable>
   );
@@ -471,6 +487,7 @@ export default function ChatTab() {
     message?: string;
     actions: ConfirmAction[];
   } | null>(null);
+  const [timerSheetMsg, setTimerSheetMsg] = useState<ChatMessage | null>(null);
   const handledMsgLinkRef = useRef<string | null>(null);
   const listRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -640,12 +657,32 @@ export default function ChatTab() {
         .limit(PAGE_SIZE);
       if (data) {
         const sorted = [...data].reverse();
+        // Lazy cleanup: soft-delete any burned messages whose timer has expired.
+        const now = Date.now();
+        const expired = sorted.filter(m => m.burns_at && new Date(m.burns_at).getTime() < now);
+        if (expired.length > 0) {
+          const deletedAt = new Date().toISOString();
+          for (const m of expired) {
+            if (m.media_storage_path) {
+              const bucket = m.media_storage_bucket ?? 'chat_media';
+              supabase.storage.from(bucket).remove([m.media_storage_path]).catch(() => {});
+            }
+          }
+          Promise.resolve(
+            supabase
+              .from('chat_messages')
+              .update({ deleted_at: deletedAt })
+              .in('id', expired.map(m => m.id))
+              .eq('couple_id', couple.id)
+          ).catch(() => {});
+        }
+        const visible = expired.length > 0 ? sorted.filter(m => !expired.some(e => e.id === m.id)) : sorted;
         // Build the URL map from embedded media_url and the module-level cache.
         // For anything still missing, await the Supabase storage signed-URL fetch
         // so that setMessages + setSignedUrls fire together in one batched render.
         const urlMap: Record<string, string> = {};
         const needsNetworkFetch: ChatMessage[] = [];
-        for (const m of sorted) {
+        for (const m of visible) {
           if (m.media_url) {
             urlMap[m.id] = m.media_url;
             if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url);
@@ -681,11 +718,11 @@ export default function ChatTab() {
           );
         }
         // Single batched render: messages and all available URLs arrive together.
-        setMessages(sorted);
+        setMessages(visible);
         if (Object.keys(urlMap).length > 0) {
           setSignedUrls(prev => ({ ...prev, ...urlMap }));
         }
-        oldestCreatedAtRef.current = sorted[0]?.created_at ?? null;
+        oldestCreatedAtRef.current = visible[0]?.created_at ?? null;
         setHasMore(data.length === PAGE_SIZE);
       }
     } finally {
@@ -819,6 +856,8 @@ export default function ChatTab() {
               media_storage_path: m.media_storage_path ?? updated.media_storage_path,
               media_storage_bucket: m.media_storage_bucket ?? updated.media_storage_bucket,
               media_type: m.media_type ?? updated.media_type,
+              burn_after_seconds: updated.burn_after_seconds,
+              burns_at: updated.burns_at,
             };
           }));
         }
@@ -1034,6 +1073,8 @@ export default function ChatTab() {
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
       reply_to: replyingTo?.id ?? null,
+      burn_after_seconds: null,
+      burns_at: null,
       created_at: new Date().toISOString(),
       edited_at: null,
       deleted_at: null,
@@ -1473,6 +1514,56 @@ export default function ChatTab() {
     setRevealedMedia(prev => new Set([...prev, id]));
   }, []);
 
+  const handleSetBurnTimer = useCallback(async (msg: ChatMessage, seconds: number | null) => {
+    const prevBurn = msg.burn_after_seconds;
+    const prevBurnsAt = msg.burns_at;
+    // Optimistic update so the countdown starts/clears instantly.
+    const optimisticBurnsAt = seconds ? new Date(Date.now() + seconds * 1000).toISOString() : null;
+    setMessages(prev => prev.map(m =>
+      m.id === msg.id
+        ? { ...m, burn_after_seconds: seconds, burns_at: optimisticBurnsAt }
+        : m
+    ));
+    const { error } = await supabase
+      .from('chat_messages')
+      .update({ burn_after_seconds: seconds })
+      .eq('id', msg.id)
+      .eq('couple_id', couple!.id);
+    if (error) {
+      // Revert on failure.
+      setMessages(prev => prev.map(m =>
+        m.id === msg.id
+          ? { ...m, burn_after_seconds: prevBurn, burns_at: prevBurnsAt }
+          : m
+      ));
+      Alert.alert('Timer Failed', 'Could not set the self-destruct timer. Please try again.');
+    }
+  }, [couple]);
+
+  const handleBurnMessage = useCallback((msg: ChatMessage) => {
+    // Remove from local state immediately.
+    setMessages(prev => prev.filter(m => m.id !== msg.id));
+    // Soft-delete server-side; realtime UPDATE will propagate to the partner.
+    const deletedAt = new Date().toISOString();
+    supabase
+      .from('chat_messages')
+      .update({ deleted_at: deletedAt })
+      .eq('id', msg.id)
+      .eq('couple_id', couple!.id)
+      .then(({ error }) => {
+        if (error) {
+          logDebugEvent('chat_burn_delete_failed', { messageId: msg.id, error: error.message });
+        }
+      });
+    // Remove the underlying storage object (fire-and-forget).
+    if (msg.media_storage_path) {
+      const bucket = msg.media_storage_bucket ?? 'chat_media';
+      supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
+    }
+    // Evict any cached signed URL so it doesn't linger.
+    if (msg.media_storage_path) evictCachedUrl(msg.media_storage_path);
+  }, [couple]);
+
   const handleCopy = useCallback((msg: ChatMessage) => {
     if (!msg.content_text) return;
     if (Platform.OS === 'web') {
@@ -1538,6 +1629,7 @@ export default function ChatTab() {
         onReveal={handleRevealMedia}
         onOpen={handleOpenMedia}
         onLongPress={handleLongPress}
+        onBurn={handleBurnMessage}
         onReactQuick={(emoji) => reactOnMessage(item.id, emoji, item.sender_id)}
         prevCreatedAt={index > 0 ? (item as any).__prevCreatedAt : undefined}
         highlighted={item.id === highlightedId}
@@ -1546,7 +1638,7 @@ export default function ChatTab() {
         onJumpToMessage={handleJumpToMessage}
       />
     );
-  }, [user?.id, profile?.display_name, partnerProfile?.display_name, partnerProfile?.first_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, chatFontScale, reactOnMessage, highlightedId, messagesById]);
+  }, [user?.id, profile?.display_name, partnerProfile?.display_name, partnerProfile?.first_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, handleBurnMessage, mediaBubbleWidth, mediaBubbleHeight, chatFontScale, reactOnMessage, highlightedId, messagesById]);
 
   const canSend = editingState
     ? text.trim().length > 0 && !sending
@@ -1811,6 +1903,8 @@ export default function ChatTab() {
                 onEdit={!hasMedia ? () => handleStartEdit(activeMsg) : undefined}
                 onCopy={!hasMedia ? () => handleCopy(activeMsg) : undefined}
                 onReply={() => handleStartReply(activeMsg)}
+                onSetTimer={hasMedia ? () => setTimerSheetMsg(activeMsg) : undefined}
+                burnAfterSeconds={hasMedia ? activeMsg.burn_after_seconds : undefined}
                 onDismiss={handleDismissMenu}
               />
             </Pressable>
@@ -1825,6 +1919,58 @@ export default function ChatTab() {
         actions={confirmSheet?.actions ?? []}
         onDismiss={() => setConfirmSheet(null)}
       />
+
+      {/* Self-destruct timer picker */}
+      <BottomSheet
+        visible={!!timerSheetMsg}
+        onClose={() => setTimerSheetMsg(null)}
+        title="Self-destruct timer"
+        subtitle="This photo/video will disappear from chat when the timer ends."
+      >
+        <View style={styles.timerSheetBody}>
+          {timerSheetMsg?.burn_after_seconds ? (
+            <PillButton
+              label="Cancel current timer"
+              onPress={() => {
+                const m = timerSheetMsg;
+                setTimerSheetMsg(null);
+                if (m) handleSetBurnTimer(m, null);
+              }}
+              style={{ width: '100%', paddingVertical: 14, backgroundColor: 'rgba(255,68,68,0.12)', borderColor: 'rgba(255,68,68,0.3)' }}
+            />
+          ) : null}
+          <PillButton
+            label="1 minute"
+            onPress={() => {
+              const m = timerSheetMsg;
+              setTimerSheetMsg(null);
+              if (m) handleSetBurnTimer(m, 60);
+            }}
+            active={timerSheetMsg?.burn_after_seconds === 60}
+            style={styles.timerSheetBtn}
+          />
+          <PillButton
+            label="5 minutes"
+            onPress={() => {
+              const m = timerSheetMsg;
+              setTimerSheetMsg(null);
+              if (m) handleSetBurnTimer(m, 300);
+            }}
+            active={timerSheetMsg?.burn_after_seconds === 300}
+            style={styles.timerSheetBtn}
+          />
+          <PillButton
+            label="10 minutes"
+            onPress={() => {
+              const m = timerSheetMsg;
+              setTimerSheetMsg(null);
+              if (m) handleSetBurnTimer(m, 600);
+            }}
+            active={timerSheetMsg?.burn_after_seconds === 600}
+            style={styles.timerSheetBtn}
+          />
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -1883,6 +2029,7 @@ const MessageRow = React.memo(function MessageRow({
   onReveal,
   onOpen,
   onLongPress,
+  onBurn,
   onReactQuick,
   prevCreatedAt,
   highlighted,
@@ -1910,6 +2057,7 @@ const MessageRow = React.memo(function MessageRow({
   onReveal: (id: string) => void;
   onOpen: (m: ChatMessage) => void;
   onLongPress: (m: ChatMessage) => void;
+  onBurn: (m: ChatMessage) => void;
   onReactQuick: (emoji: string) => void;
   prevCreatedAt?: string | null;
   highlighted?: boolean;
@@ -2034,6 +2182,7 @@ const MessageRow = React.memo(function MessageRow({
                     signedUrl={signedUrl}
                     onOpen={onOpen}
                     onLongPress={onLongPress}
+                    onBurn={onBurn}
                     bubbleWidth={mediaBubbleWidth}
                     bubbleHeight={mediaBubbleHeight}
                     radii={item.content_text ? { ...radii, borderBottomLeftRadius: 4, borderBottomRightRadius: 4 } : radii}
@@ -2085,6 +2234,7 @@ const MessageRow = React.memo(function MessageRow({
                     signedUrl={signedUrl}
                     onOpen={onOpen}
                     onLongPress={onLongPress}
+                    onBurn={onBurn}
                     bubbleWidth={mediaBubbleWidth}
                     bubbleHeight={mediaBubbleHeight}
                     radii={item.content_text ? { ...radii, borderBottomLeftRadius: 4, borderBottomRightRadius: 4 } : radii}
@@ -2507,5 +2657,31 @@ const styles = StyleSheet.create({
   // Menu backdrop
   menuBackdrop: {
     backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+
+  // Burn timer countdown badge on media bubbles
+  burnBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  burnBadgeBg: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+
+  // Timer picker sheet
+  timerSheetBody: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  timerSheetBtn: {
+    width: '100%',
+    paddingVertical: 14,
   },
 });

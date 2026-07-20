@@ -110,6 +110,8 @@ export interface ChatMessage {
   allow_share: boolean;
   vault_item_id: string | null;
   reply_to: string | null;
+  burn_after_seconds: number | null;
+  burns_at: string | null;
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;

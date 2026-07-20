@@ -3,7 +3,7 @@ import {
   View, StyleSheet, TouchableOpacity, Platform, Animated,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { Trash2, Pencil, Copy, Lock, Check, Reply } from 'lucide-react-native';
+import { Trash2, Pencil, Copy, Lock, Check, Reply, Timer } from 'lucide-react-native';
 import { MediaReaction } from '@/lib/types';
 
 type VaultFeedback = 'idle' | 'saved' | 'already';
@@ -16,6 +16,7 @@ type Props = {
   isMedia: boolean;
   isInVault?: boolean;
   isMine: boolean;
+  burnAfterSeconds?: number | null;
   screenWidth: number;
   onReact: (emoji: string) => void;
   onSaveToVault?: () => void;
@@ -24,6 +25,7 @@ type Props = {
   onEdit?: () => void;
   onCopy?: () => void;
   onReply?: (emoji: string) => void;
+  onSetTimer?: () => void;
   onDismiss: () => void;
 };
 
@@ -33,6 +35,7 @@ export default function MediaActionRow({
   isMedia,
   isInVault,
   isMine,
+  burnAfterSeconds,
   screenWidth,
   onReact,
   onSaveToVault,
@@ -41,6 +44,7 @@ export default function MediaActionRow({
   onEdit,
   onCopy,
   onReply,
+  onSetTimer,
   onDismiss,
 }: Props) {
   const scaleAnim = useRef(new Animated.Value(0.82)).current;
@@ -210,6 +214,31 @@ export default function MediaActionRow({
               </TouchableOpacity>
 
               <>
+                {onSetTimer && (
+                  <>
+                    <View style={styles.actionDivider} />
+                    <TouchableOpacity
+                      style={[styles.actionBtn, burnAfterSeconds ? styles.actionBtnTimerActive : null]}
+                      onPress={() => { onDismiss(); onSetTimer(); }}
+                      activeOpacity={0.65}
+                    >
+                      <Timer
+                        color={burnAfterSeconds ? '#FFB347' : 'rgba(255,255,255,0.70)'}
+                        size={15}
+                        strokeWidth={2}
+                      />
+                      <AppText
+                        style={[styles.actionLabel, burnAfterSeconds ? styles.actionLabelTimerActive : null]}
+                      >
+                        {burnAfterSeconds
+                          ? burnAfterSeconds >= 3600
+                            ? `${Math.floor(burnAfterSeconds / 3600)}h`
+                            : `${Math.round(burnAfterSeconds / 60)}m`
+                          : 'Timer'}
+                      </AppText>
+                    </TouchableOpacity>
+                  </>
+                )}
                 <View style={styles.actionDivider} />
                 <TouchableOpacity
                   style={styles.actionBtn}
@@ -336,6 +365,9 @@ const styles = StyleSheet.create({
   actionBtnActive: {
     backgroundColor: 'rgba(255,46,138,0.15)',
   },
+  actionBtnTimerActive: {
+    backgroundColor: 'rgba(255,179,71,0.15)',
+  },
   actionLabel: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
@@ -343,6 +375,9 @@ const styles = StyleSheet.create({
   },
   actionLabelActive: {
     color: '#FF2E8A',
+  },
+  actionLabelTimerActive: {
+    color: '#FFB347',
   },
   actionLabelSuccess: {
     color: '#33D17A',

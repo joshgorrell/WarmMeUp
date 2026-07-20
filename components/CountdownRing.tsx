@@ -3,10 +3,8 @@ import { View, StyleSheet } from 'react-native';
 import AppText from '@/components/AppText';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 
-const SIZE = 88;
+const DEFAULT_SIZE = 88;
 const STROKE = 5;
-const RADIUS = (SIZE - STROKE) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 function formatTimeRemaining(seconds: number): string {
   if (seconds <= 0) return '0s';
@@ -35,9 +33,13 @@ interface CountdownRingProps {
   expiresAt: string;
   totalSeconds: number;
   onExpire: () => void;
+  size?: number;
 }
 
-export default function CountdownRing({ expiresAt, totalSeconds, onExpire }: CountdownRingProps) {
+export default function CountdownRing({ expiresAt, totalSeconds, onExpire, size = DEFAULT_SIZE }: CountdownRingProps) {
+  const stroke = size < 60 ? 3.5 : STROKE;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
   const expireMs = new Date(expiresAt).getTime();
 
   const computeRemaining = () => Math.max(0, Math.round((expireMs - Date.now()) / 1000));
@@ -63,45 +65,46 @@ export default function CountdownRing({ expiresAt, totalSeconds, onExpire }: Cou
   }, [expiresAt]);
 
   const fraction = totalSeconds > 0 ? Math.min(1, Math.max(0, remaining / totalSeconds)) : 0;
-  const dashOffset = CIRCUMFERENCE * (1 - fraction);
+  const dashOffset = circumference * (1 - fraction);
   const { start, end } = getRingColor(fraction);
   const timeText = formatTimeRemaining(remaining);
+  const isCompact = size < 60;
 
   return (
-    <View style={styles.container}>
-      <Svg width={SIZE} height={SIZE}>
+    <View style={[styles.container, { width: size, height: size }]}>
+      <Svg width={size} height={size}>
         <Defs>
-          <SvgGradient id="cdGrad" x1="0" y1="0" x2="1" y2="1">
+          <SvgGradient id={`cdGrad-${size}`} x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0" stopColor={start} />
             <Stop offset="1" stopColor={end} />
           </SvgGradient>
         </Defs>
         {/* Track */}
         <Circle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={RADIUS}
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
           stroke="rgba(255,255,255,0.08)"
-          strokeWidth={STROKE}
+          strokeWidth={stroke}
           fill="none"
         />
         {/* Progress arc */}
         <Circle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={RADIUS}
-          stroke="url(#cdGrad)"
-          strokeWidth={STROKE}
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={`url(#cdGrad-${size})`}
+          strokeWidth={stroke}
           fill="none"
-          strokeDasharray={CIRCUMFERENCE}
+          strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
           strokeLinecap="round"
-          transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
       <View style={styles.textWrap} pointerEvents="none">
-        <AppText style={[styles.timeText, fraction <= 0.083 && styles.urgent]}>{timeText}</AppText>
-        <AppText style={styles.label}>left</AppText>
+        <AppText style={[styles.timeText, { fontSize: isCompact ? 10 : 13 }, fraction <= 0.083 && styles.urgent]}>{timeText}</AppText>
+        {!isCompact && <AppText style={styles.label}>left</AppText>}
       </View>
     </View>
   );
@@ -109,8 +112,6 @@ export default function CountdownRing({ expiresAt, totalSeconds, onExpire }: Cou
 
 const styles = StyleSheet.create({
   container: {
-    width: SIZE,
-    height: SIZE,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
@@ -122,7 +123,6 @@ const styles = StyleSheet.create({
   },
   timeText: {
     color: 'rgba(255,255,255,0.90)',
-    fontSize: 13,
     fontFamily: 'Inter-Bold',
     letterSpacing: 0.2,
     lineHeight: 16,
