@@ -52,26 +52,16 @@ export default function VerifyEmailScreen() {
       // Email is confirmed — handle pending invite code before routing
       const code = pendingCode || (await loadPendingCode()) || '';
       if (code) {
-        const result = await completePendingJoin(user.id, code, refreshSubscription);
+        const result = await completePendingJoin(user.id, code);
         if (result.ok) {
           await clearPendingCode();
-          const { data: sessionData } = await supabase.auth.getSession();
-          const token = sessionData?.session?.access_token;
-          if (token) {
-            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-              body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
-            }).catch(() => {});
-          }
           router.replace({
-            pathname: '/(auth)/paired-celebration',
-            params: { partnerName: result.partnerName || '' },
+            pathname: '/(auth)/pair',
+            params: { prefilledCode: code },
           });
           return;
         }
         await clearPendingCode();
-        // Non-fatal — show a message and continue to onboarding
         const msg =
           result.reason === 'self' ? "You can't use your own invite code." :
           result.reason === 'already_connected' ? "You're already connected to a partner." :

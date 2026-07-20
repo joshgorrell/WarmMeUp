@@ -208,21 +208,13 @@ export default function RegisterScreen() {
         const isNewUser = !!updatedProfile;
         if (isNewUser) {
           if (pendingCode && session.user?.id) {
-            const result = await completePendingJoin(session.user.id, pendingCode, refreshSubscription);
+            const result = await completePendingJoin(session.user.id, pendingCode);
             await clearPendingCode();
             if (result.ok) {
-              const { data: sessionData } = await supabase.auth.getSession();
-              const token = sessionData?.session?.access_token;
-              if (token) {
-                fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                  body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
-                }).catch(() => {});
-              }
+              // Request sent — route to pair screen to wait for User A's acceptance
               router.replace({
-                pathname: '/(auth)/paired-celebration',
-                params: { partnerName: result.partnerName || '' },
+                pathname: '/(auth)/pair',
+                params: { prefilledCode: pendingCode },
               });
               return;
             }
@@ -272,21 +264,12 @@ export default function RegisterScreen() {
 
         if (data.user.email_confirmed_at) {
           if (pendingCode) {
-            const result = await completePendingJoin(data.user.id, pendingCode, refreshSubscription);
+            const result = await completePendingJoin(data.user.id, pendingCode);
             await clearPendingCode();
             if (result.ok) {
-              const { data: sessionData } = await supabase.auth.getSession();
-              const token = sessionData?.session?.access_token;
-              if (token) {
-                fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                  body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
-                }).catch(() => {});
-              }
               router.replace({
-                pathname: '/(auth)/paired-celebration',
-                params: { partnerName: result.partnerName || '' },
+                pathname: '/(auth)/pair',
+                params: { prefilledCode: pendingCode },
               });
               return;
             }

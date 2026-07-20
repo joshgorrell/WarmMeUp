@@ -16,7 +16,7 @@ import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw, Check, XCircle, Hourglass } from 'lucide-react-native';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -33,6 +33,7 @@ const DEEP_LINK_SCHEME = process.env.EXPO_PUBLIC_DEEP_LINK_SCHEME ?? 'warmup';
 const JOIN_COOLDOWN_MS = 3000;
 
 type ActiveModal = 'invite' | 'join' | null;
+type WaitingState = 'idle' | 'waiting' | 'accepted' | 'declined';
 
 function HeartOutline({
   size,
@@ -95,6 +96,9 @@ export default function PairScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [codeLoading, setCodeLoading] = useState(false);
   const [activeModal, setActiveModal] = useState<ActiveModal>(prefilledCode ? 'join' : null);
+  const [waitingState, setWaitingState] = useState<WaitingState>('idle');
+  const [waitingCoupleId, setWaitingCoupleId] = useState<string | null>(null);
+  const [acceptLoading, setAcceptLoading] = useState(false);
   const lastJoinAttemptRef = useRef(0);
 
   useEffect(() => {
@@ -107,6 +111,103 @@ export default function PairScreen() {
       router.replace('/(app)/(tabs)');
     }
   }, [couple?.user_b_id]);
+
+  // User B: subscribe to the couple row for accept/decline transitions while waiting.
+  useEffect(() => {
+    if (waitingState !== 'waiting' || !waitingCoupleId) return;
+    const channel = supabase
+      .channel(`waiting:${waitingCoupleId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'couples', filter: `id=eq.${waitingCoupleId}` },
+        async (payload: any) => {
+          const newStatus = payload?.new?.pending_partner_status;
+          const newUserB = payload?.new?.user_b_id;
+          if (newUserB && user) {
+            // Accepted — finalize the join
+            setWaitingState('accepted');
+            const { finalizeJoin } = await import('@/lib/coupleJoin');
+            const { partnerName } = await finalizeJoin(
+              waitingCoupleId,
+              payload.new.user_a_id,
+              newUserB,
+              async () => { await refreshCouple(); },
+            );
+            // Notify User A (fire-and-forget)
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
+            if (token) {
+              fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ event_type: 'partner_joined', couple_id: waitingCoupleId }),
+              }).catch(() => {});
+            }
+            if (!settings?.celebration_seen) {
+              router.replace({
+                pathname: '/(auth)/paired-celebration',
+                params: { partnerName: partnerName || '' },
+              });
+            } else {
+              router.replace('/(app)/(tabs)');
+            }
+          } else if (newStatus === 'declined') {
+            setWaitingState('declined');
+          }
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [waitingState, waitingCoupleId, user, settings?.celebration_seen]);
+
+  // User A: accept a pending request
+  const handleAccept = async () => {
+    if (!couple?.id || acceptLoading) return;
+    setAcceptLoading(true);
+    try {
+      const { data: result, error } = await supabase.rpc('accept_partner');
+      if (error || !result?.ok) {
+        setError('Could not accept right now. Try again.');
+        return;
+      }
+      await refreshCouple();
+      // Realtime will pick up user_b_id and redirect
+    } catch (e: any) {
+      setError(e.message || 'Something went wrong.');
+    } finally {
+      setAcceptLoading(false);
+    }
+  };
+
+  // User A: decline a pending request
+  const handleDecline = async () => {
+    if (!couple?.id || acceptLoading) return;
+    setAcceptLoading(true);
+    try {
+      const { error } = await supabase.rpc('decline_partner');
+      if (error) {
+        setError('Could not decline right now. Try again.');
+        return;
+      }
+      await refreshCouple();
+    } catch (e: any) {
+      setError(e.message || 'Something went wrong.');
+    } finally {
+      setAcceptLoading(false);
+    }
+  };
+
+  // User B: cancel their own pending request
+  const handleCancelRequest = async () => {
+    try {
+      await supabase.rpc('cancel_request');
+      setWaitingState('idle');
+      setWaitingCoupleId(null);
+      setJoinCode('');
+      setActiveModal(null);
+      await refreshCouple();
+    } catch {}
+  };
 
   // Auto-submit when a full 6-character code is entered
   useEffect(() => {
@@ -249,7 +350,7 @@ export default function PairScreen() {
     setLoading(true);
     try {
       const { data: joinResult, error: joinError } = await supabase
-        .rpc('join_couple', { invite_code: normalized });
+        .rpc('request_join', { invite_code: normalized });
 
       if (joinError) {
         setError('Something went wrong. Please try again.');
@@ -276,61 +377,21 @@ export default function PairScreen() {
         return;
       }
 
-      const coupleId: string = joinResult.couple_id;
-      const userAId: string = joinResult.user_a_id;
+      // Request created — move to waiting state. Realtime handles accept/decline.
+      setWaitingState('waiting');
+      setWaitingCoupleId(joinResult.couple_id);
+      setActiveModal(null);
+      await refreshCouple();
 
-      // Stamp subscription_owner_id — non-fatal, log errors and continue.
-      const [{ data: subA, error: subAError }, { data: subB, error: subBError }] = await Promise.all([
-        supabase.from('subscriptions').select('id').eq('user_id', userAId).eq('status', 'active').maybeSingle(),
-        supabase.from('subscriptions').select('id').eq('user_id', user.id).eq('status', 'active').maybeSingle(),
-      ]);
-      if (subAError) logDebugEvent('JOIN_SUB_QUERY_ERROR', { which: 'userA', message: subAError.message });
-      if (subBError) logDebugEvent('JOIN_SUB_QUERY_ERROR', { which: 'userB', message: subBError.message });
-      const subOwnerId = subA ? userAId : subB ? user.id : null;
-      if (subOwnerId) {
-        const { error: stampError } = await supabase.from('couples').update({ subscription_owner_id: subOwnerId }).eq('id', coupleId);
-        if (stampError) logDebugEvent('JOIN_SUB_STAMP_ERROR', { coupleId, subOwnerId, message: stampError.message });
-      }
-
-      // Clean up User B's own solo placeholder (active or inactive)
-      await supabase
-        .from('couples')
-        .delete()
-        .eq('user_a_id', user.id)
-        .is('user_b_id', null)
-        .neq('id', coupleId);
-
-      const { error: scoresError } = await supabase.from('scores').upsert([
-        { couple_id: coupleId, user_id: userAId, points: 0 },
-        { couple_id: coupleId, user_id: user.id, points: 0 },
-      ]);
-      if (scoresError) logDebugEvent('JOIN_SCORES_UPSERT_ERROR', { coupleId, message: scoresError.message });
-
-      // Notify User A (fire-and-forget)
+      // Notify User A that a request is pending (fire-and-forget)
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (token) {
         fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ event_type: 'partner_joined', couple_id: coupleId }),
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ event_type: 'partner_request', couple_id: joinResult.couple_id }),
         }).catch(() => {});
-      }
-
-      await refreshCouple();
-
-      if (!settings?.celebration_seen) {
-        const { data: partnerProf } = await supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('id', userAId)
-          .maybeSingle();
-        router.replace({
-          pathname: '/(auth)/paired-celebration',
-          params: { partnerName: partnerProf?.display_name || '' },
-        });
-      } else {
-        router.replace('/(app)/(tabs)');
       }
     } catch (e: any) {
       setError(e.message || 'Something went wrong.');
@@ -649,6 +710,51 @@ export default function PairScreen() {
                 </TouchableOpacity>
 
                 <AppText style={styles.waitingText}>Waiting for your partner to join...</AppText>
+
+                {couple?.pending_partner_status === 'pending' && (
+                  <View style={styles.pendingRequestCard}>
+                    <View style={styles.pendingRequestHeader}>
+                      <UserPlus color="#FF6B3D" size={18} strokeWidth={1.8} />
+                      <AppText style={styles.pendingRequestTitle}>A partner wants to connect</AppText>
+                    </View>
+                    <AppText style={styles.pendingRequestDesc}>
+                      Someone entered your invite code.{'\n'}Confirm only if they're your partner.
+                    </AppText>
+                    <View style={styles.pendingRequestActions}>
+                      <TouchableOpacity
+                        style={[styles.pendingBtn, styles.declineBtn]}
+                        onPress={handleDecline}
+                        activeOpacity={0.8}
+                        disabled={acceptLoading}
+                      >
+                        <XCircle color="rgba(255,255,255,0.7)" size={16} />
+                        <AppText style={styles.declineBtnText}>Decline</AppText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.pendingBtn}
+                        onPress={handleAccept}
+                        activeOpacity={0.85}
+                        disabled={acceptLoading}
+                      >
+                        <LinearGradient
+                          colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.acceptGrad}
+                        >
+                          {acceptLoading ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                          ) : (
+                            <>
+                              <Check color="#fff" size={16} />
+                              <AppText style={styles.acceptBtnText}>Accept</AppText>
+                            </>
+                          )}
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
               </>
             ) : (
               <>
@@ -733,6 +839,61 @@ export default function PairScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* User B: Waiting for User A to accept */}
+      <Modal
+        visible={waitingState === 'waiting'}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelRequest}
+      >
+        <View style={styles.waitingOverlay}>
+          <View style={styles.waitingCard}>
+            <View style={styles.waitingIconWrap}>
+              <Hourglass color="#FF6B3D" size={32} strokeWidth={1.8} />
+            </View>
+            <AppText style={styles.waitingOverlayTitle}>Waiting for confirmation</AppText>
+            <AppText style={styles.waitingOverlayDesc}>
+              Your partner needs to confirm the connection.{'\n'}Ask them to open the app and accept.
+            </AppText>
+            <ActivityIndicator color="#FF6B3D" size="small" style={{ marginTop: Spacing.md }} />
+            <TouchableOpacity
+              style={styles.cancelWaitingBtn}
+              onPress={handleCancelRequest}
+              activeOpacity={0.7}
+            >
+              <AppText style={styles.cancelWaitingText}>Cancel request</AppText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* User B: Declined */}
+      <Modal
+        visible={waitingState === 'declined'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setWaitingState('idle'); setWaitingCoupleId(null); }}
+      >
+        <View style={styles.waitingOverlay}>
+          <View style={styles.waitingCard}>
+            <View style={styles.waitingIconWrap}>
+              <XCircle color="#FF5A5F" size={32} strokeWidth={1.8} />
+            </View>
+            <AppText style={styles.waitingOverlayTitle}>Request declined</AppText>
+            <AppText style={styles.waitingOverlayDesc}>
+              Your partner declined the connection.{'\n'}Check your code and try again.
+            </AppText>
+            <TouchableOpacity
+              style={styles.cancelWaitingBtn}
+              onPress={() => { setWaitingState('idle'); setWaitingCoupleId(null); setJoinCode(''); }}
+              activeOpacity={0.7}
+            >
+              <AppText style={styles.cancelWaitingText}>OK</AppText>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1026,5 +1187,106 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  pendingRequestCard: {
+    marginTop: Spacing.md,
+    backgroundColor: 'rgba(255,107,61,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,61,0.25)',
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  pendingRequestHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pendingRequestTitle: {
+    color: '#fff',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-SemiBold',
+  },
+  pendingRequestDesc: {
+    color: 'rgba(255,255,255,0.42)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 20,
+  },
+  pendingRequestActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: 4,
+  },
+  pendingBtn: {
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+  },
+  declineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  declineBtnText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+  },
+  acceptGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.pill,
+  },
+  acceptBtnText: {
+    color: '#fff',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+  },
+  waitingOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.88)',
+    padding: Spacing.xl,
+  },
+  waitingCard: {
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  waitingIconWrap: {
+    marginBottom: Spacing.xs,
+  },
+  waitingOverlayTitle: {
+    color: '#fff',
+    fontSize: FontSize.xl,
+    fontFamily: 'Inter-Bold',
+    textAlign: 'center',
+  },
+  waitingOverlayDesc: {
+    color: 'rgba(255,255,255,0.42)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  cancelWaitingBtn: {
+    marginTop: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+  },
+  cancelWaitingText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Medium',
   },
 });

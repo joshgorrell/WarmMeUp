@@ -1039,23 +1039,14 @@ export default function AccountScreen() {
     setEnterCodeLoading(true);
     setEnterCodeError(null);
     const { completePendingJoin } = await import('@/lib/coupleJoin');
-    const result = await completePendingJoin(user.id, code, refreshSubscription);
+    const result = await completePendingJoin(user.id, code);
     if (result.ok) {
       setShowEnterCodeSheet(false);
       setEnterCode('');
       await refreshCouple();
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      if (token) {
-        fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.coupleId }),
-        }).catch(() => {});
-      }
       router.replace({
-        pathname: '/(auth)/paired-celebration',
-        params: { partnerName: result.partnerName || '' },
+        pathname: '/(auth)/pair',
+        params: { prefilledCode: code },
       });
     } else {
       const msg =

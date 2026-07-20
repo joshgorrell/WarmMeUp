@@ -2,36 +2,72 @@ import { supabase } from '@/lib/supabase';
 import { logDebugEvent } from '@/lib/debugLog';
 
 export type JoinResult =
-  | { ok: true; partnerName: string | null; coupleId: string }
+  | { ok: true; status: 'pending'; coupleId: string }
   | { ok: false; reason: 'not_found' | 'already_full' | 'self' | 'already_connected' | 'error' };
 
+type JoinReason = 'not_found' | 'already_full' | 'self' | 'already_connected' | 'error';
+
+/**
+ * Phase 1 of mutual-consent pairing. Sends a join request to the couple
+ * identified by `code`. Does NOT form a couple — it sets a pending request
+ * that User A must accept via `accept_partner()` before any couple-scoped
+ * data becomes accessible.
+ *
+ * Returns `{ ok: true, status: 'pending', coupleId }` when the request was
+ * created. The caller should navigate to a "waiting for confirmation" state
+ * and subscribe to the couple row via realtime for the accept/decline
+ * transition, then call `finalizeJoin()` once accepted.
+ */
 export async function completePendingJoin(
-  userId: string,
+  _userId: string,
   code: string,
-  onJoined?: () => Promise<void>,
 ): Promise<JoinResult> {
-  const { data: joinResult, error: joinError } = await supabase
-    .rpc('join_couple', { invite_code: code.toUpperCase().trim() });
+  const { data: result, error: joinError } = await supabase
+    .rpc('request_join', { invite_code: code.toUpperCase().trim() }) as { data: any; error: any };
 
   if (joinError) return { ok: false, reason: 'error' };
 
-  if (!joinResult.ok) {
-    return { ok: false, reason: joinResult.reason as 'not_found' | 'already_full' | 'self' | 'already_connected' | 'error' };
+  if (!result?.ok) {
+    return { ok: false, reason: (result?.reason as JoinReason) ?? 'error' };
   }
 
-  const coupleId: string = joinResult.couple_id;
-  const userAId: string = joinResult.user_a_id;
+  // Notify User A that a request is pending (fire-and-forget)
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+  if (token) {
+    fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ event_type: 'partner_request', couple_id: result.couple_id }),
+    }).catch(() => {});
+  }
 
+  return { ok: true, status: 'pending', coupleId: result.couple_id };
+}
+
+/**
+ * Phase 2 of mutual-consent pairing. Runs the post-join cleanup that
+ * previously ran immediately on join — subscription owner stamping,
+ * solo-couple deletion, score seeding, and partner notification.
+ *
+ * Call this only after User A accepts the request (detected via realtime
+ * or a manual refresh that shows `user_b_id` is now populated).
+ */
+export async function finalizeJoin(
+  coupleId: string,
+  userAId: string,
+  userBId: string,
+  onJoined?: () => Promise<void>,
+): Promise<{ partnerName: string | null }> {
   // Stamp subscription_owner_id so the couple inherits whichever partner has an active paid plan.
-  // Errors here are non-fatal: the join already succeeded. Log them for diagnostics.
   const [{ data: subA, error: subAError }, { data: subB, error: subBError }] = await Promise.all([
     supabase.from('subscriptions').select('id').eq('user_id', userAId).eq('status', 'active').maybeSingle(),
-    supabase.from('subscriptions').select('id').eq('user_id', userId).eq('status', 'active').maybeSingle(),
+    supabase.from('subscriptions').select('id').eq('user_id', userBId).eq('status', 'active').maybeSingle(),
   ]);
   if (subAError) logDebugEvent('JOIN_SUB_QUERY_ERROR', { which: 'userA', message: subAError.message });
   if (subBError) logDebugEvent('JOIN_SUB_QUERY_ERROR', { which: 'userB', message: subBError.message });
 
-  const subscriptionOwnerId = subA ? userAId : subB ? userId : null;
+  const subscriptionOwnerId = subA ? userAId : subB ? userBId : null;
   if (subscriptionOwnerId) {
     const { error: stampError } = await supabase
       .from('couples')
@@ -46,14 +82,14 @@ export async function completePendingJoin(
   await supabase
     .from('couples')
     .delete()
-    .eq('user_a_id', userId)
+    .eq('user_a_id', userBId)
     .is('user_b_id', null)
     .neq('id', coupleId);
 
   // Seed scores rows so the points system works from day one.
   const { error: scoresError } = await supabase.from('scores').upsert([
     { couple_id: coupleId, user_id: userAId, points: 0 },
-    { couple_id: coupleId, user_id: userId, points: 0 },
+    { couple_id: coupleId, user_id: userBId, points: 0 },
   ]);
   if (scoresError) {
     logDebugEvent('JOIN_SCORES_UPSERT_ERROR', { coupleId, message: scoresError.message });
@@ -69,5 +105,5 @@ export async function completePendingJoin(
     onJoined().catch(() => {});
   }
 
-  return { ok: true, partnerName: partnerProfile?.display_name ?? null, coupleId };
+  return { partnerName: partnerProfile?.display_name ?? null };
 }

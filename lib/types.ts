@@ -24,6 +24,9 @@ export interface Couple {
   subscription_owner_id: string | null;
   disconnected_at: string | null;
   anniversary_date: string | null;
+  pending_partner_id: string | null;
+  pending_partner_status: string | null;
+  pending_requested_at: string | null;
   created_at: string;
 }
 

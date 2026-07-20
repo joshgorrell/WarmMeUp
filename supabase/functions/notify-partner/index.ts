@@ -29,10 +29,11 @@ const EVENT_LABELS: Record<string, string> = {
   send_love: "sent you",
   partner_disconnected: "ended the partner connection",
   partner_joined: "just joined! Your space is ready.",
+  partner_request: "someone wants to connect with you",
 };
 
 // System events shown regardless of discreet_notifications setting
-const ALWAYS_SHOW_EVENTS = new Set(["partner_disconnected", "partner_joined"]);
+const ALWAYS_SHOW_EVENTS = new Set(["partner_disconnected", "partner_joined", "partner_request"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -84,13 +85,14 @@ Deno.serve(async (req: Request) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     // For partner_disconnected, the couple may already be inactive — query without active filter.
+    // For partner_request, the couple is still a solo row (active=false) with only a pending request.
     // For all other events, require active couple for security.
     const coupleQuery = adminClient
       .from("couples")
-      .select("user_a_id, user_b_id")
+      .select("user_a_id, user_b_id, pending_partner_id, pending_partner_status")
       .eq("id", couple_id);
 
-    if (event_type !== "partner_disconnected") {
+    if (event_type !== "partner_disconnected" && event_type !== "partner_request") {
       coupleQuery.eq("active", true);
     }
 
@@ -103,7 +105,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const isCoupleMember = couple.user_a_id === user.id || couple.user_b_id === user.id;
+    // For partner_request, the caller is the pending partner (not yet user_b_id).
+    // For all other events, the caller must be user_a_id or user_b_id.
+    const isCoupleMember = event_type === "partner_request"
+      ? (couple.pending_partner_id === user.id && couple.pending_partner_status === "pending")
+      : (couple.user_a_id === user.id || couple.user_b_id === user.id);
     if (!isCoupleMember) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
@@ -111,7 +117,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
+    // For partner_request, the recipient is User A (the one who shared the code).
+    // For all other events, the recipient is the other member of the couple.
+    const partnerId = event_type === "partner_request"
+      ? couple.user_a_id
+      : (couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id);
     if (!partnerId) {
       return new Response(JSON.stringify({ ok: true, skipped: "no_partner" }), {
         status: 200,
