@@ -471,48 +471,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function fetchCouple(userId: string) {
-    // Primary fetch: solo/invite-pending row owned by this user.
-    // Do NOT require active=true here — a freshly created invite row may still have
-    // active=false until the first couple-state write, and we need its invite_code.
-    let { data, error } = await supabase
+    // Single query that covers all three cases the previous sequential
+    // fallbacks handled:
+    //   1. Solo/invite-pending row owned by this user (user_b_id IS NULL)
+    //   2. Active paired couple where this user is user_a or user_b
+    //   3. Any active couple involving this user (edge-case catch-all)
+    // We OR the conditions and order so the best row comes first:
+    //   - user_b_id IS NULL (solo/pending) before paired rows
+    //   - active=true before active=false
+    //   - most recently created first
+    // .maybeSingle() returns the top row or null in one round-trip.
+    const { data, error } = await supabase
       .from('couples')
       .select('*')
-      .eq('user_a_id', userId)
-      .is('user_b_id', null)
+      .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+      .order('user_b_id', { ascending: true, nullsFirst: true })
+      .order('active', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    // Fallback: active paired couple (user_b has joined).
-    // Always require active=true so inactive/historical couple rows never become current state.
-    if (!error && !data) {
-      ({ data, error } = await supabase
-        .from('couples')
-        .select('*')
-        .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
-        .not('user_b_id', 'is', null)
-        .eq('active', true)
-        .maybeSingle());
-    }
-
-    // Final fallback: active couple in any configuration (catches edge cases).
-    if (!error && !data) {
-      ({ data, error } = await supabase
-        .from('couples')
-        .select('*')
-        .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
-        .eq('active', true)
-        .maybeSingle());
-    }
-
     // Only update state if the query succeeded. A network error or unexpected
-    // PostgREST error (e.g. multiple rows from a bad RLS policy) returns error!=null
-    // and data=null — in that case keep whatever is already in state rather than
-    // blanking the couple and sending the user to the /pair screen.
+    // PostgREST error returns error!=null and data=null — in that case keep
+    // whatever is already in state rather than blanking the couple and
+    // sending the user to the /pair screen.
     if (!error) {
       setCouple(data);
-      // Mark that the initial couple load has completed. The realtime "partner just joined"
-      // detection must only fire AFTER this point — not during the initial state hydration.
       coupleInitialLoadDoneRef.current = true;
     }
 
@@ -530,7 +514,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setPartnerProfile(null);
       }
-      // Lazy monthly reset — archive prior month scores if needed
       maybeArchiveAndResetScores(data.id, userId).catch(() => {});
     } else {
       setPartnerProfile(null);

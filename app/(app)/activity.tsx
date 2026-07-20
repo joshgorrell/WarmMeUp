@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter, usePathname } from 'expo-router';
@@ -71,16 +71,25 @@ export default function ActivityScreen() {
 
   const unreadCount = items.filter(i => !viewedSet.has(`${i.sourceTable}:${i.sourceId}`)).length;
 
+  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedReload = useCallback(() => {
+    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+    reloadTimerRef.current = setTimeout(() => load(), 300);
+  }, []);
+
   useEffect(() => {
     if (!couple?.id || !user?.id) return;
     load();
     const ch = supabase.channel(`activity_screen_${couple.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, load)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, load)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, load)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [couple?.id, user?.id]);
+    return () => {
+      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+      supabase.removeChannel(ch);
+    };
+  }, [couple?.id, user?.id, debouncedReload]);
 
   const load = async () => {
     if (!couple?.id || !user) return;

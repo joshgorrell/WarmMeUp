@@ -157,18 +157,43 @@ export default function DiceTab() {
 
   const checkStates = useCallback(async () => {
     if (!couple?.id || !user?.id) return;
-    const { data: incoming } = await supabase
-      .from('interactions')
-      .select('*')
-      .eq('couple_id', couple.id)
-      .eq('receiver_id', user.id)
-      .eq('type', 'dice')
-      .eq('rolled_for', 'partner')
-      .in('status', ['sent', 'accepted', 'pending_verification'])
-      .is('completed_at', null)
-      .is('deleted_at', null)
-      .maybeSingle();
 
+    const [incomingRes, pendingRes, mySentRes] = await Promise.all([
+      supabase
+        .from('interactions')
+        .select('*')
+        .eq('couple_id', couple.id)
+        .eq('receiver_id', user.id)
+        .eq('type', 'dice')
+        .eq('rolled_for', 'partner')
+        .in('status', ['sent', 'accepted', 'pending_verification'])
+        .is('completed_at', null)
+        .is('deleted_at', null)
+        .maybeSingle(),
+      supabase
+        .from('interactions')
+        .select('*')
+        .eq('couple_id', couple.id)
+        .eq('sender_id', user.id)
+        .eq('type', 'dice')
+        .eq('rolled_for', 'partner')
+        .eq('status', 'pending_verification')
+        .is('completed_at', null)
+        .is('deleted_at', null)
+        .maybeSingle(),
+      supabase
+        .from('interactions')
+        .select('*')
+        .eq('couple_id', couple.id)
+        .eq('sender_id', user.id)
+        .eq('type', 'dice')
+        .eq('rolled_for', 'partner')
+        .eq('status', 'sent')
+        .is('deleted_at', null)
+        .maybeSingle(),
+    ]);
+
+    const incoming = incomingRes.data;
     if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {
       // Auto-reject expired incoming dice challenge silently
       await supabase.from('interactions').update({ status: 'rejected', is_active: false }).eq('id', incoming.id);
@@ -178,31 +203,8 @@ export default function DiceTab() {
       setIncomingChallenge(incoming);
     }
 
-    const { data: pending } = await supabase
-      .from('interactions')
-      .select('*')
-      .eq('couple_id', couple.id)
-      .eq('sender_id', user.id)
-      .eq('type', 'dice')
-      .eq('rolled_for', 'partner')
-      .eq('status', 'pending_verification')
-      .is('completed_at', null)
-      .is('deleted_at', null)
-      .maybeSingle();
-    setPendingVerification(pending);
-
-    // Track the dice I sent that is still awaiting response (for sender countdown)
-    const { data: mySent } = await supabase
-      .from('interactions')
-      .select('*')
-      .eq('couple_id', couple.id)
-      .eq('sender_id', user.id)
-      .eq('type', 'dice')
-      .eq('rolled_for', 'partner')
-      .eq('status', 'sent')
-      .is('deleted_at', null)
-      .maybeSingle();
-    setSentDice(mySent ?? null);
+    setPendingVerification(pendingRes.data);
+    setSentDice(mySentRes.data ?? null);
   }, [couple?.id, user?.id]);
 
   useEffect(() => {

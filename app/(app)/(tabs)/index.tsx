@@ -126,8 +126,16 @@ export default function HomeScreen() {
   }, [couple?.id, user]);
 
   // Reload scores when returning to the Home tab so stale state is never shown.
+  // Throttle: skip if data was loaded within the last 5 seconds to avoid
+  // redundant 4-query reloads when bouncing between Home and sub-screens.
+  const lastLoadedAtRef = useRef(0);
   useFocusEffect(useCallback(() => {
-    if (couple?.id && user) { loadAll().then(() => { if (isMountedRef.current) setLoading(false); }); }
+    if (couple?.id && user) {
+      const now = Date.now();
+      if (now - lastLoadedAtRef.current < 5000) return;
+      lastLoadedAtRef.current = now;
+      loadAll().then(() => { if (isMountedRef.current) setLoading(false); });
+    }
   }, [couple?.id, user]));
 
   // Reload immediately when Reset Points completes (scoreResetAt increments in AuthContext).
@@ -138,42 +146,16 @@ export default function HomeScreen() {
 
   const loadAll = async () => {
     if (!couple?.id || !user) return;
+    lastLoadedAtRef.current = Date.now();
     await Promise.all([loadScores(), loadActiveInteraction(), loadRecentActivity(), loadStreak()]);
   };
 
   const loadStreak = async () => {
     if (!couple?.id) return;
     if (!(couple?.streaks_enabled ?? true)) { setStreak(0); return; }
-    const [interactionsRes, chatRes] = await Promise.all([
-      supabase
-        .from('interactions')
-        .select('created_at')
-        .eq('couple_id', couple.id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(200),
-      supabase
-        .from('chat_messages')
-        .select('created_at')
-        .eq('couple_id', couple.id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(200),
-    ]);
-    const rows = [
-      ...((interactionsRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
-      ...((chatRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
-    ];
-    if (rows.length === 0) { setStreak(0); return; }
-    const activeDays = new Set(rows.map((ts: string) => new Date(ts).toDateString()));
-    let days = 0;
-    const cursor = new Date();
-    cursor.setHours(0, 0, 0, 0);
-    while (activeDays.has(cursor.toDateString())) {
-      days++;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-    setStreak(days);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const { data } = await supabase.rpc('get_day_streak', { p_couple_id: couple.id, p_tz: tz });
+    if (isMountedRef.current) setStreak(typeof data === 'number' ? data : 0);
   };
 
   const loadScores = async () => {

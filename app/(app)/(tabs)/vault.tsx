@@ -44,6 +44,10 @@ export default function VaultScreen() {
   const NUM_COLS = cols(3, 5, 6);
   const ITEM_SIZE = width > 0 ? (width - contentPadding * 2 - Spacing.sm * (NUM_COLS - 1)) / NUM_COLS : 100;
   const [items, setItems] = useState<VaultItem[]>([]);
+  const PAGE_SIZE = 60;
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const oldestCreatedAtRef = useRef<string | null>(null);
   // Single flag: has the user tapped to reveal the whole grid this session?
   const [pageRevealed, setPageRevealed] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -265,12 +269,8 @@ export default function VaultScreen() {
         }
         urlFetchedAtRef.current = { ...urlFetchedAtRef.current, ...fetchTs };
         setSignedUrls(prev => ({ ...prev, ...urlMap }));
-        // Background prefetch full-res images (not videos) — max 3 concurrent
-        const imageItems = bucketItems.filter(i => i.media_type !== 'video' && urlMap[i.id]);
-        for (let i = 0; i < imageItems.length; i += 3) {
-          const batch = imageItems.slice(i, i + 3);
-          await Promise.all(batch.map(it => ExpoImageStatic.prefetch(urlMap[it.id]).catch(() => {})));
-        }
+        // Full-res prefetch is deferred until tile tap to keep initial load fast;
+        // only thumbnail URLs are fetched eagerly for the grid.
       }),
       // Thumbnail URLs (separate paths — best-effort)
       ...Object.entries(thumbByBucket).map(async ([bucket, bucketItems]) => {
@@ -293,10 +293,34 @@ export default function VaultScreen() {
 
   const load = async () => {
     if (!couple?.id) return;
-    const { data } = await supabase.from('vault_items').select('*').eq('couple_id', couple.id).is('deleted_at', null).order('created_at', { ascending: false });
+    setHasMore(true);
+    oldestCreatedAtRef.current = null;
+    const { data } = await supabase.from('vault_items').select('*').eq('couple_id', couple.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(PAGE_SIZE);
     if (data) {
       setItems(data);
+      if (data.length > 0) oldestCreatedAtRef.current = data[data.length - 1].created_at;
+      setHasMore(data.length === PAGE_SIZE);
       await fetchSignedUrlsForItems(data);
+    }
+  };
+
+  const loadMore = async () => {
+    if (!couple?.id || loadingMore || !hasMore) return;
+    const cursor = oldestCreatedAtRef.current;
+    if (!cursor) return;
+    setLoadingMore(true);
+    try {
+      const { data } = await supabase.from('vault_items').select('*').eq('couple_id', couple.id).is('deleted_at', null).lt('created_at', cursor).order('created_at', { ascending: false }).limit(PAGE_SIZE);
+      if (data && data.length > 0) {
+        setItems(prev => [...prev, ...data]);
+        oldestCreatedAtRef.current = data[data.length - 1].created_at;
+        setHasMore(data.length === PAGE_SIZE);
+        await fetchSignedUrlsForItems(data);
+      } else {
+        setHasMore(false);
+      }
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -750,6 +774,13 @@ export default function VaultScreen() {
         ref={scrollViewRef}
         contentContainerStyle={[styles.scroll, { paddingHorizontal: contentPadding }]}
         showsVerticalScrollIndicator={false}
+        onScroll={(e) => {
+          const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+          if (loadingMore || !hasMore) return;
+          const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+          if (distanceFromBottom < 200) loadMore();
+        }}
+        scrollEventThrottle={64}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}
       >
         {/* Vault header */}
@@ -846,6 +877,11 @@ export default function VaultScreen() {
                 </View>
               );
             })}
+            {loadingMore && (
+              <View style={{ width: '100%', paddingVertical: Spacing.lg, alignItems: 'center' }}>
+                <ActivityIndicator color="rgba(255,255,255,0.25)" size="small" />
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
