@@ -154,15 +154,10 @@ export default function PairScreen() {
           const newStatus = payload?.new?.pending_partner_status;
           const newUserB = payload?.new?.user_b_id;
           if (newUserB && user) {
-            // Accepted — finalize the join
+            // Accepted — finalization ran server-side in accept_partner().
+            // Just refresh and navigate.
             setWaitingState('accepted');
-            const { finalizeJoin } = await import('@/lib/coupleJoin');
-            const { partnerName } = await finalizeJoin(
-              waitingCoupleId,
-              payload.new.user_a_id,
-              newUserB,
-              async () => { await refreshCouple(); },
-            );
+            await refreshCouple();
             // Notify User A (fire-and-forget)
             const { data: sessionData } = await supabase.auth.getSession();
             const token = sessionData?.session?.access_token;
@@ -176,7 +171,7 @@ export default function PairScreen() {
             if (!settings?.celebration_seen) {
               router.replace({
                 pathname: '/(auth)/paired-celebration',
-                params: { partnerName: partnerName || '' },
+                params: { partnerName: inviterName || '' },
               });
             } else {
               router.replace('/(app)/(tabs)');
