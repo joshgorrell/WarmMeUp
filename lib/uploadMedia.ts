@@ -82,21 +82,26 @@ export async function uploadMediaFile(
   userId?: string,
   coupleId?: string,
 ): Promise<UploadResult> {
-  // getUser() validates the token server-side and triggers a refresh if expired,
-  // then we re-read the session to get the freshened access_token.
-  await supabase.auth.getUser();
-  const { data: { session } } = await supabase.auth.getSession();
+  // Try getSession() first (local, no network) — only call getUser() (which
+  // validates the token server-side and can trigger a refresh) if the session
+  // is missing. This avoids a network round-trip on every upload.
+  const { data: { session: initialSession } } = await supabase.auth.getSession();
+  let session = initialSession;
+  if (!session) {
+    await supabase.auth.getUser();
+    const { data: { session: refreshed } } = await supabase.auth.getSession();
+    if (!refreshed) {
+      logDebugEvent('VAULT UPLOAD ERROR', {
+        reason: 'No active session',
+        bucket, storagePath, mimeType, userId: userId ?? null, coupleId: coupleId ?? null,
+      });
+      throw new Error('Session expired — please log out and back in.');
+    }
+    session = refreshed;
+  }
 
   const sessionValid = !!session;
   const tokenPresent = !!session?.access_token;
-
-  if (!session) {
-    logDebugEvent('VAULT UPLOAD ERROR', {
-      reason: 'No active session',
-      bucket, storagePath, mimeType, userId: userId ?? null, coupleId: coupleId ?? null,
-    });
-    throw new Error('Session expired — please log out and back in.');
-  }
 
   onProgress?.(0);
 

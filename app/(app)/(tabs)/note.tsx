@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
   TouchableOpacity, TouchableWithoutFeedback, Pressable, ActivityIndicator, TextInput, Alert,
-  AppState, AppStateStatus, Keyboard, Animated, LayoutAnimation, UIManager, InteractionManager, BackHandler, Linking,
+  AppState, AppStateStatus, Keyboard, Animated, InteractionManager, BackHandler, Linking,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { BlurView } from 'expo-blur';
@@ -30,16 +30,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logDebugEvent } from '@/lib/debugLog';
 import { setGalleryItems, getCachedUrl, setCachedUrl, evictCachedUrl } from '@/lib/mediaGalleryStore';
 import ReAnimated, {
-  useSharedValue, useAnimatedStyle, withSpring,
+  useSharedValue, useAnimatedStyle, withSpring, FadeInDown,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 function formatTime(iso: string) {
   const d = new Date(iso);
@@ -514,6 +509,10 @@ export default function ChatTab() {
       }
       if ((prev === 'background' || prev === 'inactive') && next === 'active') {
         if (blurEnabled) setRevealedMedia(new Set());
+        // Re-sync messages on resume — the realtime channel may have dropped
+        // while backgrounded, so any messages that arrived during that window
+        // would otherwise be missing until a manual reload.
+        if (couple?.id) loadMessages();
         const elapsed = lastInactiveAtRef.current ? Date.now() - lastInactiveAtRef.current : 999;
         if (elapsed < 400 && couple?.id && user?.id) {
           supabase.auth.getSession().then(({ data }) => {
@@ -607,6 +606,22 @@ export default function ChatTab() {
 
     setSignedUrls(prev => ({ ...prev, ...results }));
   }, []);
+
+  // Debounced batch fetch — when several media messages arrive in quick
+  // succession (rapid back-and-forth), coalesce them into a single signed-URL
+  // round-trip instead of one fetch per message.
+  const pendingSignedFetchRef = useRef<ChatMessage[]>([]);
+  const signedFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchSignedUrlsBatched = useCallback((msg: ChatMessage) => {
+    pendingSignedFetchRef.current.push(msg);
+    if (signedFetchTimerRef.current) clearTimeout(signedFetchTimerRef.current);
+    signedFetchTimerRef.current = setTimeout(() => {
+      const batch = pendingSignedFetchRef.current;
+      pendingSignedFetchRef.current = [];
+      signedFetchTimerRef.current = null;
+      if (batch.length > 0) fetchSignedUrls(batch);
+    }, 150);
+  }, [fetchSignedUrls]);
 
   const PAGE_SIZE = 30;
   const [hasMore, setHasMore] = useState(false);
@@ -743,26 +758,42 @@ export default function ChatTab() {
     }
   }, [couple?.id, loadingOlder, hasMore]);
 
+  const channelStatusRef = useRef<'connecting' | 'open' | 'closed' | 'error'>('connecting');
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!couple?.id) { setChatLoading(false); return; }
     loadMessages();
+
+    const handleInsert = (newMsg: ChatMessage) => {
+      setMessages(prev => {
+        // Idempotency: if a matching optimistic temp message exists for this
+        // real row, replace it instead of appending a duplicate. Match on
+        // media_storage_path (unique per upload) or sender+created_at.
+        const tempIdx = prev.findIndex(m =>
+          m.id.startsWith('temp_') &&
+          ((newMsg.media_storage_path && m.media_storage_path === newMsg.media_storage_path) ||
+           (m.sender_id === newMsg.sender_id && m.created_at === newMsg.created_at))
+        );
+        if (tempIdx >= 0) {
+          const next = [...prev];
+          next[tempIdx] = newMsg;
+          return next;
+        }
+        if (prev.some(m => m.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
+      });
+      if (newMsg.media_url) {
+        setSignedUrls(prev => ({ ...prev, [newMsg.id]: newMsg.media_url! }));
+        if (newMsg.media_storage_path) setCachedUrl(newMsg.media_storage_path, newMsg.media_url);
+      } else if (newMsg.media_storage_path) {
+        fetchSignedUrlsBatched(newMsg);
+      }
+    };
+
     const ch = supabase.channel(`chat_tab_${couple.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
-        (payload) => {
-          const newMsg = payload.new as ChatMessage;
-          console.log('[CHAT_RECEIVED INSERT]', newMsg);
-          setMessages(prev => {
-            if (prev.some(m => m.id === newMsg.id)) return prev;
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            return [...prev, newMsg];
-          });
-          if (newMsg.media_url) {
-            // Signed URL already embedded in the row — no extra round-trip needed.
-            setSignedUrls(prev => ({ ...prev, [newMsg.id]: newMsg.media_url! }));
-          } else if (newMsg.media_storage_path) {
-            fetchSignedUrls([newMsg]);
-          }
-        }
+        (payload) => handleInsert(payload.new as ChatMessage)
       )
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
         (payload) => {
@@ -773,15 +804,10 @@ export default function ChatTab() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
         (payload) => {
           const updated = payload.new as ChatMessage;
-          console.log('[CHAT_RECEIVED UPDATE]', updated);
           if (updated.deleted_at) {
             setMessages(prev => prev.filter(m => m.id !== updated.id));
             return;
           }
-          // Defensively merge: preserve immutable content fields from the existing
-          // record in case payload.new arrives with partial data (replica identity
-          // race). Only mutable fields (vault_item_id, edited_at, content_text on
-          // edit, deleted_at) are applied from the update payload.
           setMessages(prev => prev.map(m => {
             if (m.id !== updated.id) return m;
             return {
@@ -789,9 +815,7 @@ export default function ChatTab() {
               vault_item_id: updated.vault_item_id,
               edited_at: updated.edited_at,
               deleted_at: updated.deleted_at,
-              // content_text can change on edit — only overwrite if payload has it
               content_text: updated.content_text !== undefined ? updated.content_text : m.content_text,
-              // preserve media fields from existing record as the ground truth
               media_storage_path: m.media_storage_path ?? updated.media_storage_path,
               media_storage_bucket: m.media_storage_bucket ?? updated.media_storage_bucket,
               media_type: m.media_type ?? updated.media_type,
@@ -799,8 +823,28 @@ export default function ChatTab() {
           }));
         }
       )
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          channelStatusRef.current = 'open';
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          channelStatusRef.current = 'error';
+          logDebugEvent('chat_realtime_channel_error', { status, error: String(err ?? '') });
+          // Auto-reconnect with backoff — a dropped realtime channel is the
+          // primary cause of "messages stopped arriving" during active chat.
+          if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = setTimeout(() => {
+            supabase.removeChannel(ch);
+            // Force a fresh sync + resubscribe by reloading messages on next tick.
+            loadMessages();
+          }, 1500);
+        } else if (status === 'CLOSED') {
+          channelStatusRef.current = 'closed';
+        }
+      });
+    return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      supabase.removeChannel(ch);
+    };
   }, [couple?.id]);
 
   const isLoadingOlderRef = useRef(false);
@@ -1440,13 +1484,32 @@ export default function ChatTab() {
     }
   }, []);
 
+  const messagesWithPrev = useMemo(() =>
+    messages.map((m, i) => ({
+      ...m,
+      __prevCreatedAt: i > 0 ? messages[i - 1].created_at : null,
+      __prevSenderId: i > 0 ? messages[i - 1].sender_id : null,
+      __nextCreatedAt: i < messages.length - 1 ? messages[i + 1].created_at : null,
+      __nextSenderId: i < messages.length - 1 ? messages[i + 1].sender_id : null,
+    })),
+    [messages]
+  );
+
+  // Lookup map so renderItem doesn't depend on the full messages array —
+  // only the specific replied-to message triggers a re-render.
+  const messagesById = useMemo(() => {
+    const map: Record<string, ChatMessage> = {};
+    for (const m of messages) map[m.id] = m;
+    return map;
+  }, [messages]);
+
   const renderItem = useCallback(({ item, index }: { item: ChatMessage & { __prevCreatedAt?: string | null; __nextCreatedAt?: string | null; __prevSenderId?: string | null; __nextSenderId?: string | null }; index: number }) => {
     const isMine = item.sender_id === user?.id;
     const name = isMine ? (profile?.display_name ?? 'You') : (partnerProfile?.display_name ?? 'Partner');
     const hasMedia = !!item.media_storage_path;
     const isMenuOpen = activeMenuId === item.id;
     const itemReactions = reactionsMap[item.id] ?? [];
-    const repliedMessage = item.reply_to ? messages.find(m => m.id === item.reply_to) : null;
+    const repliedMessage = item.reply_to ? messagesById[item.reply_to] : null;
 
     const prevMsg = (item.__prevCreatedAt && item.__prevSenderId) ? { created_at: item.__prevCreatedAt, sender_id: item.__prevSenderId } as ChatMessage : null;
     const nextMsg = (item.__nextCreatedAt && item.__nextSenderId) ? { created_at: item.__nextCreatedAt, sender_id: item.__nextSenderId } as ChatMessage : null;
@@ -1483,18 +1546,7 @@ export default function ChatTab() {
         onJumpToMessage={handleJumpToMessage}
       />
     );
-  }, [user?.id, profile?.display_name, partnerProfile?.display_name, partnerProfile?.first_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, chatFontScale, reactOnMessage, highlightedId, messages]);
-
-  const messagesWithPrev = useMemo(() =>
-    messages.map((m, i) => ({
-      ...m,
-      __prevCreatedAt: i > 0 ? messages[i - 1].created_at : null,
-      __prevSenderId: i > 0 ? messages[i - 1].sender_id : null,
-      __nextCreatedAt: i < messages.length - 1 ? messages[i + 1].created_at : null,
-      __nextSenderId: i < messages.length - 1 ? messages[i + 1].sender_id : null,
-    })),
-    [messages]
-  );
+  }, [user?.id, profile?.display_name, partnerProfile?.display_name, partnerProfile?.first_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, mediaBubbleWidth, mediaBubbleHeight, chatFontScale, reactOnMessage, highlightedId, messagesById]);
 
   const canSend = editingState
     ? text.trim().length > 0 && !sending
@@ -1563,6 +1615,10 @@ export default function ChatTab() {
               showsVerticalScrollIndicator={false}
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
+              removeClippedSubviews
+              maxToRenderPerBatch={8}
+              initialNumToRender={20}
+              windowSize={15}
               onScroll={(e) => {
                 if (e.nativeEvent.contentOffset.y < 80) {
                   loadOlderMessages();
@@ -1934,7 +1990,7 @@ const MessageRow = React.memo(function MessageRow({
           </AppText>
         </ReAnimated.View>
         <GestureDetector gesture={swipeGesture}>
-          <ReAnimated.View style={swipeRowStyle}>
+          <ReAnimated.View style={swipeRowStyle} entering={FadeInDown.duration(180).springify().damping(22)}>
             <Animated.View style={[
               styles.msgRow,
               isMine ? styles.msgRowRight : styles.msgRowLeft,
