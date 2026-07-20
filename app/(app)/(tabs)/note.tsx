@@ -675,6 +675,30 @@ export default function ChatTab() {
               .in('id', expired.map(m => m.id))
               .eq('couple_id', couple.id)
           ).catch(() => {});
+          // Also purge any linked Vault copies so a burn removes them everywhere.
+          const expiredVaultIds = expired.map(m => m.vault_item_id).filter((id): id is string => !!id);
+          if (expiredVaultIds.length > 0) {
+            supabase
+              .from('vault_items')
+              .select('id, storage_path, storage_bucket')
+              .in('id', expiredVaultIds)
+              .then(({ data: vis }) => {
+                supabase
+                  .from('vault_items')
+                  .update({ deleted_at: deletedAt })
+                  .in('id', expiredVaultIds)
+                  .then(({ error }) => {
+                    if (error) logDebugEvent('chat_burn_vault_cleanup_failed', { error: error.message });
+                  });
+                if (vis) {
+                  for (const vi of vis) {
+                    if (vi.storage_path) {
+                      supabase.storage.from(vi.storage_bucket ?? 'vault').remove([vi.storage_path]).catch(() => {});
+                    }
+                  }
+                }
+              });
+          }
         }
         const visible = expired.length > 0 ? sorted.filter(m => !expired.some(e => e.id === m.id)) : sorted;
         // Build the URL map from embedded media_url and the module-level cache.
@@ -1562,6 +1586,26 @@ export default function ChatTab() {
     }
     // Evict any cached signed URL so it doesn't linger.
     if (msg.media_storage_path) evictCachedUrl(msg.media_storage_path);
+    // Also purge the linked Vault copy so a burn removes it everywhere.
+    if (msg.vault_item_id) {
+      supabase
+        .from('vault_items')
+        .select('storage_path, storage_bucket')
+        .eq('id', msg.vault_item_id)
+        .maybeSingle()
+        .then(({ data: vi }) => {
+          supabase
+            .from('vault_items')
+            .update({ deleted_at: deletedAt })
+            .eq('id', msg.vault_item_id)
+            .then(({ error }) => {
+              if (error) logDebugEvent('chat_burn_vault_delete_failed', { vaultItemId: msg.vault_item_id, error: error.message });
+            });
+          if (vi?.storage_path) {
+            supabase.storage.from(vi.storage_bucket ?? 'vault').remove([vi.storage_path]).catch(() => {});
+          }
+        });
+    }
   }, [couple]);
 
   const handleCopy = useCallback((msg: ChatMessage) => {
