@@ -1413,16 +1413,16 @@ export default function AccountScreen() {
   };
 
   const handleContactSupport = async () => {
-    const url = 'mailto:support@warmmeupp.app?subject=Support%20Request';
+    const url = 'mailto:support@warmmeup.app?subject=Support%20Request';
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('Contact Support', 'Email us at support@warmmeupp.app');
+        Alert.alert('Contact Support', 'Email us at support@warmmeup.app');
       }
     } catch {
-      Alert.alert('Contact Support', 'Email us at support@warmmeupp.app');
+      Alert.alert('Contact Support', 'Email us at support@warmmeup.app');
     }
   };
 

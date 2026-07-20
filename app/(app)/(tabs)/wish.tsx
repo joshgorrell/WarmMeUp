@@ -1038,6 +1038,7 @@ export default function WishTab() {
   }, [couple?.id, user?.id]);
 
   useEffect(() => {
+    if (!couple?.id) return;
     loadWishes();
     const ch = supabase.channel(`wish_tab_${couple.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wishes', filter: `couple_id=eq.${couple.id}` }, loadWishes)

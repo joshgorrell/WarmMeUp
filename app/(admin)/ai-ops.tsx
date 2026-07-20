@@ -365,7 +365,7 @@ export default function AiOpsScreen() {
                       const val = dailyBrief.stats[key];
                       if (val === undefined) return null;
                       return (
-                        <View key={key} style={[styles.statChip, { backgroundColor: colors.background, borderColor: colors.borderSubtle }]}>
+                        <View key={key} style={[styles.statChip, { backgroundColor: colors.bg1, borderColor: colors.borderSubtle }]}>
                           <AppText style={[styles.statChipNum, { color: colors.text }]}>{String(val)}</AppText>
                           <AppText style={[styles.statChipLabel, { color: colors.textMuted }]}>{label}</AppText>
                         </View>

@@ -38,7 +38,7 @@ const PRIVACY_MANIFEST = `<?xml version="1.0" encoding="UTF-8"?>
     </dict>
     <dict>
       <key>NSPrivacyCollectedDataType</key>
-      <string>NSPrivacyCollectedDataTypePhototosorVideos</string>
+      <string>NSPrivacyCollectedDataTypePhotosorVideos</string>
       <key>NSPrivacyCollectedDataTypeLinked</key>
       <true/>
       <key>NSPrivacyCollectedDataTypeTracking</key>
@@ -144,6 +144,18 @@ function withPrivacyManifest(config) {
       'PrivacyInfo.xcprivacy'
     );
     fs.writeFileSync(manifestPath, PRIVACY_MANIFEST);
+
+    const pbxProject = modConfig.modResults;
+
+    const fileUuid = pbxProject.addResourceFile(
+      'PrivacyInfo.xcprivacy',
+      { target: pbxProject.getFirstTarget().uuid },
+      { name: 'PrivacyInfo.xcprivacy' }
+    );
+
+    if (!fileUuid) {
+      console.warn('[withPrivacyManifest] Could not add PrivacyInfo.xcprivacy to Xcode project resources.');
+    }
 
     return modConfig;
   });

@@ -337,6 +337,7 @@ export default function HomeScreen() {
           time: timeAgo(ev.created_at),
           icon: <AppText style={{ fontSize: 16, lineHeight: 20 }}>{emoji}</AppText>,
           color: '#FF2E8A',
+          route: '/(app)/(tabs)/note',
           _rawTime: ev.created_at,
         });
         return;
