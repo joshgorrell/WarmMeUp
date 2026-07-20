@@ -9,7 +9,7 @@ import { BlurView } from 'expo-blur';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Image as ImageIcon, Camera, X, Lock, EyeOff, Pencil, ChevronLeft, Phone, Video, Send } from 'lucide-react-native';
+import { Image as ImageIcon, Camera, X, Lock, EyeOff, Pencil, ChevronLeft, Send } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -25,6 +25,7 @@ import ConfirmSheet, { ConfirmAction } from '@/components/ConfirmSheet';
 import { useMediaReactions } from '@/hooks/useMediaReactions';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
+import { useWeather } from '@/hooks/useWeather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logDebugEvent } from '@/lib/debugLog';
 import { setGalleryItems, getCachedUrl, setCachedUrl, evictCachedUrl } from '@/lib/mediaGalleryStore';
@@ -324,6 +325,14 @@ function ChatHeader({
   onBack: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { profile, settings } = useAuth();
+  const privacyMode = settings?.stealth_mode_enabled ?? false;
+  const temp = useWeather(
+    privacyMode ? settings?.weather_lat : null,
+    privacyMode ? settings?.weather_lon : null,
+    privacyMode ? profile?.id : undefined,
+  );
   return (
     <View style={[chatHeaderStyles.container, { paddingTop: insets.top + 6 }]}>
       <TouchableOpacity onPress={onBack} style={chatHeaderStyles.backBtn} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -342,12 +351,16 @@ function ChatHeader({
       </View>
 
       <View style={chatHeaderStyles.rightIcons}>
-        <TouchableOpacity style={chatHeaderStyles.iconBtn} activeOpacity={0.7}>
-          <Phone color="rgba(255,255,255,0.70)" size={20} strokeWidth={2} />
-        </TouchableOpacity>
-        <TouchableOpacity style={chatHeaderStyles.iconBtn} activeOpacity={0.7}>
-          <Video color="rgba(255,255,255,0.70)" size={22} strokeWidth={2} />
-        </TouchableOpacity>
+        {privacyMode && (
+          <TouchableOpacity
+            onPress={() => router.replace('/weather')}
+            activeOpacity={0.7}
+            style={chatHeaderStyles.tempBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+          >
+            <AppText style={chatHeaderStyles.tempText}>{temp}</AppText>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={chatHeaderStyles.separator} />
@@ -413,11 +426,17 @@ const chatHeaderStyles = StyleSheet.create({
     gap: 4,
     flexShrink: 0,
   },
-  iconBtn: {
-    width: 40,
-    height: 40,
+  tempBtn: {
+    minWidth: 44,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tempText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 0.2,
   },
   separator: {
     position: 'absolute',
