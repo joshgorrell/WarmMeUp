@@ -1021,9 +1021,10 @@ export default function ChatTab() {
         mimeType: media.mimeType,
         uri: media.uri,
       });
-      await uploadMediaFile(media.uri, 'chat_media', path, media.mimeType, (pct) => setUploadPct(pct));
-      logDebugEvent('chat_photo_upload_success', { bucket: 'chat_media', path });
-      return path;
+      const uploadResult = await uploadMediaFile(media.uri, 'chat_media', path, media.mimeType, (pct) => setUploadPct(pct));
+      const actualPath = uploadResult.storagePath;
+      logDebugEvent('chat_photo_upload_success', { bucket: 'chat_media', path: actualPath, requestedPath: path });
+      return actualPath;
     } catch (e: any) {
       logDebugEvent('chat_photo_upload_error', { error: e?.message ?? String(e) });
       Alert.alert('Upload Failed', e?.message ?? 'Could not upload media. Please try again.');
@@ -1202,13 +1203,17 @@ export default function ChatTab() {
           const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${ext}`;
           const { data: srcData } = await supabase.storage.from('chat_media').createSignedUrl(chatStoragePath, 120);
           if (!srcData?.signedUrl) throw new Error('Could not access uploaded media for vault save.');
-          await uploadMediaFile(srcData.signedUrl, 'vault', vaultPath, capturedMedia.mimeType);
+          // The chat file is already compressed to JPEG by uploadChatMedia, so pass
+          // image/jpeg for photos to avoid a redundant recompression / MIME mismatch.
+          const vaultMime = capturedMedia.type === 'video' ? capturedMedia.mimeType : 'image/jpeg';
+          const vaultUploadResult = await uploadMediaFile(srcData.signedUrl, 'vault', vaultPath, vaultMime);
+          const actualVaultPath = vaultUploadResult.storagePath;
           const { data: vaultData } = await supabase.from('vault_items').insert({
             couple_id: coupleId,
             uploaded_by_user_id: userId,
             media_type: capturedMedia.type,
-            file_path: vaultPath,
-            storage_path: vaultPath,
+            file_path: actualVaultPath,
+            storage_path: actualVaultPath,
             storage_bucket: 'vault',
             allow_screenshot: false,
             allow_save: settings?.vault_allow_save_default ?? false,

@@ -41,8 +41,9 @@
   the client soft-deletes any message whose `burns_at` is in the past and
   removes the storage object. This avoids the need for pg_cron (which is
   not available on this project).
-- The burn timer only affects the chat copy. If the media was also saved to
-  the Vault (vault_item_id), the Vault copy is left intact.
+- When a burned message has a linked Vault copy (vault_item_id), the burn
+  also soft-deletes the vault_items row and removes the vault storage
+  object, so the media is purged everywhere.
 */
 
 -- Add burn_after_seconds column
