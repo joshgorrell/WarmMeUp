@@ -64,7 +64,7 @@ We do not use your private content for advertising.`,
   },
   {
     title: '3. Private Content & the Vault',
-    body: `Photos, videos, and media you upload through Warm Me Up are stored securely and are only accessible to you and your connected partner.
+    body: `Photos, videos, and media you upload through Warm Me Up are stored with access controls designed to limit access to you and your connected partner.
 
 Warm Me Up is designed with privacy in mind:
 
@@ -97,7 +97,7 @@ We do not share your private messages or media with third parties except as desc
     title: '5. User-Generated Content',
     body: `All content you create or upload in Warm Me Up — including messages, notes, vault photos and videos, dares, and custom prompts — is your content. You retain full ownership.
 
-Your content is shared only with your single connected partner. It is never:
+Your content is shared only with your single connected partner. It is not:
 
 \u2022 visible to other users, third parties, or the public
 \u2022 used for advertising or marketing purposes
@@ -128,16 +128,20 @@ Deleted accounts cannot be recovered.`,
   },
   {
     title: '7. Security',
-    body: `We take reasonable measures to protect your personal information, including:
+    body: `Electronic Life LLC implements administrative, technical, and organizational safeguards that are designed to help protect personal information, including:
 
 \u2022 encrypted data transmission (HTTPS/TLS)
 \u2022 access-controlled cloud storage
 \u2022 authentication controls (PIN, biometrics, password)
 \u2022 row-level security for database access
 
-However, no method of electronic transmission or storage is 100% secure.
+However, no method of transmitting data over the Internet, electronic storage, or mobile device is completely secure.
 
-We cannot guarantee absolute security, and we encourage users to use strong passwords, enable app lock features, and be thoughtful about what content they share digitally.`,
+Accordingly, we cannot and do not guarantee the absolute security, confidentiality, or privacy of any information, communications, photographs, videos, or other content transmitted through or stored within Warm Me Up.
+
+Privacy features are intended to reduce privacy risks and provide users with greater control over their information, but they cannot eliminate all risks or prevent every unauthorized access, disclosure, copying, recording, interception, or misuse.
+
+We encourage users to use strong passwords, enable app lock features, and be thoughtful about what content they share digitally.`,
   },
   {
     title: '8. Push Notifications',

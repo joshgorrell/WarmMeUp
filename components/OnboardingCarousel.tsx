@@ -859,7 +859,7 @@ const SLIDES: SlideData[] = [
     subtext: "We're not a social network. We're built for one thing — your relationship.",
     rows: [
       { icon: <Users color="#FF5A3D" size={14} strokeWidth={2} />, label: 'Built only for couples' },
-      { icon: <Lock color="#FF2E8A" size={14} strokeWidth={2} />, label: 'Completely private' },
+      { icon: <Lock color="#FF2E8A" size={14} strokeWidth={2} />, label: 'Privacy-focused' },
       { icon: <Heart color="#FF8A3D" size={14} strokeWidth={2} />, label: 'Designed to strengthen connection' },
       { icon: <Sparkles color="#FFB347" size={14} strokeWidth={2} />, label: 'No followers. No distractions.' },
       { icon: <MessageCircle color="#FF5A3D" size={14} strokeWidth={2} />, label: 'More intimate than social media' },
@@ -936,7 +936,7 @@ const SLIDES: SlideData[] = [
         sub: 'Only inside WarmMeUp',
         highlight: true,
       },
-      { icon: <Users color="#00B4C8" size={14} strokeWidth={2} />, label: 'Shared only between you and your partner' },
+      { icon: <Users color="#00B4C8" size={14} strokeWidth={2} />, label: 'Shared between you and your partner' },
       { icon: <EyeOff color="#00B4C8" size={14} strokeWidth={2} />, label: 'Optional blur thumbnails' },
       { icon: <Lock color="#00B4C8" size={14} strokeWidth={2} />, label: 'Face ID lock & security' },
       { icon: <Shield color="#00B4C8" size={14} strokeWidth={2} />, label: 'Secure & private by design' },

@@ -92,7 +92,7 @@ Users assume all responsibility and risk associated with use of the Services.`,
 
 By using Warm Me Up, you grant us a limited, non-exclusive license to store, process, and transmit your content solely for the purpose of operating the Services. We do not claim ownership of your private content.
 
-Content shared through Warm Me Up is visible only to you and your single connected partner. It is never shared with other users, third parties, advertisers, or used for machine learning or model training.
+Content shared through Warm Me Up is visible only to you and your single connected partner. It is not shared with other users, third parties, advertisers, or used for machine learning or model training.
 
 You may delete your own content at any time from within the app. When you delete your account, all content associated with that account is permanently deleted from our systems.
 
@@ -111,7 +111,35 @@ Warm Me Up does not guarantee permanent deletion or complete prevention of conte
 Users acknowledge all digital communication carries some level of risk.`,
   },
   {
-    title: '7. Prohibited Content & Conduct',
+    title: '7. Privacy Features; No Warranty of Privacy or Security',
+    body: `Warm Me Up includes features intended to enhance user privacy, including but not limited to Vault, Stealth Mode, biometric authentication (where supported), screenshot notifications (where supported), and other privacy-related controls. These features are designed to help users better manage their privacy, but they do not guarantee confidentiality, anonymity, security, or protection against unauthorized access, disclosure, interception, copying, recording, or misuse.
+
+No software application, mobile device, operating system, network, cloud service, or method of electronic communication can guarantee absolute privacy or security. Accordingly, Warm Me Up is provided on an "AS IS" and "AS AVAILABLE" basis, and Electronic Life LLC expressly disclaims any representation, warranty, or guarantee that any communication, photograph, video, file, or other content transmitted, stored, or viewed through the Service will remain private, confidential, secure, or inaccessible to third parties.
+
+By using the Service, you acknowledge and accept these inherent limitations and assume responsibility for the content you choose to create, upload, transmit, store, or share.`,
+  },
+  {
+    title: '8. User Responsibility',
+    body: `Users are solely responsible for the content they choose to create, upload, store, transmit, or share through Warm Me Up.
+
+Users are also responsible for maintaining the security of their own devices, operating systems, passwords, passcodes, biometric authentication, account credentials, backups, and physical access to their devices.
+
+Electronic Life LLC is not responsible for loss of privacy or unauthorized disclosure resulting from:
+
+\u2022 another user sharing content voluntarily or involuntarily;
+\u2022 screenshots or screen recordings (whether detectable or not);
+\u2022 photographs or recordings made using another device;
+\u2022 compromised devices;
+\u2022 malware;
+\u2022 third-party software;
+\u2022 operating system behavior;
+\u2022 cloud backups;
+\u2022 shared devices or accounts;
+\u2022 unauthorized access resulting from a user's own actions or omissions; or
+\u2022 other circumstances beyond Electronic Life LLC's reasonable control.`,
+  },
+  {
+    title: '9. Prohibited Content & Conduct',
     body: `Users may not use Warm Me Up to:
 
 \u2022 violate applicable laws
@@ -127,13 +155,13 @@ Users acknowledge all digital communication carries some level of risk.`,
 Any violation may result in immediate suspension or permanent account termination.`,
   },
   {
-    title: '8. No Obligation to Monitor',
+    title: '10. No Obligation to Monitor',
     body: `Warm Me Up does not actively monitor all communications, uploads, or interactions occurring through the Services.
 
 We reserve the right, but not the obligation, to investigate, remove, suspend, or terminate content or accounts that violate these Terms, Community Guidelines, or applicable laws.`,
   },
   {
-    title: '9. Subscription Services',
+    title: '11. Subscription Services',
     body: `Warm Me Up may offer free features, premium subscriptions, monthly plans, annual plans, and lifetime access options.
 
 Subscriptions automatically renew unless canceled through the applicable app store or platform settings before the renewal date.
@@ -143,7 +171,7 @@ Pricing and features may change periodically.
 Refund requests are subject to the policies of the applicable app store provider (Apple App Store or Google Play Store).`,
   },
   {
-    title: '10. Account Deletion Rights',
+    title: '12. Account Deletion Rights',
     body: `You have the right to delete your Warm Me Up account at any time, for any reason, with no penalty.
 
 To delete your account:
@@ -163,13 +191,13 @@ Some anonymized, non-personal operational data (such as security logs) may be re
 Deleted accounts cannot be recovered.`,
   },
   {
-    title: '11. Account Suspension & Termination by Us',
+    title: '13. Account Suspension & Termination by Us',
     body: `We reserve the right to suspend or terminate accounts for Terms violations, abusive behavior, illegal activity, harmful conduct, or misuse of the platform.
 
 We will make reasonable efforts to notify affected users where legally permitted to do so.`,
   },
   {
-    title: '12. Disclaimer of Warranties',
+    title: '14. Disclaimer of Warranties',
     body: `Warm Me Up is provided "as is" and "as available" without warranties of any kind.
 
 We do not guarantee uninterrupted service, permanent availability, compatibility with all devices, absolute security, or prevention of unauthorized sharing or screenshots.
@@ -177,25 +205,25 @@ We do not guarantee uninterrupted service, permanent availability, compatibility
 Use of the Services is at your own risk.`,
   },
   {
-    title: '13. Limitation of Liability',
+    title: '15. Limitation of Liability',
     body: `To the fullest extent permitted by law, Warm Me Up, its owners, operators, developers, affiliates, employees, contractors, and partners shall not be liable for indirect damages, emotional disputes between users, lost data, unauthorized access, screenshots or recordings by users, misuse of the Services, damages arising from user-generated content, or actions taken by users on or off the platform.
 
 Warm Me Up is not responsible for the conduct of its users.`,
   },
   {
-    title: '14. Indemnification',
+    title: '16. Indemnification',
     body: `You agree to defend, indemnify, and hold harmless Warm Me Up, its owners, operators, developers, affiliates, employees, contractors, and partners from and against any claims, liabilities, damages, losses, or expenses arising from your use of the Services, your uploaded content, your interactions with other users, your violation of these Terms, or unlawful or improper conduct.
 
 This includes reasonable legal fees and costs.`,
   },
   {
-    title: '15. Changes to Terms',
+    title: '17. Changes to Terms',
     body: `We may update these Terms periodically.
 
 Continued use of the Services after updates constitutes acceptance of revised Terms.`,
   },
   {
-    title: '16. Contact',
+    title: '18. Contact',
     body: `Questions regarding these Terms may be sent to:
 
 support@warmmeup.app
