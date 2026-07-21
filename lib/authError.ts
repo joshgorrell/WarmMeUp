@@ -1,4 +1,5 @@
 import { logDebugEvent } from './debugLog';
+import { logger } from './logger';
 
 export function friendlyAuthError(e: unknown): string {
   const raw: string =
@@ -34,7 +35,7 @@ export function friendlyAuthError(e: unknown): string {
     return 'Incorrect email or password.';
   }
   if (lower.includes('invalid api key') || lower.includes('no api key') || lower.includes('apikey')) {
-    console.warn('[authError] api_key_missing raw:', raw);
+    logger.warn('[authError] api_key_missing raw:', raw);
     return 'Could not reach the server. Check your connection and try again.';
   }
   if (lower.includes('email not confirmed')) {

@@ -20,6 +20,7 @@ import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
+import { logger } from '@/lib/logger';
 
 const V_SM = 16;
 const V_MD = 24;
@@ -199,7 +200,7 @@ export default function LoginScreen() {
       } catch (writeErr) {
         console.error('[Login] SecureStore write failed:', writeErr);
       }
-      console.log('[Login] attempt recorded', attemptPayload);
+      logger.log('[Login] attempt recorded', attemptPayload);
 
       await SecureStore.setItemAsync('debug_login_reached_signInWithPassword', 'true').catch(() => {});
 
@@ -281,7 +282,7 @@ export default function LoginScreen() {
         probeSupabaseNetwork().catch(() => {});
         throw err;
       }
-      console.log('[Login] signInWithPassword success', { userId: data.user?.id ?? null });
+      logger.log('[Login] signInWithPassword success', { userId: data.user?.id ?? null });
       await SecureStore.setItemAsync('debug_login_error_source', 'none:success').catch(() => {});
 
       // Full signin-persistence probe: record every observable checkpoint so the
@@ -328,7 +329,7 @@ export default function LoginScreen() {
           SecureStore.setItemAsync('debug_after_signin_session_raw_length', String(rawSession?.length ?? 0)),
           SecureStore.setItemAsync('debug_after_signin_session_parse_ok', storeParseOk === null ? 'null' : String(storeParseOk)),
         ]);
-        console.log('[Login] persistence probe:', {
+        logger.log('[Login] persistence probe:', {
           accessTokenPresent, refreshTokenPresent,
           sessionAfterSignin: !!sessionAfterSignin,
           storageKeysFound: foundKeys,

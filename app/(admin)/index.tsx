@@ -23,6 +23,7 @@ import {
   hashSupportCode,
   GlobalDebugStatus,
 } from '@/lib/globalDebugAccess';
+import { logger } from '@/lib/logger';
 
 interface StatEntry {
   value: number | null;
@@ -87,7 +88,7 @@ export default function AdminDashboard() {
 
   // Fire on focus only after auth is fully hydrated
   useFocusEffect(useCallback(() => {
-    console.log('[ADMIN LOAD START] authLoading:', authLoading, 'user:', user?.id, 'is_admin:', profile?.is_admin, 'is_super_admin:', profile?.is_super_admin);
+    logger.log('[ADMIN LOAD START] authLoading:', authLoading, 'user:', user?.id, 'is_admin:', profile?.is_admin, 'is_super_admin:', profile?.is_super_admin);
     if (!authLoading && user?.id) {
       fetchStats();
       fetchDebugMode();
@@ -242,7 +243,7 @@ export default function AdminDashboard() {
     queryFn: () => PromiseLike<{ count: number | null; error: any }>,
   ) => {
     if (!mountedRef.current) return;
-    console.log('[ADMIN QUERY START]', key);
+    logger.log('[ADMIN QUERY START]', key);
     setStats(prev => ({ ...prev, [key]: { value: prev[key].value, error: null, errorCode: null, loading: true } }));
 
     // Race the query against a 15-second timeout so spinners never hang forever
@@ -252,7 +253,7 @@ export default function AdminDashboard() {
 
     try {
       const { count, error } = await Promise.race([queryFn(), timeoutPromise]);
-      console.log('[ADMIN QUERY RESULT]', key, { count, error });
+      logger.log('[ADMIN QUERY RESULT]', key, { count, error });
       if (!mountedRef.current) return;
       if (error) {
         logDebugEvent('ADMIN STATS ERROR', { stat: key, code: error.code, message: error.message, details: (error as any).details });
@@ -261,7 +262,7 @@ export default function AdminDashboard() {
         setStats(prev => ({ ...prev, [key]: { value: count ?? 0, error: null, errorCode: null, loading: false } }));
       }
     } catch (err: any) {
-      console.log('[ADMIN QUERY RESULT]', key, { error: err?.message });
+      logger.log('[ADMIN QUERY RESULT]', key, { error: err?.message });
       if (!mountedRef.current) return;
       logDebugEvent('ADMIN STATS ERROR', { stat: key, message: err?.message });
       setStats(prev => ({ ...prev, [key]: { value: null, error: err?.message ?? 'Failed', errorCode: null, loading: false } }));
@@ -288,7 +289,7 @@ export default function AdminDashboard() {
 
     if (mountedRef.current) {
       setLoading(false);
-      console.log('[ADMIN LOAD COMPLETE]');
+      logger.log('[ADMIN LOAD COMPLETE]');
     }
   };
 

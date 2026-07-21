@@ -3,6 +3,7 @@ import { Alert, Linking, Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { ensureConfigured } from '@/lib/purchases';
 import { planFromProductId } from '@/lib/productIds';
+import { logger } from '../lib/logger';
 
 export type SubscriptionPlan = 'Free' | 'Monthly' | 'Annual';
 export type SubscriptionStatus = 'Active' | 'Inactive' | 'Trial';
@@ -84,7 +85,7 @@ async function notifyServerOfRestore(): Promise<void> {
       body: JSON.stringify({}),
     });
   } catch (err: any) {
-    console.warn('[useSubscription] notifyServerOfRestore failed:', err?.message);
+    logger.warn('[useSubscription] notifyServerOfRestore failed:', err?.message);
   }
 }
 
@@ -102,7 +103,7 @@ export function useSubscription(): SubscriptionState {
     try {
       // Primary: server-authoritative check via Edge Function (handles partner sharing)
       const effective = await fetchEffectiveSubscription();
-      console.log('[useSubscription] effective subscription:', JSON.stringify({
+      logger.log('[useSubscription] effective subscription:', JSON.stringify({
         isPremium: effective?.isPremium,
         source: effective?.source,
         plan: effective?.plan,
@@ -125,7 +126,7 @@ export function useSubscription(): SubscriptionState {
           if (Purchases) {
             const info = await Purchases.getCustomerInfo();
             const entitlement = info.entitlements.active['premium'];
-            console.log('[useSubscription] RC local entitlement active:', !!entitlement,
+            logger.log('[useSubscription] RC local entitlement active:', !!entitlement,
               'productId:', entitlement?.productIdentifier ?? 'none');
             if (entitlement) {
               const onTrial = entitlement.periodType === 'TRIAL';
@@ -140,12 +141,12 @@ export function useSubscription(): SubscriptionState {
             }
           }
         } catch (err: any) {
-          console.warn('[useSubscription] RC getCustomerInfo failed:', err?.message);
+          logger.warn('[useSubscription] RC getCustomerInfo failed:', err?.message);
         }
       }
 
       // No active subscription from either source
-      console.log('[useSubscription] no active premium from any source');
+      logger.log('[useSubscription] no active premium from any source');
       setPlan('Free');
       setStatus('Inactive');
       setIsOnTrial(false);
@@ -153,7 +154,7 @@ export function useSubscription(): SubscriptionState {
       setPremiumSource('none');
       setRenewalDate(null);
     } catch (err: any) {
-      console.warn('[useSubscription] fetchCustomerInfo error:', err?.message);
+      logger.warn('[useSubscription] fetchCustomerInfo error:', err?.message);
       setPlan('Free');
       setStatus('Inactive');
       setIsOnTrial(false);
@@ -182,7 +183,7 @@ export function useSubscription(): SubscriptionState {
       }
       const info = await Purchases.restorePurchases();
       const entitlement = info.entitlements.active['premium'];
-      console.log('[useSubscription] restore result — premium active:', !!entitlement,
+      logger.log('[useSubscription] restore result — premium active:', !!entitlement,
         'productId:', entitlement?.productIdentifier ?? 'none');
       if (entitlement) {
         // Notify server to re-verify via RevenueCat REST API and sync Supabase.

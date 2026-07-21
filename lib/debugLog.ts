@@ -1,3 +1,5 @@
+import { logger } from './logger';
+
 export type DebugEvent = {
   tag: string;
   timestamp: string;
@@ -13,7 +15,7 @@ export function logDebugEvent(tag: string, data: Record<string, unknown> = {}): 
   events.unshift(event);
   if (events.length > MAX_EVENTS) events.splice(MAX_EVENTS);
   if (process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1') {
-    console.log(`[${tag}]`, data);
+    logger.log(`[${tag}]`, data);
   }
   listeners.forEach(fn => fn());
 }

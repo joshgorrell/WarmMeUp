@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { logger } from './logger';
 
 let configured = false;
 let configurePromise: Promise<void> | null = null;
@@ -26,9 +27,9 @@ async function ensureConfigured(): Promise<typeof import('react-native-purchases
           const Purchases = (await import('react-native-purchases')).default;
           Purchases.configure({ apiKey });
           configured = true;
-          console.log(`[RevenueCat] Configured for platform "${Platform.OS}"`);
+          logger.log(`[RevenueCat] Configured for platform "${Platform.OS}"`);
         } catch (err: any) {
-          console.warn('[RevenueCat] configure() failed — native module may be unavailable:', err?.message);
+          logger.warn('[RevenueCat] configure() failed — native module may be unavailable:', err?.message);
         } finally {
           configurePromise = null;
         }
@@ -47,9 +48,9 @@ async function logInRevenueCat(userId: string): Promise<void> {
     const Purchases = await ensureConfigured();
     if (!Purchases) return;
     const { created } = await Purchases.logIn(userId);
-    console.log(`[RevenueCat] logIn userId=${userId} created=${created}`);
+    logger.log(`[RevenueCat] logIn userId=${userId} created=${created}`);
   } catch (err: any) {
-    console.warn('[RevenueCat] logIn failed:', err?.message);
+    logger.warn('[RevenueCat] logIn failed:', err?.message);
   }
 }
 
@@ -59,9 +60,9 @@ async function logOutRevenueCat(): Promise<void> {
     const Purchases = await ensureConfigured();
     if (!Purchases) return;
     await Purchases.logOut();
-    console.log('[RevenueCat] logged out');
+    logger.log('[RevenueCat] logged out');
   } catch (err: any) {
-    console.warn('[RevenueCat] logOut failed:', err?.message);
+    logger.warn('[RevenueCat] logOut failed:', err?.message);
   }
 }
 

@@ -24,6 +24,7 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { ensureConfigured } from '@/lib/purchases';
 import { MONTHLY_PRODUCT_ID, ANNUAL_PRODUCT_ID } from '@/lib/productIds';
+import { logger } from '@/lib/logger';
 
 type Plan = 'monthly' | 'yearly';
 type Reason = 'expired_trial' | 'post_unpairing' | undefined;
@@ -101,25 +102,25 @@ export default function SubscriptionScreen() {
         if (!Purchases) { setOfferingsLoaded(true); return; }
         const offerings = await Purchases.getOfferings();
         const current = offerings.current;
-        console.log('[Subscription] offerings loaded, current:', current?.identifier ?? 'null');
+        logger.log('[Subscription] offerings loaded, current:', current?.identifier ?? 'null');
         if (current) {
           const pkgMap: Record<string, any> = {};
           for (const pkg of current.availablePackages) {
             const id = pkg.product.identifier;
-            console.log('[Subscription] package found:', id);
+            logger.log('[Subscription] package found:', id);
             if (id === ANNUAL_PRODUCT_ID) {
               pkgMap['yearly'] = pkg;
             } else if (id === MONTHLY_PRODUCT_ID) {
               pkgMap['monthly'] = pkg;
             }
           }
-          console.log('[Subscription] mapped packages — monthly:', !!pkgMap['monthly'], 'yearly:', !!pkgMap['yearly']);
+          logger.log('[Subscription] mapped packages — monthly:', !!pkgMap['monthly'], 'yearly:', !!pkgMap['yearly']);
           setPackages(pkgMap);
         } else {
-          console.warn('[Subscription] no current offering returned from RevenueCat');
+          logger.warn('[Subscription] no current offering returned from RevenueCat');
         }
       } catch (err: any) {
-        console.warn('[Subscription] getOfferings failed:', err?.message);
+        logger.warn('[Subscription] getOfferings failed:', err?.message);
       } finally {
         setOfferingsLoaded(true);
       }
@@ -139,7 +140,7 @@ export default function SubscriptionScreen() {
       },
       body: JSON.stringify({}),
     });
-    console.log('[Subscription] confirm-subscription response:', res.status);
+    logger.log('[Subscription] confirm-subscription response:', res.status);
     return res.ok;
   };
 
@@ -157,19 +158,19 @@ export default function SubscriptionScreen() {
       const pkg = Purchases ? packages[selected] : null;
       if (!pkg) {
         Alert.alert('Unavailable', 'This plan is currently unavailable. Please try again later.');
-        console.warn('[Subscription] handleSubscribe — package not found for plan:', selected, 'available:', Object.keys(packages));
+        logger.warn('[Subscription] handleSubscribe — package not found for plan:', selected, 'available:', Object.keys(packages));
         return;
       }
-      console.log('[Subscription] purchasing package:', pkg.product.identifier);
+      logger.log('[Subscription] purchasing package:', pkg.product.identifier);
       const { customerInfo } = await Purchases!.purchasePackage(pkg);
       const entitlement = customerInfo.entitlements.active['premium'];
-      console.log('[Subscription] purchase result — premium entitlement active:', !!entitlement);
+      logger.log('[Subscription] purchase result — premium entitlement active:', !!entitlement);
       if (!entitlement) {
         Alert.alert('Purchase Not Confirmed', 'Your purchase completed but the premium entitlement was not found. Please tap Restore Purchase.');
         return;
       }
       const confirmed = await confirmWithServer();
-      console.log('[Subscription] server confirm result:', confirmed);
+      logger.log('[Subscription] server confirm result:', confirmed);
       await refreshSubscription();
       router.replace('/(app)/(tabs)');
     } catch (e: any) {
@@ -195,10 +196,10 @@ export default function SubscriptionScreen() {
       }
       const info = await Purchases.restorePurchases();
       const entitlement = info.entitlements.active['premium'];
-      console.log('[Subscription] restore result — premium entitlement active:', !!entitlement);
+      logger.log('[Subscription] restore result — premium entitlement active:', !!entitlement);
       if (entitlement) {
         const confirmed = await confirmWithServer();
-        console.log('[Subscription] server confirm after restore:', confirmed);
+        logger.log('[Subscription] server confirm after restore:', confirmed);
         await refreshSubscription();
         router.replace('/(app)/(tabs)');
       } else {

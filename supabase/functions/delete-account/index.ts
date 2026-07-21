@@ -45,7 +45,29 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    // ── 1. Hard-delete the auth user first ───────────────────────────
+    // ── 1. Cancel RevenueCat subscription ───────────────────────────
+    // Must happen before the auth user is deleted — RevenueCat needs the
+    // user's app_user_id to find and cancel their subscription.
+    const rcSecret = Deno.env.get("REVENUECAT_SECRET_KEY");
+    if (rcSecret) {
+      try {
+        await fetch(`https://api.revenuecat.com/v1/subscribers/${userId}/subscriptions`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${rcSecret}`,
+            "Content-Type": "application/json",
+            "X-Platform": "ios",
+          },
+          body: JSON.stringify({
+            expiry_at: Math.floor(Date.now() / 1000),
+          }),
+        });
+      } catch (rcErr) {
+        console.error("RevenueCat cancellation failed:", rcErr);
+      }
+    }
+
+    // ── 2. Hard-delete the auth user ────────────────────────────────
     // Doing this before DB cleanup ensures we never leave an orphaned auth
     // record if the DB deletions below fail. The service role cascade in
     // Supabase handles auth.users → profiles FK automatically.
@@ -124,9 +146,10 @@ Deno.serve(async (req: Request) => {
     await admin.from("user_settings").delete().eq("user_id", userId);
 
     // Gamification rows linked to this user
+    // scores has FK user_id → auth.users(id) ON DELETE CASCADE, so the
+    // auth.admin.deleteUser call above already removed the scores row.
     await admin.from("monthly_scores").delete().eq("user_id", userId);
     await admin.from("point_events").delete().eq("user_id", userId);
-    await admin.from("scores").delete().eq("user_id", userId);
     await admin.from("cash_in_events").delete().or(`winner_user_id.eq.${userId},loser_user_id.eq.${userId}`);
 
     // vault_screenshot_events

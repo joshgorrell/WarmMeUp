@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { Spacing, FontSize, Radius } from '@/constants/theme';
 import StealthBypassSheet from '@/components/StealthBypassSheet';
 import { setWeatherSessionCache } from '@/hooks/useWeather';
+import { logger } from '@/lib/logger';
 
 // Shown only when permission is denied and no cached coords exist
 const FALLBACK = {
@@ -173,7 +174,7 @@ export default function WeatherScreen() {
   // SessionGuard in _layout.tsx handles the global case, but guard here too so
   // a stale navigation state or direct push can never strand a guest on this screen.
   useEffect(() => {
-    console.log('[WEATHER ENTRY]', {
+    logger.log('[WEATHER ENTRY]', {
       userId: user?.id ?? session?.user?.id,
       loginMethod: settings?.login_method,
       stealthEnabled: settings?.stealth_mode_enabled,
@@ -348,7 +349,7 @@ export default function WeatherScreen() {
             setWeatherSessionCache(data.currentTemp);
           }
         } catch (e) {
-          console.warn('[weather] GPS fetch failed:', e);
+          logger.warn('[weather] GPS fetch failed:', e);
           if (!cancelled.current) setWeather(prev => prev ?? FALLBACK);
         }
 
@@ -357,7 +358,7 @@ export default function WeatherScreen() {
           cacheCoords(user.id, lat, lon);
         }
       } catch (e) {
-        console.warn('[weather] GPS error:', e);
+        logger.warn('[weather] GPS error:', e);
         if (!cancelled.current) setWeather(prev => prev ?? FALLBACK);
         gpsDone.current = true;
       }
@@ -387,7 +388,7 @@ export default function WeatherScreen() {
           }
         }
       } catch (e) {
-        console.warn('[weather] cached coords fetch failed:', e);
+        logger.warn('[weather] cached coords fetch failed:', e);
       }
     })();
   // weather is intentionally excluded — we only want to run this when settings loads.

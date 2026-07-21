@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { logger } from '@/lib/logger';
 
 interface AdminGrant {
   id: string;
@@ -77,7 +78,7 @@ export default function EntitlementsScreen() {
   }, []);
 
   const loadActiveGrants = useCallback(async () => {
-    console.log('[ADMIN ENTITLEMENT] Loading active grants...');
+    logger.log('[ADMIN ENTITLEMENT] Loading active grants...');
     setGrantsLoading(true);
     setGrantsError(null);
     try {

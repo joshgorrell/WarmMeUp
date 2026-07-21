@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import { useAuth, computeIsUnlockRequired, computeShouldShowPrivacyCover } from '@/context/AuthContext';
 import { logDebugEvent } from '@/lib/debugLog';
+import { logger } from '@/lib/logger';
 
 // If settings haven't arrived this many ms after loading=false, fall through to
 // /transition rather than hanging on the black index screen indefinitely.
@@ -35,7 +36,7 @@ export default function IndexScreen() {
         fakeWeatherShownReason: 'not_shown',
         bootElapsedMs,
       });
-      console.log('[LAUNCH DEBUG] no session → welcome');
+      logger.log('[LAUNCH DEBUG] no session → welcome');
       router.replace('/(auth)/welcome');
       return;
     }
@@ -46,7 +47,7 @@ export default function IndexScreen() {
       settingsLoaded: !!settings,
       bootElapsedMs,
     });
-    console.log('[LAUNCH DEBUG]', {
+    logger.log('[LAUNCH DEBUG]', {
       hasSession: true,
       userId: session?.user?.id,
       settingsLoaded: !!settings,
@@ -102,7 +103,7 @@ export default function IndexScreen() {
     const shouldShowPrivacyCover = computeShouldShowPrivacyCover(session, settings);
     const mustLock = computeIsUnlockRequired(settings, unlockedAtMs);
 
-    console.log('[INDEX ROUTE DECISION]', {
+    logger.log('[INDEX ROUTE DECISION]', {
       shouldShowPrivacyCover,
       bypassActive,
       loginMethod: settings.login_method ?? 'password',
@@ -116,7 +117,7 @@ export default function IndexScreen() {
       const userId = session.user?.id;
       const loginMethod = settings.login_method ?? 'none';
 
-      console.log('[INDEX ROUTE DECISION] gate', {
+      logger.log('[INDEX ROUTE DECISION] gate', {
         loginMethod,
         mustLock,
         destination: mustLock ? '/unlock' : '/transition',
@@ -176,7 +177,7 @@ export default function IndexScreen() {
       fakeWeatherShownReason: 'stealth_mode_enabled=true, no_bypass',
       bootElapsedMs,
     });
-    console.log('[INDEX ROUTE DECISION] → /weather (stealth active, no bypass)');
+    logger.log('[INDEX ROUTE DECISION] → /weather (stealth active, no bypass)');
     router.replace('/weather');
   }, [loading, session, settings, unlockedAtMs]);
 

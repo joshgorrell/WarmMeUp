@@ -2,26 +2,23 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, Share, Alert, Platform,
-  ActivityIndicator, Modal, Image, Linking, Animated, TextInput,
+  ActivityIndicator, Modal, Image, Linking, TextInput,
   KeyboardAvoidingView,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Heart, Copy, Share2, UserPlus, Camera, Pencil, Check, X, ChevronRight, ChevronLeft, Shield, ShieldOff, Mail, Lock, Trash2, RotateCcw, TriangleAlert as AlertTriangle, Trophy, SlidersHorizontal, LogOut, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, UserX, Clock, Users, Smartphone, FileSliders as Sliders, RefreshCw, Dice6, Flame } from 'lucide-react-native';
+import { ChevronRight, ChevronLeft, Shield, Lock, Trash2, RotateCcw, TriangleAlert as AlertTriangle, UserX, Clock, Users, Smartphone, ScanFace, FileSliders as Sliders, X, Check } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { logDebugEvent } from '@/lib/debugLog';
 import { FontSize, Spacing, Radius, Gradient } from '@/constants/theme';
-import Toggle from '@/components/Toggle';
 import AppShell from '@/components/AppShell';
-import Avatar from '@/components/Avatar';
 import BottomSheet from '@/components/BottomSheet';
 import WarmupLogo from '@/components/WarmupLogo';
 import BrandHeader from '@/components/BrandHeader';
-import QuickStatsRow from '@/components/QuickStatsRow';
 import { UserSettings } from '@/lib/types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
@@ -31,642 +28,11 @@ import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
 import { useLayout } from '@/hooks/useLayout';
 import { ensureConfigured } from '@/lib/purchases';
+import { logger } from '@/lib/logger';
+import { ProfileTab } from '@/components/account/ProfileTab';
+import { SettingsTab } from '@/components/account/SettingsTab';
 
 type AccountTab = 'profile' | 'settings';
-
-// ─── Section wrapper ──────────────────────────────────────────────
-function Section({ title, note, onInfo, children }: { title: string; note?: string; onInfo?: () => void; children: React.ReactNode }) {
-  const { colors } = useTheme();
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionTitleRow}>
-        <AppText style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</AppText>
-        {onInfo && (
-          <TouchableOpacity onPress={onInfo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
-            <CircleQuestionMark color="rgba(255,46,138,0.7)" size={14} strokeWidth={2} />
-          </TouchableOpacity>
-        )}
-      </View>
-      <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-        {note && (
-          <View style={[styles.ownerNote, { borderBottomColor: colors.borderSubtle }]}>
-            <AppText style={[styles.ownerNoteText, { color: colors.textMuted }]}>{note}</AppText>
-          </View>
-        )}
-        {children}
-      </View>
-    </View>
-  );
-}
-
-// ─── Settings row ─────────────────────────────────────────────────
-function SettingsRow({
-  label, sub, toggle, value, onChange, onPress, onInfo, danger, last, accent, disabled,
-}: {
-  label: string; sub?: string; toggle?: boolean; value?: boolean;
-  onChange?: (v: boolean) => void; onPress?: () => void; onInfo?: () => void;
-  danger?: boolean; last?: boolean; accent?: boolean; disabled?: boolean;
-}) {
-  const { colors } = useTheme();
-  const labelColor = danger ? colors.danger : accent ? '#FF2E8A' : colors.text;
-  const chevronColor = danger ? colors.danger : accent ? '#FF2E8A' : colors.textMuted;
-  const content = (
-    <View style={[styles.row, { borderBottomColor: last ? 'transparent' : colors.borderSubtle, borderBottomWidth: last ? 0 : 1 }]}>
-      <View style={styles.rowLeft}>
-        <View style={styles.rowLabelRow}>
-          <AppText style={[styles.rowLabel, { color: labelColor }]}>{label}</AppText>
-          {onInfo && (
-            <TouchableOpacity onPress={onInfo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
-              <CircleQuestionMark color="rgba(255,46,138,0.7)" size={14} strokeWidth={2} />
-            </TouchableOpacity>
-          )}
-        </View>
-        {sub && <AppText style={[styles.rowSub, { color: colors.textMuted }]}>{sub}</AppText>}
-      </View>
-      {toggle
-        ? <Toggle value={value ?? false} onChange={onChange ?? (() => {})} disabled={disabled} />
-        : <ChevronRight color={chevronColor} size={16} />
-      }
-    </View>
-  );
-  if (onPress) return <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{content}</TouchableOpacity>;
-  return content;
-}
-
-// ─── Inline password/text field ───────────────────────────────────
-function InlineField({
-  label, value, onChange, secure, placeholder, last,
-}: {
-  label: string; value: string; onChange: (v: string) => void;
-  secure?: boolean; placeholder?: string; last?: boolean;
-}) {
-  const { colors } = useTheme();
-  return (
-    <View style={[styles.inlineFieldRow, { borderBottomColor: last ? 'transparent' : colors.borderSubtle, borderBottomWidth: last ? 0 : 1 }]}>
-      <AppText style={[styles.inlineFieldLabel, { color: colors.textMuted }]}>{label}</AppText>
-      <AppTextInput
-        style={[styles.inlineFieldInput, { color: colors.text }]}
-        value={value}
-        onChangeText={onChange}
-        secureTextEntry={secure}
-        placeholder={placeholder ?? ''}
-        placeholderTextColor={colors.textMuted}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-    </View>
-  );
-}
-
-
-// ─── Security section components (shared with settings.tsx) ──────
-
-type UnlockMethod = 'none' | 'biometric';
-
-const slm = StyleSheet.create({
-  wrap: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.md, borderBottomWidth: 1 },
-  label: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', marginBottom: 2 },
-  sub: { fontSize: 11, fontFamily: 'Inter-Regular', marginBottom: Spacing.sm },
-  row: { flexDirection: 'row', gap: 8 },
-  chip: {
-    flex: 1,
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  chipSelected: { backgroundColor: 'rgba(255,46,138,0.08)' },
-  chipDisabled: { opacity: 0.4 },
-  chipLabel: { fontSize: 11, fontFamily: 'Inter-Medium', textAlign: 'center' },
-  dropRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    borderBottomWidth: 1,
-  },
-  valueWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  value: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
-  dropOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.sm,
-  },
-  dropOptionLabel: { fontSize: FontSize.body, fontFamily: 'Inter-Medium' },
-});
-
-const LOCK_TIMEOUT_OPTIONS: { label: string; value: number }[] = [
-  { label: 'Immediately', value: 0 },
-  { label: '1 minute', value: 60 },
-  { label: '5 minutes', value: 300 },
-  { label: '15 minutes', value: 900 },
-  { label: '1 hour', value: 3600 },
-  { label: 'Never', value: -1 },
-];
-
-function RequireUnlockRow({
-  current,
-  bioAvailable,
-  biometricLabel,
-  colors,
-  onSelect,
-}: {
-  current: UnlockMethod;
-  bioAvailable: boolean;
-  biometricLabel: string;
-  colors: any;
-  onSelect: (method: UnlockMethod) => void;
-}) {
-  const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
-
-  type Option = { key: UnlockMethod; label: string; icon: React.ReactNode; disabled?: boolean };
-  const options: Option[] = [
-    {
-      key: 'none',
-      label: 'Off',
-      icon: <ShieldOff color={current === 'none' ? '#FF2E8A' : colors.textMuted} size={16} strokeWidth={1.8} />,
-    },
-    {
-      key: 'biometric',
-      label: biometricLabel,
-      icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={16} strokeWidth={1.8} />,
-      disabled: !bioAvailable,
-    },
-  ];
-
-  return (
-    <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
-      <AppText style={[slm.label, { color: colors.text }]}>App Lock</AppText>
-      <AppText style={[slm.sub, { color: colors.textMuted }]}>Require biometrics to open Warm Me Up</AppText>
-      <View style={slm.row}>
-        {options.map((opt) => {
-          const sel = current === opt.key;
-          return (
-            <TouchableOpacity
-              key={opt.key}
-              style={[
-                slm.chip,
-                sel && slm.chipSelected,
-                opt.disabled && slm.chipDisabled,
-                { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle },
-              ]}
-              onPress={() => !opt.disabled && onSelect(opt.key)}
-              activeOpacity={opt.disabled ? 1 : 0.72}
-              disabled={opt.disabled}
-            >
-              {opt.icon}
-              <AppText style={[slm.chipLabel, { color: opt.disabled ? colors.textDisabled : sel ? '#fff' : colors.textSecondary }]}>
-                {opt.label}
-              </AppText>
-              {sel && <Check color="#FF2E8A" size={10} strokeWidth={2.5} />}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-function RequireUnlockAfterRow({
-  current, colors, onSelect,
-}: {
-  current: number | null;
-  colors: any;
-  onSelect: (seconds: number) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const effectiveCurrent = current === null ? 0 : current;
-  const selected = LOCK_TIMEOUT_OPTIONS.find(o => o.value === effectiveCurrent) ?? LOCK_TIMEOUT_OPTIONS[0];
-  return (
-    <>
-      <TouchableOpacity
-        style={[slm.dropRow, { borderBottomColor: colors.borderSubtle }]}
-        onPress={() => setOpen(true)}
-        activeOpacity={0.7}
-      >
-        <View style={{ flex: 1 }}>
-          <AppText style={[slm.label, { color: colors.text }]}>Require Unlock After</AppText>
-          <AppText style={[slm.sub, { color: colors.textMuted, marginBottom: 0 }]}>How long before the app re-locks</AppText>
-        </View>
-        <View style={slm.valueWrap}>
-          <AppText style={[slm.value, { color: colors.textSecondary }]}>{selected.label}</AppText>
-          <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
-        </View>
-      </TouchableOpacity>
-      <BottomSheet
-        visible={open}
-        onClose={() => setOpen(false)}
-        title="Require Unlock After"
-        subtitle="How long before the app re-locks"
-      >
-        {LOCK_TIMEOUT_OPTIONS.map((opt, i) => {
-          const sel = effectiveCurrent === opt.value;
-          const last = i === LOCK_TIMEOUT_OPTIONS.length - 1;
-          return (
-            <TouchableOpacity
-              key={String(opt.value)}
-              style={[slm.dropOption, !last && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}
-              onPress={() => { onSelect(opt.value); setOpen(false); }}
-              activeOpacity={0.7}
-            >
-              <AppText style={[slm.dropOptionLabel, { color: sel ? '#FF2E8A' : colors.text }]}>{opt.label}</AppText>
-              {sel && <Check color="#FF2E8A" size={16} strokeWidth={2.5} />}
-            </TouchableOpacity>
-          );
-        })}
-      </BottomSheet>
-    </>
-  );
-}
-
-function VaultProtectionRow({
-  isAdditional,
-  bioAvailable,
-  biometricLabel,
-  colors,
-  onSelect,
-}: {
-  isAdditional: boolean;
-  bioAvailable: boolean;
-  biometricLabel: string;
-  colors: any;
-  onSelect: (additional: boolean) => void;
-}) {
-  const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
-
-  type VaultOpt = { key: boolean; label: string; sub: string; icon: React.ReactNode; disabled?: boolean };
-  const opts: VaultOpt[] = [
-    {
-      key: false,
-      label: 'No',
-      sub: 'No extra step for Vault',
-      icon: <ShieldOff color={!isAdditional ? '#FF2E8A' : colors.textMuted} size={15} strokeWidth={1.8} />,
-    },
-    {
-      key: true,
-      label: biometricLabel,
-      sub: 'Biometric step to open Vault',
-      icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={15} strokeWidth={1.8} />,
-      disabled: !bioAvailable,
-    },
-  ];
-
-  return (
-    <View style={[slm.wrap, { borderBottomColor: colors.borderSubtle }]}>
-      <AppText style={[slm.label, { color: colors.text }]}>Vault Protection</AppText>
-      <AppText style={[slm.sub, { color: colors.textMuted }]}>Require biometrics each time you open the Vault</AppText>
-      <View style={[slm.row, { gap: 10 }]}>
-        {opts.map((opt) => {
-          const sel = isAdditional === opt.key;
-          return (
-            <TouchableOpacity
-              key={String(opt.key)}
-              style={[
-                slm.chip,
-                sel && slm.chipSelected,
-                opt.disabled && slm.chipDisabled,
-                { borderColor: sel ? 'rgba(255,46,138,0.5)' : colors.borderSubtle, flex: 1, paddingVertical: 12, gap: 5 },
-              ]}
-              onPress={() => !opt.disabled && onSelect(opt.key)}
-              activeOpacity={opt.disabled ? 1 : 0.72}
-              disabled={opt.disabled}
-            >
-              {opt.icon}
-              <AppText style={[slm.chipLabel, { color: opt.disabled ? colors.textDisabled : sel ? '#fff' : colors.textSecondary, fontSize: 12 }]}>{opt.label}</AppText>
-              <AppText style={[slm.chipLabel, { color: sel ? 'rgba(255,255,255,0.55)' : colors.textMuted, fontSize: 10 }]}>{opt.sub}</AppText>
-              {sel && <Check color="#FF2E8A" size={10} strokeWidth={2.5} />}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-// ─── Chat font size selector ──────────────────────────────────────
-const CHAT_FONT_OPTIONS: { label: string; value: number }[] = [
-  { label: 'Small', value: 0.85 },
-  { label: 'Standard', value: 1.0 },
-  { label: 'Large', value: 1.2 },
-];
-
-const cfs = StyleSheet.create({
-  wrap: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.md },
-  label: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', marginBottom: 2 },
-  sub: { fontSize: 11, fontFamily: 'Inter-Regular', marginBottom: Spacing.sm },
-  row: { flexDirection: 'row', gap: 8 },
-  chip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingVertical: 9,
-    paddingHorizontal: 6,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  chipSelected: { backgroundColor: 'rgba(255,90,61,0.08)' },
-  chipLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
-});
-
-function ChatFontSizeRow({ current, colors, onSelect }: { current: number; colors: any; onSelect: (scale: number) => void }) {
-  return (
-    <View style={cfs.wrap}>
-      <AppText style={[cfs.label, { color: colors.text }]}>Chat Text Size</AppText>
-      <AppText style={[cfs.sub, { color: colors.textMuted }]}>How large message text appears in Chat</AppText>
-      <View style={cfs.row}>
-        {CHAT_FONT_OPTIONS.map((opt) => {
-          const sel = Math.abs(current - opt.value) < 0.01;
-          return (
-            <TouchableOpacity
-              key={String(opt.value)}
-              style={[cfs.chip, sel && cfs.chipSelected, { borderColor: sel ? 'rgba(255,90,61,0.5)' : colors.borderSubtle }]}
-              onPress={() => onSelect(opt.value)}
-              activeOpacity={0.72}
-            >
-              <AppText style={[cfs.chipLabel, { color: sel ? '#fff' : colors.textSecondary }]}>{opt.label}</AppText>
-              {sel && <Check color="#FF5A3D" size={12} strokeWidth={2.5} />}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-// ─── Connected Partner Card ───────────────────────────────────────
-function ConnectedPartnerCard({
-  userProfile,
-  partnerProfile: partner,
-  streak,
-  diceRolls,
-  momentsToday,
-  streaksEnabled,
-  onManagePairing,
-}: {
-  userProfile: { display_name?: string; avatar_url?: string | null } | null;
-  partnerProfile: { display_name?: string; avatar_url?: string | null } | null;
-  streak: number | string;
-  diceRolls: number;
-  momentsToday: number;
-  streaksEnabled: boolean;
-  onManagePairing: () => void;
-}) {
-  const router = useRouter();
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.13, duration: 4000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 4000, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-
-  return (
-    <View style={pcc.outerWrap}>
-      {/* Gradient border frame */}
-      <LinearGradient
-        colors={['#FFB347', '#FF5A3D', '#FF2E8A', '#FF5A3D', '#FFB347']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={pcc.gradBorder}
-      >
-        <View style={pcc.inner}>
-          {/* Subtle background glow */}
-          <LinearGradient
-            colors={['rgba(255,46,138,0.08)', 'rgba(255,90,61,0.04)', 'transparent']}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-
-          {/* Avatar row */}
-          <View style={pcc.avatarRow}>
-            {/* User avatar */}
-            <Avatar
-              name={userProfile?.display_name}
-              uri={userProfile?.avatar_url}
-              size="lg"
-            />
-
-            {/* Heart + wave lines */}
-            <View style={pcc.heartZone}>
-              <LinearGradient
-                colors={['transparent', 'rgba(255,46,138,0.45)', 'transparent']}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={pcc.waveLine}
-              />
-              <Animated.View style={[pcc.heartWrap, { transform: [{ scale: pulseAnim }] }]}>
-                <LinearGradient
-                  colors={['rgba(255,90,61,0.28)', 'rgba(255,46,138,0.28)']}
-                  style={pcc.heartGlowBg}
-                />
-                <Heart color="#FF2E8A" size={38} strokeWidth={0} fill="#FF3D6A" />
-              </Animated.View>
-              <LinearGradient
-                colors={['transparent', 'rgba(255,46,138,0.45)', 'transparent']}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={pcc.waveLine}
-              />
-            </View>
-
-            {/* Partner avatar */}
-            <Avatar
-              name={partner?.display_name}
-              uri={partner?.avatar_url}
-              size="lg"
-            />
-          </View>
-
-          {/* Text block */}
-          <View style={pcc.textBlock}>
-            <AppText style={pcc.connectedWithLabel}>CONNECTED WITH</AppText>
-            <AppText style={pcc.partnerName}>{partner?.display_name ?? 'Partner'}</AppText>
-            <AppText style={pcc.tagline}>Your private space together.</AppText>
-          </View>
-
-          {/* Status + CTA row */}
-          <View style={pcc.statusRow}>
-            <View style={pcc.connectedPill}>
-              <View style={pcc.greenDot} />
-              <AppText style={pcc.connectedPillText}>Connected</AppText>
-            </View>
-            <TouchableOpacity onPress={onManagePairing} activeOpacity={0.7} style={pcc.manageCta}>
-              <AppText style={pcc.manageCtaText}>Manage Pairing</AppText>
-              <ChevronRight color="#FF2E8A" size={14} strokeWidth={2.5} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </LinearGradient>
-
-      {/* Metrics row below the card */}
-      <TouchableOpacity onPress={() => router.push('/(app)/my-stats')} activeOpacity={0.75} style={pcc.metricsCard}>
-        <View style={pcc.metricCol}>
-          <Heart color="#FF2E8A" size={22} strokeWidth={0} fill="#FF2E8A" />
-          <AppText style={pcc.metricValue}>{momentsToday.toLocaleString()}</AppText>
-          <AppText style={pcc.metricLabel}>{'Moments\nTogether'}</AppText>
-        </View>
-        <View style={pcc.metricDivider} />
-        <View style={pcc.metricCol}>
-          <LinearGradient colors={['#FFB347', '#FF5A3D']} style={pcc.diceIconGrad}>
-            <Dice6 color="#fff" size={14} strokeWidth={2} />
-          </LinearGradient>
-          <AppText style={pcc.metricValue}>{diceRolls.toLocaleString()}</AppText>
-          <AppText style={pcc.metricLabel}>{'Dice\nRolls'}</AppText>
-        </View>
-        <View style={pcc.metricDivider} />
-        <View style={pcc.metricCol}>
-          <LinearGradient colors={['#FF5A3D', '#FF2E8A']} style={pcc.diceIconGrad}>
-            <Flame color="#fff" size={14} strokeWidth={2} />
-          </LinearGradient>
-          <AppText style={pcc.metricValue}>{streaksEnabled ? streak.toLocaleString() : '—'}</AppText>
-          <AppText style={pcc.metricLabel}>{'Day\nStreak'}</AppText>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-const pcc = StyleSheet.create({
-  outerWrap: { marginBottom: Spacing.md, gap: 8 },
-  gradBorder: { borderRadius: Radius.xl + 2, padding: 1.5 },
-  inner: {
-    borderRadius: Radius.xl,
-    backgroundColor: 'rgba(18,12,26,0.97)',
-    padding: Spacing.card,
-    gap: 14,
-    overflow: 'hidden',
-  },
-  avatarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  heartZone: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  waveLine: { flex: 1, height: 2, borderRadius: 1 },
-  heartWrap: {
-    width: 64,
-    height: 64,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heartGlowBg: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 32,
-  } as any,
-  textBlock: { alignItems: 'center', gap: 4 },
-  connectedWithLabel: {
-    fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    letterSpacing: 1.4,
-    color: '#FF5A3D',
-  },
-  partnerName: {
-    fontSize: 32,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-    lineHeight: 38,
-  },
-  tagline: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    color: 'rgba(255,255,255,0.50)',
-    marginTop: 2,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 2,
-  },
-  connectedPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(51,209,122,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(51,209,122,0.28)',
-    borderRadius: Radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  greenDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#33D17A' },
-  connectedPillText: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-    color: '#33D17A',
-  },
-  manageCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingVertical: 4,
-  },
-  manageCtaText: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FF2E8A',
-  },
-  // Metrics card
-  metricsCard: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.055)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: Radius.lg,
-    paddingVertical: Spacing.md,
-  },
-  metricCol: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 4,
-  },
-  metricDivider: {
-    width: 1,
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(255,255,255,0.09)',
-    marginVertical: 4,
-  },
-  metricValue: {
-    fontSize: FontSize.h2,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-    lineHeight: 28,
-  },
-  metricLabel: {
-    fontSize: 10,
-    fontFamily: 'Inter-Medium',
-    color: 'rgba(255,255,255,0.44)',
-    textAlign: 'center',
-    lineHeight: 14,
-  },
-  diceIconGrad: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
 
 // ─── Main screen ──────────────────────────────────────────────────
 export default function AccountScreen() {
@@ -827,7 +193,7 @@ export default function AccountScreen() {
         .eq('active', true)
         .maybeSingle();
       if (!error && data && data.invite_code !== couple?.invite_code) {
-        console.log('[account] direct fetch corrected invite_code from', couple?.invite_code, 'to', data.invite_code);
+        logger.log('[account] direct fetch corrected invite_code from', couple?.invite_code, 'to', data.invite_code);
         patchCouple(data);
       } else if (!error && !data) {
         // User may be user_b in a paired couple — refresh via context
@@ -1079,7 +445,7 @@ export default function AccountScreen() {
     if (isAdmin || isSuperAdmin) {
       if (!subscriptionInfo.canInvite) {
         destination = '/(admin)/entitlements';
-        console.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
+        logger.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
         router.push('/(admin)/entitlements' as any);
         return;
       }
@@ -1088,20 +454,20 @@ export default function AccountScreen() {
 
     if (!subscriptionInfo.canInvite) {
       destination = '/(auth)/subscription';
-      console.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
+      logger.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
       router.push('/(auth)/subscription');
       return;
     }
 
     if (!couple?.invite_code) {
       destination = 'generate_code';
-      console.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
+      logger.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
       handleRefreshCode();
       return;
     }
 
     destination = 'has_code_noop';
-    console.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
+    logger.log('[PROFILE INVITE CARD PRESS]', { userId: user?.id, is_admin: isAdmin, is_super_admin: isSuperAdmin, sub_canInvite: subscriptionInfo.canInvite, sub_isPremium: subscriptionInfo.isPremium, coupleId: couple?.id, coupleActive: couple?.active, destination });
   };
 
   const handleInvitePartner = async () => {
@@ -1382,25 +748,25 @@ export default function AccountScreen() {
   const handleResetPoints = async () => {
     if (!couple?.id) return;
     setResetting(true);
-    console.log('[POINTS_RESET_START]', couple.id);
+    logger.log('[POINTS_RESET_START]', couple.id);
     try {
       const eventsResult = await supabase.from('point_events').delete().eq('couple_id', couple.id);
-      console.log('[POINTS_RESET_RESULT] point_events delete', eventsResult);
+      logger.log('[POINTS_RESET_RESULT] point_events delete', eventsResult);
       if (eventsResult.error) throw eventsResult.error;
 
       const scoresResult = await supabase.from('scores').update({ points: 0 }).eq('couple_id', couple.id);
-      console.log('[POINTS_RESET_RESULT] scores update', scoresResult);
+      logger.log('[POINTS_RESET_RESULT] scores update', scoresResult);
       if (scoresResult.error) throw scoresResult.error;
 
       const monthlyResult = await supabase.from('monthly_scores').delete().eq('couple_id', couple.id);
-      console.log('[POINTS_RESET_RESULT] monthly_scores delete', monthlyResult);
+      logger.log('[POINTS_RESET_RESULT] monthly_scores delete', monthlyResult);
       if (monthlyResult.error) throw monthlyResult.error;
 
       const { data: pointsData, error: pointsError } = await supabase
         .from('scores')
         .select('*')
         .eq('couple_id', couple.id);
-      console.log('[POINTS_AFTER_RESET]', pointsError ?? pointsData);
+      logger.log('[POINTS_AFTER_RESET]', pointsError ?? pointsData);
 
       notifyScoreReset();
       setResetDone(true);
@@ -1458,623 +824,6 @@ export default function AccountScreen() {
       </AppShell>
     );
   }
-
-  const renderProfileTab = () => (
-    <>
-      {/* Stats row — only shown when no partner; replaced by ConnectedPartnerCard metrics when paired */}
-      {!couple?.user_b_id && (
-        <View style={styles.statsWrap}>
-          <QuickStatsRow
-            streak={(optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)) ? streak : '—'}
-            momentsToday={momentsToday}
-            totalPoints={(optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)) ? totalPoints : '—'}
-          />
-        </View>
-      )}
-
-      {/* Partner card */}
-      {couple?.user_b_id && partnerProfile ? (
-        <ConnectedPartnerCard
-          userProfile={profile}
-          partnerProfile={partnerProfile}
-          streak={(optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)) ? streak : '—'}
-          diceRolls={diceRolls}
-          momentsToday={momentsToday}
-          streaksEnabled={optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)}
-          onManagePairing={() => setShowLeaveSheet(true)}
-        />
-      ) : !couple?.user_b_id && subscriptionInfo.loading ? (
-        <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-          <View style={styles.inviteHeader}>
-            <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
-              <UserPlus color={colors.textMuted} size={18} strokeWidth={2} />
-            </View>
-            <View style={{ flex: 1, gap: 6 }}>
-              <View style={{ height: 10, width: 120, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.08)' }} />
-              <View style={{ height: 8, width: 180, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.05)' }} />
-            </View>
-          </View>
-        </View>
-      ) : !couple?.user_b_id && !subscriptionInfo.loading ? (
-        // Single Pressable card for all "no partner yet" states:
-        // has code + canInvite / canInvite but no code / no access (admin or regular)
-        <TouchableOpacity
-          style={[
-            styles.inviteCard,
-            { backgroundColor: colors.card, borderColor: subscriptionInfo.canInvite ? 'rgba(255,46,138,0.30)' : colors.borderSubtle },
-          ]}
-          onPress={handleInviteCardPress}
-          activeOpacity={0.8}
-        >
-          <View style={styles.inviteHeader}>
-            <View style={[styles.heartWrap, { backgroundColor: subscriptionInfo.canInvite ? 'rgba(255,46,138,0.12)' : 'rgba(255,179,71,0.10)' }]}>
-              <UserPlus color={subscriptionInfo.canInvite ? '#FF2E8A' : '#FFB347'} size={18} strokeWidth={2} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>INVITE YOUR PARTNER</AppText>
-              <AppText style={[styles.inviteHint, { color: colors.textSecondary }]}>
-                {!subscriptionInfo.canInvite
-                  ? ((isAdmin || isSuperAdmin) ? 'Manage Access' : 'Subscribe to Invite')
-                  : couple?.invite_code
-                    ? 'Share your code to connect'
-                    : 'Tap to generate your invite code'}
-              </AppText>
-            </View>
-            {!subscriptionInfo.canInvite && (
-              <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
-            )}
-            {subscriptionInfo.canInvite && !couple?.invite_code && (
-              <ChevronRight color={colors.textMuted} size={16} strokeWidth={2} />
-            )}
-          </View>
-
-          {/* Code area — only shown when user has access and a code */}
-          {subscriptionInfo.canInvite && couple?.invite_code ? (
-            <>
-              <View style={[styles.codeBox, { backgroundColor: 'rgba(255,46,138,0.06)', borderColor: 'rgba(255,46,138,0.20)' }]}>
-                <AppText style={[styles.codeText, { color: colors.text }]}>{couple.invite_code}</AppText>
-                <TouchableOpacity
-                  style={styles.codeRefreshBtn}
-                  onPress={handleRefreshCode}
-                  activeOpacity={0.7}
-                  disabled={codeRefreshing}
-                >
-                  <RefreshCw
-                    color={codeRefreshing ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.45)'}
-                    size={15}
-                    strokeWidth={2}
-                  />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.inviteActions}>
-                <TouchableOpacity
-                  style={[styles.inviteBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
-                  onPress={handleCopyCode}
-                  activeOpacity={0.75}
-                >
-                  <Copy color={copied ? '#33D17A' : colors.textSecondary} size={15} strokeWidth={2} />
-                  <AppText style={[styles.inviteBtnText, { color: copied ? '#33D17A' : colors.textSecondary }]}>{copied ? 'Copied!' : 'Copy'}</AppText>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.inviteBtn, { borderColor: 'rgba(255,46,138,0.35)', backgroundColor: 'rgba(255,46,138,0.07)' }]}
-                  onPress={handleShareCode}
-                  activeOpacity={0.75}
-                >
-                  <Share2 color="#FF2E8A" size={15} strokeWidth={2} />
-                  <AppText style={[styles.inviteBtnText, { color: '#FF2E8A' }]}>Share</AppText>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={styles.cancelInviteBtn}
-                onPress={() => setShowCancelInviteSheet(true)}
-                activeOpacity={0.7}
-              >
-                <X color="rgba(255,90,90,0.70)" size={13} strokeWidth={2.2} />
-                <AppText style={styles.cancelInviteText}>Cancel invite</AppText>
-              </TouchableOpacity>
-            </>
-          ) : subscriptionInfo.canInvite && !couple?.invite_code ? (
-            // Generate button as secondary affordance inside the card
-            <TouchableOpacity
-              style={[styles.inviteBtn, { borderColor: 'rgba(255,46,138,0.35)', backgroundColor: 'rgba(255,46,138,0.07)', alignSelf: 'stretch', justifyContent: 'center', gap: 8 }]}
-              onPress={handleRefreshCode}
-              activeOpacity={0.75}
-              disabled={codeRefreshing}
-            >
-              {codeRefreshing
-                ? <ActivityIndicator size="small" color="#FF2E8A" />
-                : <RefreshCw color="#FF2E8A" size={15} strokeWidth={2} />}
-              <AppText style={[styles.inviteBtnText, { color: '#FF2E8A' }]}>Generate Invite Code</AppText>
-            </TouchableOpacity>
-          ) : null}
-        </TouchableOpacity>
-      ) : null}
-
-      {/* Anniversary date card — only when paired */}
-      {couple?.user_b_id && (
-        <TouchableOpacity
-          style={[styles.anniversaryCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-          onPress={() => {
-            const existing = couple?.anniversary_date ? new Date(couple.anniversary_date) : null;
-            setAnniversaryDate(existing);
-            setAnnivMonth(existing ? String(existing.getMonth() + 1).padStart(2, '0') : '');
-            setAnnivDay(existing ? String(existing.getDate()).padStart(2, '0') : '');
-            setAnnivYear(existing ? String(existing.getFullYear()) : '');
-            setAnniversaryError(null);
-            setShowAnniversarySheet(true);
-          }}
-          activeOpacity={0.75}
-        >
-          <View style={[styles.anniversaryIcon, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
-            <Heart color="#FF2E8A" size={16} strokeWidth={2} />
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <AppText style={[styles.cardLabel, { color: colors.textMuted }]}>ANNIVERSARY DATE</AppText>
-            <AppText style={[styles.anniversaryValue, { color: colors.text }]}>
-              {couple?.anniversary_date
-                ? new Date(couple.anniversary_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-                : 'Set your anniversary'}
-            </AppText>
-          </View>
-          <ChevronRight color={colors.textMuted} size={15} strokeWidth={2} />
-        </TouchableOpacity>
-      )}
-
-      {/* Enter a partner's code — always visible for solo users */}
-      {!couple?.user_b_id && (
-        <TouchableOpacity
-          style={[styles.enterCodeRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-          onPress={() => { setEnterCode(''); setEnterCodeError(null); setShowEnterCodeSheet(true); }}
-          activeOpacity={0.75}
-        >
-          <View style={[styles.enterCodeIcon, { backgroundColor: 'rgba(255,122,69,0.10)' }]}>
-            <UserPlus color="#FF7A45" size={16} strokeWidth={2} />
-          </View>
-          <AppText style={[styles.enterCodeText, { color: colors.textSecondary }]}>Have a partner's code? Enter it here</AppText>
-          <ChevronRight color={colors.textMuted} size={15} strokeWidth={2} />
-        </TouchableOpacity>
-      )}
-
-      {/* Profile menu */}
-      <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-        <TouchableOpacity
-          style={[styles.menuRow, { borderBottomColor: colors.borderSubtle }]}
-          onPress={() => router.push('/(app)/my-stats')}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
-            <Trophy color="#FFB347" size={18} strokeWidth={2} />
-          </View>
-          <AppText style={[styles.menuText, { color: colors.text }]}>My Stats</AppText>
-          <ChevronRight color={colors.textMuted} size={16} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.menuRow, { borderBottomColor: colors.borderSubtle }]}
-          onPress={() => router.push('/(app)/customize-prompts')}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
-            <SlidersHorizontal color="#FFB347" size={18} strokeWidth={2} />
-          </View>
-          <AppText style={[styles.menuText, { color: colors.text }]}>Customize Prompts</AppText>
-          <ChevronRight color={colors.textMuted} size={16} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.menuRow, { borderBottomColor: colors.borderSubtle }]}
-          onPress={() => setResetPointsOpen(true)}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
-            <RotateCcw color="#FFB347" size={18} strokeWidth={2} />
-          </View>
-          <AppText style={[styles.menuText, { color: colors.text }]}>Reset Sparks</AppText>
-          <ChevronRight color={colors.textMuted} size={16} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.menuRow, { borderBottomColor: colors.borderSubtle }]}
-          onPress={() => router.push('/(app)/delete-content')}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,90,95,0.08)' }]}>
-            <Trash2 color={colors.danger} size={18} strokeWidth={2} />
-          </View>
-          <AppText style={[styles.menuText, { color: colors.danger }]}>Delete Content</AppText>
-          <ChevronRight color={colors.danger} size={16} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.menuRow, { borderBottomColor: 'transparent' }]}
-          onPress={signOut}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,90,95,0.08)' }]}>
-            <LogOut color={colors.danger} size={18} strokeWidth={2} />
-          </View>
-          <AppText style={[styles.menuText, { color: colors.danger }]}>Sign Out</AppText>
-          <ChevronRight color={colors.danger} size={16} />
-        </TouchableOpacity>
-      </View>
-
-      {/* My Profile section */}
-      <AppText style={[styles.sectionLabel, { color: colors.textMuted }]}>My Profile</AppText>
-      <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-        <TouchableOpacity onPress={handlePickAvatar} activeOpacity={0.8} style={styles.avatarWrap} disabled={uploadingAvatar}>
-          <Avatar key={profile?.avatar_url ?? 'noavatar'} name={profile?.display_name} uri={profile?.avatar_url} size="lg" bgColor="rgba(255,46,138,0.20)" />
-          <View style={[styles.cameraChip, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-            <Camera color={uploadingAvatar ? colors.textMuted : '#FF2E8A'} size={12} strokeWidth={2.5} />
-          </View>
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          {editingName ? (
-            <View ref={nameWrapRef} style={styles.nameEditRow}>
-              <View style={styles.nameInputsCol}>
-                <AppTextInput
-                  style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
-                  value={firstNameInput}
-                  onChangeText={setFirstNameInput}
-                  autoFocus
-                  returnKeyType="next"
-                  placeholderTextColor={colors.textMuted}
-                  placeholder="First name"
-                  maxLength={20}
-                />
-                <AppTextInput
-                  style={[styles.nameInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: 'rgba(255,255,255,0.04)' }]}
-                  value={lastNameInput}
-                  onChangeText={setLastNameInput}
-                  returnKeyType="done"
-                  onSubmitEditing={saveName}
-                  onBlur={saveName}
-                  placeholderTextColor={colors.textMuted}
-                  placeholder="Last name"
-                  maxLength={30}
-                />
-              </View>
-              <View style={styles.nameActionBtns}>
-                <TouchableOpacity onPress={saveName} disabled={savingName} style={styles.nameActionBtn} activeOpacity={0.7}>
-                  <Check color="#33D17A" size={18} strokeWidth={2.5} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={cancelEditName} style={styles.nameActionBtn} activeOpacity={0.7}>
-                  <X color={colors.textMuted} size={18} strokeWidth={2.5} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <TouchableOpacity onPress={startEditName} style={styles.nameRow} activeOpacity={0.7}>
-              <AppText style={[styles.name, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">{profile ? `${profile.first_name} ${profile.last_name}`.trim() || profile.display_name : 'Your Name'}</AppText>
-              <Pencil color={colors.textMuted} size={14} strokeWidth={2} />
-            </TouchableOpacity>
-          )}
-          <AppText style={[styles.emailText, { color: colors.textMuted }]}>{user?.email ?? ''}</AppText>
-          {uploadingAvatar && <AppText style={[styles.emailText, { color: '#FF2E8A', marginTop: 4 }]}>Uploading...</AppText>}
-          {avatarError && !uploadingAvatar && <AppText style={[styles.emailText, { color: colors.danger, marginTop: 4 }]}>{avatarError}</AppText>}
-          {nameError && <AppText style={[styles.emailText, { color: colors.danger, marginTop: 4 }]}>{nameError}</AppText>}
-        </View>
-      </View>
-
-      {(isAdmin || isSuperAdmin) && (
-        <TouchableOpacity
-          style={styles.debugRow}
-          onPress={() => router.push('/debug')}
-          activeOpacity={0.7}
-        >
-          <AppText style={styles.debugRowText}>Debug Diagnostics</AppText>
-          <ChevronRight color="#333" size={14} />
-        </TouchableOpacity>
-      )}
-
-      {/* Footer logo */}
-      <View style={styles.footerLogoWrap}>
-        <Image
-          source={require('@/assets/images/image_(2).png')}
-          style={styles.footerLogo}
-          resizeMode="contain"
-        />
-      </View>
-    </>
-  );
-
-  const renderSettingsTab = () => (
-    <>
-      <Section title="LOGIN & SECURITY">
-        <View style={[styles.row, { borderBottomColor: colors.borderSubtle, borderBottomWidth: 1 }]}>
-          <View style={styles.rowLeft}>
-            <AppText style={[styles.rowLabel, { color: colors.text }]}>Email Address</AppText>
-            <AppText style={[styles.rowSub, { color: colors.textMuted }]}>{user?.email ?? '—'}</AppText>
-          </View>
-          <Mail color={colors.textMuted} size={16} strokeWidth={1.5} />
-        </View>
-
-        <TouchableOpacity
-          style={[styles.row, { borderBottomColor: colors.borderSubtle, borderBottomWidth: 1 }]}
-          onPress={showChangeEmail ? () => setShowChangeEmail(false) : openChangeEmail}
-          activeOpacity={0.7}
-        >
-          <View style={styles.rowLeft}>
-            <AppText style={[styles.rowLabel, { color: colors.text }]}>Change Email</AppText>
-          </View>
-          {showChangeEmail ? <X color={colors.textMuted} size={16} /> : <ChevronRight color={colors.textMuted} size={16} />}
-        </TouchableOpacity>
-
-        {showChangeEmail && (
-          <View style={[styles.inlineForm, { borderBottomColor: colors.borderSubtle, borderBottomWidth: 1, backgroundColor: 'rgba(255,255,255,0.03)' }]}>
-            {emailSuccess ? (
-              <View style={styles.inlineSuccess}>
-                <Check color="#33D17A" size={16} strokeWidth={2.5} />
-                <AppText style={[styles.inlineSuccessText, { color: '#33D17A' }]}>Confirmation sent — check your new inbox.</AppText>
-              </View>
-            ) : (
-              <>
-                <InlineField label="New Email" value={newEmail} onChange={setNewEmail} placeholder="you@example.com" last />
-                {emailError && <AppText style={[styles.inlineError, { color: colors.danger }]}>{emailError}</AppText>}
-                <AppText style={[styles.inlineNote, { color: colors.textMuted }]}>
-                  A confirmation link will be sent to your new address. Your email changes once you click it.
-                </AppText>
-                <TouchableOpacity
-                  style={[styles.inlineSubmitBtn, { backgroundColor: '#FF2E8A', opacity: savingEmail ? 0.6 : 1 }]}
-                  onPress={handleSaveEmail}
-                  disabled={savingEmail}
-                  activeOpacity={0.8}
-                >
-                  {savingEmail
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <AppText style={styles.inlineSubmitText}>Send Confirmation</AppText>
-                  }
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={[styles.row, { borderBottomColor: colors.borderSubtle, borderBottomWidth: 1 }]}
-          onPress={showChangePw ? () => setShowChangePw(false) : openChangePw}
-          activeOpacity={0.7}
-        >
-          <View style={styles.rowLeft}>
-            <AppText style={[styles.rowLabel, { color: colors.text }]}>Change Password</AppText>
-          </View>
-          {showChangePw ? <X color={colors.textMuted} size={16} /> : <ChevronRight color={colors.textMuted} size={16} />}
-        </TouchableOpacity>
-
-        {showChangePw && (
-          <View style={[styles.inlineForm, { borderBottomColor: colors.borderSubtle, borderBottomWidth: 1, backgroundColor: 'rgba(255,255,255,0.03)' }]}>
-            {pwSuccess ? (
-              <View style={styles.inlineSuccess}>
-                <Check color="#33D17A" size={16} strokeWidth={2.5} />
-                <AppText style={[styles.inlineSuccessText, { color: '#33D17A' }]}>Password updated successfully.</AppText>
-              </View>
-            ) : (
-              <>
-                <InlineField label="Current Password" value={currentPw} onChange={setCurrentPw} secure placeholder="••••••••" />
-                <InlineField label="New Password" value={newPw} onChange={setNewPw} secure placeholder="8+ characters" />
-                <InlineField label="Confirm New" value={confirmPw} onChange={setConfirmPw} secure placeholder="••••••••" last />
-                {pwError && <AppText style={[styles.inlineError, { color: colors.danger }]}>{pwError}</AppText>}
-                <TouchableOpacity
-                  style={[styles.inlineSubmitBtn, { backgroundColor: '#FF2E8A', opacity: savingPw ? 0.6 : 1 }]}
-                  onPress={handleSavePassword}
-                  disabled={savingPw}
-                  activeOpacity={0.8}
-                >
-                  {savingPw
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <AppText style={styles.inlineSubmitText}>Update Password</AppText>
-                  }
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        )}
-
-      </Section>
-
-      <Section title="MY DEVICE PRIVACY" note="These settings only affect your device. Your partner manages their own independently.">
-        <SettingsRow label="Privacy Mode" sub="Show Weather Lock Screen when you open the app" toggle value={s?.stealth_mode_enabled ?? true} onChange={v => update({ stealth_mode_enabled: v })} />
-        <RequireUnlockRow
-          current={(s?.login_method === 'biometric' ? 'biometric' : 'none') as UnlockMethod}
-          bioAvailable={bioAvailable}
-          biometricLabel={biometricLabel}
-          colors={colors}
-          onSelect={async (method) => {
-            if (method === 'biometric') {
-              const result = await bioAuthenticate('Confirm biometrics to enable this method');
-              if (!result.success) return;
-            }
-            update({ login_method: method });
-          }}
-        />
-        {(s?.login_method ?? 'none') !== 'none' && (
-          <RequireUnlockAfterRow
-            current={s?.lock_after_seconds ?? null}
-            colors={colors}
-            onSelect={(seconds) => update({ lock_after_seconds: seconds })}
-          />
-        )}
-        <VaultProtectionRow
-          isAdditional={s?.vault_face_id_required ?? false}
-          bioAvailable={bioAvailable}
-          biometricLabel={biometricLabel}
-          colors={colors}
-          onSelect={async (additional) => {
-            if (additional) {
-              const result = await bioAuthenticate('Confirm biometrics to enable Vault protection');
-              if (!result.success) return;
-            }
-            update({ vault_face_id_required: additional });
-          }}
-        />
-        <SettingsRow label="Notify Me if My Content is Screenshotted" sub="Get a push notification when your partner screenshots your content in Chat, Vault, or Wish. Screenshots are always recorded in your Activity feed." toggle value={s?.screenshot_notify_partner ?? true} onChange={v => update({ screenshot_notify_partner: v })} />
-      </Section>
-
-      <View onLayout={(e) => setVaultSectionY(e.nativeEvent.layout.y)}>
-        <Section title="VAULT PREFERENCES" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately." onInfo={() => setShowVaultSecurityInfo(true)}>
-          <SettingsRow label="Blur Vault Photos & Videos" sub="Vault items stay blurred until tapped; re-blurs when you leave the app." toggle value={s?.blur_vault_media ?? s?.blur_media ?? true} onChange={v => update({ blur_vault_media: v })} />
-          <SettingsRow label="Allow Saving My Uploads" sub="Your partner can save your uploads to their phone" toggle value={s?.vault_allow_save_default ?? false} onChange={v => update({ vault_allow_save_default: v })} />
-          <SettingsRow label="Allow Sharing My Uploads Outside App" sub="Your partner can share your content externally" toggle value={s?.vault_allow_share_default ?? false} onChange={v => update({ vault_allow_share_default: v })} />
-          <SettingsRow label="Auto-Save Chat Media to Vault" sub="Photos and videos you send in Chat are automatically saved to your Vault. Deleting from either place removes both." toggle value={s?.chat_auto_save_to_vault ?? true} onChange={v => update({ chat_auto_save_to_vault: v })} last />
-        </Section>
-      </View>
-
-      <Section title="CHAT">
-        <SettingsRow label="Blur Chat Photos & Videos" sub="Photos and videos sent in Chat stay blurred until tapped; re-blurs when you leave the app." toggle value={s?.blur_chat_media ?? s?.blur_media ?? true} onChange={v => update({ blur_chat_media: v })} />
-        <ChatFontSizeRow
-          current={s?.chat_font_scale ?? 1.0}
-          colors={colors}
-          onSelect={(scale) => update({ chat_font_scale: scale })}
-        />
-      </Section>
-
-      <Section title="NOTIFICATIONS">
-        <SettingsRow label="Discreet Notifications" sub="Never show content previews" toggle value={s?.discreet_notifications ?? true} onChange={v => update({ discreet_notifications: v })} onInfo={() => setShowDiscreetInfo(true)} last />
-      </Section>
-
-      <Section
-        title="POINTS & SCORE"
-        note={
-          couple?.id
-            ? "This setting affects both you and your partner. Points are always tallied in the background — turning this off just hides the scores."
-            : "Connect with a partner to enable the points system."
-        }
-      >
-        <SettingsRow
-          label="Sparks System"
-          sub="Show scores, leaderboard, and Cash In features"
-          toggle
-          value={optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)}
-          onChange={handleTogglePoints}
-          disabled={!couple?.id}
-          last
-        />
-      </Section>
-
-      <Section
-        title="STREAKS"
-        note={
-          couple?.id
-            ? "This setting affects both you and your partner. Your streak is always tracked in the background — turning this off just hides it."
-            : "Connect with a partner to enable streaks."
-        }
-      >
-        <SettingsRow
-          label="Day Streak"
-          sub="Show your current consecutive-day activity streak"
-          toggle
-          value={optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)}
-          onChange={handleToggleStreaks}
-          disabled={!couple?.id}
-          last
-        />
-      </Section>
-
-      <Section title="SUPPORT">
-        <SettingsRow
-          label="Contact Support"
-          sub="Get help from the Warm Me Up team"
-          onPress={handleContactSupport}
-        />
-        <SettingsRow
-          label="Community Guidelines"
-          sub="How we keep this space safe and respectful"
-          onPress={() => setShowCommunityGuidelines(true)}
-          last
-        />
-      </Section>
-
-      <Section title="MEMBERSHIP">
-        {subscriptionInfo.loading ? (
-          <SettingsRow label="Status" sub="Loading…" last />
-
-        ) : (subscriptionInfo.source === 'admin' || subscriptionInfo.source === 'super_admin' || subscriptionInfo.source === 'admin_grant') ? (
-          <SettingsRow
-            label="Access"
-            sub="Complimentary — full access granted"
-            last
-          />
-
-        ) : subscriptionInfo.source === 'partner' ? (
-          <>
-            <SettingsRow
-              label="Plan"
-              sub="Covered by partner's subscription"
-            />
-            <SettingsRow
-              label="Manage"
-              sub="View or cancel in the App Store"
-              onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
-              accent
-              last
-            />
-          </>
-
-        ) : subscriptionInfo.source === 'self' && subscriptionInfo.isOnTrial ? (
-          <>
-            <SettingsRow
-              label="Plan"
-              sub={`Free Trial${subscriptionInfo.trialExpiresAt ? ` · ends ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`}
-            />
-            <SettingsRow
-              label="Subscribe"
-              sub="Unlock full access · your partner joins free"
-              onPress={() => router.push('/(auth)/subscription')}
-              accent
-            />
-            <SettingsRow
-              label="Restore Purchase"
-              sub="Recover a previous subscription"
-              onPress={handleRestorePurchase}
-              last
-            />
-          </>
-
-        ) : subscriptionInfo.source === 'self' && subscriptionInfo.isPremium ? (
-          <>
-            <SettingsRow
-              label="Plan"
-              sub={`${subscriptionInfo.plan === 'yearly' ? 'Yearly' : 'Monthly'} · Active${subscriptionInfo.expiresAt ? ` — renews ${new Date(subscriptionInfo.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`}
-            />
-            <SettingsRow
-              label="Manage Subscription"
-              sub="View or cancel in the App Store"
-              onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
-              accent
-            />
-            <SettingsRow
-              label="Restore Purchase"
-              sub="Recover a previous subscription"
-              onPress={handleRestorePurchase}
-              last
-            />
-          </>
-
-        ) : (
-          <>
-            <SettingsRow label="Plan" sub="No active subscription" />
-            <SettingsRow
-              label="Subscribe"
-              sub="One subscription covers both of you · partner joins free"
-              onPress={() => router.push('/(auth)/subscription')}
-              accent
-            />
-            <SettingsRow
-              label="Restore Purchase"
-              sub="Recover a previous subscription"
-              onPress={handleRestorePurchase}
-              last
-            />
-          </>
-        )}
-      </Section>
-
-      <Section title="SECURITY">
-        <SettingsRow label="Terms of Service" sub="The rules for using Warm Me Up" onPress={() => setShowTerms(true)} />
-        <SettingsRow label="Privacy Policy" sub="How we handle your data" onPress={() => setShowPrivacyPolicy(true)} />
-        <SettingsRow label="Delete My Account" danger onPress={() => { setDeleteAccountError(null); setDeleteAccountStep(1); setDeleteAccountOpen(true); }} last />
-      </Section>
-    </>
-  );
 
   return (
     <>
@@ -2145,7 +894,102 @@ export default function AccountScreen() {
             </TouchableOpacity>
           </View>
 
-          {activeTab === 'profile' ? renderProfileTab() : renderSettingsTab()}
+          {activeTab === 'profile' ? (
+            <ProfileTab
+              couple={couple}
+              partnerProfile={partnerProfile}
+              profile={profile}
+              user={user}
+              isAdmin={isAdmin}
+              isSuperAdmin={isSuperAdmin}
+              subscriptionInfo={subscriptionInfo}
+              streak={streak}
+              momentsToday={momentsToday}
+              totalPoints={totalPoints}
+              diceRolls={diceRolls}
+              optimisticPointsEnabled={optimisticPointsEnabled}
+              optimisticStreaksEnabled={optimisticStreaksEnabled}
+              copied={copied}
+              codeRefreshing={codeRefreshing}
+              editingName={editingName}
+              firstNameInput={firstNameInput}
+              lastNameInput={lastNameInput}
+              savingName={savingName}
+              nameError={nameError}
+              nameWrapRef={nameWrapRef}
+              uploadingAvatar={uploadingAvatar}
+              avatarError={avatarError}
+              onCopyCode={handleCopyCode}
+              onShareCode={handleShareCode}
+              onRefreshCode={handleRefreshCode}
+              onInviteCardPress={handleInviteCardPress}
+              onManagePairing={() => setShowLeaveSheet(true)}
+              onCancelInvite={() => setShowCancelInviteSheet(true)}
+              onEnterCode={() => { setEnterCode(''); setEnterCodeError(null); setShowEnterCodeSheet(true); }}
+              onPickAvatar={handlePickAvatar}
+              onStartEditName={startEditName}
+              onSaveName={saveName}
+              onCancelEditName={cancelEditName}
+              onResetPoints={() => setResetPointsOpen(true)}
+              onSignOut={signOut}
+              onAnniversaryPress={(existing) => {
+                setAnniversaryDate(existing);
+                setAnnivMonth(existing ? String(existing.getMonth() + 1).padStart(2, '0') : '');
+                setAnnivDay(existing ? String(existing.getDate()).padStart(2, '0') : '');
+                setAnnivYear(existing ? String(existing.getFullYear()) : '');
+                setAnniversaryError(null);
+                setShowAnniversarySheet(true);
+              }}
+              onSetFirstName={setFirstNameInput}
+              onSetLastName={setLastNameInput}
+            />
+          ) : (
+            <SettingsTab
+              user={user}
+              s={s}
+              couple={couple}
+              bioAvailable={bioAvailable}
+              biometricLabel={biometricLabel}
+              bioAuthenticate={bioAuthenticate}
+              update={update}
+              optimisticPointsEnabled={optimisticPointsEnabled}
+              optimisticStreaksEnabled={optimisticStreaksEnabled}
+              onTogglePoints={handleTogglePoints}
+              onToggleStreaks={handleToggleStreaks}
+              showChangeEmail={showChangeEmail}
+              newEmail={newEmail}
+              emailError={emailError}
+              emailSuccess={emailSuccess}
+              savingEmail={savingEmail}
+              onOpenChangeEmail={openChangeEmail}
+              onCloseChangeEmail={() => setShowChangeEmail(false)}
+              onSetNewEmail={setNewEmail}
+              onSaveEmail={handleSaveEmail}
+              showChangePw={showChangePw}
+              currentPw={currentPw}
+              newPw={newPw}
+              confirmPw={confirmPw}
+              pwError={pwError}
+              pwSuccess={pwSuccess}
+              savingPw={savingPw}
+              onOpenChangePw={openChangePw}
+              onCloseChangePw={() => setShowChangePw(false)}
+              onSetCurrentPw={setCurrentPw}
+              onSetNewPw={setNewPw}
+              onSetConfirmPw={setConfirmPw}
+              onSavePassword={handleSavePassword}
+              onShowVaultSecurityInfo={() => setShowVaultSecurityInfo(true)}
+              onShowDiscreetInfo={() => setShowDiscreetInfo(true)}
+              onShowCommunityGuidelines={() => setShowCommunityGuidelines(true)}
+              onShowTerms={() => setShowTerms(true)}
+              onShowPrivacyPolicy={() => setShowPrivacyPolicy(true)}
+              subscriptionInfo={subscriptionInfo}
+              onRestorePurchase={handleRestorePurchase}
+              onDeleteAccount={() => { setDeleteAccountError(null); setDeleteAccountStep(1); setDeleteAccountOpen(true); }}
+              onContactSupport={handleContactSupport}
+              onVaultSectionLayout={(y) => setVaultSectionY(y)}
+            />
+          )}
 
           <View style={{ height: 60 }} />
         </ScrollView>
@@ -2342,7 +1186,7 @@ export default function AccountScreen() {
           <AppTextInput
             style={[styles.enterCodeInput, { color: colors.text, borderColor: enterCodeError ? '#FF5A5F' : colors.borderSubtle, backgroundColor: colors.card }]}
             value={enterCode}
-            onChangeText={t => { setEnterCode(t.toUpperCase()); setEnterCodeError(null); }}
+            onChangeText={(t: string) => { setEnterCode(t.toUpperCase()); setEnterCodeError(null); }}
             placeholder="e.g. T9RRG6"
             placeholderTextColor={colors.textMuted}
             autoCapitalize="characters"

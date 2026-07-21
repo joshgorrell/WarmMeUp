@@ -2,6 +2,7 @@ import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { logger } from './logger';
 
 const _rawUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const _rawAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -20,7 +21,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 if (anonKeyEndsWithNewline) {
-  console.warn('[Supabase] WARNING: anon key had trailing whitespace/newline — trimmed before use');
+  logger.warn('[Supabase] WARNING: anon key had trailing whitespace/newline — trimmed before use');
 }
 
 const webStorage = {

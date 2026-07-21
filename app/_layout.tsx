@@ -15,6 +15,7 @@ import type { NotificationData } from '@/lib/notifications';
 import { logDebugEvent } from '@/lib/debugLog';
 import { emitIncoming } from '@/lib/incomingEvents';
 import IncomingSlash from '@/components/IncomingSlash';
+import { logger } from '@/lib/logger';
 
 // Warm the image decode cache as early as possible — before the transition/unlock screens mount.
 // resolveAssetSource works on both native (file URI) and web (network URL).

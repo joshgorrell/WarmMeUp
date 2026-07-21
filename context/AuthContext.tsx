@@ -11,6 +11,7 @@ import { clearWeatherSessionCache } from '@/hooks/useWeather';
 import { logInRevenueCat, logOutRevenueCat } from '@/lib/purchases';
 import { saveDiagnosticsSnapshot } from '@/lib/diagnosticsSnapshot';
 import { emitIncoming } from '@/lib/incomingEvents';
+import { logger } from '../lib/logger';
 
 /**
  * Single source of truth for whether the unlock gate must be shown.
@@ -232,7 +233,7 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
     const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
     if (!baseUrl.startsWith('https://')) return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
     const url = `${baseUrl}/functions/v1/get-effective-subscription`;
-    console.log('[Subscription] fetching:', url);
+    logger.log('[Subscription] fetching:', url);
     const res = await fetch(url, {
       method: 'GET',
       headers: {
@@ -241,7 +242,7 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
         'Content-Type': 'application/json',
       },
     });
-    console.log('[Subscription] response status:', res.status, res.statusText);
+    logger.log('[Subscription] response status:', res.status, res.statusText);
     const rawText = await res.text();
     if (!res.ok) {
       console.warn('[Subscription] non-OK response — returning default');
@@ -416,7 +417,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const persistedTs = await readUnlockedAt(userId);
       unlockedAtRef.current = persistedTs;
       setUnlockedAtMs(persistedTs);
-      console.log('[Auth] unlockedAt restored:', persistedTs);
+      logger.log('[Auth] unlockedAt restored:', persistedTs);
 
       // Always attempt push token registration on load — the OS prompt only appears
       // once, and subsequent calls return the cached token immediately.
@@ -442,12 +443,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetchEffectiveSubscription(accessToken).then(async info => {
           const adminOverride = await applyAdminOverrideAsync(info, userId);
           if (adminOverride !== info) {
-            console.log('[Auth] admin override applied — canInvite forced true');
+            logger.log('[Auth] admin override applied — canInvite forced true');
           }
           setSubscriptionInfo(adminOverride);
         });
       } else {
-        console.log('[Auth] no accessToken — subscription set to default (not loading)');
+        logger.log('[Auth] no accessToken — subscription set to default (not loading)');
         setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
       }
     } catch (err) {
@@ -455,7 +456,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Network or unexpected error — don't wipe already-loaded state.
       setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
     } finally {
-      console.log('[Auth] loadUserData done — setLoading(false)');
+      logger.log('[Auth] loadUserData done — setLoading(false)');
       setLoading(false);
     }
   }

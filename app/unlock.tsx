@@ -16,6 +16,7 @@ import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { supabase } from '@/lib/supabase';
 import { logDebugEvent } from '@/lib/debugLog';
 import { useLayout } from '@/hooks/useLayout';
+import { logger } from '@/lib/logger';
 
 export default function UnlockScreen() {
   const router = useRouter();
@@ -42,7 +43,7 @@ export default function UnlockScreen() {
   const logoSize = Math.min(Math.round(width * 0.16), 64);
 
   const proceed = useCallback(() => {
-    console.log('[UNLOCK SUCCESS]', {
+    logger.log('[UNLOCK SUCCESS]', {
       userId: user?.id,
       loginMethod: settings?.login_method,
       timestamp: Date.now(),
@@ -80,7 +81,7 @@ export default function UnlockScreen() {
     modeInitialised.current = true;
     const method = settings.login_method ?? 'password';
     const lockAfter = settings.lock_after_seconds ?? null;
-    console.log('[unlock] settings loaded, login_method:', method, 'lock_after_seconds:', lockAfter);
+    logger.log('[unlock] settings loaded, login_method:', method, 'lock_after_seconds:', lockAfter);
 
     if (lockAfter !== null && lockAfter < 0) {
       proceed();
@@ -144,7 +145,7 @@ export default function UnlockScreen() {
         SecureStore.setItemAsync('debug_login_error_full_json', ''),
       ]);
     } catch {}
-    console.log('[unlock] handleEmailSignIn preflight — anonKey length:', anonKey.length, '| client:', !!supabase);
+    logger.log('[unlock] handleEmailSignIn preflight — anonKey length:', anonKey.length, '| client:', !!supabase);
 
     try {
       await SecureStore.setItemAsync('debug_login_reached_signInWithPassword', 'true').catch(() => {});

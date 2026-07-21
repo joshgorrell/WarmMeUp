@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { logger } from '../lib/logger';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
@@ -61,7 +62,7 @@ export function useWeather(
             setTemp(t);
           }
         } catch (e) {
-          console.warn('[useWeather] cached coords fetch failed:', e);
+          logger.warn('[useWeather] cached coords fetch failed:', e);
         }
       }
 
@@ -108,7 +109,7 @@ export function useWeather(
 
         if (userId) cacheCoords(userId, lat!, lon!);
       } catch (e) {
-        console.warn('[useWeather] GPS fetch failed:', e);
+        logger.warn('[useWeather] GPS fetch failed:', e);
       }
     })();
 

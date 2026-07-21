@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform, Share, ActivityIndicator,
+  View, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform, Share,
 } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Constants from 'expo-constants';
@@ -8,76 +8,21 @@ import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname, useFocusEffect } from 'expo-router';
-import { ChevronLeft, Trash2, LogOut, Shield, Share2, RefreshCw } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import { useAuth, computeIsUnlockRequired, computeShouldShowPrivacyCover } from '@/context/AuthContext';
 import { supabase, getSupabaseDiagnostics } from '@/lib/supabase';
-import { secureKey, hasPinStored } from '@/lib/secureKey';
+import { secureKey } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
 import { getDebugEvents, clearDebugEvents, subscribeDebugEvents, logDebugEvent, DebugEvent } from '@/lib/debugLog';
 import { APP_CODE_VERSION, OTA_MARKER, GIT_SHA } from '@/lib/appVersion';
 import { registerForPushNotifications, savePushToken } from '@/lib/notifications';
-import { Spacing, Radius, FontSize } from '@/constants/theme';
-
-function Row({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
-  const display =
-    value === null || value === undefined
-      ? 'null'
-      : value === true
-      ? 'true'
-      : value === false
-      ? 'false'
-      : String(value);
-
-  const isNull = value === null || value === undefined;
-  const isBad = value === false || value === 'null';
-
-  return (
-    <View style={styles.row}>
-      <AppText style={styles.label}>{label}</AppText>
-      <AppText
-        style={[
-          styles.value,
-          isNull && styles.valueNull,
-          isBad && !isNull && styles.valueBad,
-        ]}
-        numberOfLines={2}
-        selectable
-      >
-        {display}
-      </AppText>
-    </View>
-  );
-}
-
-function Section({ title }: { title: string }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <AppText style={styles.sectionTitle}>{title}</AppText>
-    </View>
-  );
-}
-
-function EventRow({ event }: { event: DebugEvent }) {
-  const time = event.timestamp.substring(11, 19);
-  const isError = event.tag.includes('ERROR');
-  const isSuccess = event.tag.includes('SUCCESS');
-  const tagColor = isError ? '#FF6B6B' : isSuccess ? '#4CAF50' : '#FFA040';
-  const pairs = Object.entries(event.data)
-    .map(([k, v]) => `${k}=${v === null ? 'null' : String(v)}`)
-    .join('  ');
-  return (
-    <View style={styles.eventRow}>
-      <AppText style={styles.eventTime}>{time}</AppText>
-      <View style={styles.eventBody}>
-        <AppText style={[styles.eventTag, { color: tagColor }]}>[{event.tag}]</AppText>
-        {!!pairs && (
-          <AppText style={styles.eventPairs} selectable numberOfLines={4}>{pairs}</AppText>
-        )}
-      </View>
-    </View>
-  );
-}
+import { Spacing, FontSize } from '@/constants/theme';
+import { logger } from '@/lib/logger';
+import { Row, Section } from '@/components/debug/DebugSharedHelpers';
+import AuthProbePanel from '@/components/debug/AuthProbePanel';
+import RecentEventsPanel from '@/components/debug/RecentEventsPanel';
+import ActionButtonsPanel from '@/components/debug/ActionButtonsPanel';
 
 export default function DebugScreen() {
   const router = useRouter();
@@ -87,7 +32,7 @@ export default function DebugScreen() {
   const [clearing, setClearing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [hasPin, setHasPin] = useState<boolean | null>(null);
+
   const [inactiveCoupleCount, setInactiveCoupleCount] = useState<number | null>(null);
   const [events, setEvents] = useState<DebugEvent[]>(() => getDebugEvents());
   const [rpcTest, setRpcTest] = useState<{
@@ -399,7 +344,6 @@ export default function DebugScreen() {
 
   useEffect(() => {
     if (userId) {
-      hasPinStored(userId).then(setHasPin).catch(() => setHasPin(null));
       // Count inactive couple rows for this user
       supabase
         .from('couples')
@@ -1378,7 +1322,7 @@ export default function DebugScreen() {
     try {
       const { data, error: err } = await supabase.auth.getSession();
       const ranAt = new Date().toISOString();
-      console.log('[DebugScreen] GET SESSION', JSON.stringify({ data, error: err }, null, 2));
+      logger.log('[DebugScreen] GET SESSION', JSON.stringify({ data, error: err }, null, 2));
       if (err) {
         setSessionTest({ status: 'error', ranAt, result: null, error: JSON.stringify(err, null, 2) });
       } else {
@@ -1406,7 +1350,7 @@ export default function DebugScreen() {
     try {
       const { data, error: err } = await supabase.from('profiles').select('id').limit(1);
       const ranAt = new Date().toISOString();
-      console.log('[DebugScreen] DB TEST', JSON.stringify({ data, error: err }, null, 2));
+      logger.log('[DebugScreen] DB TEST', JSON.stringify({ data, error: err }, null, 2));
       if (err) {
         setDbTest({ status: 'error', ranAt, result: null, error: JSON.stringify(err, null, 2) });
       } else {
@@ -1422,7 +1366,7 @@ export default function DebugScreen() {
   const handleClearLocalState = () => {
     Alert.alert(
       'Clear Local Device State',
-      'Deletes PIN, unlock timer, and weather cache from this device. You will stay logged in.',
+'Deletes unlock timer and weather cache from this device. You will stay logged in.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -1432,15 +1376,12 @@ export default function DebugScreen() {
             setClearing(true);
             try {
               if (userId && Platform.OS !== 'web') {
-                const pinKey = secureKey('warmup_pin', userId);
-                await SecureStore.deleteItemAsync(pinKey).catch(() => {});
                 const unlockKey = secureKey('warmup_unlocked_at', userId);
                 await SecureStore.deleteItemAsync(unlockKey).catch(() => {});
               } else if (userId && typeof window !== 'undefined') {
-                window.localStorage.removeItem(secureKey('warmup_pin', userId));
+                window.localStorage.removeItem(secureKey('warmup_unlocked_at', userId));
               }
               clearWeatherSessionCache();
-              if (userId) hasPinStored(userId).then(setHasPin).catch(() => {});
               Alert.alert('Done', 'Local device state cleared.');
             } catch (e) {
               console.error('[DebugScreen] clearLocalState error:', e);
@@ -1483,7 +1424,7 @@ export default function DebugScreen() {
   const handleResetSecurity = () => {
     Alert.alert(
       'Reset Security Settings',
-      'Sets login_method=password, disables stealth mode, and sets lock_after_seconds=-1 (Never Lock) in Supabase. PIN on this device is not deleted.',
+      'Sets login_method=password, disables stealth mode, and sets lock_after_seconds=-1 (Never Lock) in Supabase.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -1531,7 +1472,7 @@ export default function DebugScreen() {
       stealth_mode_enabled: settings?.stealth_mode_enabled ?? null,
       lock_after_seconds: settings?.lock_after_seconds ?? null,
       unlockedAtMs,
-      hasStoredPIN: hasPin,
+
       isUnlockRequired,
       shouldShowPrivacyCover,
       blur_on_background: settings?.blur_on_background ?? null,
@@ -1768,7 +1709,7 @@ export default function DebugScreen() {
         <Row label="stealth_mode_enabled" value={settings?.stealth_mode_enabled ?? null} />
         <Row label="lock_after_seconds" value={settings?.lock_after_seconds ?? null} />
         <Row label="unlockedAtMs" value={unlockedAtMs} />
-        <Row label="hasStoredPIN" value={hasPin} />
+
         <Row label="isUnlockRequired" value={isUnlockRequired} />
         <Row label="shouldShowPrivacyCover" value={shouldShowPrivacyCover} />
         <Row label="blur_on_background" value={settings?.blur_on_background ?? null} />
@@ -2025,96 +1966,8 @@ export default function DebugScreen() {
           );
         })()}
 
-        {/* ── 4f. Auth Session Live Probe ── */}
-        {/* Auto-runs on every screen focus. Tap button to re-run manually. */}
-        <Section title="Auth Session Live Probe" />
-        <TouchableOpacity
-          onPress={runAuthProbe}
-          style={styles.probeButton}
-          activeOpacity={0.75}
-        >
-          <AppText style={styles.probeButtonText}>Run Auth Session Probe</AppText>
-        </TouchableOpacity>
-        <Row label="probe_ran_at"                        value={authProbe.ranAt ?? '(not yet run)'} />
-        <Row label="auth_storage_adapter"                value={authProbe.auth_storage_adapter} />
-        <Row label="auth_storage_keys_found"             value={authProbe.auth_storage_keys_found} />
-        <Row label="auth_storage_session_key_exists"     value={authProbe.auth_storage_session_key_exists} />
-        <Row label="auth_storage_session_raw_length"     value={authProbe.auth_storage_session_raw_length} />
-        <Row label="auth_storage_session_parse_ok"       value={authProbe.auth_storage_session_parse_ok} />
-        <Row label="auth_storage_session_user_id"        value={authProbe.auth_storage_session_user_id} />
-        <Row label="auth_storage_session_expires_at"     value={authProbe.auth_storage_session_expires_at} />
-        <Row label="auth_getSession_ran_at"              value={authProbe.auth_getSession_ran_at} />
-        <Row label="auth_getSession_has_session"         value={authProbe.auth_getSession_has_session} />
-        <Row label="auth_getSession_user_id"             value={authProbe.auth_getSession_user_id} />
-        <Row label="auth_getSession_error_message"       value={authProbe.auth_getSession_error_message ?? '(none)'} />
-        <Row label="auth_getUser_ran_at"                 value={authProbe.auth_getUser_ran_at} />
-        <Row label="auth_getUser_has_user"               value={authProbe.auth_getUser_has_user} />
-        <Row label="auth_getUser_user_id"                value={authProbe.auth_getUser_user_id} />
-        <Row label="auth_getUser_error_message"          value={authProbe.auth_getUser_error_message ?? '(none)'} />
-        <Row label="last_auth_event"                     value={authProbe.last_auth_event ?? '(none since screen mount)'} />
-        <Row label="last_auth_event_at"                  value={authProbe.last_auth_event_at ?? '(none)'} />
-        <Row label="auth_client_source"                  value={authProbe.auth_client_source} />
-        <Row label="auth_last_attempt_at"                value={authProbe.persisted_attempt_at ?? '(none recorded)'} />
-        <Row label="auth_last_error_message"             value={authProbe.persisted_error_message ?? '(none recorded)'} />
-        <Row label="auth_last_error_status"              value={authProbe.persisted_error_status ?? '(none recorded)'} />
-        <Row label="auth_last_error_code"                value={authProbe.persisted_error_code ?? '(none recorded)'} />
-        <Row label="auth_last_error_full_json"           value={authProbe.persisted_error_full_json ?? '(none recorded)'} />
-        <Row label="auth_last_signin_success"                  value={authProbe.auth_last_signin_success ?? '(none recorded)'} />
-        <Row label="auth_last_signin_user_id"                  value={authProbe.auth_last_signin_user_id ?? '(none recorded)'} />
-        <Row label="auth_last_signin_session_present"          value={authProbe.auth_last_signin_session_present ?? '(none recorded)'} />
-        <Row label="auth_last_signin_access_token_present"     value={authProbe.auth_last_signin_access_token_present ?? '(none recorded)'} />
-        <Row label="auth_last_signin_refresh_token_present"    value={authProbe.auth_last_signin_refresh_token_present ?? '(none recorded)'} />
-        <Row label="auth_after_signin_getSession_has_session"  value={authProbe.auth_after_signin_getSession_has_session ?? '(none recorded)'} />
-        <Row label="auth_after_signin_getSession_user_id"      value={authProbe.auth_after_signin_getSession_user_id ?? '(none recorded)'} />
-        <Row label="auth_after_signin_storage_keys_found"      value={authProbe.auth_after_signin_storage_keys_found ?? '(none recorded)'} />
-        <Row label="auth_after_signin_session_key_exists"      value={authProbe.auth_after_signin_session_key_exists ?? '(none recorded)'} />
-        <Row label="auth_after_signin_session_raw_length"      value={authProbe.auth_after_signin_session_raw_length ?? '(none recorded)'} />
-        <Row label="auth_after_signin_session_parse_ok"        value={authProbe.auth_after_signin_session_parse_ok ?? '(none recorded)'} />
-        <Row label="auth_session_cleared_at"                   value={authProbe.auth_session_cleared_at ?? '(none recorded)'} />
-        <Row label="auth_session_cleared_reason"               value={authProbe.auth_session_cleared_reason ?? '(none recorded)'} />
-
-        <Section title="Login Button Preflight (login.tsx / unlock.tsx)" />
-        <Row label="login_button_pressed_at"                   value={authProbe.login_button_pressed_at ?? '(none recorded)'} />
-        <Row label="login_handler_file"                        value={authProbe.login_handler_file ?? '(none recorded)'} />
-        <Row label="login_handler_name"                        value={authProbe.login_handler_name ?? '(none recorded)'} />
-        <Row label="login_reached_preflight"                   value={authProbe.login_reached_preflight ?? '(none recorded)'} />
-        <Row label="login_reached_signInWithPassword"          value={authProbe.login_reached_signInWithPassword ?? '(none recorded)'} />
-        <Row label="login_preflight_has_supabase_client"       value={authProbe.login_preflight_has_supabase_client ?? '(none recorded)'} />
-        <Row label="login_preflight_has_anon_key"              value={authProbe.login_preflight_has_anon_key ?? '(none recorded)'} />
-        <Row label="login_preflight_anon_key_length"           value={authProbe.login_preflight_anon_key_length ?? '(none recorded)'} />
-        <Row label="login_error_source"                        value={authProbe.login_error_source ?? '(none recorded)'} />
-        <Row label="login_visible_error_message"               value={authProbe.login_visible_error_message ?? '(none recorded)'} />
-        <Row label="login_error_name"                          value={authProbe.login_error_name ?? '(none recorded)'} />
-        <Row label="login_error_message"                       value={authProbe.login_error_message ?? '(none recorded)'} />
-        <Row label="login_error_status"                        value={authProbe.login_error_status ?? '(none recorded)'} />
-        <Row label="login_error_code"                          value={authProbe.login_error_code ?? '(none recorded)'} />
-        <Row label="login_error_stack"                         value={authProbe.login_error_stack ?? '(none recorded)'} />
-        <Row label="login_error_full_json"                     value={authProbe.login_error_full_json ?? '(none recorded)'} />
-
-        <Section title="Network Probes (run after login error)" />
-        <Row label="network_supabase_root_ok"                  value={authProbe.network_supabase_root_ok ?? '(not run yet)'} />
-        <Row label="network_supabase_root_status"              value={authProbe.network_supabase_root_status ?? '(not run yet)'} />
-        <Row label="network_supabase_auth_health_ok"           value={authProbe.network_supabase_auth_health_ok ?? '(not run yet)'} />
-        <Row label="network_supabase_auth_health_status"       value={authProbe.network_supabase_auth_health_status ?? '(not run yet)'} />
-        <Row label="network_supabase_auth_health_error"        value={authProbe.network_supabase_auth_health_error ?? '(not run yet)'} />
-        <Row label="network_raw_fetch_with_key_ok"             value={authProbe.network_raw_fetch_with_key_ok ?? '(not run yet)'} />
-        <Row label="network_raw_fetch_with_key_status"         value={authProbe.network_raw_fetch_with_key_status ?? '(not run yet)'} />
-        <Row label="network_raw_fetch_with_key_error"          value={authProbe.network_raw_fetch_with_key_error ?? '(not run yet)'} />
-        <Row label="network_raw_auth_with_key_ok"              value={authProbe.network_raw_auth_with_key_ok ?? '(not run yet)'} />
-        <Row label="network_raw_auth_with_key_status"          value={authProbe.network_raw_auth_with_key_status ?? '(not run yet)'} />
-        <Row label="network_raw_auth_with_key_error"           value={authProbe.network_raw_auth_with_key_error ?? '(not run yet)'} />
-        <Row label="v37_req_headers_entries"                   value={authProbe.v37_req_headers_entries ?? '(not run yet)'} />
-        <Row label="v37_req_fetch_status"                      value={authProbe.v37_req_fetch_status ?? '(not run yet)'} />
-        <Row label="v37_req_fetch_ok"                          value={authProbe.v37_req_fetch_ok ?? '(not run yet)'} />
-        <Row label="v37_req_fetch_body"                        value={authProbe.v37_req_fetch_body ?? '(not run yet)'} />
-        <Row label="v38_ran_at"                                value={authProbe.v38_ran_at ?? '(not run yet)'} />
-        <Row label="v38_req_headers_entries"                   value={authProbe.v38_req_headers_entries ?? '(not run yet)'} />
-        <Row label="v38_req_has_apikey"                        value={authProbe.v38_req_has_apikey ?? '(not run yet)'} />
-        <Row label="v38_req_has_authorization"                 value={authProbe.v38_req_has_authorization ?? '(not run yet)'} />
-        <Row label="v38_req_fetch_status"                      value={authProbe.v38_req_fetch_status ?? '(not run yet)'} />
-        <Row label="v38_req_fetch_body"                        value={authProbe.v38_req_fetch_body ?? '(not run yet)'} />
-        <Row label="v38_url_param_fetch_status"                value={authProbe.v38_url_param_fetch_status ?? '(not run yet)'} />
-        <Row label="v38_url_param_fetch_body"                  value={authProbe.v38_url_param_fetch_body ?? '(not run yet)'} />
+        {/* ── 4f. Auth Session Live Probe + Login Preflight + Network Probes ── */}
+        <AuthProbePanel authProbe={authProbe} onRunProbe={runAuthProbe} />
 
         {/* ── 5. EAS / OTA Runtime Info ── */}
         <Section title="EAS / OTA Runtime Info (legacy top-level)" />
@@ -2151,582 +2004,45 @@ export default function DebugScreen() {
 
         {/* ── 6. Recent Debug Events ── */}
         <Section title="Recent Debug Events" />
-        <View style={styles.eventsHeader}>
-          <AppText style={styles.eventsCount}>{events.length} event{events.length !== 1 ? 's' : ''}</AppText>
-          <TouchableOpacity
-            onPress={() => { clearDebugEvents(); setEvents([]); }}
-            style={styles.clearEventsBtn}
-            activeOpacity={0.7}
-            hitSlop={8}
-          >
-            <RefreshCw size={12} color="#777" />
-            <AppText style={styles.clearEventsBtnText}>Clear</AppText>
-          </TouchableOpacity>
-        </View>
-        {events.length === 0 ? (
-          <View style={styles.emptyEvents}>
-            <AppText style={styles.emptyEventsText}>No events yet — trigger a vault upload to see logs here.</AppText>
-          </View>
-        ) : (
-          events.slice(0, 30).map((ev, i) => <EventRow key={i} event={ev} />)
-        )}
+        <RecentEventsPanel
+          events={events}
+          onClear={() => {
+            clearDebugEvents();
+            setEvents([]);
+          }}
+        />
 
         {/* ── Action Buttons ── */}
-        <View style={styles.buttonArea}>
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.actionBtnDanger, clearing && styles.btnDisabled]}
-            onPress={handleClearLocalState}
-            disabled={clearing}
-            activeOpacity={0.8}
-          >
-            <Trash2 size={15} color="#fff" />
-            <AppText style={styles.actionBtnLabel}>
-              {clearing ? 'Clearing…' : 'Clear Local Device State'}
-            </AppText>
-          </TouchableOpacity>
-          <AppText style={styles.btnNote}>
-            Deletes PIN, unlock timer, and weather cache. Stays logged in.
-          </AppText>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.actionBtnDanger, loggingOut && styles.btnDisabled]}
-            onPress={handleForceLogout}
-            disabled={loggingOut}
-            activeOpacity={0.8}
-          >
-            <LogOut size={15} color="#fff" />
-            <AppText style={styles.actionBtnLabel}>
-              {loggingOut ? 'Logging out…' : 'Force Logout'}
-            </AppText>
-          </TouchableOpacity>
-          <AppText style={styles.btnNote}>
-            Signs out of Supabase and returns to welcome screen.
-          </AppText>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.actionBtnWarn, resetting && styles.btnDisabled]}
-            onPress={handleResetSecurity}
-            disabled={resetting}
-            activeOpacity={0.8}
-          >
-            <Shield size={15} color="#fff" />
-            <AppText style={styles.actionBtnLabel}>
-              {resetting ? 'Resetting…' : 'Reset Security Settings'}
-            </AppText>
-          </TouchableOpacity>
-          <AppText style={styles.btnNote}>
-            Sets login_method=password, disables stealth mode, clears lock timer in DB.
-          </AppText>
-
-          {/* ── Push Test Buttons ── */}
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#1a1a2e' }, (reRegisterStatus === 'running' || Platform.OS === 'web' || !userId) && styles.btnDisabled]}
-            onPress={handleReRegisterToken}
-            disabled={reRegisterStatus === 'running' || Platform.OS === 'web' || !userId}
-            activeOpacity={0.8}
-          >
-            {reRegisterStatus === 'running'
-              ? <ActivityIndicator size="small" color="#A569BD" />
-              : <RefreshCw size={15} color="#A569BD" />
-            }
-            <AppText style={[styles.actionBtnLabel, { color: '#A569BD' }]}>
-              {reRegisterStatus === 'running' ? 'Re-registering…'
-                : reRegisterStatus === 'done' ? 'Token Re-registered'
-                : reRegisterStatus === 'error' ? 'Re-register Failed (check permission)'
-                : 'A. Re-register Push Token'}
-            </AppText>
-          </TouchableOpacity>
-          <AppText style={styles.btnNote}>
-            Fetches a fresh Expo push token from APNs and saves it to the database. Fixes stale or missing tokens without toggling Settings.
-          </AppText>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#1a2a1a' }, (localTestSent === 'sending' || Platform.OS === 'web') && styles.btnDisabled]}
-            onPress={handleLocalTestNotification}
-            disabled={localTestSent === 'sending' || Platform.OS === 'web'}
-            activeOpacity={0.8}
-          >
-            {localTestSent === 'sending'
-              ? <ActivityIndicator size="small" color="#82E0AA" />
-              : <RefreshCw size={15} color="#82E0AA" />
-            }
-            <AppText style={[styles.actionBtnLabel, { color: '#82E0AA' }]}>
-              {localTestSent === 'sending' ? 'Scheduling…'
-                : localTestSent === 'sent' ? 'Local Notification Sent'
-                : localTestSent === 'error' ? 'Local Notification Failed'
-                : 'B. Local Test Notification'}
-            </AppText>
-          </TouchableOpacity>
-          <AppText style={styles.btnNote}>
-            Schedules a notification to appear in 1 second. Proves permission + in-app handler. No server involved.
-          </AppText>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#0d2233' }, (pushTest.running || Platform.OS === 'web' || !couple?.id) && styles.btnDisabled]}
-            onPress={() => handleTestPush(false)}
-            disabled={pushTest.running || Platform.OS === 'web' || !couple?.id}
-            activeOpacity={0.8}
-          >
-            {pushTest.running && pushTest.self.status === 'loading'
-              ? <ActivityIndicator size="small" color="#5DADE2" />
-              : <RefreshCw size={15} color="#5DADE2" />
-            }
-            <AppText style={[styles.actionBtnLabel, { color: '#5DADE2' }]}>
-              {pushTest.running ? 'Running push tests…' : 'C. End-to-End Push Test (Self + Partner)'}
-            </AppText>
-          </TouchableOpacity>
-          <AppText style={styles.btnNote}>
-            Re-registers token, saves to DB, then sends via Expo push server to both self and partner.
-          </AppText>
-
-          {pushTest.running && (
-            <View style={[styles.rpcCard, styles.rpcCardLoading]}>
-              <AppText style={[styles.rpcCardStatus, { color: '#FFA040' }]}>
-                {pushTest.self.status === 'loading' ? 'Sending self push…'
-                  : pushTest.partner.status === 'loading' ? 'Sending partner push…'
-                  : 'Running…'}
-              </AppText>
-            </View>
-          )}
-
-          {!pushTest.running && pushTest.ranAt !== null && (() => {
-            const selfReceiptOk = pushTest.self.receipt_status === 'ok';
-            const selfReceiptErr = pushTest.self.receipt_status === 'error' || (pushTest.self.receipt_error ?? '') !== '';
-            const selfTicketOk = pushTest.self.expo_status === 'ok';
-            const partnerReceiptOk = pushTest.partner.receipt_status === 'ok';
-            const partnerReceiptErr = pushTest.partner.receipt_status === 'error' || (pushTest.partner.receipt_error ?? '') !== '';
-            const partnerTicketOk = pushTest.partner.expo_status === 'ok';
-            const anyReceiptOk = selfReceiptOk || partnerReceiptOk;
-            const anyReceiptErr = selfReceiptErr || partnerReceiptErr;
-            const cardStyle = pushTest.top_error || anyReceiptErr
-              ? styles.rpcCardError
-              : anyReceiptOk
-                ? { backgroundColor: '#0d1f2b', borderColor: '#1a4a6a' }
-                : { backgroundColor: '#2b2b0d', borderColor: '#6a6a1a' };
-            const cardColor = pushTest.top_error || anyReceiptErr ? '#FF6B6B' : anyReceiptOk ? '#5DADE2' : '#FFA040';
-            return (
-            <View style={[styles.rpcCard, cardStyle]}>
-              <View style={styles.rpcCardHeader}>
-                <AppText style={[styles.rpcCardStatus, { color: cardColor }]}>
-                  PUSH TEST — {pushTest.top_error || anyReceiptErr ? 'ERROR' : anyReceiptOk ? 'DELIVERED' : 'PENDING'}
-                </AppText>
-                <AppText style={styles.rpcCardTs} selectable>{pushTest.ranAt?.substring(11, 19)}</AppText>
-              </View>
-              {([
-                ['permission', pushTest.permission_status],
-                ['token_present', pushTest.token_present],
-                ['token_saved_to_db', pushTest.token_saved_to_db],
-                ['self.send_status', pushTest.self.send_status],
-                ['self.expo_ticket_status', pushTest.self.expo_status],
-                ['self.expo_ticket_id', pushTest.self.expo_ticket_id],
-                ['self.expo_receipt_status', pushTest.self.receipt_status],
-                ['self.expo_receipt_error', pushTest.self.receipt_error],
-                ['self.expo_receipt_details', pushTest.self.receipt_details],
-                ['self.expo_receipt_timeout', pushTest.self.receipt_timeout],
-                ['self.expo_payload_sent', pushTest.self.expo_payload_sent],
-                ['self.skipped', pushTest.self.skipped_reason],
-                ['self.error', pushTest.self.error],
-                ['partner.token_present', pushTest.partner_token_present],
-                ['partner.enabled', pushTest.partner_enabled],
-                ['partner.send_status', pushTest.partner.send_status],
-                ['partner.expo_ticket_status', pushTest.partner.expo_status],
-                ['partner.expo_ticket_id', pushTest.partner.expo_ticket_id],
-                ['partner.expo_receipt_status', pushTest.partner.receipt_status],
-                ['partner.expo_receipt_error', pushTest.partner.receipt_error],
-                ['partner.expo_receipt_details', pushTest.partner.receipt_details],
-                ['partner.expo_receipt_timeout', pushTest.partner.receipt_timeout],
-                ['partner.expo_payload_sent', pushTest.partner.expo_payload_sent],
-                ['partner.skipped', pushTest.partner.skipped_reason],
-                ['partner.error', pushTest.partner.error],
-                ['top_error', pushTest.top_error],
-              ] as [string, string | number | boolean | null][]).filter(([, v]) => v !== null && v !== '').map(([label, value]) => {
-                const isError = value === false || (typeof value === 'string' && (value.includes('error') || value.includes('Error') || value === 'DeviceNotRegistered' || value === 'InvalidCredentials'));
-                const isOk = typeof value === 'string' && (value === 'ok' || value === '200');
-                return (
-                <View key={label} style={styles.rpcCardField}>
-                  <AppText style={styles.rpcCardFieldLabel}>{label}</AppText>
-                  <AppText style={[styles.rpcCardFieldValue, isError ? { color: '#FF6B6B' } : isOk ? { color: '#5DADE2' } : {}]} selectable>
-                    {String(value)}
-                  </AppText>
-                </View>
-                );
-              })}
-            </View>
-            );
-          })()}
-
-          {profile?.is_super_admin === true && (
-            <>
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#2a0d1a', borderWidth: 1, borderColor: '#6a2d3a' }, (pushTest.running || Platform.OS === 'web' || !couple?.id) && styles.btnDisabled]}
-                onPress={() => handleTestPush(true)}
-                disabled={pushTest.running || Platform.OS === 'web' || !couple?.id}
-                activeOpacity={0.8}
-              >
-                {pushTest.running
-                  ? <ActivityIndicator size="small" color="#F1948A" />
-                  : <Shield size={15} color="#F1948A" />
-                }
-                <AppText style={[styles.actionBtnLabel, { color: '#F1948A' }]}>
-                  Force Partner Test Push (Admin Override)
-                </AppText>
-              </TouchableOpacity>
-              <AppText style={styles.btnNote}>
-                Bypasses partner push_notifications_enabled. Super-admin only.
-              </AppText>
-            </>
-          )}
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#1a3a1a' }, rpcTest.status === 'loading' && styles.btnDisabled]}
-            onPress={handleTestRpc}
-            disabled={rpcTest.status === 'loading'}
-            activeOpacity={0.8}
-          >
-            {rpcTest.status === 'loading'
-              ? <ActivityIndicator size="small" color="#4CAF50" />
-              : <RefreshCw size={15} color="#4CAF50" />
-            }
-            <AppText style={[styles.actionBtnLabel, { color: '#4CAF50' }]}>
-              {rpcTest.status === 'loading' ? 'Testing RPC…' : 'Test generate_invite_code RPC'}
-            </AppText>
-          </TouchableOpacity>
-
-          {/* Inline result card — always visible after first run */}
-          {rpcTest.status !== 'idle' && (
-            <View style={[
-              styles.rpcCard,
-              rpcTest.status === 'loading' && styles.rpcCardLoading,
-              rpcTest.status === 'success' && styles.rpcCardSuccess,
-              (rpcTest.status === 'error' || rpcTest.status === 'timeout') && styles.rpcCardError,
-            ]}>
-              <View style={styles.rpcCardHeader}>
-                <AppText style={[
-                  styles.rpcCardStatus,
-                  rpcTest.status === 'success' && { color: '#4CAF50' },
-                  (rpcTest.status === 'error' || rpcTest.status === 'timeout') && { color: '#FF6B6B' },
-                  rpcTest.status === 'loading' && { color: '#FFA040' },
-                ]}>
-                  {rpcTest.status.toUpperCase()}
-                </AppText>
-                {rpcTest.ranAt && (
-                  <AppText style={styles.rpcCardTs} selectable>{rpcTest.ranAt}</AppText>
-                )}
-              </View>
-
-              {rpcTest.status === 'success' && rpcTest.result !== null && (
-                <View style={styles.rpcCardField}>
-                  <AppText style={styles.rpcCardFieldLabel}>result</AppText>
-                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>
-                    {JSON.stringify(rpcTest.result, null, 2)}
-                  </AppText>
-                </View>
-              )}
-
-              {(rpcTest.status === 'error' || rpcTest.status === 'timeout') && rpcTest.error && (
-                <>
-                  {rpcTest.error.code && (
-                    <View style={styles.rpcCardField}>
-                      <AppText style={styles.rpcCardFieldLabel}>code</AppText>
-                      <AppText style={styles.rpcCardFieldValue} selectable>{rpcTest.error.code}</AppText>
-                    </View>
-                  )}
-                  {rpcTest.error.message && (
-                    <View style={styles.rpcCardField}>
-                      <AppText style={styles.rpcCardFieldLabel}>message</AppText>
-                      <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{rpcTest.error.message}</AppText>
-                    </View>
-                  )}
-                  {rpcTest.error.details && (
-                    <View style={styles.rpcCardField}>
-                      <AppText style={styles.rpcCardFieldLabel}>details</AppText>
-                      <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{rpcTest.error.details}</AppText>
-                    </View>
-                  )}
-                  {rpcTest.error.hint && (
-                    <View style={styles.rpcCardField}>
-                      <AppText style={styles.rpcCardFieldLabel}>hint</AppText>
-                      <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{rpcTest.error.hint}</AppText>
-                    </View>
-                  )}
-                </>
-              )}
-            </View>
-          )}
-
-          <AppText style={styles.btnNote}>
-            Calls generate_invite_code() RPC. Result appears immediately above.
-          </AppText>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#0d2233' }, dbIdentity.status === 'loading' && styles.btnDisabled]}
-            onPress={handleTestDbIdentity}
-            disabled={dbIdentity.status === 'loading'}
-            activeOpacity={0.8}
-          >
-            {dbIdentity.status === 'loading'
-              ? <ActivityIndicator size="small" color="#60C8FF" />
-              : <Shield size={15} color="#60C8FF" />
-            }
-            <AppText style={[styles.actionBtnLabel, { color: '#60C8FF' }]}>
-              {dbIdentity.status === 'loading' ? 'Checking DB…' : 'Test DB Identity RPC'}
-            </AppText>
-          </TouchableOpacity>
-
-          {dbIdentity.status !== 'idle' && (
-            <View style={[
-              styles.rpcCard,
-              dbIdentity.status === 'loading' && styles.rpcCardLoading,
-              dbIdentity.status === 'success' && { backgroundColor: '#0d1f2b', borderColor: '#1a4a6a' },
-              dbIdentity.status === 'error' && styles.rpcCardError,
-            ]}>
-              <View style={styles.rpcCardHeader}>
-                <AppText style={[
-                  styles.rpcCardStatus,
-                  dbIdentity.status === 'success' && { color: '#60C8FF' },
-                  dbIdentity.status === 'error' && { color: '#FF6B6B' },
-                  dbIdentity.status === 'loading' && { color: '#FFA040' },
-                ]}>
-                  DB IDENTITY — {dbIdentity.status.toUpperCase()}
-                </AppText>
-                {dbIdentity.ranAt && (
-                  <AppText style={styles.rpcCardTs} selectable>{dbIdentity.ranAt.substring(11, 19)}</AppText>
-                )}
-              </View>
-
-              {dbIdentity.status === 'success' && dbIdentity.result !== null && (
-                Object.entries(dbIdentity.result as Record<string, any>).map(([k, v]) => (
-                  <View key={k} style={styles.rpcCardField}>
-                    <AppText style={styles.rpcCardFieldLabel}>{k}</AppText>
-                    <AppText style={styles.rpcCardFieldValue} selectable>{String(v)}</AppText>
-                  </View>
-                ))
-              )}
-
-              {dbIdentity.status === 'error' && dbIdentity.error && (
-                <>
-                  {dbIdentity.error.code && (
-                    <View style={styles.rpcCardField}>
-                      <AppText style={styles.rpcCardFieldLabel}>code</AppText>
-                      <AppText style={styles.rpcCardFieldValue} selectable>{dbIdentity.error.code}</AppText>
-                    </View>
-                  )}
-                  {dbIdentity.error.message && (
-                    <View style={styles.rpcCardField}>
-                      <AppText style={styles.rpcCardFieldLabel}>message</AppText>
-                      <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{dbIdentity.error.message}</AppText>
-                    </View>
-                  )}
-                </>
-              )}
-            </View>
-          )}
-
-          <AppText style={styles.btnNote}>
-            Confirms which Supabase project the app is connected to.
-          </AppText>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#0d1a2b' }, checkUpdate.status === 'loading' && styles.btnDisabled]}
-            onPress={handleCheckUpdate}
-            disabled={checkUpdate.status === 'loading'}
-            activeOpacity={0.8}
-          >
-            {checkUpdate.status === 'loading'
-              ? <ActivityIndicator size="small" color="#60C8FF" />
-              : <RefreshCw size={15} color="#60C8FF" />
-            }
-            <AppText style={[styles.actionBtnLabel, { color: '#60C8FF' }]}>
-              {checkUpdate.status === 'loading' ? 'Checking for update…' : 'checkForUpdateAsync()'}
-            </AppText>
-          </TouchableOpacity>
-
-          {checkUpdate.status !== 'idle' && (
-            <View style={[
-              styles.rpcCard,
-              checkUpdate.status === 'loading' && styles.rpcCardLoading,
-              checkUpdate.status === 'success' && (checkUpdate.isAvailable ? styles.rpcCardSuccess : { backgroundColor: '#0d2b0d', borderColor: '#2d6a2d' }),
-              checkUpdate.status === 'error' && styles.rpcCardError,
-            ]}>
-              <View style={styles.rpcCardHeader}>
-                <AppText style={[
-                  styles.rpcCardStatus,
-                  checkUpdate.status === 'success' && { color: checkUpdate.isAvailable ? '#FFA040' : '#4CAF50' },
-                  checkUpdate.status === 'error' && { color: '#FF6B6B' },
-                  checkUpdate.status === 'loading' && { color: '#FFA040' },
-                ]}>
-                  {checkUpdate.status === 'success'
-                    ? (checkUpdate.isAvailable ? 'UPDATE AVAILABLE' : 'UP TO DATE')
-                    : checkUpdate.status.toUpperCase()}
-                </AppText>
-                {checkUpdate.ranAt && (
-                  <AppText style={styles.rpcCardTs} selectable>{checkUpdate.ranAt.substring(11, 19)}</AppText>
-                )}
-              </View>
-              {checkUpdate.status === 'success' && checkUpdate.manifest && (
-                <View style={styles.rpcCardField}>
-                  <AppText style={styles.rpcCardFieldLabel}>manifest</AppText>
-                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{checkUpdate.manifest}</AppText>
-                </View>
-              )}
-              {checkUpdate.status === 'error' && checkUpdate.error && (
-                <View style={styles.rpcCardField}>
-                  <AppText style={styles.rpcCardFieldLabel}>error</AppText>
-                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{checkUpdate.error}</AppText>
-                </View>
-              )}
-            </View>
-          )}
-          <AppText style={styles.btnNote}>
-            Calls Updates.checkForUpdateAsync() — shows whether a newer OTA is available.
-          </AppText>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#0d2b1a' }, (applyUpdate.status === 'checking' || applyUpdate.status === 'fetching' || applyUpdate.status === 'reloading') && styles.btnDisabled]}
-            onPress={handleFetchAndApplyUpdate}
-            disabled={applyUpdate.status === 'checking' || applyUpdate.status === 'fetching' || applyUpdate.status === 'reloading'}
-            activeOpacity={0.8}
-          >
-            {(applyUpdate.status === 'checking' || applyUpdate.status === 'fetching' || applyUpdate.status === 'reloading')
-              ? <ActivityIndicator size="small" color="#4CAF50" />
-              : <RefreshCw size={15} color="#4CAF50" />
-            }
-            <AppText style={[styles.actionBtnLabel, { color: '#4CAF50' }]}>
-              {applyUpdate.status === 'checking' ? 'Checking…'
-                : applyUpdate.status === 'fetching' ? 'Downloading update…'
-                : applyUpdate.status === 'reloading' ? 'Reloading app…'
-                : 'Fetch + Apply OTA Update'}
-            </AppText>
-          </TouchableOpacity>
-
-          {applyUpdate.status !== 'idle' && (
-            <View style={[
-              styles.rpcCard,
-              (applyUpdate.status === 'checking' || applyUpdate.status === 'fetching' || applyUpdate.status === 'reloading') && styles.rpcCardLoading,
-              applyUpdate.status === 'no-update' && { backgroundColor: '#0d2b0d', borderColor: '#2d6a2d' },
-              applyUpdate.status === 'error' && styles.rpcCardError,
-            ]}>
-              <View style={styles.rpcCardHeader}>
-                <AppText style={[
-                  styles.rpcCardStatus,
-                  applyUpdate.status === 'no-update' && { color: '#4CAF50' },
-                  applyUpdate.status === 'error' && { color: '#FF6B6B' },
-                  (applyUpdate.status === 'checking' || applyUpdate.status === 'fetching' || applyUpdate.status === 'reloading') && { color: '#FFA040' },
-                ]}>
-                  {applyUpdate.status === 'no-update' ? 'UP TO DATE'
-                    : applyUpdate.status === 'reloading' ? 'RELOADING…'
-                    : applyUpdate.status.toUpperCase()}
-                </AppText>
-                {applyUpdate.ranAt && (
-                  <AppText style={styles.rpcCardTs} selectable>{applyUpdate.ranAt.substring(11, 19)}</AppText>
-                )}
-              </View>
-              {applyUpdate.status === 'error' && applyUpdate.error && (
-                <View style={styles.rpcCardField}>
-                  <AppText style={styles.rpcCardFieldLabel}>error</AppText>
-                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>{applyUpdate.error}</AppText>
-                </View>
-              )}
-            </View>
-          )}
-          <AppText style={styles.btnNote}>
-            Downloads the latest OTA if available and immediately reloads the app.
-          </AppText>
-
-          {/* getSession test */}
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#0d1f33' }, sessionTest.status === 'loading' && styles.btnDisabled]}
-            onPress={handleTestGetSession}
-            disabled={sessionTest.status === 'loading'}
-            activeOpacity={0.8}
-          >
-            {sessionTest.status === 'loading'
-              ? <ActivityIndicator size="small" color="#7EC8FF" />
-              : <Shield size={15} color="#7EC8FF" />
-            }
-            <AppText style={[styles.actionBtnLabel, { color: '#7EC8FF' }]}>
-              {sessionTest.status === 'loading' ? 'Getting session…' : 'Test getSession()'}
-            </AppText>
-          </TouchableOpacity>
-          {sessionTest.status !== 'idle' && (
-            <View style={[
-              styles.rpcCard,
-              sessionTest.status === 'loading' && styles.rpcCardLoading,
-              sessionTest.status === 'success' && { backgroundColor: '#0d1f33', borderColor: '#1a4a6a' },
-              sessionTest.status === 'error' && styles.rpcCardError,
-            ]}>
-              <View style={styles.rpcCardHeader}>
-                <AppText style={[styles.rpcCardStatus, { color: sessionTest.status === 'error' ? '#FF6B6B' : '#7EC8FF' }]}>
-                  GET SESSION — {sessionTest.status.toUpperCase()}
-                </AppText>
-                {sessionTest.ranAt && <AppText style={styles.rpcCardTs} selectable>{sessionTest.ranAt.substring(11, 19)}</AppText>}
-              </View>
-              {(sessionTest.result || sessionTest.error) && (
-                <View style={styles.rpcCardField}>
-                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>
-                    {sessionTest.result ?? sessionTest.error}
-                  </AppText>
-                </View>
-              )}
-            </View>
-          )}
-          <AppText style={styles.btnNote}>
-            Calls supabase.auth.getSession() and logs full result to console.
-          </AppText>
-
-          {/* DB test */}
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#1a1a0d' }, dbTest.status === 'loading' && styles.btnDisabled]}
-            onPress={handleTestDb}
-            disabled={dbTest.status === 'loading'}
-            activeOpacity={0.8}
-          >
-            {dbTest.status === 'loading'
-              ? <ActivityIndicator size="small" color="#FFD966" />
-              : <RefreshCw size={15} color="#FFD966" />
-            }
-            <AppText style={[styles.actionBtnLabel, { color: '#FFD966' }]}>
-              {dbTest.status === 'loading' ? 'Testing DB…' : 'Test DB (profiles select)'}
-            </AppText>
-          </TouchableOpacity>
-          {dbTest.status !== 'idle' && (
-            <View style={[
-              styles.rpcCard,
-              dbTest.status === 'loading' && styles.rpcCardLoading,
-              dbTest.status === 'success' && { backgroundColor: '#1a1a0d', borderColor: '#4a4a1a' },
-              dbTest.status === 'error' && styles.rpcCardError,
-            ]}>
-              <View style={styles.rpcCardHeader}>
-                <AppText style={[styles.rpcCardStatus, { color: dbTest.status === 'error' ? '#FF6B6B' : '#FFD966' }]}>
-                  DB TEST — {dbTest.status.toUpperCase()}
-                </AppText>
-                {dbTest.ranAt && <AppText style={styles.rpcCardTs} selectable>{dbTest.ranAt.substring(11, 19)}</AppText>}
-              </View>
-              {(dbTest.result || dbTest.error) && (
-                <View style={styles.rpcCardField}>
-                  <AppText style={styles.rpcCardFieldValue} selectable numberOfLines={0}>
-                    {dbTest.result ?? dbTest.error}
-                  </AppText>
-                </View>
-              )}
-            </View>
-          )}
-          <AppText style={styles.btnNote}>
-            Calls supabase.from('profiles').select('*').limit(1) and logs full result to console.
-          </AppText>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.actionBtnNeutral]}
-            onPress={handleShareDebugInfo}
-            activeOpacity={0.8}
-          >
-            <Share2 size={15} color="#fff" />
-            <AppText style={styles.actionBtnLabel}>Copy Debug Info</AppText>
-          </TouchableOpacity>
-          <AppText style={styles.btnNote}>
-            Opens share sheet with all debug values and recent events as JSON.
-          </AppText>
-        </View>
+        <ActionButtonsPanel
+          clearing={clearing}
+          loggingOut={loggingOut}
+          resetting={resetting}
+          reRegisterStatus={reRegisterStatus}
+          localTestSent={localTestSent}
+          pushTest={pushTest}
+          rpcTest={rpcTest}
+          dbIdentity={dbIdentity}
+          checkUpdate={checkUpdate}
+          applyUpdate={applyUpdate}
+          sessionTest={sessionTest}
+          dbTest={dbTest}
+          userId={userId}
+          coupleId={couple?.id}
+          isSuperAdmin={profile?.is_super_admin === true}
+          onClearLocalState={handleClearLocalState}
+          onForceLogout={handleForceLogout}
+          onResetSecurity={handleResetSecurity}
+          onReRegisterToken={handleReRegisterToken}
+          onLocalTestNotification={handleLocalTestNotification}
+          onTestPush={handleTestPush}
+          onTestRpc={handleTestRpc}
+          onTestDbIdentity={handleTestDbIdentity}
+          onCheckUpdate={handleCheckUpdate}
+          onFetchAndApplyUpdate={handleFetchAndApplyUpdate}
+          onTestGetSession={handleTestGetSession}
+          onTestDb={handleTestDb}
+          onShareDebugInfo={handleShareDebugInfo}
+        />
       </ScrollView>
       )}
     </View>
@@ -2739,23 +2055,6 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  probeButton: {
-    backgroundColor: '#1A3A5C',
-    borderWidth: 1,
-    borderColor: '#2A6099',
-    borderRadius: Radius.md,
-    paddingVertical: 10,
-    paddingHorizontal: Spacing.md,
-    marginHorizontal: Spacing.md,
-    marginVertical: 6,
-    alignItems: 'center',
-  },
-  probeButtonText: {
-    color: '#4FC3F7',
-    fontFamily: 'Inter-SemiBold',
-    fontSize: FontSize.sm,
-    letterSpacing: 0.5,
   },
   otaBannerText: {
     color: '#FFFFFF',
@@ -2791,86 +2090,12 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: 60,
   },
-  sectionHeader: {
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1f',
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#777',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#111115',
-    gap: Spacing.sm,
-  },
   label: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
     color: '#888',
     width: 180,
     flexShrink: 0,
-  },
-  value: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#e0e0e0',
-    flex: 1,
-  },
-  valueNull: {
-    color: '#666',
-    fontStyle: 'italic',
-  },
-  valueBad: {
-    color: '#FF6B6B',
-  },
-  buttonArea: {
-    marginTop: Spacing.xl,
-    paddingHorizontal: Spacing.md,
-    gap: Spacing.xs,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: Radius.md,
-    paddingVertical: 13,
-    marginTop: Spacing.sm,
-    gap: Spacing.xs,
-  },
-  actionBtnDanger: {
-    backgroundColor: '#8B0000',
-  },
-  actionBtnWarn: {
-    backgroundColor: '#7A4500',
-  },
-  actionBtnNeutral: {
-    backgroundColor: '#1E3A5F',
-  },
-  btnDisabled: {
-    opacity: 0.5,
-  },
-  actionBtnLabel: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-    color: '#fff',
-  },
-  btnNote: {
-    fontSize: 11,
-    color: '#777',
-    textAlign: 'center',
-    lineHeight: 16,
-    paddingHorizontal: Spacing.sm,
   },
   blockedBanner: {
     backgroundColor: 'rgba(255,60,60,0.15)',
@@ -2887,121 +2112,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#FF6B6B',
     lineHeight: 16,
-  },
-  eventsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  eventsCount: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#777',
-  },
-  clearEventsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    padding: 4,
-  },
-  clearEventsBtnText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    color: '#777',
-  },
-  emptyEvents: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  rpcCard: {
-    borderRadius: Radius.md,
-    padding: Spacing.sm,
-    marginTop: 6,
-    gap: 8,
-    borderWidth: 1,
-  },
-  rpcCardLoading: {
-    backgroundColor: '#1a1a0d',
-    borderColor: '#4a4a1a',
-  },
-  rpcCardSuccess: {
-    backgroundColor: '#0d2b0d',
-    borderColor: '#2d6a2d',
-  },
-  rpcCardError: {
-    backgroundColor: '#2b0d0d',
-    borderColor: '#6a2d2d',
-  },
-  rpcCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  rpcCardStatus: {
-    fontSize: 13,
-    fontFamily: 'Inter-Bold',
-    letterSpacing: 0.5,
-  },
-  rpcCardTs: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
-    flexShrink: 1,
-  },
-  rpcCardField: {
-    gap: 2,
-  },
-  rpcCardFieldLabel: {
-    fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-    color: '#888',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  rpcCardFieldValue: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#ddd',
-    lineHeight: 18,
-  },
-  emptyEventsText: {
-    fontSize: 12,
-    color: '#666',
-    fontStyle: 'italic',
-  },
-  eventRow: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 7,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#111115',
-    gap: Spacing.sm,
-    alignItems: 'flex-start',
-  },
-  eventTime: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
-    width: 60,
-    flexShrink: 0,
-    paddingTop: 2,
-  },
-  eventBody: {
-    flex: 1,
-    gap: 2,
-  },
-  eventTag: {
-    fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    letterSpacing: 0.3,
-  },
-  eventPairs: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
-    lineHeight: 14,
   },
 });
