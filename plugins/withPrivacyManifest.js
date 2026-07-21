@@ -147,25 +147,14 @@ function withPrivacyManifest(config) {
 
     const pbxProject = modConfig.modResults;
 
-    // Guard against duplicate or partially-initialized projects
-    const resources = pbxProject.pbxFileReferenceSection();
-    const alreadyAdded = Object.keys(resources).some(
-      (key) => resources[key].path === 'PrivacyInfo.xcprivacy'
+    const fileUuid = pbxProject.addResourceFile(
+      'PrivacyInfo.xcprivacy',
+      { target: pbxProject.getFirstTarget().uuid },
+      { name: 'PrivacyInfo.xcprivacy' }
     );
 
-    if (!alreadyAdded) {
-      try {
-        const target = pbxProject.getFirstTarget();
-        if (target && target.uuid) {
-          pbxProject.addResourceFile(
-            'PrivacyInfo.xcprivacy',
-            { target: target.uuid },
-            { name: 'PrivacyInfo.xcprivacy' }
-          );
-        }
-      } catch (e) {
-        console.warn('[withPrivacyManifest] Could not add PrivacyInfo.xcprivacy to Xcode project resources:', e.message);
-      }
+    if (!fileUuid) {
+      console.warn('[withPrivacyManifest] Could not add PrivacyInfo.xcprivacy to Xcode project resources.');
     }
 
     return modConfig;

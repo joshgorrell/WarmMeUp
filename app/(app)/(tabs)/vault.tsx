@@ -9,7 +9,7 @@ import { ResizeMode, Video } from 'expo-av';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Video as VideoIcon } from 'lucide-react-native';
+import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Video as VideoIcon, Check, Trash2, X } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -87,6 +87,8 @@ export default function VaultScreen() {
   const tileRefs = useRef<Record<string, View | null>>({});
   const scrollViewRef = useRef<any>(null);
   const [highlightedVaultId, setHighlightedVaultId] = useState<string | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const handledVaultLinkRef = useRef<string | null>(null);
   const [confirmSheet, setConfirmSheet] = useState<{
     title: string;
@@ -176,6 +178,7 @@ export default function VaultScreen() {
             setItems(prev => prev.filter(i => i.id !== updated.id));
             setSignedUrls(prev => { const n = { ...prev }; delete n[updated.id]; return n; });
             setThumbUrls(prev => { const n = { ...prev }; delete n[updated.id]; return n; });
+            setSelectedIds(prev => { const n = new Set(prev); n.delete(updated.id); return n; });
             const p = (updated as any).storage_path ?? (updated as any).file_path;
             if (p) evictCachedUrl(p);
             if ((updated as any).blurred_thumbnail_path) evictCachedUrl((updated as any).blurred_thumbnail_path);
@@ -439,6 +442,76 @@ export default function VaultScreen() {
       message: `This will permanently remove this item for both you and your partner.${linkedChatNote}`,
       actions: [
         { label: 'Delete', style: 'destructive', onPress: doDelete },
+        { label: 'Cancel', style: 'cancel', onPress: () => {} },
+      ],
+    });
+  };
+
+  const enterSelectMode = () => {
+    setSelectMode(true);
+    setSelectedIds(new Set());
+    if (blurEnabled && !pageRevealed) {
+      handleRevealPage();
+    }
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+    if (Platform.OS !== 'web') {
+      import('expo-haptics').then(Haptics => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}));
+    }
+  };
+
+  const handleBulkDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const count = ids.length;
+    const doBulkDelete = async () => {
+      const deletedAt = new Date().toISOString();
+      const idSet = new Set(ids);
+      const targets = items.filter(i => idSet.has(i.id));
+      await Promise.all(targets.map(async (item) => {
+        await supabase.from('vault_items').update({ deleted_at: deletedAt }).eq('id', item.id);
+        const path = item.storage_path ?? item.file_path;
+        const bucket = item.storage_bucket ?? 'vault';
+        if (path) {
+          evictCachedUrl(path);
+          if (item.blurred_thumbnail_path) evictCachedUrl(item.blurred_thumbnail_path);
+          supabase.storage.from(bucket).remove([path]).catch(() => {});
+        }
+        if (item.chat_message_id) {
+          const { data: chatMsg } = await supabase
+            .from('chat_messages')
+            .select('media_storage_path, media_storage_bucket')
+            .eq('id', item.chat_message_id)
+            .maybeSingle();
+          await supabase.from('chat_messages').update({ deleted_at: deletedAt }).eq('id', item.chat_message_id);
+          if (chatMsg?.media_storage_path) {
+            const chatBucket = chatMsg.media_storage_bucket ?? 'chat_media';
+            supabase.storage.from(chatBucket).remove([chatMsg.media_storage_path]).catch(() => {});
+          }
+        }
+      }));
+      setItems(prev => prev.filter(i => !idSet.has(i.id)));
+      setSignedUrls(prev => { const n = { ...prev }; ids.forEach(id => delete n[id]); return n; });
+      setThumbUrls(prev => { const n = { ...prev }; ids.forEach(id => delete n[id]); return n; });
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    };
+    setConfirmSheet({
+      title: `Delete ${count} ${count === 1 ? 'item' : 'items'}`,
+      message: `This will permanently remove ${count} ${count === 1 ? 'item' : 'items'} for both you and your partner.`,
+      actions: [
+        { label: 'Delete', style: 'destructive', onPress: doBulkDelete },
         { label: 'Cancel', style: 'cancel', onPress: () => {} },
       ],
     });
@@ -769,7 +842,20 @@ export default function VaultScreen() {
 
   return (
     <AppShell scrollable={false}>
-      <TabHeader title={unviewed > 0 ? `Vault  ·  ${unviewed} new` : 'Vault'} />
+      <TabHeader
+        title={selectMode ? `${selectedIds.size} selected` : (unviewed > 0 ? `Vault  ·  ${unviewed} new` : 'Vault')}
+        rightSlot={items.length > 0 ? (
+          selectMode ? (
+            <TouchableOpacity onPress={exitSelectMode} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <X color="#FF2E8A" size={22} strokeWidth={2} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={enterSelectMode} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <AppText style={styles.selectBtnText}>Select</AppText>
+            </TouchableOpacity>
+          )
+        ) : null}
+      />
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={[styles.scroll, { paddingHorizontal: contentPadding }]}
@@ -814,8 +900,8 @@ export default function VaultScreen() {
                   <TouchableOpacity
                     ref={ref => { tileRefs.current[item.id] = ref as any; }}
                     style={[styles.gridItem, { width: ITEM_SIZE, height: ITEM_SIZE }]}
-                    onPress={() => handleTilePress(item)}
-                    onLongPress={() => handleVaultLongPress(item)}
+                    onPress={() => selectMode ? toggleSelection(item.id) : handleTilePress(item)}
+                    onLongPress={() => selectMode ? undefined : handleVaultLongPress(item)}
                     delayLongPress={400}
                     activeOpacity={0.85}
                   >
@@ -872,6 +958,14 @@ export default function VaultScreen() {
                     )}
                     {item.id === highlightedVaultId && (
                       <View style={[StyleSheet.absoluteFill, styles.tileHighlight, { borderRadius: Radius.sm }]} pointerEvents="none" />
+                    )}
+                    {selectMode && (
+                      <View style={[styles.selectCheck, selectedIds.has(item.id) && styles.selectCheckActive]} pointerEvents="none">
+                        {selectedIds.has(item.id) && <Check color="#fff" size={14} strokeWidth={3} />}
+                      </View>
+                    )}
+                    {selectMode && !selectedIds.has(item.id) && (
+                      <View style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm, backgroundColor: 'rgba(0,0,0,0.35)' }]} pointerEvents="none" />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -968,18 +1062,52 @@ export default function VaultScreen() {
         </View>
       )}
 
+      {/* Bulk delete action bar */}
+      {selectMode && (
+        <View style={[styles.bulkBar, { bottom: insets.bottom + Spacing.lg }]}>
+          <TouchableOpacity
+            style={styles.bulkSelectAllBtn}
+            onPress={() => {
+              if (selectedIds.size === items.length && items.length > 0) {
+                setSelectedIds(new Set());
+              } else {
+                setSelectedIds(new Set(items.map(i => i.id)));
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <AppText style={styles.bulkSelectAllText}>
+              {selectedIds.size === items.length && items.length > 0 ? 'Deselect All' : 'Select All'}
+            </AppText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.bulkDeleteBtn, selectedIds.size === 0 && { opacity: 0.4 }]}
+            onPress={handleBulkDelete}
+            activeOpacity={0.7}
+            disabled={selectedIds.size === 0}
+          >
+            <Trash2 color="#fff" size={16} strokeWidth={2} />
+            <AppText style={styles.bulkDeleteText}>
+              {selectedIds.size > 0 ? `Delete ${selectedIds.size}` : 'Delete'}
+            </AppText>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Floating add button */}
-      <TouchableOpacity
-        style={[styles.fab, { bottom: insets.bottom + Spacing.lg }]}
-        onPress={() => setShowAdd(true)}
-        activeOpacity={0.88}
-        accessibilityRole="button"
-        accessibilityLabel="Add to Vault"
-      >
-        <LinearGradient colors={['#FF5A3D', '#FF2E8A']} style={styles.fabGrad}>
-          <Plus color="#fff" size={24} strokeWidth={2.5} />
-        </LinearGradient>
-      </TouchableOpacity>
+      {!selectMode && (
+        <TouchableOpacity
+          style={[styles.fab, { bottom: insets.bottom + Spacing.lg }]}
+          onPress={() => setShowAdd(true)}
+          activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel="Add to Vault"
+        >
+          <LinearGradient colors={['#FF5A3D', '#FF2E8A']} style={styles.fabGrad}>
+            <Plus color="#fff" size={24} strokeWidth={2.5} />
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
 
       <BottomSheet
         visible={showAdd}
@@ -1137,4 +1265,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xxl,
   },
   vaultGateBtnText: { color: '#fff', fontSize: FontSize.body, fontFamily: 'Inter-SemiBold' },
+  selectBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', color: '#FF2E8A' },
+  selectCheck: {
+    position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 11,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  selectCheckActive: {
+    backgroundColor: '#FF2E8A', borderColor: '#FF2E8A',
+  },
+  bulkBar: {
+    position: 'absolute', left: Spacing.xl, right: Spacing.xl,
+    flexDirection: 'row', gap: Spacing.sm, zIndex: 100,
+  },
+  bulkSelectAllBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 14,
+    borderRadius: Radius.pill, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  bulkSelectAllText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', color: 'rgba(255,255,255,0.8)' },
+  bulkDeleteBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 14, borderRadius: Radius.pill, backgroundColor: '#FF3D4F',
+  },
+  bulkDeleteText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', color: '#fff' },
 });
