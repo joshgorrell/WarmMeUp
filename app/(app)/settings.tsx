@@ -805,10 +805,12 @@ export default function SettingsScreen() {
         visible={showDiscreetInfo}
         onClose={() => setShowDiscreetInfo(false)}
         title="Discreet Notifications"
-        subtitle="Here's what a notification looks like with this setting on."
+        subtitle="See how your notifications look with each setting."
       >
         <View style={styles.previewWrap}>
-          {/* Mock notification bubble */}
+          <AppText style={[styles.previewLabel, { color: colors.textSecondary }]}>
+            Discreet ON
+          </AppText>
           <View style={[styles.notifCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
             <View style={styles.notifAppRow}>
               <View style={styles.notifAppIconWrap}>
@@ -825,8 +827,27 @@ export default function SettingsScreen() {
             </AppText>
           </View>
 
+          <AppText style={[styles.previewLabel, { color: colors.textSecondary }]}>
+            Discreet OFF
+          </AppText>
+          <View style={[styles.notifCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+            <View style={styles.notifAppRow}>
+              <View style={styles.notifAppIconWrap}>
+                <WarmupLogo size={20} />
+              </View>
+              <AppText style={[styles.notifAppName, { color: colors.textMuted }]}>WARM ME UP</AppText>
+              <AppText style={[styles.notifTime, { color: colors.textMuted }]}>now</AppText>
+            </View>
+            <AppText style={[styles.notifTitle, { color: colors.text }]}>
+              {partnerProfile?.display_name ?? 'Your partner'}: Can't wait to see you tonight
+            </AppText>
+            <AppText style={[styles.notifBody, { color: colors.textSecondary }]}>
+              Message preview is shown, just like iMessage
+            </AppText>
+          </View>
+
           <AppText style={[styles.previewNote, { color: colors.textMuted }]}>
-            No message content or previews are ever shown — just a discreet nudge.
+            When Discreet is ON, no message content or previews are shown — just a discreet nudge. When OFF, you'll see a text preview of chat messages.
           </AppText>
         </View>
       </BottomSheet>
@@ -869,7 +890,14 @@ const styles = StyleSheet.create({
   radioInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#FF2E8A' },
   rowLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   // Discreet notification preview sheet
-  previewWrap: { paddingBottom: Spacing.sm, gap: Spacing.md },
+  previewWrap: { paddingBottom: Spacing.sm, gap: Spacing.sm },
+  previewLabel: {
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-SemiBold',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginTop: Spacing.xs,
+  },
   notifCard: {
     borderRadius: Radius.md,
     borderWidth: 1,
