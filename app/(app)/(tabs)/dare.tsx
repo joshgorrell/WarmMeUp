@@ -19,6 +19,7 @@ import WarmTextInput from '@/components/WarmTextInput';
 import PromptChip from '@/components/PromptChip';
 import AppShell from '@/components/AppShell';
 import ReceivedDareCard from '@/components/ReceivedDareCard';
+import CustomizePromptsNotice from '@/components/CustomizePromptsNotice';
 import TabHeader from '@/components/TabHeader';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 
@@ -65,6 +66,7 @@ export default function DareTab() {
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
   const [quickDares, setQuickDares] = useState<string[]>(FALLBACK_DARES);
+  const [hasCustomPrompts, setHasCustomPrompts] = useState(false);
   const [dareText, setDareText] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -94,7 +96,7 @@ export default function DareTab() {
 
   useEffect(() => {
     const coupleId = couple?.id;
-    const query = supabase.from('dare_prompts').select('id, text, is_default').eq('is_active', true);
+    const query = supabase.from('dare_prompts').select('id, text, is_default, couple_id').eq('is_active', true);
     const baseQuery = coupleId
       ? query.or(`is_default.eq.true,couple_id.eq.${coupleId}`)
       : query.eq('is_default', true);
@@ -110,6 +112,8 @@ export default function DareTab() {
       const hiddenIds = new Set((hiddenResult.data ?? []).map((r: { prompt_id: string }) => r.prompt_id));
       const visible = promptsResult.data.filter((d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id));
       if (visible.length > 0) setQuickDares(visible.map((d: { text: string }) => d.text));
+      const hasCustom = promptsResult.data.some((d: { is_default: boolean; couple_id?: string }) => !d.is_default && d.couple_id === coupleId);
+      setHasCustomPrompts(!!hasCustom);
     })();
   }, [couple?.id]);
 
@@ -443,6 +447,13 @@ export default function DareTab() {
                 style={{ marginTop: Spacing.lg }}
               />
             </>
+          )}
+
+          {hasPartner && !hasCustomPrompts && (
+            <CustomizePromptsNotice
+              onPress={() => router.push('/(app)/customize-prompts?tab=dare')}
+              accentColor="#FF2E8A"
+            />
           )}
 
           {sent && (

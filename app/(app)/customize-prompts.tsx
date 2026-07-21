@@ -4,7 +4,7 @@ import {
   Modal, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Plus, Pencil, Trash2, ChevronLeft, Dices, Zap, X as XIcon } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
@@ -34,10 +34,12 @@ interface Prompt {
 
 export default function CustomizePromptsScreen() {
   const router = useRouter();
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
   const { user, couple } = useAuth();
   const { colors } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<Tab>('dice');
+  const initialTab: Tab = tab === 'dare' || tab === 'decline' ? tab : 'dice';
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);

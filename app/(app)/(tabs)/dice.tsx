@@ -18,6 +18,7 @@ import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
 import NeonDice, { NeonDiceHandle } from '@/components/NeonDice';
 import ReceivedDiceChallengeCard from '@/components/ReceivedDiceChallengeCard';
+import CustomizePromptsNotice from '@/components/CustomizePromptsNotice';
 import { useLayout } from '@/hooks/useLayout';
 
 function useSenderCountdown(expiresAt: string | null | undefined): string | null {
@@ -84,6 +85,7 @@ export default function DiceTab() {
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
   const [prompts, setPrompts] = useState<string[]>(FALLBACK_PROMPTS);
+  const [hasCustomPrompts, setHasCustomPrompts] = useState(false);
   const [rolledFor, setRolledFor] = useState<RolledFor>('self');
   const [rolledForResult, setRolledForResult] = useState<RolledFor>('self');
   const [result, setResult] = useState<string | null>(null);
@@ -135,7 +137,7 @@ export default function DiceTab() {
     const coupleId = couple?.id;
     const query = supabase
       .from('dice_prompts')
-      .select('id, text, is_default')
+      .select('id, text, is_default, couple_id')
       .eq('is_active', true);
     const baseQuery = coupleId
       ? query.or(`is_default.eq.true,couple_id.eq.${coupleId}`)
@@ -152,6 +154,8 @@ export default function DiceTab() {
       const hiddenIds = new Set((hiddenResult.data ?? []).map((r: { prompt_id: string }) => r.prompt_id));
       const visible = promptsResult.data.filter((d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id));
       if (visible.length > 0) setPrompts(visible.map((d: { text: string }) => d.text));
+      const hasCustom = promptsResult.data.some((d: { is_default: boolean; couple_id?: string }) => !d.is_default && d.couple_id === coupleId);
+      setHasCustomPrompts(!!hasCustom);
     })();
   }, [couple?.id]);
 
@@ -626,6 +630,13 @@ export default function DiceTab() {
                 <AppText style={[styles.soloNoticeLink, { color: '#FFB347' }]}>pairing up first</AppText>
               </AppText>
             </TouchableOpacity>
+          )}
+
+          {hasPartner && !hasCustomPrompts && (
+            <CustomizePromptsNotice
+              onPress={() => router.push('/(app)/customize-prompts?tab=dice')}
+              accentColor="#FFB347"
+            />
           )}
 
           {error ? (
