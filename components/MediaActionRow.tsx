@@ -280,9 +280,35 @@ export default function MediaActionRow({
                 </>
               )}
 
-              {isMine && onDelete && (
+              {onSetTimer && (
                 <>
                   {(onReply || onCopy || onEdit) && <View style={styles.actionDivider} />}
+                  <TouchableOpacity
+                    style={[styles.actionBtn, burnAfterSeconds ? styles.actionBtnTimerActive : null]}
+                    onPress={() => { onDismiss(); onSetTimer(); }}
+                    activeOpacity={0.65}
+                  >
+                    <Timer
+                      color={burnAfterSeconds ? '#FFB347' : 'rgba(255,255,255,0.70)'}
+                      size={15}
+                      strokeWidth={2}
+                    />
+                    <AppText
+                      style={[styles.actionLabel, burnAfterSeconds ? styles.actionLabelTimerActive : null]}
+                    >
+                      {burnAfterSeconds
+                        ? burnAfterSeconds >= 3600
+                          ? `${Math.floor(burnAfterSeconds / 3600)}h`
+                          : `${Math.round(burnAfterSeconds / 60)}m`
+                        : 'Timer'}
+                    </AppText>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {isMine && onDelete && (
+                <>
+                  {(onReply || onCopy || onEdit || onSetTimer) && <View style={styles.actionDivider} />}
                   <TouchableOpacity
                     style={styles.actionBtn}
                     onPress={() => { onDismiss(); onDelete?.(); }}

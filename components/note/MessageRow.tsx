@@ -16,6 +16,7 @@ import {
   GroupPos,
 } from './noteHelpers';
 import { MediaBubble } from './MediaBubble';
+import CountdownRing from '@/components/CountdownRing';
 
 export function ReplyQuote({
   msg,
@@ -249,6 +250,17 @@ export const MessageRow = React.memo(function MessageRow({
                     edited
                   </AppText>
                 ) : null}
+                {!hasMedia && item.burns_at && item.burn_after_seconds && new Date(item.burns_at).getTime() > Date.now() && (
+                  <View style={styles.textBurnBadge} pointerEvents="none">
+                    <View style={styles.textBurnBadgeBg} />
+                    <CountdownRing
+                      expiresAt={item.burns_at}
+                      totalSeconds={item.burn_after_seconds}
+                      onExpire={() => onBurn(item)}
+                      size={28}
+                    />
+                  </View>
+                )}
               </View>
             ) : (
               <View style={[
@@ -301,6 +313,17 @@ export const MessageRow = React.memo(function MessageRow({
                     edited
                   </AppText>
                 ) : null}
+                {!hasMedia && item.burns_at && item.burn_after_seconds && new Date(item.burns_at).getTime() > Date.now() && (
+                  <View style={styles.textBurnBadge} pointerEvents="none">
+                    <View style={styles.textBurnBadgeBg} />
+                    <CountdownRing
+                      expiresAt={item.burns_at}
+                      totalSeconds={item.burn_after_seconds}
+                      onExpire={() => onBurn(item)}
+                      size={28}
+                    />
+                  </View>
+                )}
               </View>
             )}
           </TouchableOpacity>

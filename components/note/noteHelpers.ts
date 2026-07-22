@@ -488,6 +488,22 @@ export const noteStyles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
 
+  // Burn timer countdown badge on text-only bubbles
+  textBurnBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textBurnBadgeBg: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+
   // Timer picker sheet
   timerSheetBody: {
     gap: 10,

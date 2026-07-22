@@ -1535,8 +1535,8 @@ export default function ChatTab() {
                 onEdit={!hasMedia ? () => handleStartEdit(activeMsg) : undefined}
                 onCopy={!hasMedia ? () => handleCopy(activeMsg) : undefined}
                 onReply={() => handleStartReply(activeMsg)}
-                onSetTimer={hasMedia ? () => setTimerSheetMsg(activeMsg) : undefined}
-                burnAfterSeconds={hasMedia ? activeMsg.burn_after_seconds : undefined}
+                onSetTimer={() => setTimerSheetMsg(activeMsg)}
+                burnAfterSeconds={activeMsg.burn_after_seconds}
                 onDismiss={handleDismissMenu}
               />
             </Pressable>
@@ -1557,7 +1557,7 @@ export default function ChatTab() {
         visible={!!timerSheetMsg}
         onClose={() => setTimerSheetMsg(null)}
         title="Self-destruct timer"
-        subtitle="This photo/video will disappear from chat when the timer ends."
+        subtitle="This message will disappear from chat when the timer ends."
       >
         <View style={styles.timerSheetBody}>
           {timerSheetMsg?.burn_after_seconds ? (
