@@ -448,7 +448,7 @@ export default function RegisterScreen() {
                     buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
                     buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
                     cornerRadius={Radius.lg}
-                    style={[styles.oauthBtn, { height: 48 }]}
+                    style={styles.appleNativeBtn}
                   />
                 ) : (
                   <TouchableOpacity
@@ -774,6 +774,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',
+  },
+  appleNativeBtn: {
+    width: '100%',
+    height: 48,
   },
   googleBtn: {
     backgroundColor: 'rgba(255,255,255,0.94)',

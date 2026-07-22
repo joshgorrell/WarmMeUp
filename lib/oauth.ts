@@ -68,12 +68,20 @@ async function signInWithAppleNative() {
     throw new Error('Sign in with Apple is not available on this device.');
   }
 
-  const credential = await AppleAuthentication.signInAsync({
-    requestedScopes: [
-      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-      AppleAuthentication.AppleAuthenticationScope.EMAIL,
-    ],
-  });
+  let credential: AppleAuthentication.AppleAuthenticationCredential;
+  try {
+    credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+  } catch (e: any) {
+    if (e?.code === 'ERR_REQUEST_CANCELED' || e?.name === 'ERR_REQUEST_CANCELED') {
+      return null;
+    }
+    throw e;
+  }
 
   if (!credential.identityToken) {
     throw new Error('Apple did not return an identity token.');

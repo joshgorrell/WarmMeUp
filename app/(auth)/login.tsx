@@ -501,7 +501,7 @@ export default function LoginScreen() {
                         buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
                         buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
                         cornerRadius={Radius.lg}
-                        style={[styles.socialBtn, { height: 48 }]}
+                        style={styles.appleNativeBtn}
                       />
                     ) : (
                       <TouchableOpacity
@@ -648,6 +648,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',
+  },
+  appleNativeBtn: {
+    flex: 1,
+    height: 48,
   },
   googleBtn: {
     backgroundColor: 'rgba(255,255,255,0.94)',
