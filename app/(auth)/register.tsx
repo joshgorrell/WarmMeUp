@@ -19,6 +19,7 @@ import { signInWithProvider, isOAuthSupported } from '@/lib/oauth';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import { useLayout } from '@/hooks/useLayout';
@@ -441,17 +442,27 @@ export default function RegisterScreen() {
           {(showGoogle || showApple) && (
             <View style={[styles.oauthBlock, { gap: vXs, marginBottom: vSm }]}>
               {showApple && (
-                <TouchableOpacity
-                  style={[styles.oauthBtn, styles.appleBtn, { paddingVertical: inputPad }]}
-                  onPress={() => handleOAuth('apple')}
-                  activeOpacity={0.88}
-                  disabled={oauthLoading !== null || loading}
-                >
-                  <AppleIcon color="#fff" size={18} />
-                  <AppText style={styles.appleBtnText}>
-                    {oauthLoading === 'apple' ? 'Signing in…' : 'Continue with Apple'}
-                  </AppText>
-                </TouchableOpacity>
+                Platform.OS === 'ios' ? (
+                  <AppleAuthentication.AppleAuthenticationButton
+                    onPress={() => handleOAuth('apple')}
+                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                    buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                    cornerRadius={Radius.lg}
+                    style={[styles.oauthBtn, { height: 48 }]}
+                  />
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.oauthBtn, styles.appleBtn, { paddingVertical: inputPad }]}
+                    onPress={() => handleOAuth('apple')}
+                    activeOpacity={0.88}
+                    disabled={oauthLoading !== null || loading}
+                  >
+                    <AppleIcon color="#fff" size={18} />
+                    <AppText style={styles.appleBtnText}>
+                      {oauthLoading === 'apple' ? 'Signing in…' : 'Continue with Apple'}
+                    </AppText>
+                  </TouchableOpacity>
+                )
               )}
 
               {showGoogle && (

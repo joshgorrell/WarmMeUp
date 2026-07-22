@@ -288,9 +288,13 @@ export default function RootLayout() {
             <Stack.Screen name="weather" />
             <Stack.Screen name="transition" />
             <Stack.Screen name="unlock" />
-            <Stack.Screen name="debug" />
-            <Stack.Screen name="debug-access" />
-            <Stack.Screen name="debug-fallback" />
+            {__DEV__ && (
+              <>
+                <Stack.Screen name="debug" />
+                <Stack.Screen name="debug-access" />
+                <Stack.Screen name="debug-fallback" />
+              </>
+            )}
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(app)" />
             <Stack.Screen name="(admin)" />

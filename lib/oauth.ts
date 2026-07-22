@@ -1,13 +1,17 @@
 import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from './supabase';
 
 try { WebBrowser.maybeCompleteAuthSession(); } catch {}
 
 export async function signInWithProvider(provider: 'google' | 'apple') {
-  // Web: standard browser redirect — Supabase handles the callback via
-  // detectSessionInUrl. Returns null because the page will navigate away.
+  if (provider === 'apple' && Platform.OS === 'ios') {
+    return signInWithAppleNative();
+  }
+
+  // Web (all providers) and native Google: browser redirect flow
   if (Platform.OS === 'web') {
     const redirectTo = window.location.origin + '/auth/callback';
     await supabase.auth.signInWithOAuth({
@@ -17,7 +21,6 @@ export async function signInWithProvider(provider: 'google' | 'apple') {
     return null;
   }
 
-  // Native: deep-link flow
   const redirectTo = makeRedirectUri({ scheme: 'warmup', path: 'auth/callback' });
 
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -57,6 +60,32 @@ export async function signInWithProvider(provider: 'google' | 'apple') {
   }
 
   throw new Error('Sign-in was not completed.');
+}
+
+async function signInWithAppleNative() {
+  const isAvailable = await AppleAuthentication.isAvailableAsync();
+  if (!isAvailable) {
+    throw new Error('Sign in with Apple is not available on this device.');
+  }
+
+  const credential = await AppleAuthentication.signInAsync({
+    requestedScopes: [
+      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+      AppleAuthentication.AppleAuthenticationScope.EMAIL,
+    ],
+  });
+
+  if (!credential.identityToken) {
+    throw new Error('Apple did not return an identity token.');
+  }
+
+  const { data, error } = await supabase.auth.signInWithIdToken({
+    provider: 'apple',
+    token: credential.identityToken,
+  });
+
+  if (error) throw error;
+  return data;
 }
 
 // Google is supported on all platforms; Apple only on native

@@ -32,7 +32,7 @@ type Reason = 'expired_trial' | 'post_unpairing' | undefined;
 const PLANS: {
   id: Plan;
   label: string;
-  price: string;
+  fallbackPrice: string;
   period: string;
   badge?: string;
   sub: string;
@@ -40,14 +40,14 @@ const PLANS: {
   {
     id: 'monthly',
     label: 'Monthly',
-    price: '$9.99',
+    fallbackPrice: '$9.99',
     period: 'per month',
     sub: 'Billed monthly · cancel anytime',
   },
   {
     id: 'yearly',
     label: 'Yearly',
-    price: '$99.99',
+    fallbackPrice: '$99.99',
     period: 'per year',
     badge: 'Best Value',
     sub: 'Save 17% · just $8.33/mo',
@@ -214,6 +214,33 @@ export default function SubscriptionScreen() {
 
   const selectedPlan = PLANS.find((p) => p.id === selected)!;
 
+  const getDisplayPrice = (planId: Plan): string => {
+    const pkg = packages[planId];
+    if (pkg?.product?.priceString) return pkg.product.priceString;
+    return PLANS.find((p) => p.id === planId)?.fallbackPrice ?? '';
+  };
+
+  const getYearlySub = (): string => {
+    const annualPkg = packages['yearly'];
+    const monthlyPkg = packages['monthly'];
+    if (annualPkg?.product?.priceString && monthlyPkg?.product?.priceString) {
+      const annualNum = annualPkg.product.price;
+      const monthlyNum = monthlyPkg.product.price;
+      if (typeof annualNum === 'number' && typeof monthlyNum === 'number' && monthlyNum > 0) {
+        const savings = Math.round((1 - annualNum / (monthlyNum * 12)) * 100);
+        const perMonth = annualNum / 12;
+        const currencyCode = annualPkg.product.currencyCode ?? 'USD';
+        const perMonthStr = new Intl.NumberFormat(undefined, {
+          style: 'currency',
+          currency: currencyCode,
+          maximumFractionDigits: 2,
+        }).format(perMonth);
+        return savings > 0 ? `Save ${savings}% · just ${perMonthStr}/mo` : `just ${perMonthStr}/mo`;
+      }
+    }
+    return PLANS.find((p) => p.id === 'yearly')?.sub ?? '';
+  };
+
   const innerStyle = isTablet
     ? { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const }
     : { width: '100%' as const };
@@ -310,13 +337,15 @@ export default function SubscriptionScreen() {
                       <AppText style={[styles.planLabel, active && styles.planLabelActive]}>
                         {plan.label}
                       </AppText>
-                      <AppText style={styles.planSub}>{plan.sub}</AppText>
+                      <AppText style={styles.planSub}>
+                        {plan.id === 'yearly' ? getYearlySub() : plan.sub}
+                      </AppText>
                     </View>
                   </View>
 
                   <View style={styles.planRight}>
                     <AppText style={[styles.planPrice, active && styles.planPriceActive]}>
-                      {plan.price}
+                      {getDisplayPrice(plan.id)}
                     </AppText>
                     <AppText style={styles.planPeriod}>{plan.period}</AppText>
                   </View>
@@ -341,7 +370,7 @@ export default function SubscriptionScreen() {
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <AppText style={styles.ctaLabel}>
-                  {`Subscribe — ${selectedPlan.price}/${selected === 'monthly' ? 'mo' : 'yr'}`}
+                  {`Subscribe — ${getDisplayPrice(selected)}/${selected === 'monthly' ? 'mo' : 'yr'}`}
                 </AppText>
               )}
             </LinearGradient>

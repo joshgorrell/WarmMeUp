@@ -18,6 +18,7 @@ import WarmupBrand from '@/components/WarmupBrand';
 import PrimaryButton from '@/components/PrimaryButton';
 import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { logger } from '@/lib/logger';
@@ -494,17 +495,27 @@ export default function LoginScreen() {
 
                 <View style={styles.socialRow}>
                   {showApple && (
-                    <TouchableOpacity
-                      style={[styles.socialBtn, styles.appleBtn, { paddingVertical: INPUT_PAD + 2 }]}
-                      onPress={() => handleOAuth('apple')}
-                      activeOpacity={0.88}
-                      disabled={oauthLoading !== null || loading}
-                    >
-                      <AppleIcon color="#fff" size={18} />
-                      <AppText style={styles.appleBtnText}>
-                        {oauthLoading === 'apple' ? 'Signing in…' : 'Apple'}
-                      </AppText>
-                    </TouchableOpacity>
+                    Platform.OS === 'ios' ? (
+                      <AppleAuthentication.AppleAuthenticationButton
+                        onPress={() => handleOAuth('apple')}
+                        buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                        cornerRadius={Radius.lg}
+                        style={[styles.socialBtn, { height: 48 }]}
+                      />
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.socialBtn, styles.appleBtn, { paddingVertical: INPUT_PAD + 2 }]}
+                        onPress={() => handleOAuth('apple')}
+                        activeOpacity={0.88}
+                        disabled={oauthLoading !== null || loading}
+                      >
+                        <AppleIcon color="#fff" size={18} />
+                        <AppText style={styles.appleBtnText}>
+                          {oauthLoading === 'apple' ? 'Signing in…' : 'Apple'}
+                        </AppText>
+                      </TouchableOpacity>
+                    )
                   )}
 
                   {showGoogle && (

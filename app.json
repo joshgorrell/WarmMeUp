@@ -84,6 +84,7 @@
         }
       ],
       "expo-camera",
+      "expo-apple-authentication",
       "expo-build-properties",
       "expo-updates",
       "./plugins/withPrivacyManifest"
