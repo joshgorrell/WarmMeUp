@@ -403,54 +403,54 @@ export default function MyStatsScreen() {
       label: 'Dares',
       icon: <Zap color="#FF2E8A" size={18} strokeWidth={2} />,
       bg: 'rgba(255,46,138,0.12)', border: 'rgba(255,46,138,0.25)',
-      myVal: showPts ? (myCatPts!.pts_dares ?? 0) : (myStats?.dares_accepted ?? 0) + (myStats?.dares_completed ?? 0),
-      partnerVal: showPts ? (partnerCatPts?.pts_dares ?? 0) : (partnerStats?.dares_accepted ?? 0) + (partnerStats?.dares_completed ?? 0),
-      unit: showPts ? '⚡' : 'done',
+      myVal: (myStats?.dares_accepted ?? 0) + (myStats?.dares_completed ?? 0),
+      partnerVal: (partnerStats?.dares_accepted ?? 0) + (partnerStats?.dares_completed ?? 0),
+      unit: 'done',
       extra: showPts
-        ? `${(myStats?.dares_accepted ?? 0) + (myStats?.dares_completed ?? 0)} accepted/completed · ${myStats?.dares_skipped ?? 0} skipped`
+        ? `${myStats?.dares_skipped ?? 0} skipped · ${myCatPts!.pts_dares ?? 0}⚡ earned`
         : `${myStats?.dares_skipped ?? 0} skipped`,
     },
     {
       label: 'Dice Rolls',
       icon: <Star color="#FFB347" size={18} strokeWidth={2} />,
       bg: 'rgba(255,179,71,0.12)', border: 'rgba(255,179,71,0.25)',
-      myVal: showPts ? (myCatPts!.pts_dice ?? 0) : (myStats?.dice_accepted ?? 0) + (myStats?.dice_completed ?? 0),
-      partnerVal: showPts ? (partnerCatPts?.pts_dice ?? 0) : (partnerStats?.dice_accepted ?? 0) + (partnerStats?.dice_completed ?? 0),
-      unit: showPts ? '⚡' : 'done',
+      myVal: (myStats?.dice_accepted ?? 0) + (myStats?.dice_completed ?? 0),
+      partnerVal: (partnerStats?.dice_accepted ?? 0) + (partnerStats?.dice_completed ?? 0),
+      unit: 'done',
       extra: showPts
-        ? `${(myStats?.dice_accepted ?? 0) + (myStats?.dice_completed ?? 0)} accepted/completed · ${myStats?.dice_skipped ?? 0} skipped`
+        ? `${myStats?.dice_skipped ?? 0} skipped · ${myCatPts!.pts_dice ?? 0}⚡ earned`
         : `${myStats?.dice_skipped ?? 0} skipped`,
     },
     {
       label: 'Wishes & Asks',
       icon: <MessageCircle color="#FF8A3D" size={18} strokeWidth={2} />,
       bg: 'rgba(255,138,61,0.12)', border: 'rgba(255,138,61,0.25)',
-      myVal: showPts ? (myCatPts!.pts_wish ?? 0) : (myStats?.wishes_sent ?? 0) + (myStats?.wishes_fulfilled ?? 0) + (myStats?.asks_sent ?? 0) + (myStats?.asks_replied ?? 0),
-      partnerVal: showPts ? (partnerCatPts?.pts_wish ?? 0) : (partnerStats?.wishes_sent ?? 0) + (partnerStats?.wishes_fulfilled ?? 0) + (partnerStats?.asks_sent ?? 0) + (partnerStats?.asks_replied ?? 0),
-      unit: showPts ? '⚡' : 'done',
+      myVal: (myStats?.wishes_sent ?? 0) + (myStats?.wishes_fulfilled ?? 0) + (myStats?.asks_sent ?? 0) + (myStats?.asks_replied ?? 0),
+      partnerVal: (partnerStats?.wishes_sent ?? 0) + (partnerStats?.wishes_fulfilled ?? 0) + (partnerStats?.asks_sent ?? 0) + (partnerStats?.asks_replied ?? 0),
+      unit: 'done',
       extra: showPts
-        ? `${myStats?.wishes_sent ?? 0} wished · ${myStats?.wishes_fulfilled ?? 0} granted · ${myStats?.asks_sent ?? 0} asked`
+        ? `${myStats?.wishes_sent ?? 0} wished · ${myStats?.wishes_fulfilled ?? 0} granted · ${myStats?.asks_sent ?? 0} asked · ${myCatPts!.pts_wish ?? 0}⚡`
         : `${myStats?.wishes_sent ?? 0} wished · ${myStats?.asks_sent ?? 0} asked`,
     },
     {
       label: 'Chat Messages',
       icon: <MessageCircle color="#69A7FF" size={18} strokeWidth={2} />,
       bg: 'rgba(105,167,255,0.12)', border: 'rgba(105,167,255,0.25)',
-      myVal: showPts ? (myCatPts!.pts_chat ?? 0) : (myStats?.chat_messages_sent ?? 0) + (myStats?.media_sent ?? 0),
-      partnerVal: showPts ? (partnerCatPts?.pts_chat ?? 0) : (partnerStats?.chat_messages_sent ?? 0) + (partnerStats?.media_sent ?? 0),
-      unit: showPts ? '⚡' : 'sent',
+      myVal: (myStats?.chat_messages_sent ?? 0) + (myStats?.media_sent ?? 0),
+      partnerVal: (partnerStats?.chat_messages_sent ?? 0) + (partnerStats?.media_sent ?? 0),
+      unit: 'sent',
       extra: showPts
-        ? `${myStats?.chat_messages_sent ?? 0} messages · ${myStats?.media_sent ?? 0} media`
+        ? `${myStats?.chat_messages_sent ?? 0} msgs · ${myStats?.media_sent ?? 0} media · ${myCatPts!.pts_chat ?? 0}⚡ earned`
         : `${myStats?.media_sent ?? 0} media sent`,
     },
     {
       label: 'Vault Uploads',
       icon: <Vault color="#33D17A" size={18} strokeWidth={2} />,
       bg: 'rgba(51,209,122,0.12)', border: 'rgba(51,209,122,0.25)',
-      myVal: showPts ? (myCatPts!.pts_vault ?? 0) : (myStats?.vault_uploads ?? 0),
-      partnerVal: showPts ? (partnerCatPts?.pts_vault ?? 0) : (partnerStats?.vault_uploads ?? 0),
-      unit: showPts ? '⚡' : 'uploads',
-      extra: showPts ? `${myStats?.vault_uploads ?? 0} uploads` : '',
+      myVal: (myStats?.vault_uploads ?? 0),
+      partnerVal: (partnerStats?.vault_uploads ?? 0),
+      unit: 'uploads',
+      extra: showPts ? `${myStats?.vault_uploads ?? 0} uploads · ${myCatPts!.pts_vault ?? 0}⚡ earned` : '',
     },
   ];
 
