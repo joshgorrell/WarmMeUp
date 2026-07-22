@@ -74,6 +74,7 @@ export default function HomeScreen() {
   const [loveSentEmoji, setLoveSentEmoji] = useState('❤️');
   const [showLovePicker, setShowLovePicker] = useState(false);
   const [loveBurstEmoji, setLoveBurstEmoji] = useState<string | null>(null);
+  const [togetherMode, setTogetherMode] = useState<'total' | 'months' | 'days' | 'hours'>('total');
   const burstScale = useRef(new Animated.Value(0.3));
   const burstOpacity = useRef(new Animated.Value(0));
   const burstY = useRef(new Animated.Value(0));
@@ -546,23 +547,45 @@ export default function HomeScreen() {
 
   // Anniversary labels
   const anniversaryDate = couple?.anniversary_date ? new Date(couple.anniversary_date) : null;
-  let anniversaryLabel = '—';
-  if (anniversaryDate) {
+  const togetherDisplay = (() => {
+    if (!anniversaryDate) return { value: '—', label: 'Together' };
     const now = new Date();
+    const diffMs = now.getTime() - anniversaryDate.getTime();
+    if (diffMs < 0) return { value: '—', label: 'Together' };
+    const totalDays = Math.floor(diffMs / 86400000);
+    const totalHours = Math.floor(diffMs / 3600000);
     const years = now.getFullYear() - anniversaryDate.getFullYear();
-    const months = now.getMonth() - anniversaryDate.getMonth();
-    const totalMonths = years * 12 + months;
-    if (totalMonths < 0) { anniversaryLabel = '—'; }
-    else if (totalMonths === 0) {
-      const days = Math.max(0, Math.floor((now.getTime() - anniversaryDate.getTime()) / 86400000));
-      anniversaryLabel = `${days}d`;
-    } else if (years < 1) {
-      anniversaryLabel = `${totalMonths}mo`;
-    } else {
-      const remMonths = totalMonths % 12;
-      anniversaryLabel = remMonths === 0 ? `${years}y` : `${years}y ${remMonths}m`;
+    const totalMonths = years * 12 + (now.getMonth() - anniversaryDate.getMonth());
+
+    switch (togetherMode) {
+      case 'months':
+        return { value: `${totalMonths}mo`, label: 'Months' };
+      case 'days':
+        return { value: totalDays.toLocaleString(), label: 'Days' };
+      case 'hours':
+        return { value: totalHours.toLocaleString(), label: 'Hours' };
+      default: {
+        let label: string;
+        if (totalMonths === 0) {
+          label = `${totalDays}d`;
+        } else if (years < 1) {
+          label = `${totalMonths}mo`;
+        } else {
+          const remMonths = totalMonths % 12;
+          label = remMonths === 0 ? `${years}y` : `${years}y ${remMonths}m`;
+        }
+        return { value: label, label: 'Together' };
+      }
     }
-  }
+  })();
+
+  const cycleTogetherMode = useCallback(() => {
+    setTogetherMode(prev =>
+      prev === 'total' ? 'months' :
+      prev === 'months' ? 'days' :
+      prev === 'days' ? 'hours' : 'total'
+    );
+  }, []);
 
   // Action zone cards
   // Ambient zone — streak, time together, send love
@@ -576,9 +599,9 @@ export default function HomeScreen() {
       />
       <HomeMiniCard
         icon={<Heart color="#FF2E8A" size={16} strokeWidth={2} />}
-        label="Together"
-        value={anniversaryLabel}
-        onPress={() => router.push('/(app)/account')}
+        label={togetherDisplay.label}
+        value={togetherDisplay.value}
+        onPress={cycleTogetherMode}
       />
       <View style={styles.loveCardWrap}>
         <HomeMiniCard
