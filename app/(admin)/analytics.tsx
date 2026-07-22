@@ -29,6 +29,7 @@ interface OverviewData {
   activeToday: number;
   onTrial: number;
   paid: number;
+  freeAccess: number;
 }
 
 interface HealthData {
@@ -56,7 +57,7 @@ interface CancellationData {
 
 const EMPTY_OVERVIEW: OverviewData = {
   totalCouples: 0, totalUsers: 0,
-  activeToday: 0, onTrial: 0, paid: 0,
+  activeToday: 0, onTrial: 0, paid: 0, freeAccess: 0,
 };
 
 export default function AnalyticsDashboard() {
@@ -211,6 +212,7 @@ export default function AnalyticsDashboard() {
               {statCard('Total Couples', overview.totalCouples, '#FF2E8A')}
               {statCard('Active Today', overview.activeToday, '#33D17A')}
               {statCard('On Trial', overview.onTrial, '#FFB347')}
+              {statCard('Free Access', overview.freeAccess, '#69A7FF')}
             </View>
 
             {/* Couple Health */}
