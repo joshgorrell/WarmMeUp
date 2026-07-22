@@ -49,71 +49,27 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Trials started (subscriptions with trial_started_at not null)
-    const { count: trialsStarted } = await adminClient
-      .from("subscriptions")
-      .select("id", { count: "exact", head: true })
-      .not("trial_started_at", "is", null);
+    const [
+      { count: trialsStarted },
+      { count: trialsConverted },
+    ] = await Promise.all([
+      adminClient.from("subscriptions").select("id", { count: "exact", head: true })
+        .not("trial_started_at", "is", null),
+      adminClient.from("subscriptions").select("id", { count: "exact", head: true })
+        .not("trial_started_at", "is", null)
+        .in("plan", ["monthly", "yearly"])
+        .eq("status", "active"),
+    ]);
 
-    // Trials converted (trial_started_at not null AND plan in monthly/yearly AND status active)
-    const { count: trialsConverted } = await adminClient
-      .from("subscriptions")
-      .select("id", { count: "exact", head: true })
-      .not("trial_started_at", "is", null)
-      .in("plan", ["monthly", "yearly"])
-      .eq("status", "active");
-
-    // Trials expired (trial plan, status not active)
-    const { count: trialsExpired } = await adminClient
-      .from("subscriptions")
-      .select("id", { count: "exact", head: true })
-      .eq("plan", "trial")
-      .neq("status", "active");
-
-    const conversionRate = trialsStarted ? Math.round(((trialsConverted ?? 0) / trialsStarted) * 100) : 0;
-
-    // Avg days until subscription (from trial_started_at to started_at for converted)
-    const { data: convertedSubs } = await adminClient
-      .from("subscriptions")
-      .select("trial_started_at, started_at")
-      .not("trial_started_at", "is", null)
-      .in("plan", ["monthly", "yearly"])
-      .eq("status", "active");
-
-    let avgDaysUntilSub = 0;
-    if (convertedSubs && convertedSubs.length > 0) {
-      const totalDays = convertedSubs.reduce((sum, s: any) => {
-        if (s.trial_started_at && s.started_at) {
-          return sum + Math.floor((new Date(s.started_at).getTime() - new Date(s.trial_started_at).getTime()) / 86400000);
-        }
-        return sum;
-      }, 0);
-      avgDaysUntilSub = Math.round(totalDays / convertedSubs.length * 10) / 10;
-    }
-
-    // Avg days until partner joined (from couple created_at to user_b_id set)
-    const { data: couplesData } = await adminClient
-      .from("couples")
-      .select("created_at, updated_at, user_b_id")
-      .not("user_b_id", "is", null)
-      .eq("active", true);
-
-    let avgDaysUntilPartner = 0;
-    if (couplesData && couplesData.length > 0) {
-      const totalDays = couplesData.reduce((sum, c: any) => {
-        return sum + Math.floor((new Date(c.updated_at).getTime() - new Date(c.created_at).getTime()) / 86400000);
-      }, 0);
-      avgDaysUntilPartner = Math.round(totalDays / couplesData.length * 10) / 10;
-    }
+    const conversionRate = trialsStarted
+      ? Math.round(((trialsConverted ?? 0) / trialsStarted) * 100)
+      : 0;
 
     return new Response(
       JSON.stringify({
         trialsStarted: trialsStarted ?? 0,
         trialsConverted: trialsConverted ?? 0,
-        trialsExpired: trialsExpired ?? 0,
         conversionRate,
-        avgDaysUntilSubscription: avgDaysUntilSub,
-        avgDaysUntilPartnerJoined: avgDaysUntilPartner,
         _ts: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

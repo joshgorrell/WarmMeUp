@@ -60,7 +60,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Fetch all couples (active only)
     const { data: couples } = await adminClient
       .from("couples")
       .select("id, user_a_id, user_b_id, created_at, active")
@@ -70,7 +69,7 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           distribution: { healthy: 0, at_risk: 0, inactive: 0 },
-          couples: [],
+          total: 0,
           _ts: new Date().toISOString(),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -78,72 +77,26 @@ Deno.serve(async (req: Request) => {
     }
 
     const now = Date.now();
-    const sevenDaysAgo = new Date(now - SEVEN_DAYS_MS).toISOString();
     const fourteenDaysAgo = new Date(now - FOURTEEN_DAYS_MS).toISOString();
 
-    // Get last activity per couple from activity_events
-    const { data: recentActivity } = await adminClient
-      .from("activity_events")
-      .select("couple_id, created_at")
-      .gte("created_at", fourteenDaysAgo);
+    const [recentActivity, recentChats] = await Promise.all([
+      adminClient.from("activity_events").select("couple_id, created_at")
+        .gte("created_at", fourteenDaysAgo),
+      adminClient.from("chat_messages").select("couple_id, created_at")
+        .is("deleted_at", null).gte("created_at", fourteenDaysAgo),
+    ]);
 
-    // Build a map of couple_id -> last activity timestamp
     const lastActivityMap = new Map<string, string>();
-    const activity7dCountMap = new Map<string, number>();
-    if (recentActivity) {
-      for (const evt of recentActivity) {
-        const prev = lastActivityMap.get(evt.couple_id);
-        if (!prev || new Date(evt.created_at) > new Date(prev)) {
-          lastActivityMap.set(evt.couple_id, evt.created_at);
-        }
-        if (new Date(evt.created_at).getTime() > now - SEVEN_DAYS_MS) {
-          activity7dCountMap.set(evt.couple_id, (activity7dCountMap.get(evt.couple_id) ?? 0) + 1);
-        }
+    const sources = [
+      ...(recentActivity.data ?? []),
+      ...(recentChats.data ?? []),
+    ];
+    for (const evt of sources) {
+      const prev = lastActivityMap.get(evt.couple_id);
+      if (!prev || new Date(evt.created_at) > new Date(prev)) {
+        lastActivityMap.set(evt.couple_id, evt.created_at);
       }
     }
-
-    // Also check chat_messages for last activity
-    const { data: recentChats } = await adminClient
-      .from("chat_messages")
-      .select("couple_id, created_at")
-      .is("deleted_at", null)
-      .gte("created_at", fourteenDaysAgo);
-
-    if (recentChats) {
-      for (const msg of recentChats) {
-        const prev = lastActivityMap.get(msg.couple_id);
-        if (!prev || new Date(msg.created_at) > new Date(prev)) {
-          lastActivityMap.set(msg.couple_id, msg.created_at);
-        }
-        if (new Date(msg.created_at).getTime() > now - SEVEN_DAYS_MS) {
-          activity7dCountMap.set(msg.couple_id, (activity7dCountMap.get(msg.couple_id) ?? 0) + 1);
-        }
-      }
-    }
-
-    // Check partner activity (both partners active in last 7 days)
-    const { data: recentActorActivity } = await adminClient
-      .from("activity_events")
-      .select("actor_user_id, created_at")
-      .gte("created_at", sevenDaysAgo);
-
-    const activeUsers7d = new Set<string>();
-    if (recentActorActivity) {
-      for (const evt of recentActorActivity) {
-        activeUsers7d.add(evt.actor_user_id);
-      }
-    }
-
-    // Compute health for each couple
-    const healthRecords: Array<{
-      couple_id: string;
-      status: string;
-      last_activity_at: string | null;
-      days_since_activity: number | null;
-      partner_a_active: boolean;
-      partner_b_active: boolean;
-      shared_activity_7d: number;
-    }> = [];
 
     const distribution = { healthy: 0, at_risk: 0, inactive: 0 };
 
@@ -152,9 +105,6 @@ Deno.serve(async (req: Request) => {
       const daysSince = lastActivity
         ? Math.floor((now - new Date(lastActivity).getTime()) / 86400000)
         : null;
-      const shared7d = activity7dCountMap.get(couple.id) ?? 0;
-      const partnerAActive = activeUsers7d.has(couple.user_a_id);
-      const partnerBActive = couple.user_b_id ? activeUsers7d.has(couple.user_b_id) : false;
 
       let status: string;
       if (!lastActivity || (daysSince !== null && daysSince > 14)) {
@@ -166,46 +116,12 @@ Deno.serve(async (req: Request) => {
       }
 
       distribution[status as keyof typeof distribution]++;
-
-      healthRecords.push({
-        couple_id: couple.id,
-        status,
-        last_activity_at: lastActivity,
-        days_since_activity: daysSince,
-        partner_a_active: partnerAActive,
-        partner_b_active: partnerBActive,
-        shared_activity_7d: shared7d,
-      });
     }
-
-    // Upsert into couple_health_scores
-    for (const rec of healthRecords) {
-      await adminClient
-        .from("couple_health_scores")
-        .upsert({
-          couple_id: rec.couple_id,
-          status: rec.status,
-          computed_at: new Date().toISOString(),
-          last_activity_at: rec.last_activity_at,
-          days_since_activity: rec.days_since_activity,
-          partner_a_active: rec.partner_a_active,
-          partner_b_active: rec.partner_b_active,
-          shared_activity_7d: rec.shared_activity_7d,
-        }, { onConflict: "couple_id" });
-    }
-
-    // Filter by status if requested
-    const url = new URL(req.url);
-    const statusFilter = url.searchParams.get("status");
-    const filteredRecords = statusFilter
-      ? healthRecords.filter((r) => r.status === statusFilter)
-      : healthRecords;
 
     return new Response(
       JSON.stringify({
         distribution,
-        couples: filteredRecords,
-        total: healthRecords.length,
+        total: couples.length,
         _ts: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
