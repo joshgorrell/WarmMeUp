@@ -76,7 +76,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Attempt email delivery to admin-specified addresses
-    const resendKey = Deno.env.get("RESEND_API_KEY");
+    const resendKey = Deno.env.get("WMU_Feedback");
     const { data: configRow } = await adminClient
       .from("app_config")
       .select("value")
@@ -121,7 +121,7 @@ Deno.serve(async (req: Request) => {
         console.error("[submit-feedback] Email delivery failed:", emailErr?.message ?? String(emailErr));
       }
     } else if (!resendKey && recipientEmails.length > 0) {
-      console.warn("[submit-feedback] RESEND_API_KEY not set — feedback stored in DB but no email sent");
+      console.warn("[submit-feedback] WMU_Feedback not set — feedback stored in DB but no email sent");
     }
 
     return new Response(JSON.stringify({ ok: true }), {
