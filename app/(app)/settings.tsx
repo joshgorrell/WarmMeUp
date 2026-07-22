@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform,
+  TextInput, ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
-import { ChevronRight, Check, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, ShieldOff, Shield } from 'lucide-react-native';
+import { ChevronRight, Check, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, ShieldOff, Shield, MessageSquare } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -372,8 +373,48 @@ export default function SettingsScreen() {
   const [showDiscreetInfo, setShowDiscreetInfo] = useState(false);
   const [showCommunityGuidelines, setShowCommunityGuidelines] = useState(false);
   const [showLeaveSheet, setShowLeaveSheet] = useState(false);
+  const [feedbackEnabled, setFeedbackEnabled] = useState(false);
+  const [feedbackSheetVisible, setFeedbackSheetVisible] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   const s = settings;
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('app_config')
+        .select('value')
+        .eq('key', 'feedback_enabled')
+        .maybeSingle();
+      if (data?.value === true) setFeedbackEnabled(true);
+    })();
+  }, []);
+
+  const handleSubmitFeedback = useCallback(async () => {
+    const content = feedbackText.trim();
+    if (!content) { setFeedbackError('Please enter your feedback.'); return; }
+    setFeedbackSubmitting(true);
+    setFeedbackError(null);
+    try {
+      const { error: invokeError } = await supabase.functions.invoke('submit-feedback', {
+        body: { content },
+      });
+      if (invokeError) throw invokeError;
+      setFeedbackSuccess(true);
+      setFeedbackText('');
+      setTimeout(() => {
+        setFeedbackSheetVisible(false);
+        setFeedbackSuccess(false);
+      }, 2000);
+    } catch (e: any) {
+      setFeedbackError(e.message || 'Failed to send feedback. Please try again.');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }, [feedbackText]);
 
   const update = async (patch: Record<string, unknown>) => {
     if (!user) return;
@@ -619,6 +660,13 @@ export default function SettingsScreen() {
               </Section>
 
               <Section title="ACCOUNT">
+                {feedbackEnabled && (
+                  <SettingsRow
+                    label="Send Feedback"
+                    sub="Share your thoughts, ideas, or report an issue"
+                    onPress={() => setFeedbackSheetVisible(true)}
+                  />
+                )}
                 <SettingsRow label="End Partner Connection" danger onPress={() => setShowLeaveSheet(true)} />
                 <SettingsRow label="Sign Out" danger onPress={signOut} />
               </Section>
@@ -787,6 +835,13 @@ export default function SettingsScreen() {
             </Section>
 
             <Section title="ACCOUNT">
+              {feedbackEnabled && (
+                <SettingsRow
+                  label="Send Feedback"
+                  sub="Share your thoughts, ideas, or report an issue"
+                  onPress={() => setFeedbackSheetVisible(true)}
+                />
+              )}
               <SettingsRow label="End Partner Connection" danger onPress={() => setShowLeaveSheet(true)} />
               <SettingsRow label="Sign Out" danger onPress={signOut} />
             </Section>
@@ -857,6 +912,57 @@ export default function SettingsScreen() {
         onClose={() => setShowLeaveSheet(false)}
         partnerName={partnerProfile?.display_name ?? 'your partner'}
       />
+
+      <BottomSheet
+        visible={feedbackSheetVisible}
+        onClose={() => { setFeedbackSheetVisible(false); setFeedbackError(null); setFeedbackSuccess(false); }}
+        title="Send Feedback"
+        subtitle="We'd love to hear your thoughts"
+      >
+        {feedbackSuccess ? (
+          <View style={styles.feedbackSuccessWrap}>
+            <View style={styles.feedbackSuccessIcon}>
+              <Check color="#4CAF50" size={32} strokeWidth={2.5} />
+            </View>
+            <AppText style={[styles.feedbackSuccessText, { color: colors.text }]}>
+              Thank you! Your feedback has been sent.
+            </AppText>
+          </View>
+        ) : (
+          <View style={styles.feedbackSheetContent}>
+            <TextInput
+              style={[styles.feedbackInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.bg2 }]}
+              value={feedbackText}
+              onChangeText={setFeedbackText}
+              placeholder="Tell us what you think, an idea you have, or an issue you've noticed..."
+              placeholderTextColor={colors.textMuted}
+              multiline
+              textAlignVertical="top"
+              maxLength={5000}
+              autoFocus
+              editable={!feedbackSubmitting}
+            />
+            <AppText style={[styles.feedbackCharCount, { color: colors.textMuted }]}>
+              {feedbackText.length}/5000
+            </AppText>
+            {feedbackError && (
+              <AppText style={[styles.feedbackError, { color: colors.danger }]}>{feedbackError}</AppText>
+            )}
+            <TouchableOpacity
+              style={[styles.feedbackSubmitBtn, { opacity: feedbackSubmitting || !feedbackText.trim() ? 0.5 : 1 }]}
+              onPress={handleSubmitFeedback}
+              disabled={feedbackSubmitting || !feedbackText.trim()}
+              activeOpacity={0.85}
+            >
+              {feedbackSubmitting ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <AppText style={styles.feedbackSubmitText}>Send Feedback</AppText>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </BottomSheet>
     </AppShell>
   );
 }
@@ -944,5 +1050,59 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     textAlign: 'center',
     paddingHorizontal: Spacing.sm,
+  },
+  // Feedback sheet
+  feedbackSheetContent: {
+    paddingBottom: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  feedbackInput: {
+ minHeight: 120,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 22,
+  },
+  feedbackCharCount: {
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'right',
+  },
+  feedbackError: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+  },
+  feedbackSubmitBtn: {
+    borderRadius: Radius.pill,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF6B35',
+  },
+  feedbackSubmitText: {
+    color: '#fff',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Bold',
+  },
+  feedbackSuccessWrap: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    gap: Spacing.md,
+  },
+  feedbackSuccessIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(76,175,80,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackSuccessText: {
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-SemiBold',
+    textAlign: 'center',
   },
 });

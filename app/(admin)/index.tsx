@@ -8,7 +8,7 @@ import {
   FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity,
   CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2,
   Star, UserCog, Bug, ShieldCheck, MessageSquare, TriangleAlert as AlertTriangle,
-  RefreshCw, X as XIcon, Clock, Bot,
+  RefreshCw, X as XIcon, Clock, Bot, Mail,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -482,6 +482,15 @@ export default function AdminDashboard() {
       bg: 'rgba(74,144,226,0.10)',
       border: 'rgba(74,144,226,0.25)',
       route: '/(admin)/ai-ops',
+    },
+    {
+      label: 'Feedback',
+      sub: 'Manage feedback feature and view user submissions',
+      icon: <Mail color="#FF6B35" size={22} strokeWidth={2} />,
+      color: '#FF6B35',
+      bg: 'rgba(255,107,53,0.10)',
+      border: 'rgba(255,107,53,0.25)',
+      route: '/(admin)/feedback',
     },
   ];
 
