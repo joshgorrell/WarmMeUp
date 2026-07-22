@@ -51,18 +51,13 @@ Deno.serve(async (req: Request) => {
 
     const [
       { count: totalCouples },
-      { count: pairedCouples },
-      { count: soloCouples },
       { count: totalUsers },
       { count: activeToday },
       { count: onTrial },
       { count: paid },
     ] = await Promise.all([
-      adminClient.from("couples").select("id", { count: "exact", head: true }),
       adminClient.from("couples").select("id", { count: "exact", head: true })
         .not("user_b_id", "is", null).eq("active", true),
-      adminClient.from("couples").select("id", { count: "exact", head: true })
-        .is("user_b_id", null),
       adminClient.from("profiles").select("id", { count: "exact", head: true }),
       adminClient.from("activity_events").select("actor_user_id", { count: "exact", head: true })
         .gte("created_at", new Date(Date.now() - 86400000).toISOString()),
@@ -75,8 +70,6 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         totalCouples: totalCouples ?? 0,
-        pairedCouples: pairedCouples ?? 0,
-        soloCouples: soloCouples ?? 0,
         totalUsers: totalUsers ?? 0,
         activeToday: activeToday ?? 0,
         onTrial: onTrial ?? 0,

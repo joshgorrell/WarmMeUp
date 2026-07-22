@@ -25,8 +25,6 @@ const RANGES: { key: RangeKey; label: string }[] = [
 
 interface OverviewData {
   totalCouples: number;
-  pairedCouples: number;
-  soloCouples: number;
   totalUsers: number;
   activeToday: number;
   onTrial: number;
@@ -57,7 +55,7 @@ interface CancellationData {
 }
 
 const EMPTY_OVERVIEW: OverviewData = {
-  totalCouples: 0, pairedCouples: 0, soloCouples: 0, totalUsers: 0,
+  totalCouples: 0, totalUsers: 0,
   activeToday: 0, onTrial: 0, paid: 0,
 };
 
@@ -211,8 +209,6 @@ export default function AnalyticsDashboard() {
             <View style={styles.statGrid}>
               {statCard('Total Users', overview.totalUsers, '#FFB347')}
               {statCard('Total Couples', overview.totalCouples, '#FF2E8A')}
-              {statCard('Paired', overview.pairedCouples, '#33D17A')}
-              {statCard('Solo', overview.soloCouples, '#69A7FF')}
               {statCard('Active Today', overview.activeToday, '#33D17A')}
               {statCard('On Trial', overview.onTrial, '#FFB347')}
             </View>

@@ -63,7 +63,8 @@ Deno.serve(async (req: Request) => {
     const { data: couples } = await adminClient
       .from("couples")
       .select("id, user_a_id, user_b_id, created_at, active")
-      .eq("active", true);
+      .eq("active", true)
+      .not("user_b_id", "is", null);
 
     if (!couples || couples.length === 0) {
       return new Response(
