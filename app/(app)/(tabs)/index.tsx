@@ -81,6 +81,7 @@ export default function HomeScreen() {
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
   const isMountedRef = useRef(true);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
     return () => { isMountedRef.current = false; };
@@ -110,8 +111,13 @@ export default function HomeScreen() {
     if (!couple?.id || !user) return;
     loadAll().then(() => { if (isMountedRef.current) setLoading(false); });
 
-    const channel = supabase
-      .channel(`home_${couple.id}`)
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    channelRef.current = supabase
+      .channel(`home_${couple.id}_${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
@@ -121,9 +127,12 @@ export default function HomeScreen() {
 
     return () => {
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
-  }, [couple?.id, user]);
+  }, [couple?.id, user?.id]);
 
   // Reload scores when returning to the Home tab so stale state is never shown.
   // Throttle: skip if data was loaded within the last 5 seconds to avoid
