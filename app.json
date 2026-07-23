@@ -105,7 +105,6 @@
     "android": {
       "backgroundColor": "#050507",
       "package": "app.warmmeup",
-      "googleServicesFile": "./google-services.json",
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
