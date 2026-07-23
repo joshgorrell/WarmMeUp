@@ -137,6 +137,31 @@ const PRIVACY_MANIFEST = `<?xml version="1.0" encoding="UTF-8"?>
 </plist>
 `;
 
+function addResourceManually(pbxProject, filename) {
+  const fileRefUuid = pbxProject.generateUuid();
+  const buildFileUuid = pbxProject.generateUuid();
+
+  pbxProject.addToPbxFileReferenceSection({
+    uuid: fileRefUuid,
+    name: filename,
+    path: filename,
+    sourceTree: '"<group>"',
+    lastKnownFileType: 'text.xml',
+  });
+
+  pbxProject.addToPbxBuildFileSection({
+    uuid: buildFileUuid,
+    fileRef: fileRefUuid,
+  });
+
+  const target = pbxProject.getFirstTarget();
+  pbxProject.addToPbxResourcesFilePhase({
+    uuid: buildFileUuid,
+    fileRef: fileRefUuid,
+    target: target.uuid,
+  });
+}
+
 function withPrivacyManifest(config) {
   return withXcodeProject(config, (modConfig) => {
     const manifestPath = path.join(
@@ -147,13 +172,13 @@ function withPrivacyManifest(config) {
 
     const pbxProject = modConfig.modResults;
 
-    const fileUuid = pbxProject.addResourceFile(
-      'PrivacyInfo.xcprivacy',
-      { target: pbxProject.getFirstTarget().uuid }
-    );
-
-    if (!fileUuid) {
-      console.warn('[withPrivacyManifest] Could not add PrivacyInfo.xcprivacy to Xcode project resources.');
+    try {
+      const fileUuid = pbxProject.addResourceFile('PrivacyInfo.xcprivacy');
+      if (!fileUuid) {
+        addResourceManually(pbxProject, 'PrivacyInfo.xcprivacy');
+      }
+    } catch (e) {
+      addResourceManually(pbxProject, 'PrivacyInfo.xcprivacy');
     }
 
     return modConfig;
