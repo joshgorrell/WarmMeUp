@@ -149,8 +149,7 @@ function withPrivacyManifest(config) {
 
     const fileUuid = pbxProject.addResourceFile(
       'PrivacyInfo.xcprivacy',
-      { target: pbxProject.getFirstTarget().uuid },
-      { name: 'PrivacyInfo.xcprivacy' }
+      { target: pbxProject.getFirstTarget().uuid }
     );
 
     if (!fileUuid) {
