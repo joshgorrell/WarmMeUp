@@ -155,10 +155,10 @@ function addResourceManually(pbxProject, filename) {
   });
 
   const target = pbxProject.getFirstTarget();
-  pbxProject.addToPbxResourcesFilePhase({
-    uuid: buildFileUuid,
-    fileRef: fileRefUuid,
-    target: target.uuid,
+  const resourcesPhase = pbxProject.getPBXResourcesBuildPhase(target.uuid);
+  resourcesPhase.files.push({
+    value: buildFileUuid,
+    comment: `${filename} in Resources`,
   });
 }
 
