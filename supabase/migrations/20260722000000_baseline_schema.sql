@@ -220,6 +220,32 @@ ALTER TABLE wish_reactions ENABLE ROW LEVEL SECURITY;
 -- RLS: wishes
 ALTER TABLE wishes ENABLE ROW LEVEL SECURITY;
 
+-- Helper functions (referenced by RLS policies below)
+CREATE OR REPLACE FUNCTION public.is_current_user_admin()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+SELECT COALESCE(
+  (SELECT (is_admin = true OR is_super_admin = true)
+   FROM public.profiles WHERE id = auth.uid()),
+  false
+);
+$function$;
+
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+SELECT COALESCE(
+  (SELECT is_super_admin FROM public.profiles WHERE id = auth.uid()),
+  false
+);
+$function$;
+
 -- Policy: Actor can insert own activity events on activity_events
 DROP POLICY IF EXISTS "Actor can insert own activity events" ON activity_events;
 CREATE POLICY "Actor can insert own activity events" ON activity_events FOR INSERT TO authenticated USING (true) WITH CHECK ((auth.uid() = actor_user_id));
@@ -766,6 +792,29 @@ CREATE POLICY "Admins can read all profiles" ON profiles FOR SELECT TO authentic
 DROP POLICY IF EXISTS "Users can read own profile" ON profiles;
 CREATE POLICY "Users can read own profile" ON profiles FOR SELECT TO authenticated USING ((auth.uid() = id));
 
+-- Trigger function: protect admin flags from self-elevation
+CREATE OR REPLACE FUNCTION public.protect_profile_admin_flags()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF is_super_admin() THEN
+    RETURN NEW;
+  END IF;
+  NEW.is_admin := OLD.is_admin;
+  NEW.is_super_admin := OLD.is_super_admin;
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS protect_profile_admin_flags_trigger ON public.profiles;
+CREATE TRIGGER protect_profile_admin_flags_trigger
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_profile_admin_flags();
+
 -- Policy: Users can update own profile on profiles
 DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
 CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE TO authenticated USING ((auth.uid() = id)) WITH CHECK ((auth.uid() = id));
@@ -1141,3 +1190,96 @@ CREATE INDEX IF NOT EXISTS wish_reactions_wish_id_idx ON public.wish_reactions U
 -- Index: wish_reactions_wish_id_user_id_key on wish_reactions
 CREATE INDEX IF NOT EXISTS wish_reactions_wish_id_user_id_key ON public.wish_reactions USING btree (wish_id, user_id);
 
+-- Storage bucket: avatars
+INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage bucket: chat_media
+INSERT INTO storage.buckets (id, name, public) VALUES ('chat_media', 'chat_media', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage bucket: vault
+INSERT INTO storage.buckets (id, name, public) VALUES ('vault', 'vault', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage RLS: avatars (owner-scoped)
+DROP POLICY IF EXISTS "Users can read their own avatars" ON storage.objects;
+CREATE POLICY "Users can read their own avatars" ON storage.objects FOR SELECT
+  TO authenticated USING ((bucket_id = 'avatars') AND ((storage.foldername(name))[1] = (auth.uid())::text));
+
+DROP POLICY IF EXISTS "Users can upload their own avatar" ON storage.objects;
+CREATE POLICY "Users can upload their own avatar" ON storage.objects FOR INSERT
+  TO authenticated WITH CHECK ((bucket_id = 'avatars') AND ((storage.foldername(name))[1] = (auth.uid())::text));
+
+DROP POLICY IF EXISTS "Users can update their own avatar" ON storage.objects;
+CREATE POLICY "Users can update their own avatar" ON storage.objects FOR UPDATE
+  TO authenticated USING ((bucket_id = 'avatars') AND ((storage.foldername(name))[1] = (auth.uid())::text))
+  WITH CHECK ((bucket_id = 'avatars') AND ((storage.foldername(name))[1] = (auth.uid())::text));
+
+DROP POLICY IF EXISTS "Users can delete their own avatar" ON storage.objects;
+CREATE POLICY "Users can delete their own avatar" ON storage.objects FOR DELETE
+  TO authenticated USING ((bucket_id = 'avatars') AND ((storage.foldername(name))[1] = (auth.uid())::text));
+
+-- Storage RLS: chat_media (couple-scoped)
+DROP POLICY IF EXISTS "Chat media: couple members can read media" ON storage.objects;
+CREATE POLICY "Chat media: couple members can read media" ON storage.objects FOR SELECT
+  TO authenticated USING ((bucket_id = 'chat_media') AND (EXISTS (SELECT 1 FROM couples
+    WHERE ((couples.id)::text = (storage.foldername(objects.name))[1])
+    AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))));
+
+DROP POLICY IF EXISTS "Chat media: couple members can upload to own path" ON storage.objects;
+CREATE POLICY "Chat media: couple members can upload to own path" ON storage.objects FOR INSERT
+  TO authenticated WITH CHECK ((bucket_id = 'chat_media') AND (EXISTS (SELECT 1 FROM couples
+    WHERE ((couples.id)::text = (storage.foldername(objects.name))[1])
+    AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))
+    AND ((storage.foldername(name))[2] = (auth.uid())::text));
+
+DROP POLICY IF EXISTS "Chat media: uploaders can update own media" ON storage.objects;
+CREATE POLICY "Chat media: uploaders can update own media" ON storage.objects FOR UPDATE
+  TO authenticated USING ((bucket_id = 'chat_media') AND (EXISTS (SELECT 1 FROM couples
+    WHERE ((couples.id)::text = (storage.foldername(objects.name))[1])
+    AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))
+    AND ((storage.foldername(name))[2] = (auth.uid())::text))
+  WITH CHECK ((bucket_id = 'chat_media') AND (EXISTS (SELECT 1 FROM couples
+    WHERE ((couples.id)::text = (storage.foldername(objects.name))[1])
+    AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))
+    AND ((storage.foldername(name))[2] = (auth.uid())::text));
+
+DROP POLICY IF EXISTS "Chat media: uploaders can delete own media" ON storage.objects;
+CREATE POLICY "Chat media: uploaders can delete own media" ON storage.objects FOR DELETE
+  TO authenticated USING ((bucket_id = 'chat_media') AND (EXISTS (SELECT 1 FROM couples
+    WHERE ((couples.id)::text = (storage.foldername(objects.name))[1])
+    AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))
+    AND ((storage.foldername(name))[2] = (auth.uid())::text));
+
+-- Storage RLS: vault (couple-scoped)
+DROP POLICY IF EXISTS "Vault: couple members can read media" ON storage.objects;
+CREATE POLICY "Vault: couple members can read media" ON storage.objects FOR SELECT
+  TO authenticated USING ((bucket_id = 'vault') AND (EXISTS (SELECT 1 FROM couples
+    WHERE ((couples.id)::text = (storage.foldername(objects.name))[1])
+    AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))));
+
+DROP POLICY IF EXISTS "Vault: couple members can upload to own path" ON storage.objects;
+CREATE POLICY "Vault: couple members can upload to own path" ON storage.objects FOR INSERT
+  TO authenticated WITH CHECK ((bucket_id = 'vault') AND (EXISTS (SELECT 1 FROM couples
+    WHERE ((couples.id)::text = (storage.foldername(objects.name))[1])
+    AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))
+    AND ((storage.foldername(name))[2] = (auth.uid())::text));
+
+DROP POLICY IF EXISTS "Vault: uploaders can update own media" ON storage.objects;
+CREATE POLICY "Vault: uploaders can update own media" ON storage.objects FOR UPDATE
+  TO authenticated USING ((bucket_id = 'vault') AND (EXISTS (SELECT 1 FROM couples
+    WHERE ((couples.id)::text = (storage.foldername(objects.name))[1])
+    AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))
+    AND ((storage.foldername(name))[2] = (auth.uid())::text))
+  WITH CHECK ((bucket_id = 'vault') AND (EXISTS (SELECT 1 FROM couples
+    WHERE ((couples.id)::text = (storage.foldername(objects.name))[1])
+    AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))
+    AND ((storage.foldername(name))[2] = (auth.uid())::text));
+
+DROP POLICY IF EXISTS "Vault: uploaders can delete own media" ON storage.objects;
+CREATE POLICY "Vault: uploaders can delete own media" ON storage.objects FOR DELETE
+  TO authenticated USING ((bucket_id = 'vault') AND (EXISTS (SELECT 1 FROM couples
+    WHERE ((couples.id)::text = (storage.foldername(objects.name))[1])
+    AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))
+    AND ((storage.foldername(name))[2] = (auth.uid())::text));

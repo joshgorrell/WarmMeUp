@@ -10,7 +10,7 @@
 -- INSERT violations DO throw (42501), so those use throws_ok with NULL
 -- error matching (any exception satisfies the test).
 
-SELECT plan(47);
+SELECT plan(50);
 
 -- ═══════════════════════════════════════════════════════════════
 -- Test Setup: Create two couples with test users
@@ -201,6 +201,38 @@ SELECT results_eq($q$SELECT count(*)::int FROM chat_messages WHERE id = 'b000000
 SELECT results_eq($q$SELECT count(*)::int FROM vault_items WHERE id = 'b0000000-0000-0000-0000-000000000002'$q$, ARRAY[1]::int[], 'B vault_items survived A DELETE');
 SELECT results_eq($q$SELECT count(*)::int FROM wishes WHERE id = 'b0000000-0000-0000-0000-000000000003'$q$, ARRAY[1]::int[], 'B wishes survived A DELETE');
 SELECT results_eq($q$SELECT count(*)::int FROM interactions WHERE id = 'b0000000-0000-0000-0000-000000000004'$q$, ARRAY[1]::int[], 'B interactions survived A DELETE');
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- Admin flag self-elevation protection (2 tests)
+-- ═══════════════════════════════════════════════════════════════
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claims', json_build_object('sub', '11111111-1111-1111-1111-111111111111')::text, true);
+
+-- Attempt to self-elevate is_admin
+UPDATE profiles SET is_admin = true WHERE id = '11111111-1111-1111-1111-111111111111';
+
+-- Attempt to self-elevate is_super_admin
+UPDATE profiles SET is_super_admin = true WHERE id = '11111111-1111-1111-1111-111111111111';
+
+RESET ROLE;
+SELECT results_eq(
+  $q$SELECT (is_admin::int || is_super_admin::int)::int FROM profiles WHERE id = '11111111-1111-1111-1111-111111111111'$q$,
+  ARRAY[0]::int[],
+  'Non-admin cannot self-elevate is_admin or is_super_admin'
+);
+
+-- Verify normal profile updates still work (display_name change)
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claims', json_build_object('sub', '11111111-1111-1111-1111-111111111111')::text, true);
+UPDATE profiles SET display_name = 'Updated Name' WHERE id = '11111111-1111-1111-1111-111111111111';
+RESET ROLE;
+SELECT results_eq(
+  $q$SELECT display_name FROM profiles WHERE id = '11111111-1111-1111-1111-111111111111'$q$,
+  ARRAY['Updated Name']::text[],
+  'Non-admin can still update own display_name'
+);
 
 SELECT * FROM finish();
 
