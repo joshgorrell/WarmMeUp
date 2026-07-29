@@ -86,6 +86,7 @@ export default function DiceTab() {
   const expirySeconds = expiryHours * 3600;
   const [prompts, setPrompts] = useState<string[]>(FALLBACK_PROMPTS);
   const [hasCustomPrompts, setHasCustomPrompts] = useState(false);
+  const [promptsLoaded, setPromptsLoaded] = useState(false);
   const [rolledFor, setRolledFor] = useState<RolledFor>('self');
   const [rolledForResult, setRolledForResult] = useState<RolledFor>('self');
   const [result, setResult] = useState<string | null>(null);
@@ -144,18 +145,22 @@ export default function DiceTab() {
       : query.eq('is_default', true);
 
     (async () => {
-      const [promptsResult, hiddenResult] = await Promise.all([
-        baseQuery,
-        coupleId
-          ? supabase.from('couple_hidden_prompts').select('prompt_id').eq('couple_id', coupleId).eq('prompt_table', 'dice_prompts')
-          : Promise.resolve({ data: [] }),
-      ]);
-      if (!promptsResult.data?.length) return;
-      const hiddenIds = new Set((hiddenResult.data ?? []).map((r: { prompt_id: string }) => r.prompt_id));
-      const visible = promptsResult.data.filter((d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id));
-      if (visible.length > 0) setPrompts(visible.map((d: { text: string }) => d.text));
-      const hasCustom = promptsResult.data.some((d: { is_default: boolean; couple_id?: string }) => !d.is_default && d.couple_id === coupleId);
-      setHasCustomPrompts(!!hasCustom);
+      try {
+        const [promptsResult, hiddenResult] = await Promise.all([
+          baseQuery,
+          coupleId
+            ? supabase.from('couple_hidden_prompts').select('prompt_id').eq('couple_id', coupleId).eq('prompt_table', 'dice_prompts')
+            : Promise.resolve({ data: [] }),
+        ]);
+        if (!promptsResult.data?.length) return;
+        const hiddenIds = new Set((hiddenResult.data ?? []).map((r: { prompt_id: string }) => r.prompt_id));
+        const visible = promptsResult.data.filter((d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id));
+        if (visible.length > 0) setPrompts(visible.map((d: { text: string }) => d.text));
+        const hasCustom = promptsResult.data.some((d: { is_default: boolean; couple_id?: string }) => !d.is_default && d.couple_id === coupleId);
+        setHasCustomPrompts(!!hasCustom);
+      } finally {
+        setPromptsLoaded(true);
+      }
     })();
   }, [couple?.id]);
 
@@ -632,7 +637,7 @@ export default function DiceTab() {
             </TouchableOpacity>
           )}
 
-          {hasPartner && !hasCustomPrompts && (
+          {hasPartner && promptsLoaded && !hasCustomPrompts && (
             <CustomizePromptsNotice
               onPress={() => router.push('/(app)/customize-prompts?tab=dice')}
               accentColor="#FFB347"

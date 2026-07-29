@@ -67,6 +67,7 @@ export default function DareTab() {
   const expirySeconds = expiryHours * 3600;
   const [quickDares, setQuickDares] = useState<string[]>(FALLBACK_DARES);
   const [hasCustomPrompts, setHasCustomPrompts] = useState(false);
+  const [promptsLoaded, setPromptsLoaded] = useState(false);
   const [dareText, setDareText] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -102,18 +103,22 @@ export default function DareTab() {
       : query.eq('is_default', true);
 
     (async () => {
-      const [promptsResult, hiddenResult] = await Promise.all([
-        baseQuery,
-        coupleId
-          ? supabase.from('couple_hidden_prompts').select('prompt_id').eq('couple_id', coupleId).eq('prompt_table', 'dare_prompts')
-          : Promise.resolve({ data: [] }),
-      ]);
-      if (!promptsResult.data?.length) return;
-      const hiddenIds = new Set((hiddenResult.data ?? []).map((r: { prompt_id: string }) => r.prompt_id));
-      const visible = promptsResult.data.filter((d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id));
-      if (visible.length > 0) setQuickDares(visible.map((d: { text: string }) => d.text));
-      const hasCustom = promptsResult.data.some((d: { is_default: boolean; couple_id?: string }) => !d.is_default && d.couple_id === coupleId);
-      setHasCustomPrompts(!!hasCustom);
+      try {
+        const [promptsResult, hiddenResult] = await Promise.all([
+          baseQuery,
+          coupleId
+            ? supabase.from('couple_hidden_prompts').select('prompt_id').eq('couple_id', coupleId).eq('prompt_table', 'dare_prompts')
+            : Promise.resolve({ data: [] }),
+        ]);
+        if (!promptsResult.data?.length) return;
+        const hiddenIds = new Set((hiddenResult.data ?? []).map((r: { prompt_id: string }) => r.prompt_id));
+        const visible = promptsResult.data.filter((d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id));
+        if (visible.length > 0) setQuickDares(visible.map((d: { text: string }) => d.text));
+        const hasCustom = promptsResult.data.some((d: { is_default: boolean; couple_id?: string }) => !d.is_default && d.couple_id === coupleId);
+        setHasCustomPrompts(!!hasCustom);
+      } finally {
+        setPromptsLoaded(true);
+      }
     })();
   }, [couple?.id]);
 
@@ -449,7 +454,7 @@ export default function DareTab() {
             </>
           )}
 
-          {hasPartner && !hasCustomPrompts && (
+          {hasPartner && promptsLoaded && !hasCustomPrompts && (
             <CustomizePromptsNotice
               onPress={() => router.push('/(app)/customize-prompts?tab=dare')}
               accentColor="#FF2E8A"
