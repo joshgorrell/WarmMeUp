@@ -66,7 +66,7 @@ export default function VerifyEmailScreen() {
           result.reason === 'self' ? "You can't use your own invite code." :
           result.reason === 'already_connected' ? "You're already connected to a partner." :
           result.reason === 'not_found' ? "Invite code not found. You can pair from the app later." :
-          result.reason === 'already_full' ? 'That code has already been used. You can pair from the app later.' :
+          result.reason === 'rate_limited' ? 'Too many attempts. You can pair from the app later.' :
           'Something went wrong connecting you. You can pair from the app later.';
         setError(msg);
         setTimeout(() => router.replace('/(auth)/onboarding'), 3000);

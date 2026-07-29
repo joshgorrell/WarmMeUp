@@ -72,6 +72,12 @@ export default function PairHelpModal({ visible, onClose, variant }: Props) {
                   : 'For your safety, your partner confirms every connection. No one can join without their approval. Your partner\'s identity is shown before you commit.'}
               </AppText>
             </View>
+
+            <View style={[styles.noteBox, { marginTop: Spacing.sm }]}>
+              <AppText style={styles.noteText}>
+                One subscription covers both of you — your partner joins at no extra cost.
+              </AppText>
+            </View>
           </ScrollView>
         </View>
       </View>

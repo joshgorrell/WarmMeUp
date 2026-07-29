@@ -432,7 +432,7 @@ export default function AccountScreen() {
         result.reason === 'self' ? "You can't use your own invite code." :
         result.reason === 'already_connected' ? "You're already connected to a partner." :
         result.reason === 'not_found' ? "Invite code not found. Please check and try again." :
-        result.reason === 'already_full' ? 'That code has already been used.' :
+        result.reason === 'rate_limited' ? 'Too many attempts. Wait a moment and try again.' :
         'Something went wrong. Please try again.';
       setEnterCodeError(msg);
     }

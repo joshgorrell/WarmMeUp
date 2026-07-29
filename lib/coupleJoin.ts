@@ -3,9 +3,36 @@ import { logDebugEvent } from '@/lib/debugLog';
 
 export type JoinResult =
   | { ok: true; status: 'b_accepted'; coupleId: string; inviterName: string | null }
-  | { ok: false; reason: 'not_found' | 'already_full' | 'self' | 'already_connected' | 'error' };
+  | { ok: false; reason: 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'error' };
 
-type JoinReason = 'not_found' | 'already_full' | 'self' | 'already_connected' | 'error';
+type JoinReason = 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'error';
+
+export type PendingJoinStatus = 'accepted' | 'b_accepted' | 'pending';
+
+export type PendingJoinResult =
+  | { ok: true; status: PendingJoinStatus; coupleId: string; inviterName: string | null; inviterAvatar: string | null }
+  | { ok: false };
+
+/**
+ * Check whether the current user has a pending join request or has been accepted.
+ * Used to resume the waiting state after app restart and as a polling fallback.
+ */
+export async function getMyPendingJoin(): Promise<PendingJoinResult> {
+  const { data, error } = await supabase
+    .rpc('get_my_pending_join') as { data: any; error: any };
+
+  if (error || !data?.ok) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    status: data.status as PendingJoinStatus,
+    coupleId: data.couple_id as string,
+    inviterName: data.inviter_name ?? null,
+    inviterAvatar: data.inviter_avatar ?? null,
+  };
+}
 
 /**
  * Preview an invite code without creating a pending request.

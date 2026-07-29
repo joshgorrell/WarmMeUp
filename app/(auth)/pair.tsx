@@ -28,7 +28,7 @@ import {
   savePendingCode,
   sanitizeInviteCode,
 } from '@/lib/inviteCode';
-import { previewInvite, getPendingPartnerProfile } from '@/lib/coupleJoin';
+import { previewInvite, getPendingPartnerProfile, getMyPendingJoin, type PendingJoinStatus } from '@/lib/coupleJoin';
 import { logDebugEvent } from '@/lib/debugLog';
 import { ensureConfigured } from '@/lib/purchases';
 import { MONTHLY_PRODUCT_ID, ANNUAL_PRODUCT_ID } from '@/lib/productIds';
@@ -136,6 +136,7 @@ export default function PairScreen() {
   const [pendingPartnerAvatar, setPendingPartnerAvatar] = useState<string | null>(null);
   const [helpVisible, setHelpVisible] = useState(false);
   const [helpVariant, setHelpVariant] = useState<HelpVariant>('joiner');
+  const [resumeChecked, setResumeChecked] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
   const [subscribing, setSubscribing] = useState(false);
   const [subscribeError, setSubscribeError] = useState('');
@@ -143,7 +144,28 @@ export default function PairScreen() {
 
   useEffect(() => {
     if (!user) return;
-    loadOrCreateCouple();
+    // Before loading the couple, check whether the user has a pending join request
+    // from a previous session. If so, resume straight into the waiting state.
+    (async () => {
+      const pending = await getMyPendingJoin();
+      if (pending.ok && (pending.status === 'b_accepted' || pending.status === 'pending')) {
+        setWaitingState('waiting');
+        setWaitingCoupleId(pending.coupleId);
+        setInviterName(pending.inviterName);
+        setInviterAvatar(pending.inviterAvatar);
+        setActiveModal(null);
+        setResumeChecked(true);
+        return;
+      }
+      if (pending.ok && pending.status === 'accepted') {
+        // Already accepted — refresh and let the couple redirect handle navigation.
+        await refreshCouple();
+        setResumeChecked(true);
+        return;
+      }
+      setResumeChecked(true);
+      loadOrCreateCouple();
+    })();
   }, [user]);
 
   // User A: fetch pending partner's profile when a request arrives
@@ -171,6 +193,33 @@ export default function PairScreen() {
     }
   }, [couple?.user_b_id]);
 
+  // Resolve the waiting state: navigate to celebration or mark declined.
+  const resolveWaiting = async (status: 'accepted' | 'declined') => {
+    if (status === 'accepted') {
+      setWaitingState('accepted');
+      await refreshCouple();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (token && waitingCoupleId) {
+        fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ event_type: 'partner_joined', couple_id: waitingCoupleId }),
+        }).catch(() => {});
+      }
+      if (!settings?.celebration_seen) {
+        router.replace({
+          pathname: '/(auth)/paired-celebration',
+          params: { partnerName: inviterName || '' },
+        });
+      } else {
+        router.replace('/(app)/(tabs)');
+      }
+    } else {
+      setWaitingState('declined');
+    }
+  };
+
   // User B: subscribe to the couple row for accept/decline transitions while waiting.
   useEffect(() => {
     if (waitingState !== 'waiting' || !waitingCoupleId) return;
@@ -183,36 +232,49 @@ export default function PairScreen() {
           const newStatus = payload?.new?.pending_partner_status;
           const newUserB = payload?.new?.user_b_id;
           if (newUserB && user) {
-            // Accepted — finalization ran server-side in accept_partner().
-            // Just refresh and navigate.
-            setWaitingState('accepted');
-            await refreshCouple();
-            // Notify User A (fire-and-forget)
-            const { data: sessionData } = await supabase.auth.getSession();
-            const token = sessionData?.session?.access_token;
-            if (token) {
-              fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ event_type: 'partner_joined', couple_id: waitingCoupleId }),
-              }).catch(() => {});
-            }
-            if (!settings?.celebration_seen) {
-              router.replace({
-                pathname: '/(auth)/paired-celebration',
-                params: { partnerName: inviterName || '' },
-              });
-            } else {
-              router.replace('/(app)/(tabs)');
-            }
+            await resolveWaiting('accepted');
           } else if (newStatus === 'declined') {
-            setWaitingState('declined');
+            await resolveWaiting('declined');
           }
         },
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [waitingState, waitingCoupleId, user, settings?.celebration_seen]);
+  }, [waitingState, waitingCoupleId, user, settings?.celebration_seen, inviterName]);
+
+  // User B: polling fallback — if realtime drops, poll every 4s for status changes.
+  useEffect(() => {
+    if (waitingState !== 'waiting' || !user) return;
+    let cancelled = false;
+    const poll = async () => {
+      const result = await getMyPendingJoin();
+      if (cancelled) return;
+      if (result.ok && result.status === 'accepted') {
+        await resolveWaiting('accepted');
+      } else if (result.ok && (result.status === 'b_accepted' || result.status === 'pending')) {
+        // Still waiting — keep polling.
+        return;
+      } else if (!result.ok) {
+        // No pending request found — could be declined or cleared.
+        // Check the couple row directly for declined status.
+        if (waitingCoupleId) {
+          const { data: couple } = await supabase
+            .from('couples')
+            .select('pending_partner_status, user_b_id')
+            .eq('id', waitingCoupleId)
+            .maybeSingle();
+          if (cancelled) return;
+          if (couple?.user_b_id && couple.user_b_id === user.id) {
+            await resolveWaiting('accepted');
+          } else if (couple?.pending_partner_status === 'declined' || (!couple?.pending_partner_status && !couple?.user_b_id)) {
+            await resolveWaiting('declined');
+          }
+        }
+      }
+    };
+    const interval = setInterval(poll, 4000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [waitingState, waitingCoupleId, user, inviterName]);
 
   // User A: accept a pending request
   const handleAccept = async () => {
@@ -222,7 +284,7 @@ export default function PairScreen() {
       const { data: result, error } = await supabase.rpc('accept_partner');
       if (error || !result?.ok) {
         if (result?.reason === 'no_subscription') {
-          setError('Your subscription has ended. Subscribe to confirm your partner.');
+          setError('Your trial has ended. Subscribe to confirm your partner.');
         } else {
           setError('Could not accept right now. Try again.');
         }
@@ -532,8 +594,8 @@ export default function PairScreen() {
           case 'self':
             setError("That's your own code! Share it with your partner.");
             break;
-          case 'already_full':
-            setError('This code has already been used.');
+          case 'rate_limited':
+            setError('Too many attempts. Wait a moment and try again.');
             break;
           default:
             setError('Something went wrong. Please try again.');
@@ -1143,7 +1205,7 @@ export default function PairScreen() {
             </View>
             <AppText style={styles.waitingOverlayTitle}>Request declined</AppText>
             <AppText style={styles.waitingOverlayDesc}>
-              Your partner declined the connection.{'\n'}Check your code and try again.
+              Your partner declined the connection, or their trial may have ended.{'\n'}Ask them to subscribe and try again.
             </AppText>
             <TouchableOpacity
               style={styles.cancelWaitingBtn}
