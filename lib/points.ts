@@ -182,13 +182,16 @@ export async function reversePoints(
   });
 }
 
-export async function deactivatePreviousEphemeral(coupleId: string) {
-  await supabase
+export async function deactivatePreviousEphemeral(coupleId: string, senderId?: string) {
+  let query = supabase
     .from('interactions')
-    .update({ is_active: false })
+    .update({ is_active: false, status: 'cancelled' })
     .eq('couple_id', coupleId)
-    .eq('is_active', true)
+    .is('deleted_at', null)
+    .in('status', ['sent', 'accepted'])
     .in('type', ['dice', 'dare', 'tell_me']);
+  if (senderId) query = query.eq('sender_id', senderId);
+  await query;
 }
 
 // Lazy monthly reset — called on app load. Archives current scores into monthly_scores

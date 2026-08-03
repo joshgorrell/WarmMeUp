@@ -166,6 +166,9 @@ export default function DareTab() {
       .eq('receiver_id', user.id)
       .eq('type', 'dare')
       .in('status', ['sent', 'accepted', 'pending_verification'])
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {
@@ -185,6 +188,9 @@ export default function DareTab() {
       .eq('type', 'dare')
       .eq('status', 'pending_verification')
       .is('completed_at', null)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     setPendingVerification(pending);
 
@@ -194,7 +200,10 @@ export default function DareTab() {
       .eq('couple_id', couple.id)
       .eq('sender_id', user.id)
       .eq('type', 'dare')
-      .in('status', ['sent'])
+      .eq('status', 'sent')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     setSentDare(mySent ?? null);
   }, [couple?.id, user]);
@@ -206,7 +215,7 @@ export default function DareTab() {
     try {
       const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
       const receiverId = partnerId ?? user.id;
-      await deactivatePreviousEphemeral(couple.id);
+      await deactivatePreviousEphemeral(couple.id, user.id);
       const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
       const { error: insertError } = await supabase.from('interactions').insert({
         couple_id: couple.id,

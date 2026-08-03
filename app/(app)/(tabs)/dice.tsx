@@ -178,6 +178,8 @@ export default function DiceTab() {
         .in('status', ['sent', 'accepted', 'pending_verification'])
         .is('completed_at', null)
         .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle(),
       supabase
         .from('interactions')
@@ -189,6 +191,8 @@ export default function DiceTab() {
         .eq('status', 'pending_verification')
         .is('completed_at', null)
         .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle(),
       supabase
         .from('interactions')
@@ -199,6 +203,8 @@ export default function DiceTab() {
         .eq('rolled_for', 'partner')
         .eq('status', 'sent')
         .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle(),
     ]);
 
@@ -291,7 +297,7 @@ export default function DiceTab() {
           if (couple?.id && user) {
             const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
             const receiverId = partnerId ?? user.id;
-            await deactivatePreviousEphemeral(couple.id);
+            await deactivatePreviousEphemeral(couple.id, user.id);
             const diceExpiresAt = forPartner
               ? new Date(Date.now() + expirySeconds * 1000).toISOString()
               : null;
@@ -337,7 +343,7 @@ export default function DiceTab() {
     if (!incomingChallenge || !couple?.id || !user) return;
     if (accepted) {
       // Keep is_active true so the receiver can later tap "I Did It!"
-      await supabase.from('interactions').update({ status: 'accepted' }).eq('id', incomingChallenge.id);
+      await supabase.from('interactions').update({ status: 'accepted', is_active: false }).eq('id', incomingChallenge.id);
       notifyPartner({ event_type: 'dice_accepted', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
       const pts = await getPointValue('dice_accept');
       await awardPoints(couple.id, user.id, pts, 'Dice challenge accepted', incomingChallenge.id);
