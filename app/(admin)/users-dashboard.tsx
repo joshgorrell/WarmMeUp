@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ChevronRight, UserCog, X, ShieldCheck, ShieldOff, Crown, Activity,
   Users, Heart, Lock, Check, TriangleAlert as AlertTriangle, RefreshCw, CreditCard, Gift,
+  Trash2,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -196,6 +197,65 @@ export default function UsersDashboard() {
         },
       },
     ]);
+  };
+
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteUser = (user: UserRow) => {
+    const partner = coupleMap[user.id];
+    const isPaired = partner?.partnerName != null;
+    const activeSub = subscriptions.find(
+      s => s.user_id === user.id && s.status === 'active' && s.plan !== 'trial',
+    );
+
+    const warnings: string[] = [];
+    if (isPaired) {
+      warnings.push(`This user is currently paired with ${partner!.partnerName}. Deleting will disconnect their partner and remove all shared content.`);
+    }
+    if (activeSub) {
+      warnings.push(`This user has an active ${activeSub.plan} subscription. Deleting will cancel it immediately.`);
+    }
+
+    const warningText = warnings.length > 0
+      ? `\n\n${warnings.join('\n\n')}`
+      : '';
+
+    Alert.alert(
+      'Delete User',
+      `Are you sure you want to permanently delete ${user.display_name}? This cannot be undone.${warningText}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              const token = session?.access_token;
+              if (!token) throw new Error('Not authenticated.');
+
+              const { error } = await supabase.functions.invoke('delete-account', {
+                headers: { Authorization: `Bearer ${token}` },
+                body: { targetUserId: user.id },
+              });
+
+              if (error) throw error;
+
+              setUsers(prev => prev.filter(u => u.id !== user.id));
+              setCouples(prev => prev.filter(c => c.user_a_id !== user.id && c.user_b_id !== user.id));
+              setSubscriptions(prev => prev.filter(s => s.user_id !== user.id));
+              setSelectedUser(null);
+              Alert.alert('Deleted', `${user.display_name} has been permanently deleted.`);
+            } catch (e) {
+              Alert.alert('Error', 'Failed to delete user. Please try again.');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const openDiagnosticsSnapshot = async (user: UserRow) => {
@@ -627,6 +687,30 @@ export default function UsersDashboard() {
                       <>
                         <ShieldCheck color="#FF2E8A" size={20} strokeWidth={2} />
                         <AppText style={[styles.actionBtnText, { color: '#FF2E8A' }]}>Grant Admin Access</AppText>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {isSuperAdmin && !isSelf && !selectedUser.is_super_admin && (
+                  <TouchableOpacity
+                    style={[
+                      styles.actionBtn,
+                      {
+                        backgroundColor: 'rgba(255,90,95,0.08)',
+                        borderColor: 'rgba(255,90,95,0.30)',
+                      },
+                    ]}
+                    onPress={() => handleDeleteUser(selectedUser)}
+                    disabled={deleting}
+                    activeOpacity={0.8}
+                  >
+                    {deleting ? (
+                      <ActivityIndicator color={colors.danger} size="small" />
+                    ) : (
+                      <>
+                        <Trash2 color={colors.danger} size={20} strokeWidth={2} />
+                        <AppText style={[styles.actionBtnText, { color: colors.danger }]}>Delete User</AppText>
                       </>
                     )}
                   </TouchableOpacity>

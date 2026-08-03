@@ -37,13 +37,37 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const userId = user.id;
-
     // Service role client for all privileged operations
     const admin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
+
+    // ── Admin-initiated deletion ───────────────────────────────────
+    // If the request body includes a `targetUserId`, the caller must be a
+    // super admin. Otherwise we fall back to deleting the caller's own
+    // account (the standard self-serve flow).
+    let userId = user.id;
+    let body: { targetUserId?: string } | null = null;
+    try {
+      body = await req.json();
+    } catch (_) { /* body is optional */ }
+
+    if (body?.targetUserId && body.targetUserId !== user.id) {
+      const { data: callerProfile } = await admin
+        .from("profiles")
+        .select("is_super_admin")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!callerProfile?.is_super_admin) {
+        return new Response(JSON.stringify({ error: "Forbidden: super admin required" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = body.targetUserId;
+    }
 
     // ── 1. Cancel RevenueCat subscription ───────────────────────────
     // Must happen before the auth user is deleted — RevenueCat needs the
