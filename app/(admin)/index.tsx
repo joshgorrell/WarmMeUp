@@ -8,8 +8,9 @@ import {
   FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity,
   CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2,
   Star, UserCog, Bug, ShieldCheck, MessageSquare, TriangleAlert as AlertTriangle,
-  RefreshCw, X as XIcon, Clock, Bot, Mail,
+  RefreshCw, X as XIcon, Clock, Bot, Mail, CircleQuestionMark,
 } from 'lucide-react-native';
+import BottomSheet from '@/components/BottomSheet';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -79,6 +80,7 @@ export default function AdminDashboard() {
   const [globalDebugExpiry, setGlobalDebugExpiry] = useState<'15m' | '1h' | '24h' | 'never'>('1h');
   const [globalDebugError, setGlobalDebugError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<string | null>(null);
+  const [infoSheet, setInfoSheet] = useState<{ title: string; body: string } | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -642,7 +644,12 @@ export default function AdminDashboard() {
               <Bug color={globalDebugEnabled ? '#60C8FF' : 'rgba(96,200,255,0.55)'} size={20} strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
-              <AppText style={[styles.devLabel, { color: colors.text }]}>Global Debug Access</AppText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <AppText style={[styles.devLabel, { color: colors.text }]}>Global Debug Access</AppText>
+                <TouchableOpacity onPress={() => setInfoSheet({ title: 'Global Debug Access', body: 'Use this when a user contacts support and can\'t log in. Turn it on, generate a 6-digit code, and share that code with the user. They enter it on the debug screen before login to access diagnostics and share them with you.' })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+                  <CircleQuestionMark color={colors.textMuted} size={14} strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
               <AppText style={[styles.devSub, { color: colors.textMuted }]}>
                 {globalDebugEnabled
                   ? countdown ? `ON — ${countdown}` : 'ON — no expiry'
@@ -744,7 +751,12 @@ export default function AdminDashboard() {
               <ShieldCheck color="#FFB347" size={20} strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
-              <AppText style={[styles.devLabel, { color: colors.text }]}>Admin Debug Mode</AppText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <AppText style={[styles.devLabel, { color: colors.text }]}>Admin Debug Mode</AppText>
+                <TouchableOpacity onPress={() => setInfoSheet({ title: 'Admin Debug Mode', body: 'Lets you secretly access Debug Diagnostics by tapping the Warm Me Up logo 5 times rapidly on the splash, unlock, or weather screen. Useful when testing the app as a normal user or when you\'re locked out of the admin area.' })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+                  <CircleQuestionMark color={colors.textMuted} size={14} strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
               <AppText style={[styles.devSub, { color: colors.textMuted }]}>5 rapid taps on splash, unlock, or weather screen (admins only).</AppText>
             </View>
             <Toggle
@@ -767,7 +779,12 @@ export default function AdminDashboard() {
               <Activity color="#60C8FF" size={20} strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
-              <AppText style={[styles.devLabel, { color: colors.text }]}>Debug Diagnostics</AppText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <AppText style={[styles.devLabel, { color: colors.text }]}>Debug Diagnostics</AppText>
+                <TouchableOpacity onPress={() => setInfoSheet({ title: 'Debug Diagnostics', body: 'Opens the full diagnostics panel directly. Use this when you\'re already in the admin area and want to check auth state, push tokens, or connectivity for your own account. Shows the same screen as Global Debug Access and Admin Debug Mode, just a quicker shortcut.' })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+                  <CircleQuestionMark color={colors.textMuted} size={14} strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
               <AppText style={[styles.devSub, { color: colors.textMuted }]}>Auth state, push tokens, Supabase connectivity, and event log.</AppText>
             </View>
             <ChevronRight color={colors.textMuted} size={18} />
@@ -789,6 +806,7 @@ export default function AdminDashboard() {
                 : <Activity color="#69A7FF" size={16} strokeWidth={2.2} />}
               <AppText style={styles.diagBtnText}>{diagRunning ? 'Running checks…' : 'Run admin RLS checks'}</AppText>
             </TouchableOpacity>
+            <AppText style={[styles.diagSubtitle, { color: colors.textMuted }]}>Verifies database security rules are working correctly. Safe to run at any time — read-only.</AppText>
             {diag.map(c => (
               <View key={c.name} style={styles.diagRow}>
                 {c.status === 'pass' ? (
@@ -809,6 +827,18 @@ export default function AdminDashboard() {
           </View>
         </View>
       </ScrollView>
+
+      <BottomSheet
+        visible={!!infoSheet}
+        onClose={() => setInfoSheet(null)}
+        title={infoSheet?.title ?? ''}
+      >
+        <View style={{ paddingBottom: Spacing.md }}>
+          <AppText style={{ fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20, color: colors.textSecondary }}>
+            {infoSheet?.body}
+          </AppText>
+        </View>
+      </BottomSheet>
     </AppShell>
   );
 }
@@ -875,6 +905,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill, borderWidth: 1, paddingVertical: 10,
   },
   diagBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', color: '#69A7FF' },
+  diagSubtitle: { fontSize: 11, fontFamily: 'Inter-Regular', lineHeight: 16, textAlign: 'center', paddingHorizontal: Spacing.md },
   diagRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingTop: 4 },
   diagName: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
   diagDetail: { fontSize: 11, fontFamily: 'Inter-Regular', marginTop: 1 },
