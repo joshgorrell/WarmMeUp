@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,13 +7,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
+import AvatarUploader from '@/components/AvatarUploader';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Lock, Eye, EyeOff, Mail, Check, Calendar, User } from 'lucide-react-native';
+import { ChevronLeft, Lock, Eye, EyeOff, Mail, Check, Calendar, User, Sparkles } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { signInWithProvider, isOAuthSupported } from '@/lib/oauth';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -115,6 +117,13 @@ export default function RegisterScreen() {
   const [tosConsentVisible, setTosConsentVisible] = useState(false);
   const [pendingOAuthProvider, setPendingOAuthProvider] = useState<'apple' | 'google' | null>(null);
 
+  // Avatar step state
+  const [step, setStep] = useState<'form' | 'avatar'>('form');
+  const [createdUserId, setCreatedUserId] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarDone, setAvatarDone] = useState(false);
+  const [avatarSkip, setAvatarSkip] = useState(false);
+
   const tosAcceptedAt = new Date().toISOString();
   const maxDate = getMaxDate();
 
@@ -174,6 +183,35 @@ export default function RegisterScreen() {
     setDobTouched(true);
   };
 
+  // --- Route after avatar step (or skip) ---
+  const proceedFromAvatarStep = useCallback(() => {
+    if (!createdUserId) return;
+    const uid = createdUserId;
+
+    // If email was already confirmed (OAuth or auto-confirm), go straight to onboarding/pair.
+    // Otherwise go to verify-email.
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email_confirmed_at) {
+        if (pendingCode) {
+          completePendingJoin(uid, pendingCode).then(async (result) => {
+            await clearPendingCode();
+            if (result.ok) {
+              router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: pendingCode } });
+              return;
+            }
+            router.replace('/(auth)/onboarding');
+          });
+        } else {
+          router.replace('/(auth)/onboarding');
+        }
+      } else {
+        const params: Record<string, string> = { email: email || user?.email || '' };
+        if (pendingCode) params.pendingCode = pendingCode;
+        router.replace({ pathname: '/(auth)/verify-email', params });
+      }
+    });
+  }, [createdUserId, pendingCode, email, router]);
+
   // --- Shared OAuth body (called after consent guaranteed) ---
   const runOAuth = async (provider: 'apple' | 'google') => {
     const fn = firstName.trim();
@@ -208,19 +246,8 @@ export default function RegisterScreen() {
 
         const isNewUser = !!updatedProfile;
         if (isNewUser) {
-          if (pendingCode && session.user?.id) {
-            const result = await completePendingJoin(session.user.id, pendingCode);
-            await clearPendingCode();
-            if (result.ok) {
-              // Request sent — route to pair screen to wait for User A's acceptance
-              router.replace({
-                pathname: '/(auth)/pair',
-                params: { prefilledCode: pendingCode },
-              });
-              return;
-            }
-          }
-          router.replace('/(auth)/onboarding');
+          setCreatedUserId(userId);
+          setStep('avatar');
         } else {
           router.replace('/transition');
         }
@@ -263,25 +290,8 @@ export default function RegisterScreen() {
           .update({ first_name: fn, last_name: ln, display_name: fullName, tos_accepted_at: tosAcceptedAt })
           .eq('id', data.user.id);
 
-        if (data.user.email_confirmed_at) {
-          if (pendingCode) {
-            const result = await completePendingJoin(data.user.id, pendingCode);
-            await clearPendingCode();
-            if (result.ok) {
-              router.replace({
-                pathname: '/(auth)/pair',
-                params: { prefilledCode: pendingCode },
-              });
-              return;
-            }
-          }
-          router.replace('/(auth)/onboarding');
-          return;
-        }
-
-        const params: Record<string, string> = { email };
-        if (pendingCode) params.pendingCode = pendingCode;
-        router.replace({ pathname: '/(auth)/verify-email', params });
+        setCreatedUserId(data.user.id);
+        setStep('avatar');
       }
     } catch (e: unknown) {
       setApiError(friendlyAuthError(e));
@@ -421,6 +431,71 @@ export default function RegisterScreen() {
         />
       )}
 
+      {step === 'avatar' && createdUserId ? (
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingTop: vMd + insets.top, paddingBottom: Math.max(insets.bottom, vMd) + vMd }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={isTablet ? [styles.innerWrap, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }] : styles.innerWrap}>
+            {/* Header row */}
+            <View style={[styles.headerRow, { marginBottom: vSm }]}>
+              <TouchableOpacity style={styles.backBtn} onPress={() => { setStep('form'); setCreatedUserId(null); }} activeOpacity={0.7}>
+                <ChevronLeft color="rgba(255,255,255,0.75)" size={20} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.avatarStepHeader}>
+              <View style={styles.avatarStepBadge}>
+                <Sparkles color="#FF8A3D" size={16} strokeWidth={2.2} />
+              </View>
+              <AppText style={styles.avatarStepTitle}>Add your photo</AppText>
+              <AppText style={styles.avatarStepSub}>
+                Your partner will see it in chat and throughout the app. It makes everything feel more personal — but you can skip if you prefer.
+              </AppText>
+            </View>
+
+            <View style={styles.avatarStepUploader}>
+              <AvatarUploader
+                userId={createdUserId}
+                displayName={[firstName.trim(), lastName.trim()].filter(Boolean).join(' ').trim() || undefined}
+                size={120}
+                onUploadStart={() => setAvatarUploading(true)}
+                onUploaded={() => { setAvatarDone(true); setAvatarUploading(false); }}
+                onError={() => setAvatarUploading(false)}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.avatarStepContinueBtn, (!avatarDone || avatarUploading) && styles.avatarStepContinueDisabled]}
+              onPress={proceedFromAvatarStep}
+              activeOpacity={0.85}
+              disabled={!avatarDone || avatarUploading}
+            >
+              <LinearGradient
+                colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.avatarStepContinueGrad}
+              >
+                {avatarUploading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <AppText style={styles.avatarStepContinueLabel}>Continue</AppText>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.avatarStepSkipBtn}
+              onPress={proceedFromAvatarStep}
+              activeOpacity={0.7}
+              disabled={avatarUploading}
+            >
+              <AppText style={styles.avatarStepSkipText}>Skip for now</AppText>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      ) : (
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: vMd + insets.top, paddingBottom: Math.max(insets.bottom, vMd) + vMd }]}
         keyboardShouldPersistTaps="handled"
@@ -720,6 +795,7 @@ export default function RegisterScreen() {
           </View>
         </View>
       </ScrollView>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -1046,5 +1122,78 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',
     paddingHorizontal: Spacing.sm,
+  },
+  // Avatar step
+  avatarStepHeader: {
+    alignItems: 'center',
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.xl,
+    gap: Spacing.sm,
+  },
+  avatarStepBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,138,61,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,138,61,0.30)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.xs,
+  },
+  avatarStepTitle: {
+    color: '#fff',
+    fontSize: FontSize.xxl,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: -0.4,
+    textAlign: 'center',
+  },
+  avatarStepSub: {
+    color: 'rgba(255,255,255,0.50)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 19,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.md,
+  },
+  avatarStepUploader: {
+    alignItems: 'center',
+    marginBottom: Spacing.xxl,
+  },
+  avatarStepContinueBtn: {
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+    shadowColor: '#FF5A3D',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.55,
+    shadowRadius: 24,
+    elevation: 14,
+  },
+  avatarStepContinueDisabled: {
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  avatarStepContinueGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    borderRadius: Radius.pill,
+  },
+  avatarStepContinueLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: 0.2,
+  },
+  avatarStepSkipBtn: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginTop: Spacing.sm,
+  },
+  avatarStepSkipText: {
+    color: 'rgba(255,255,255,0.40)',
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
   },
 });
