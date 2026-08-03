@@ -384,8 +384,10 @@ export default function LoginScreen() {
           .eq('id', userId)
           .maybeSingle();
         if (!existing) {
-          // New OAuth user — route through onboarding; register.tsx now handles code inline.
-          router.replace('/(auth)/onboarding');
+          // New OAuth user — route through register so they get the name/avatar steps.
+          const redirectParams: Record<string, string> = { oauthComplete: '1' };
+          if (codeToPreserve) redirectParams.pendingCode = codeToPreserve;
+          router.replace({ pathname: '/(auth)/register', params: redirectParams });
         } else {
           // Existing user signing in — check for stored or param code to redeem.
           const storedCode = await loadPendingCode();

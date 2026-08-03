@@ -87,17 +87,33 @@ async function signInWithAppleNative() {
     throw new Error('Apple did not return an identity token.');
   }
 
+  // Capture the user's name — Apple only provides it on the very first sign-in.
+  const givenName = credential.fullName?.givenName;
+  const familyName = credential.fullName?.familyName;
+  const userData: Record<string, string> = {};
+  if (givenName) userData.first_name = givenName;
+  if (familyName) userData.last_name = familyName;
+  if (givenName || familyName) {
+    userData.full_name = [givenName, familyName].filter(Boolean).join(' ');
+  }
+
   const { data, error } = await supabase.auth.signInWithIdToken({
     provider: 'apple',
     token: credential.identityToken,
   });
 
   if (error) throw error;
+
+  // Persist Apple-provided name to user metadata so the register flow can pick it up.
+  if (data.user && Object.keys(userData).length > 0) {
+    await supabase.auth.updateUser({ data: userData }).catch(() => {});
+  }
+
   return data;
 }
 
 // Google is supported on all platforms; Apple only on native
 export function isOAuthSupported(provider?: 'google' | 'apple'): boolean {
-  if (provider === 'apple') return Platform.OS !== 'web';
+  if (provider === 'apple') return Platform.OS === 'ios';
   return true;
 }

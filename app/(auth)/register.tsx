@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -71,7 +71,7 @@ function parseDateInput(value: string): Date | null {
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { pendingCode } = useLocalSearchParams<{ pendingCode?: string }>();
+  const { pendingCode, oauthComplete } = useLocalSearchParams<{ pendingCode?: string; oauthComplete?: string }>();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
   const { refreshSubscription } = useAuth();
@@ -117,8 +117,8 @@ export default function RegisterScreen() {
   const [tosConsentVisible, setTosConsentVisible] = useState(false);
   const [pendingOAuthProvider, setPendingOAuthProvider] = useState<'apple' | 'google' | null>(null);
 
-  // Avatar step state
-  const [step, setStep] = useState<'form' | 'avatar'>('form');
+  // Step state: form → name (if needed) → avatar
+  const [step, setStep] = useState<'form' | 'name' | 'avatar'>('form');
   const [createdUserId, setCreatedUserId] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarDone, setAvatarDone] = useState(false);
@@ -126,6 +126,29 @@ export default function RegisterScreen() {
 
   const tosAcceptedAt = new Date().toISOString();
   const maxDate = getMaxDate();
+
+  // When arriving from login-screen OAuth (oauthComplete=1), check if the session
+  // already has a name. If yes, go to avatar. If no, go to name step.
+  useEffect(() => {
+    if (oauthComplete !== '1') return;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setStep('form');
+        return;
+      }
+      const meta = user.user_metadata ?? {};
+      const hasName = !!(meta.first_name || meta.given_name || meta.full_name);
+      if (hasName) {
+        setCreatedUserId(user.id);
+        setStep('avatar');
+      } else {
+        setCreatedUserId(user.id);
+        setStep('name');
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oauthComplete]);
 
   // --- Derived: DOB validity ---
   const dobValid: boolean = Platform.OS === 'web'
@@ -214,19 +237,6 @@ export default function RegisterScreen() {
 
   // --- Shared OAuth body (called after consent guaranteed) ---
   const runOAuth = async (provider: 'apple' | 'google') => {
-    const fn = firstName.trim();
-    const ln = lastName.trim();
-    if (!fn || fn.length < 2) {
-      setFirstNameTouched(true);
-      setApiError('Please enter your first name before continuing.');
-      return;
-    }
-    if (!ln || ln.length < 2) {
-      setLastNameTouched(true);
-      setApiError('Please enter your last name before continuing.');
-      return;
-    }
-    const fullName = `${fn} ${ln}`;
     setApiError('');
     setOauthLoading(provider);
     if (pendingCode) await savePendingCode(pendingCode);
@@ -236,9 +246,23 @@ export default function RegisterScreen() {
 
       const userId = session.user?.id;
       if (userId) {
+        // Prefer name from OAuth provider (Apple provides it on first sign-in);
+        // fall back to whatever the user typed in the form.
+        const meta = session.user?.user_metadata ?? {};
+        const providerFn = meta.first_name || meta.given_name || '';
+        const providerLn = meta.last_name || meta.family_name || '';
+        const fn = providerFn || firstName.trim();
+        const ln = providerLn || lastName.trim();
+        const fullName = [fn, ln].filter(Boolean).join(' ');
+
         const { data: updatedProfile } = await supabase
           .from('profiles')
-          .update({ first_name: fn, last_name: ln, display_name: fullName, tos_accepted_at: tosAcceptedAt })
+          .update({
+            ...(fn ? { first_name: fn } : {}),
+            ...(ln ? { last_name: ln } : {}),
+            ...(fullName ? { display_name: fullName } : {}),
+            tos_accepted_at: tosAcceptedAt,
+          })
           .eq('id', userId)
           .is('tos_accepted_at', null)
           .select('id')
@@ -247,7 +271,13 @@ export default function RegisterScreen() {
         const isNewUser = !!updatedProfile;
         if (isNewUser) {
           setCreatedUserId(userId);
-          setStep('avatar');
+          // If we got a name from the provider or the form, go to avatar.
+          // Otherwise prompt for name first.
+          if (fn) {
+            setStep('avatar');
+          } else {
+            setStep('name');
+          }
         } else {
           router.replace('/transition');
         }
@@ -256,6 +286,38 @@ export default function RegisterScreen() {
       setApiError(friendlyAuthError(e));
     } finally {
       setOauthLoading(null);
+    }
+  };
+
+  // --- Name step continue (after OAuth if no name was obtained) ---
+  const handleNameStepContinue = async () => {
+    const fn = firstName.trim();
+    const ln = lastName.trim();
+    if (!fn || fn.length < 2) {
+      setFirstNameTouched(true);
+      setApiError('Please enter your first name.');
+      return;
+    }
+    if (!ln || ln.length < 2) {
+      setLastNameTouched(true);
+      setApiError('Please enter your last name.');
+      return;
+    }
+    const fullName = `${fn} ${ln}`;
+    setApiError('');
+    setLoading(true);
+    try {
+      if (createdUserId) {
+        await supabase
+          .from('profiles')
+          .update({ first_name: fn, last_name: ln, display_name: fullName })
+          .eq('id', createdUserId);
+      }
+      setStep('avatar');
+    } catch (e: unknown) {
+      setApiError(friendlyAuthError(e));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -495,306 +557,386 @@ export default function RegisterScreen() {
             </TouchableOpacity>
           </View>
         </ScrollView>
-      ) : (
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: vMd + insets.top, paddingBottom: Math.max(insets.bottom, vMd) + vMd }]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={isTablet ? [styles.innerWrap, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }] : styles.innerWrap}>
-          {/* Header row */}
-          <View style={[styles.headerRow, { marginBottom: vSm }]}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-              <ChevronLeft color="rgba(255,255,255,0.75)" size={20} strokeWidth={2.2} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Title */}
-          <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your account</AppText>
-          <AppText style={[styles.sub, { marginBottom: vSm }]}>Private. Playful. Just for you and your partner.</AppText>
-
-          {/* OAuth buttons — always enabled */}
-          {(showGoogle || showApple) && (
-            <View style={[styles.oauthBlock, { gap: vXs, marginBottom: vSm }]}>
-              {showApple && (
-                Platform.OS === 'ios' ? (
-                  <AppleAuthentication.AppleAuthenticationButton
-                    onPress={() => handleOAuth('apple')}
-                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
-                    buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                    cornerRadius={Radius.lg}
-                    style={styles.appleNativeBtn}
-                  />
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.oauthBtn, styles.appleBtn, { paddingVertical: inputPad }]}
-                    onPress={() => handleOAuth('apple')}
-                    activeOpacity={0.88}
-                    disabled={oauthLoading !== null || loading}
-                  >
-                    <AppleIcon color="#fff" size={18} />
-                    <AppText style={styles.appleBtnText}>
-                      {oauthLoading === 'apple' ? 'Signing in…' : 'Continue with Apple'}
-                    </AppText>
-                  </TouchableOpacity>
-                )
-              )}
-
-              {showGoogle && (
-                <TouchableOpacity
-                  style={[styles.oauthBtn, styles.googleBtn, { paddingVertical: inputPad }]}
-                  onPress={() => handleOAuth('google')}
-                  activeOpacity={0.88}
-                  disabled={oauthLoading !== null || loading}
-                >
-                  <GoogleIcon size={18} />
-                  <AppText style={styles.googleBtnText}>
-                    {oauthLoading === 'google' ? 'Signing in…' : 'Continue with Google'}
-                  </AppText>
-                </TouchableOpacity>
-              )}
-
-              <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <AppText style={styles.dividerText}>or</AppText>
-                <View style={styles.dividerLine} />
-              </View>
+      ) : step === 'name' && createdUserId ? (
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingTop: vMd + insets.top, paddingBottom: Math.max(insets.bottom, vMd) + vMd }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={isTablet ? [styles.innerWrap, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }] : styles.innerWrap}>
+            {/* Header row */}
+            <View style={[styles.headerRow, { marginBottom: vSm }]}>
+              <TouchableOpacity style={styles.backBtn} onPress={() => { setStep('form'); setCreatedUserId(null); }} activeOpacity={0.7}>
+                <ChevronLeft color="rgba(255,255,255,0.75)" size={20} strokeWidth={2.2} />
+              </TouchableOpacity>
             </View>
-          )}
 
-          {/* Form fields */}
-          <View style={[styles.form, { gap: vXs }]}>
-            {/* Name row */}
-            <View>
-              <View style={styles.nameRow}>
-                <View style={[styles.inputWrap, { flex: 1 }, showFirstNameError && styles.inputWrapError]}>
-                  <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-                  <AppTextInput
-                    style={[styles.input, { paddingVertical: inputPad }]}
-                    value={firstName}
-                    onChangeText={(t) => { setFirstName(t); if (!firstNameTouched) setFirstNameTouched(true); }}
-                    onBlur={() => setFirstNameTouched(true)}
-                    placeholder="First name"
-                    placeholderTextColor="rgba(255,255,255,0.24)"
-                    autoCapitalize="words"
-                    autoComplete="given-name"
-                    maxLength={20}
-                  />
+            {/* Title */}
+            <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>What's your name?</AppText>
+            <AppText style={[styles.sub, { marginBottom: vSm }]}>Your partner will see it in chat and throughout the app.</AppText>
+
+            {/* Name inputs */}
+            <View style={[styles.form, { gap: vXs }]}>
+              <View>
+                <View style={styles.nameRow}>
+                  <View style={[styles.inputWrap, { flex: 1 }, showFirstNameError && styles.inputWrapError]}>
+                    <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                    <AppTextInput
+                      style={[styles.input, { paddingVertical: inputPad }]}
+                      value={firstName}
+                      onChangeText={(t) => { setFirstName(t); if (!firstNameTouched) setFirstNameTouched(true); }}
+                      onBlur={() => setFirstNameTouched(true)}
+                      placeholder="First name"
+                      placeholderTextColor="rgba(255,255,255,0.24)"
+                      autoCapitalize="words"
+                      autoComplete="given-name"
+                      maxLength={20}
+                      autoFocus
+                    />
+                  </View>
+                  <View style={[styles.inputWrap, { flex: 1 }, showLastNameError && styles.inputWrapError]}>
+                    <AppTextInput
+                      style={[styles.input, styles.inputNoIcon, { paddingVertical: inputPad }]}
+                      value={lastName}
+                      onChangeText={(t) => { setLastName(t); if (!lastNameTouched) setLastNameTouched(true); }}
+                      onBlur={() => setLastNameTouched(true)}
+                      placeholder="Last name"
+                      placeholderTextColor="rgba(255,255,255,0.24)"
+                      autoCapitalize="words"
+                      autoComplete="family-name"
+                      maxLength={30}
+                    />
+                  </View>
                 </View>
-                <View style={[styles.inputWrap, { flex: 1 }, showLastNameError && styles.inputWrapError]}>
-                  <AppTextInput
-                    style={[styles.input, styles.inputNoIcon, { paddingVertical: inputPad }]}
-                    value={lastName}
-                    onChangeText={(t) => { setLastName(t); if (!lastNameTouched) setLastNameTouched(true); }}
-                    onBlur={() => setLastNameTouched(true)}
-                    placeholder="Last name"
-                    placeholderTextColor="rgba(255,255,255,0.24)"
-                    autoCapitalize="words"
-                    autoComplete="family-name"
-                    maxLength={30}
-                  />
-                </View>
-              </View>
-              {showFirstNameError && (
-                <AppText style={styles.fieldError}>{firstNameError}</AppText>
-              )}
-              {!showFirstNameError && showLastNameError && (
-                <AppText style={styles.fieldError}>{lastNameError}</AppText>
-              )}
-            </View>
-
-            {/* Email */}
-            <View>
-              <View style={[styles.inputWrap, showEmailError && styles.inputWrapError]}>
-                <Mail color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-                <AppTextInput
-                  style={[styles.input, { paddingVertical: inputPad }]}
-                  value={email}
-                  onChangeText={(t) => { setEmail(t); if (!emailTouched) setEmailTouched(true); }}
-                  onBlur={() => setEmailTouched(true)}
-                  placeholder="Email"
-                  placeholderTextColor="rgba(255,255,255,0.24)"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                />
-              </View>
-              {showEmailError && (
-                <AppText style={styles.fieldError}>{emailError}</AppText>
-              )}
-            </View>
-
-            {/* Password */}
-            <View>
-              <View style={[styles.inputWrap, showPasswordError && styles.inputWrapError]}>
-                <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-                <AppTextInput
-                  style={[styles.input, { paddingVertical: inputPad }]}
-                  value={password}
-                  onChangeText={(t) => { setPassword(t); if (!passwordTouched) setPasswordTouched(true); }}
-                  onBlur={() => setPasswordTouched(true)}
-                  placeholder="Password"
-                  placeholderTextColor="rgba(255,255,255,0.24)"
-                  secureTextEntry={!showPassword}
-                />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                  {showPassword
-                    ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
-                    : <Eye color="rgba(255,255,255,0.30)" size={16} />
-                  }
-                </TouchableOpacity>
-              </View>
-              {showPasswordError ? (
-                <AppText style={styles.fieldError}>{passwordError}</AppText>
-              ) : showPasswordHint ? (
-                <AppText style={styles.fieldHint}>Must be at least 8 characters</AppText>
-              ) : null}
-            </View>
-
-            {/* Confirm Password */}
-            <View>
-              <View style={[styles.inputWrap, showConfirmPasswordError && styles.inputWrapError]}>
-                <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-                <AppTextInput
-                  style={[styles.input, { paddingVertical: inputPad }]}
-                  value={confirmPassword}
-                  onChangeText={(t) => { setConfirmPassword(t); if (!confirmPasswordTouched) setConfirmPasswordTouched(true); }}
-                  onBlur={() => setConfirmPasswordTouched(true)}
-                  placeholder="Confirm Password"
-                  placeholderTextColor="rgba(255,255,255,0.24)"
-                  secureTextEntry={!showConfirm}
-                />
-                <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeBtn}>
-                  {showConfirm
-                    ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
-                    : <Eye color="rgba(255,255,255,0.30)" size={16} />
-                  }
-                </TouchableOpacity>
-              </View>
-              {showConfirmPasswordError && (
-                <AppText style={styles.fieldError}>{confirmPasswordError}</AppText>
-              )}
-            </View>
-
-            {/* Date of Birth */}
-            <View>
-              {Platform.OS === 'web' ? (
-                <View style={[styles.inputWrap, showDobError && styles.inputWrapError]}>
-                  <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-                  <AppTextInput
-                    style={[styles.input, { paddingVertical: inputPad }]}
-                    value={dobText}
-                    onChangeText={handleDobTextChange}
-                    onBlur={() => setDobTouched(true)}
-                    placeholder="Date of Birth (MM/DD/YYYY)"
-                    placeholderTextColor="rgba(255,255,255,0.24)"
-                    keyboardType="number-pad"
-                    maxLength={10}
-                  />
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.inputWrap, styles.dobTrigger, showDobError && styles.inputWrapError]}
-                  onPress={() => { setDobTouched(true); setShowDobPicker(true); }}
-                  activeOpacity={0.8}
-                >
-                  <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
-                  <AppText style={[
-                    styles.dobText,
-                    { paddingVertical: inputPad },
-                    !dobDate && styles.dobPlaceholder,
-                  ]}>
-                    {dobDate ? formatDate(dobDate) : 'Date of Birth'}
-                  </AppText>
-                  <ChevronLeft
-                    color="rgba(255,255,255,0.30)"
-                    size={16}
-                    style={{ transform: [{ rotate: '-90deg' }] }}
-                  />
-                </TouchableOpacity>
-              )}
-              {showDobError ? (
-                <AppText style={styles.fieldError}>{dobFieldError}</AppText>
-              ) : (
-                <AppText style={styles.fieldHint}>You must be 18 or older to use this app.</AppText>
-              )}
-            </View>
-
-            {/* API / server errors */}
-            {apiError ? <AppText style={styles.error}>{apiError}</AppText> : null}
-
-            {/* ToS checkbox — immediately above Create Account */}
-            <TouchableOpacity
-              style={styles.tosRow}
-              onPress={() => setTosAccepted(!tosAccepted)}
-              activeOpacity={0.75}
-            >
-              <View style={[styles.checkbox, tosAccepted && styles.checkboxChecked]}>
-                {tosAccepted && (
-                  <LinearGradient
-                    colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.checkboxGrad}
-                  >
-                    <Check color="#fff" size={11} strokeWidth={3} />
-                  </LinearGradient>
+                {showFirstNameError && (
+                  <AppText style={styles.fieldError}>{firstNameError}</AppText>
+                )}
+                {!showFirstNameError && showLastNameError && (
+                  <AppText style={styles.fieldError}>{lastNameError}</AppText>
                 )}
               </View>
-              <AppText style={styles.tosText}>
-                I have read and agree to the{' '}
-                <AppText
-                  style={styles.tosLink}
-                  onPress={(e) => { e.stopPropagation(); setTermsVisible(true); }}
-                >
-                  Terms of Service
-                </AppText>
-                {' '}and{' '}
-                <AppText
-                  style={styles.tosLink}
-                  onPress={(e) => { e.stopPropagation(); setPrivacyVisible(true); }}
-                >
-                  Privacy Policy
-                </AppText>
-              </AppText>
-            </TouchableOpacity>
 
-            {/* Create Account */}
-            <TouchableOpacity
-              style={[styles.createBtn, !formReady && styles.createBtnDisabled]}
-              onPress={handleRegister}
-              activeOpacity={0.85}
-              disabled={loading || oauthLoading !== null || !formReady}
-            >
-              {formReady ? (
+              {apiError ? <AppText style={styles.error}>{apiError}</AppText> : null}
+
+              {/* Continue */}
+              <TouchableOpacity
+                style={styles.createBtn}
+                onPress={handleNameStepContinue}
+                activeOpacity={0.85}
+                disabled={loading}
+              >
                 <LinearGradient
                   colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={[styles.createGrad, { paddingVertical: inputPad + 4 }]}
                 >
-                  <AppText style={styles.createLabel}>{loading ? 'Creating...' : 'Create Account'}</AppText>
+                  <AppText style={styles.createLabel}>{loading ? 'Saving...' : 'Continue'}</AppText>
                 </LinearGradient>
-              ) : (
-                <View style={[styles.createGrad, styles.createGradDisabled, { paddingVertical: inputPad + 4 }]}>
-                  <AppText style={styles.createLabelDisabled}>{loading ? 'Creating...' : 'Create Account'}</AppText>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.loginRow}
-              onPress={() => router.replace('/(auth)/login')}
-              activeOpacity={0.7}
-            >
-              <AppText style={styles.loginText}>
-                Already have an account?{'  '}
-                <AppText style={styles.loginLink}>Sign In</AppText>
-              </AppText>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      ) : (
+      <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingTop: vMd + insets.top, paddingBottom: Math.max(insets.bottom, vMd) + vMd }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={isTablet ? [styles.innerWrap, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }] : styles.innerWrap}>
+            {/* Header row */}
+            <View style={[styles.headerRow, { marginBottom: vSm }]}>
+              <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+                <ChevronLeft color="rgba(255,255,255,0.75)" size={20} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Title */}
+            <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your account</AppText>
+            <AppText style={[styles.sub, { marginBottom: vSm }]}>Private. Playful. Just for you and your partner.</AppText>
+
+            {/* OAuth buttons — always enabled */}
+            {(showGoogle || showApple) && (
+              <View style={[styles.oauthBlock, { gap: vXs, marginBottom: vSm }]}>
+                {showApple && (
+                  Platform.OS === 'ios' ? (
+                    <AppleAuthentication.AppleAuthenticationButton
+                      onPress={() => handleOAuth('apple')}
+                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                      cornerRadius={Radius.lg}
+                      style={styles.appleNativeBtn}
+                    />
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.oauthBtn, styles.appleBtn, { paddingVertical: inputPad }]}
+                      onPress={() => handleOAuth('apple')}
+                      activeOpacity={0.88}
+                      disabled={oauthLoading !== null || loading}
+                    >
+                      <AppleIcon color="#fff" size={18} />
+                      <AppText style={styles.appleBtnText}>
+                        {oauthLoading === 'apple' ? 'Signing in…' : 'Continue with Apple'}
+                      </AppText>
+                    </TouchableOpacity>
+                  )
+                )}
+
+                {showGoogle && (
+                  <TouchableOpacity
+                    style={[styles.oauthBtn, styles.googleBtn, { paddingVertical: inputPad }]}
+                    onPress={() => handleOAuth('google')}
+                    activeOpacity={0.88}
+                    disabled={oauthLoading !== null || loading}
+                  >
+                    <GoogleIcon size={18} />
+                    <AppText style={styles.googleBtnText}>
+                      {oauthLoading === 'google' ? 'Signing in…' : 'Continue with Google'}
+                    </AppText>
+                  </TouchableOpacity>
+                )}
+
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <AppText style={styles.dividerText}>or</AppText>
+                  <View style={styles.dividerLine} />
+                </View>
+              </View>
+            )}
+
+            {/* Form fields */}
+            <View style={[styles.form, { gap: vXs }]}>
+              {/* Name row */}
+              <View>
+                <View style={styles.nameRow}>
+                  <View style={[styles.inputWrap, { flex: 1 }, showFirstNameError && styles.inputWrapError]}>
+                    <User color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                    <AppTextInput
+                      style={[styles.input, { paddingVertical: inputPad }]}
+                      value={firstName}
+                      onChangeText={(t) => { setFirstName(t); if (!firstNameTouched) setFirstNameTouched(true); }}
+                      onBlur={() => setFirstNameTouched(true)}
+                      placeholder="First name"
+                      placeholderTextColor="rgba(255,255,255,0.24)"
+                      autoCapitalize="words"
+                      autoComplete="given-name"
+                      maxLength={20}
+                    />
+                  </View>
+                  <View style={[styles.inputWrap, { flex: 1 }, showLastNameError && styles.inputWrapError]}>
+                    <AppTextInput
+                      style={[styles.input, styles.inputNoIcon, { paddingVertical: inputPad }]}
+                      value={lastName}
+                      onChangeText={(t) => { setLastName(t); if (!lastNameTouched) setLastNameTouched(true); }}
+                      onBlur={() => setLastNameTouched(true)}
+                      placeholder="Last name"
+                      placeholderTextColor="rgba(255,255,255,0.24)"
+                      autoCapitalize="words"
+                      autoComplete="family-name"
+                      maxLength={30}
+                    />
+                  </View>
+                </View>
+                {showFirstNameError && (
+                  <AppText style={styles.fieldError}>{firstNameError}</AppText>
+                )}
+                {!showFirstNameError && showLastNameError && (
+                  <AppText style={styles.fieldError}>{lastNameError}</AppText>
+                )}
+              </View>
+
+              {/* Email */}
+              <View>
+                <View style={[styles.inputWrap, showEmailError && styles.inputWrapError]}>
+                  <Mail color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                  <AppTextInput
+                    style={[styles.input, { paddingVertical: inputPad }]}
+                    value={email}
+                    onChangeText={(t) => { setEmail(t); if (!emailTouched) setEmailTouched(true); }}
+                    onBlur={() => setEmailTouched(true)}
+                    placeholder="Email"
+                    placeholderTextColor="rgba(255,255,255,0.24)"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                  />
+                </View>
+                {showEmailError && (
+                  <AppText style={styles.fieldError}>{emailError}</AppText>
+                )}
+              </View>
+
+              {/* Password */}
+              <View>
+                <View style={[styles.inputWrap, showPasswordError && styles.inputWrapError]}>
+                  <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                  <AppTextInput
+                    style={[styles.input, { paddingVertical: inputPad }]}
+                    value={password}
+                    onChangeText={(t) => { setPassword(t); if (!passwordTouched) setPasswordTouched(true); }}
+                    onBlur={() => setPasswordTouched(true)}
+                    placeholder="Password"
+                    placeholderTextColor="rgba(255,255,255,0.24)"
+                    secureTextEntry={!showPassword}
+                  />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                    {showPassword
+                      ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
+                      : <Eye color="rgba(255,255,255,0.30)" size={16} />
+                    }
+                  </TouchableOpacity>
+                </View>
+                {showPasswordError ? (
+                  <AppText style={styles.fieldError}>{passwordError}</AppText>
+                ) : showPasswordHint ? (
+                  <AppText style={styles.fieldHint}>Must be at least 8 characters</AppText>
+                ) : null}
+              </View>
+
+              {/* Confirm Password */}
+              <View>
+                <View style={[styles.inputWrap, showConfirmPasswordError && styles.inputWrapError]}>
+                  <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                  <AppTextInput
+                    style={[styles.input, { paddingVertical: inputPad }]}
+                    value={confirmPassword}
+                    onChangeText={(t) => { setConfirmPassword(t); if (!confirmPasswordTouched) setConfirmPasswordTouched(true); }}
+                    onBlur={() => setConfirmPasswordTouched(true)}
+                    placeholder="Confirm Password"
+                    placeholderTextColor="rgba(255,255,255,0.24)"
+                    secureTextEntry={!showConfirm}
+                  />
+                  <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeBtn}>
+                    {showConfirm
+                      ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
+                      : <Eye color="rgba(255,255,255,0.30)" size={16} />
+                    }
+                  </TouchableOpacity>
+                </View>
+                {showConfirmPasswordError && (
+                  <AppText style={styles.fieldError}>{confirmPasswordError}</AppText>
+                )}
+              </View>
+
+              {/* Date of Birth */}
+              <View>
+                {Platform.OS === 'web' ? (
+                  <View style={[styles.inputWrap, showDobError && styles.inputWrapError]}>
+                    <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                    <AppTextInput
+                      style={[styles.input, { paddingVertical: inputPad }]}
+                      value={dobText}
+                      onChangeText={handleDobTextChange}
+                      onBlur={() => setDobTouched(true)}
+                      placeholder="Date of Birth (MM/DD/YYYY)"
+                      placeholderTextColor="rgba(255,255,255,0.24)"
+                      keyboardType="number-pad"
+                      maxLength={10}
+                    />
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.inputWrap, styles.dobTrigger, showDobError && styles.inputWrapError]}
+                    onPress={() => { setDobTouched(true); setShowDobPicker(true); }}
+                    activeOpacity={0.8}
+                  >
+                    <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
+                    <AppText style={[
+                      styles.dobText,
+                      { paddingVertical: inputPad },
+                      !dobDate && styles.dobPlaceholder,
+                    ]}>
+                      {dobDate ? formatDate(dobDate) : 'Date of Birth'}
+                    </AppText>
+                    <ChevronLeft
+                      color="rgba(255,255,255,0.30)"
+                      size={16}
+                      style={{ transform: [{ rotate: '-90deg' }] }}
+                    />
+                  </TouchableOpacity>
+                )}
+                {showDobError ? (
+                  <AppText style={styles.fieldError}>{dobFieldError}</AppText>
+                ) : (
+                  <AppText style={styles.fieldHint}>You must be 18 or older to use this app.</AppText>
+                )}
+              </View>
+
+              {/* API / server errors */}
+              {apiError ? <AppText style={styles.error}>{apiError}</AppText> : null}
+
+              {/* ToS checkbox — immediately above Create Account */}
+              <TouchableOpacity
+                style={styles.tosRow}
+                onPress={() => setTosAccepted(!tosAccepted)}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.checkbox, tosAccepted && styles.checkboxChecked]}>
+                  {tosAccepted && (
+                    <LinearGradient
+                      colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.checkboxGrad}
+                    >
+                      <Check color="#fff" size={11} strokeWidth={3} />
+                    </LinearGradient>
+                  )}
+                </View>
+                <AppText style={styles.tosText}>
+                  I have read and agree to the{' '}
+                  <AppText
+                    style={styles.tosLink}
+                    onPress={(e) => { e.stopPropagation(); setTermsVisible(true); }}
+                  >
+                    Terms of Service
+                  </AppText>
+                  {' '}and{' '}
+                  <AppText
+                    style={styles.tosLink}
+                    onPress={(e) => { e.stopPropagation(); setPrivacyVisible(true); }}
+                  >
+                    Privacy Policy
+                  </AppText>
+                </AppText>
+              </TouchableOpacity>
+
+              {/* Create Account */}
+              <TouchableOpacity
+                style={[styles.createBtn, !formReady && styles.createBtnDisabled]}
+                onPress={handleRegister}
+                activeOpacity={0.85}
+                disabled={loading || oauthLoading !== null || !formReady}
+              >
+                {formReady ? (
+                  <LinearGradient
+                    colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[styles.createGrad, { paddingVertical: inputPad + 4 }]}
+                  >
+                    <AppText style={styles.createLabel}>{loading ? 'Creating...' : 'Create Account'}</AppText>
+                  </LinearGradient>
+                ) : (
+                  <View style={[styles.createGrad, styles.createGradDisabled, { paddingVertical: inputPad + 4 }]}>
+                    <AppText style={styles.createLabelDisabled}>{loading ? 'Creating...' : 'Create Account'}</AppText>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.loginRow}
+                onPress={() => router.replace('/(auth)/login')}
+                activeOpacity={0.7}
+              >
+                <AppText style={styles.loginText}>
+                  Already have an account?{'  '}
+                  <AppText style={styles.loginLink}>Sign In</AppText>
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
       )}
     </KeyboardAvoidingView>
   );
