@@ -223,23 +223,33 @@ export default function PairScreen() {
   // User B: subscribe to the couple row for accept/decline transitions while waiting.
   useEffect(() => {
     if (waitingState !== 'waiting' || !waitingCoupleId) return;
-    const channel = supabase
-      .channel(`waiting:${waitingCoupleId}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'couples', filter: `id=eq.${waitingCoupleId}` },
-        async (payload: any) => {
-          const newStatus = payload?.new?.pending_partner_status;
-          const newUserB = payload?.new?.user_b_id;
-          if (newUserB && user) {
-            await resolveWaiting('accepted');
-          } else if (newStatus === 'declined') {
-            await resolveWaiting('declined');
-          }
-        },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const channelName = `waiting:${waitingCoupleId}`;
+    // Clean up any stale channel with the same name to avoid "already subscribed" crashes.
+    supabase.getChannels().forEach((ch) => {
+      if (ch.topic === channelName) supabase.removeChannel(ch);
+    });
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'couples', filter: `id=eq.${waitingCoupleId}` },
+          async (payload: any) => {
+            const newStatus = payload?.new?.pending_partner_status;
+            const newUserB = payload?.new?.user_b_id;
+            if (newUserB && user) {
+              await resolveWaiting('accepted');
+            } else if (newStatus === 'declined') {
+              await resolveWaiting('declined');
+            }
+          },
+        )
+        .subscribe();
+    } catch {
+      // Polling fallback (below) will still catch status changes if realtime setup fails.
+    }
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, [waitingState, waitingCoupleId, user, settings?.celebration_seen, inviterName]);
 
   // User B: polling fallback — if realtime drops, poll every 4s for status changes.

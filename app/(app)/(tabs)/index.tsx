@@ -108,30 +108,50 @@ export default function HomeScreen() {
     reloadTimerRef.current = setTimeout(() => loadAll(), 300);
   }, []);
 
+  const setupChannelRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!couple?.id || !user) return;
     loadAll().then(() => { if (isMountedRef.current) setLoading(false); });
 
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
+    // Remove ALL stale home channels for this couple, not just the one in the ref.
+    // This prevents "already subscribed" crashes when rapid couple refreshes create
+    // orphaned channels that the Supabase client still tracks internally.
+    const prefix = `home_${couple.id}`;
+    supabase.getChannels().forEach((ch) => {
+      if (ch.topic.startsWith(prefix)) supabase.removeChannel(ch);
+    });
+    if (channelRef.current) channelRef.current = null;
 
-    channelRef.current = supabase
-      .channel(`home_${couple.id}_${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_views', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
-      .subscribe();
+    const setupChannel = (attempt: number) => {
+      try {
+        const channel = supabase
+          .channel(`home_${couple.id}_${Date.now()}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_views', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+          .subscribe();
+        channelRef.current = channel;
+      } catch {
+        // Supabase Realtime can throw when .on() is called on a channel the
+        // client considers already subscribed (race during rapid couple refreshes).
+        // Retry once after a short delay so the live-update channel is still established.
+        if (attempt < 2 && isMountedRef.current) {
+          setupChannelRef.current = setTimeout(() => setupChannel(attempt + 1), 300);
+        }
+      }
+    };
+    setupChannel(0);
 
     return () => {
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
+      if (setupChannelRef.current) clearTimeout(setupChannelRef.current);
+      supabase.getChannels().forEach((ch) => {
+        if (ch.topic.startsWith(prefix)) supabase.removeChannel(ch);
+      });
+      if (channelRef.current) channelRef.current = null;
     };
   }, [couple?.id, user?.id]);
 
