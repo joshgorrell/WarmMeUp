@@ -537,8 +537,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   // Live-sync: whenever the couple row changes in the DB (e.g. invite_code refreshed,
-  // partner joined), re-fetch so the UI always reflects current data without needing
-  // a manual pull-to-refresh or screen focus event.
+  // partner joined, partner subscribed), re-fetch so the UI always reflects current
+  // data without needing a manual pull-to-refresh or screen focus event.
   useEffect(() => {
     if (!couple?.id) return;
     const channel = supabase
@@ -569,6 +569,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .eq('id', newUserBId)
               .maybeSingle();
             setJustPairedPartnerName(partnerProf?.display_name ?? '');
+          }
+          // If subscription_owner_id changed, one partner just subscribed (or
+          // unsubscribed). Refresh subscription so the non-subscribing partner's
+          // app updates immediately — either gaining partner-shared premium or
+          // losing it.
+          const newSubOwner = payload?.new?.subscription_owner_id ?? null;
+          const oldSubOwner = payload?.old?.subscription_owner_id ?? null;
+          if (newSubOwner !== oldSubOwner) {
+            logger.log('[Auth] subscription_owner_id changed via realtime — refreshing subscription');
+            refreshSubscription().catch(() => {});
           }
         },
       )

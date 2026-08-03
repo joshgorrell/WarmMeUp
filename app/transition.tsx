@@ -238,8 +238,18 @@ export default function TransitionScreen() {
         routed.current = true;
         const hasActiveCouple = coupleRef.current?.active === true;
         const isPrivileged = isAdminRef.current || isSuperAdminRef.current;
-        // If subscription is still loading at deadline, route to paywall — never bypass it.
-        const dest = isPrivileged || hasActiveCouple ? '/(app)/(tabs)' : '/(auth)/pair';
+        // Privileged users always go to the app. Users without a couple go to /pair.
+        // Users WITH an active couple but unknown subscription status go to the
+        // subscription screen — never bypass the paywall check at the deadline.
+        let dest: string;
+        if (isPrivileged) {
+          dest = '/(app)/(tabs)';
+        } else if (!hasActiveCouple) {
+          dest = canInviteRef.current ? '/(app)/(tabs)' : '/(auth)/pair';
+        } else {
+          // Active couple but subscription still loading — safe fallback to paywall.
+          dest = '/(auth)/subscription';
+        }
         console.warn(`[TRANSITION ROUTED] +${elapsed()}ms HARD DEADLINE — fallback to ${dest}`, { elapsedMs: elapsed() });
         router.replace(dest);
       }

@@ -17,7 +17,7 @@ import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw, Check, Circle as XCircle, Hourglass, Circle as HelpCircle } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw, Check, Circle as XCircle, Hourglass, Circle as HelpCircle, Sparkles } from 'lucide-react-native';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -97,7 +97,7 @@ function HeartOutline({
 export default function PairScreen() {
   const router = useRouter();
   const { prefilledCode } = useLocalSearchParams<{ prefilledCode?: string }>();
-  const { user, couple, refreshCouple, settings, subscriptionInfo, refreshSubscription } = useAuth();
+  const { user, couple, refreshCouple, settings, subscriptionInfo, refreshSubscription, profile } = useAuth();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
   const headingSize = Math.min(Math.round(width * 0.086), 36);
@@ -198,6 +198,9 @@ export default function PairScreen() {
     if (status === 'accepted') {
       setWaitingState('accepted');
       await refreshCouple();
+      // Refresh subscription so User B immediately picks up partner-shared premium
+      // without needing a full app restart.
+      refreshSubscription().catch(() => {});
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (token && waitingCoupleId) {
@@ -480,8 +483,25 @@ export default function PairScreen() {
         );
         return;
       }
-      // Server enforces subscription — if no subscription, leave the locked state.
+      // Server enforces subscription — if no subscription, retry once after a brief
+      // delay to handle the race where the trial trigger hasn't committed yet.
       if ((result as any)?.success === false && (result as any)?.reason === 'no_subscription') {
+        const profileAge = profile?.created_at ? Date.now() - new Date(profile.created_at).getTime() : Infinity;
+        if (profileAge < 30_000) {
+          await new Promise(r => setTimeout(r, 1000));
+          await refreshSubscription();
+          const { data: retry } = await supabase.rpc('generate_invite_code');
+          if ((retry as any)?.success === false && (retry as any)?.reason === 'no_subscription') {
+            return;
+          }
+          const retryCode = (retry as any)?.invite_code ?? null;
+          if (retryCode) {
+            logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc_retry', inviteCode: retryCode });
+            setMyCode(retryCode);
+            await refreshCouple();
+            return;
+          }
+        }
         return;
       }
       const inviteCode = (result as any)?.invite_code ?? null;
@@ -518,7 +538,18 @@ export default function PairScreen() {
 
   const handleRefreshCode = async () => {
     if (refreshing || couple?.user_b_id) return;
-    if (!subscriptionInfo.canInvite) {
+    // Wait for subscription info to load before gating on canInvite — otherwise
+    // a brand-new trial user whose info hasn't loaded yet gets wrongly sent to
+    // the paywall.
+    if (subscriptionInfo.loading) {
+      await new Promise<void>(resolve => {
+        const unsub = setInterval(() => {
+          if (!subscriptionInfo.loading) { clearInterval(unsub); resolve(); }
+        }, 200);
+        setTimeout(() => { clearInterval(unsub); resolve(); }, 3000);
+      });
+    }
+    if (!subscriptionInfo.canInvite && !subscriptionInfo.loading) {
       router.push('/(auth)/subscription');
       return;
     }
@@ -934,6 +965,15 @@ export default function PairScreen() {
                 <AppText style={styles.modalSub}>
                   Share this with your partner to connect.{'\n'}One subscription covers both of you.
                 </AppText>
+
+                {subscriptionInfo.isOnTrial && subscriptionInfo.trialExpiresAt && (
+                  <View style={styles.trialBanner}>
+                    <Sparkles color="#FFB84D" size={14} strokeWidth={2} />
+                    <AppText style={styles.trialBannerText}>
+                      Free trial active · expires {new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </AppText>
+                  </View>
+                )}
 
                 <View style={styles.codeBox}>
                   {(refreshing || codeLoading) ? (
@@ -1425,6 +1465,23 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     marginBottom: Spacing.sm,
+  },
+  trialBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,184,77,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,184,77,0.25)',
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+    marginBottom: Spacing.sm,
+  },
+  trialBannerText: {
+    color: 'rgba(255,220,180,0.90)',
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Medium',
   },
   codeBox: {
     backgroundColor: 'rgba(255,255,255,0.06)',

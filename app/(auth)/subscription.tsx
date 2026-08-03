@@ -69,7 +69,7 @@ export default function SubscriptionScreen() {
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const { reason: reasonParam } = useLocalSearchParams<{ reason?: string }>();
   const reason = reasonParam as Reason;
-  const { refreshSubscription, subscriptionInfo } = useAuth();
+  const { refreshSubscription, subscriptionInfo, couple } = useAuth();
 
   const [selected, setSelected] = useState<Plan>('yearly');
   const [loading, setLoading] = useState(false);
@@ -89,6 +89,16 @@ export default function SubscriptionScreen() {
 
   const logoSize = Math.min(Math.round(width * 0.12), 48);
   const canDismiss = !reason;
+
+  // Auto-dismiss paywall when premium access appears (e.g. partner subscribed
+  // while this screen was open). Only dismiss if the user was trapped (no
+  // canDismiss) — otherwise let them leave manually.
+  useEffect(() => {
+    if (subscriptionInfo.isPremium && !canDismiss) {
+      logger.log('[Subscription] premium detected while on paywall — auto-dismissing');
+      router.replace('/(app)/(tabs)');
+    }
+  }, [subscriptionInfo.isPremium, canDismiss, router]);
 
   // Load RevenueCat offerings on mount (native only)
   useEffect(() => {
@@ -290,6 +300,14 @@ export default function SubscriptionScreen() {
             </View>
           )}
 
+          {reason === 'expired_trial' && couple?.user_b_id && (
+            <View style={styles.partnerHint}>
+              <AppText style={styles.partnerHintText}>
+                Only one of you needs to subscribe — it covers both of you.
+              </AppText>
+            </View>
+          )}
+
           <AppText style={styles.heading}>Unlock everything</AppText>
           <AppText style={styles.sub}>
             One subscription covers both of you.{'\n'}Your partner joins at no extra cost.
@@ -460,6 +478,23 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     lineHeight: 20,
     flex: 1,
+  },
+  partnerHint: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+    marginBottom: 24,
+    width: '100%',
+  },
+  partnerHintText: {
+    color: 'rgba(255,255,255,0.60)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Medium',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   heading: {
     color: '#fff',
