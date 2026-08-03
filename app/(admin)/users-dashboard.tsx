@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, Alert, ActivityIndicator,
+  Modal, ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import ConfirmSheet, { type ConfirmAction } from '@/components/ConfirmSheet';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -80,6 +81,13 @@ function DiagRow({ label, value, dim }: { label: string; value: string; dim?: bo
 function DiagSection({ title }: { title: string }) {
   return <AppText style={diagStyles.section}>{title}</AppText>;
 }
+
+type SheetState =
+  | { kind: 'confirmDelete'; user: UserRow; message: string }
+  | { kind: 'confirmToggleAdmin'; user: UserRow }
+  | { kind: 'confirmToggleActive'; couple: CoupleRow }
+  | { kind: 'alert'; title: string; message: string }
+  | null;
 
 export default function UsersDashboard() {
   const router = useRouter();
@@ -166,40 +174,28 @@ export default function UsersDashboard() {
 
   const handleToggleAdmin = (user: UserRow) => {
     if (!isSuperAdmin) return;
-    if (user.id === myProfile?.id) {
-      Alert.alert('Not Allowed', 'You cannot change your own admin status.');
-      return;
-    }
-    const actionLabel = user.is_admin ? 'Revoke Admin' : 'Grant Admin';
-    const message = user.is_admin
-      ? `Remove admin access from ${user.display_name}? They will revert to a regular user immediately.`
-      : `Grant admin access to ${user.display_name}? They will have full access to the Admin panel.`;
+    if (user.id === myProfile?.id) return;
+    setSheetState({ kind: 'confirmToggleAdmin', user });
+  };
 
-    Alert.alert(actionLabel, message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: actionLabel,
-        style: user.is_admin ? 'destructive' : 'default',
-        onPress: async () => {
-          setSaving(true);
-          const { error } = await supabase
-            .from('profiles')
-            .update({ is_admin: !user.is_admin })
-            .eq('id', user.id);
-          if (error) {
-            Alert.alert('Error', 'Could not update admin status. Please try again.');
-          } else {
-            const updated = { ...user, is_admin: !user.is_admin };
-            setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
-            setSelectedUser(updated);
-          }
-          setSaving(false);
-        },
-      },
-    ]);
+  const executeToggleAdmin = async (user: UserRow) => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_admin: !user.is_admin })
+      .eq('id', user.id);
+    if (error) {
+      setSheetState({ kind: 'alert', title: 'Error', message: 'Could not update admin status. Please try again.' });
+    } else {
+      const updated = { ...user, is_admin: !user.is_admin };
+      setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
+      setSelectedUser(updated);
+    }
+    setSaving(false);
   };
 
   const [deleting, setDeleting] = useState(false);
+  const [sheetState, setSheetState] = useState<SheetState>(null);
 
   const handleDeleteUser = (user: UserRow) => {
     const partner = coupleMap[user.id];
@@ -220,42 +216,37 @@ export default function UsersDashboard() {
       ? `\n\n${warnings.join('\n\n')}`
       : '';
 
-    Alert.alert(
-      'Delete User',
-      `Are you sure you want to permanently delete ${user.display_name}? This cannot be undone.${warningText}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              const { data: { session } } = await supabase.auth.getSession();
-              const token = session?.access_token;
-              if (!token) throw new Error('Not authenticated.');
+    setSheetState({
+      kind: 'confirmDelete',
+      user,
+      message: `Are you sure you want to permanently delete ${user.display_name}? This cannot be undone.${warningText}`,
+    });
+  };
 
-              const { error } = await supabase.functions.invoke('delete-account', {
-                headers: { Authorization: `Bearer ${token}` },
-                body: { targetUserId: user.id },
-              });
+  const executeDeleteUser = async (user: UserRow) => {
+    setDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Not authenticated.');
 
-              if (error) throw error;
+      const { error } = await supabase.functions.invoke('delete-account', {
+        headers: { Authorization: `Bearer ${token}` },
+        body: { targetUserId: user.id },
+      });
 
-              setUsers(prev => prev.filter(u => u.id !== user.id));
-              setCouples(prev => prev.filter(c => c.user_a_id !== user.id && c.user_b_id !== user.id));
-              setSubscriptions(prev => prev.filter(s => s.user_id !== user.id));
-              setSelectedUser(null);
-              Alert.alert('Deleted', `${user.display_name} has been permanently deleted.`);
-            } catch (e) {
-              Alert.alert('Error', 'Failed to delete user. Please try again.');
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ],
-    );
+      if (error) throw error;
+
+      setUsers(prev => prev.filter(u => u.id !== user.id));
+      setCouples(prev => prev.filter(c => c.user_a_id !== user.id && c.user_b_id !== user.id));
+      setSubscriptions(prev => prev.filter(s => s.user_id !== user.id));
+      setSelectedUser(null);
+      setSheetState({ kind: 'alert', title: 'Deleted', message: `${user.display_name} has been permanently deleted.` });
+    } catch (e) {
+      setSheetState({ kind: 'alert', title: 'Error', message: 'Failed to delete user. Please try again.' });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const openDiagnosticsSnapshot = async (user: UserRow) => {
@@ -310,23 +301,13 @@ export default function UsersDashboard() {
   };
 
   const handleToggleActive = (couple: CoupleRow) => {
-    const action = couple.active ? 'deactivate' : 'reactivate';
-    Alert.alert(
-      `${action.charAt(0).toUpperCase() + action.slice(1)} Couple`,
-      `Are you sure you want to ${action} this couple? ${couple.active ? 'They will lose access to the app.' : ''}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: action.charAt(0).toUpperCase() + action.slice(1),
-          style: couple.active ? 'destructive' : 'default',
-          onPress: async () => {
-            await supabase.from('couples').update({ active: !couple.active }).eq('id', couple.id);
-            setCouples(prev => prev.map(c => c.id === couple.id ? { ...c, active: !c.active } : c));
-            setSelectedCouple(prev => prev && prev.id === couple.id ? { ...prev, active: !prev.active } : prev);
-          },
-        },
-      ]
-    );
+    setSheetState({ kind: 'confirmToggleActive', couple });
+  };
+
+  const executeToggleActive = async (couple: CoupleRow) => {
+    await supabase.from('couples').update({ active: !couple.active }).eq('id', couple.id);
+    setCouples(prev => prev.map(c => c.id === couple.id ? { ...c, active: !c.active } : c));
+    setSelectedCouple(prev => prev && prev.id === couple.id ? { ...prev, active: !prev.active } : prev);
   };
 
   // ── Derived data ──
@@ -347,6 +328,35 @@ export default function UsersDashboard() {
   const snap = diagData?.snapshot;
 
   const q = search.trim().toLowerCase();
+
+  const confirmTitle = sheetState?.kind === 'confirmDelete' ? 'Delete User'
+    : sheetState?.kind === 'confirmToggleAdmin' ? (sheetState.user.is_admin ? 'Revoke Admin' : 'Grant Admin')
+    : sheetState?.kind === 'confirmToggleActive' ? (sheetState.couple.active ? 'Deactivate Couple' : 'Reactivate Couple')
+    : sheetState?.kind === 'alert' ? sheetState.title
+    : '';
+
+  const confirmMessage = sheetState?.kind === 'confirmDelete' ? sheetState.message
+    : sheetState?.kind === 'confirmToggleAdmin'
+      ? (sheetState.user.is_admin
+        ? `Remove admin access from ${sheetState.user.display_name}? They will revert to a regular user immediately.`
+        : `Grant admin access to ${sheetState.user.display_name}? They will have full access to the Admin panel.`)
+    : sheetState?.kind === 'confirmToggleActive'
+      ? `Are you sure you want to ${sheetState.couple.active ? 'deactivate' : 'reactivate'} this couple? ${sheetState.couple.active ? 'They will lose access to the app.' : ''}`
+    : sheetState?.kind === 'alert' ? sheetState.message
+    : undefined;
+
+  const confirmActions: ConfirmAction[] = sheetState?.kind === 'confirmDelete' ? [
+    { label: 'Cancel', style: 'cancel', onPress: () => setSheetState(null) },
+    { label: 'Delete', style: 'destructive', onPress: () => { const s = sheetState; setSheetState(null); if (s?.kind === 'confirmDelete') executeDeleteUser(s.user); } },
+  ] : sheetState?.kind === 'confirmToggleAdmin' ? [
+    { label: 'Cancel', style: 'cancel', onPress: () => setSheetState(null) },
+    { label: sheetState.user.is_admin ? 'Revoke Admin' : 'Grant Admin', style: sheetState.user.is_admin ? 'destructive' : 'default', onPress: () => { const s = sheetState; setSheetState(null); if (s?.kind === 'confirmToggleAdmin') executeToggleAdmin(s.user); } },
+  ] : sheetState?.kind === 'confirmToggleActive' ? [
+    { label: 'Cancel', style: 'cancel', onPress: () => setSheetState(null) },
+    { label: sheetState.couple.active ? 'Deactivate' : 'Reactivate', style: sheetState.couple.active ? 'destructive' : 'default', onPress: () => { const s = sheetState; setSheetState(null); if (s?.kind === 'confirmToggleActive') executeToggleActive(s.couple); } },
+  ] : sheetState?.kind === 'alert' ? [
+    { label: 'OK', style: 'default', onPress: () => setSheetState(null) },
+  ] : [];
 
   return (
     <AppShell scrollable={false} noTopPadding>
@@ -906,6 +916,13 @@ export default function UsersDashboard() {
           </View>
         </View>
       </Modal>
+      <ConfirmSheet
+        visible={!!sheetState}
+        title={confirmTitle}
+        message={confirmMessage}
+        actions={confirmActions}
+        onDismiss={() => setSheetState(null)}
+      />
     </AppShell>
   );
 }
