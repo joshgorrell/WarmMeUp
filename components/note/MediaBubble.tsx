@@ -117,7 +117,7 @@ export function MediaBubble({
             source={{ uri: retryUrl ?? signedUrl! }}
             style={[
               StyleSheet.absoluteFill,
-              isBlurred && Platform.OS === 'web' ? { filter: 'blur(18px)', transform: 'scale(1.1)' } as any : undefined,
+              isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.1)' } as any : undefined,
             ]}
             contentFit="cover"
             cachePolicy="memory-disk"
@@ -147,7 +147,7 @@ export function MediaBubble({
           />
           {/* Native blur via BlurView — matches vault blur quality; blurRadius on expo-image is broken on iOS */}
           {isBlurred && Platform.OS !== 'web' && (
-            <BlurView intensity={35} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
           )}
         </>
       ) : (
