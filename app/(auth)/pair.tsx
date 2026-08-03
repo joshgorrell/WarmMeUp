@@ -485,6 +485,8 @@ export default function PairScreen() {
       }
       // Server enforces subscription — if no subscription, retry once after a brief
       // delay to handle the race where the trial trigger hasn't committed yet.
+      // For older accounts, refresh subscription (which now includes the entitlement
+      // grant fallback) and retry once more before showing a visible error.
       if ((result as any)?.success === false && (result as any)?.reason === 'no_subscription') {
         const profileAge = profile?.created_at ? Date.now() - new Date(profile.created_at).getTime() : Infinity;
         if (profileAge < 30_000) {
@@ -492,6 +494,8 @@ export default function PairScreen() {
           await refreshSubscription();
           const { data: retry } = await supabase.rpc('generate_invite_code');
           if ((retry as any)?.success === false && (retry as any)?.reason === 'no_subscription') {
+            logDebugEvent('INVITE CREATE NO_SUBSCRIPTION', { source: 'new_profile_retry_failed', userId: user.id });
+            setInviteError('Your free trial is being set up. Please reopen the app in a moment.');
             return;
           }
           const retryCode = (retry as any)?.invite_code ?? null;
@@ -502,6 +506,25 @@ export default function PairScreen() {
             return;
           }
         }
+        // Older account — the entitlement grant fallback in refreshSubscription
+        // may not have been applied yet. Refresh and retry once.
+        logDebugEvent('INVITE CREATE NO_SUBSCRIPTION', { source: 'old_profile_retry', userId: user.id });
+        await refreshSubscription();
+        await new Promise(r => setTimeout(r, 500));
+        const { data: retry2 } = await supabase.rpc('generate_invite_code');
+        if ((retry2 as any)?.success === false && (retry2 as any)?.reason === 'no_subscription') {
+          logDebugEvent('INVITE CREATE NO_SUBSCRIPTION', { source: 'old_profile_retry_failed', userId: user.id, canInvite: subscriptionInfo.canInvite });
+          setInviteError('Could not generate an invite code. If you have an active subscription or entitlement, please try again or contact support.');
+          return;
+        }
+        const retryCode2 = (retry2 as any)?.invite_code ?? null;
+        if (retryCode2) {
+          logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc_old_profile_retry', inviteCode: retryCode2 });
+          setMyCode(retryCode2);
+          await refreshCouple();
+          return;
+        }
+        setInviteError('Invite code generation failed. Please try again.');
         return;
       }
       const inviteCode = (result as any)?.invite_code ?? null;

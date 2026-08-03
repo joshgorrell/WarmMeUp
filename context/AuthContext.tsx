@@ -229,6 +229,51 @@ async function applyAdminOverrideAsync(info: SubscriptionInfo, userId: string): 
   return info;
 }
 
+/**
+ * Separate from admin override — this checks the admin_grants table for an
+ * active entitlement grant (free_access, etc.) with can_invite=true.
+ * RLS allows users to read their own grants, so the authenticated client works.
+ * This is the client-side fallback for when the edge function is unavailable
+ * or returns stale data. It must NEVER be confused with the admin override above:
+ * admin override is for is_admin/is_super_admin profile flags; this is for
+ * regular users who received a premium entitlement grant.
+ */
+async function applyEntitlementGrantFallbackAsync(info: SubscriptionInfo, userId: string): Promise<SubscriptionInfo> {
+  if (info.canInvite && info.isPremium) return info; // already correct, skip
+  try {
+    const { data: grant, error } = await supabase
+      .from('admin_grants')
+      .select('active, can_invite, expires_at, entitlement_type')
+      .eq('user_id', userId)
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      logger.log('[Subscription] entitlement grant fallback query error:', error.message);
+      return info;
+    }
+    if (grant && grant.active === true && grant.can_invite === true) {
+      const expired = grant.expires_at && new Date(grant.expires_at) < new Date();
+      if (!expired) {
+        logger.log('[Subscription] entitlement grant fallback applied — canInvite forced true');
+        return {
+          ...info,
+          isPremium: true,
+          canInvite: true,
+          source: 'admin_grant',
+          plan: null,
+          expiresAt: grant.expires_at,
+          loading: false,
+        };
+      }
+    }
+  } catch (err: any) {
+    logger.log('[Subscription] entitlement grant fallback error:', err?.message);
+  }
+  return info;
+}
+
 async function fetchEffectiveSubscription(accessToken: string): Promise<SubscriptionInfo> {
   try {
     const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
@@ -246,14 +291,15 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
     logger.log('[Subscription] response status:', res.status, res.statusText);
     const rawText = await res.text();
     if (!res.ok) {
-      console.warn('[Subscription] non-OK response — returning default');
+      logger.log('[Subscription] non-OK response body:', rawText.slice(0, 500));
       return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
     }
     let data: any;
     try { data = JSON.parse(rawText); } catch {
-      console.warn('[Subscription] JSON parse failed');
+      logger.log('[Subscription] JSON parse failed. Raw:', rawText.slice(0, 500));
       return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
     }
+    logger.log('[Subscription] parsed:', JSON.stringify({ isPremium: data.isPremium, source: data.source, canInvite: data.canInvite, trialExpired: data.trialExpired }));
     return {
       isPremium: data.isPremium ?? false,
       source: data.source ?? 'none',
@@ -442,11 +488,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Load subscription info — fire after other data so we don't block the UI gate
       if (accessToken) {
         fetchEffectiveSubscription(accessToken).then(async info => {
-          const adminOverride = await applyAdminOverrideAsync(info, userId);
-          if (adminOverride !== info) {
+          let result = info;
+          const adminOverride = await applyAdminOverrideAsync(result, userId);
+          if (adminOverride !== result) {
             logger.log('[Auth] admin override applied — canInvite forced true');
+            result = adminOverride;
           }
-          setSubscriptionInfo(adminOverride);
+          const grantFallback = await applyEntitlementGrantFallbackAsync(result, userId);
+          if (grantFallback !== result) {
+            logger.log('[Auth] entitlement grant fallback applied — canInvite forced true');
+            result = grantFallback;
+          }
+          setSubscriptionInfo(result);
         });
       } else {
         logger.log('[Auth] no accessToken — subscription set to default (not loading)');
@@ -732,8 +785,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const userId = currentSession?.user?.id ?? '';
     setSubscriptionInfo(prev => ({ ...prev, loading: true }));
     const info = await fetchEffectiveSubscription(accessToken);
-    const overridden = await applyAdminOverrideAsync(info, userId);
-    setSubscriptionInfo(overridden);
+    let result = info;
+    const adminOverride = await applyAdminOverrideAsync(result, userId);
+    if (adminOverride !== result) result = adminOverride;
+    const grantFallback = await applyEntitlementGrantFallbackAsync(result, userId);
+    if (grantFallback !== result) result = grantFallback;
+    setSubscriptionInfo(result);
   }, []);
 
   const isAdmin = profile?.is_admin === true;
