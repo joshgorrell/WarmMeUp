@@ -466,10 +466,10 @@ export default function RegisterScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.avatarStepContinueBtn, (!avatarDone || avatarUploading) && styles.avatarStepContinueDisabled]}
+              style={[styles.avatarStepContinueBtn, avatarUploading && styles.avatarStepContinueDisabled]}
               onPress={proceedFromAvatarStep}
               activeOpacity={0.85}
-              disabled={!avatarDone || avatarUploading}
+              disabled={avatarUploading}
             >
               <LinearGradient
                 colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
