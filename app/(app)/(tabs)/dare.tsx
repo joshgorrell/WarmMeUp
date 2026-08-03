@@ -66,7 +66,7 @@ export default function DareTab() {
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
   const [quickDares, setQuickDares] = useState<string[]>(FALLBACK_DARES);
-  const [hasCustomPrompts, setHasCustomPrompts] = useState(false);
+  const [hasCustomPrompts, setHasCustomPrompts] = useState<'unknown' | 'yes' | 'no'>('unknown');
   const [promptsLoaded, setPromptsLoaded] = useState(false);
   const [dareText, setDareText] = useState('');
   const [sending, setSending] = useState(false);
@@ -115,7 +115,7 @@ export default function DareTab() {
         const visible = promptsResult.data.filter((d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id));
         if (visible.length > 0) setQuickDares(visible.map((d: { text: string }) => d.text));
         const hasCustom = promptsResult.data.some((d: { is_default: boolean; couple_id?: string }) => !d.is_default && d.couple_id === coupleId);
-        setHasCustomPrompts(!!hasCustom);
+        setHasCustomPrompts(hasCustom ? 'yes' : 'no');
       } finally {
         setPromptsLoaded(true);
       }
@@ -454,7 +454,7 @@ export default function DareTab() {
             </>
           )}
 
-          {hasPartner && promptsLoaded && !hasCustomPrompts && (
+          {hasPartner && promptsLoaded && hasCustomPrompts === 'no' && (
             <CustomizePromptsNotice
               onPress={() => router.push('/(app)/customize-prompts?tab=dare')}
               accentColor="#FF2E8A"

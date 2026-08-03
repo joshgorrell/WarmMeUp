@@ -85,7 +85,7 @@ export default function DiceTab() {
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
   const [prompts, setPrompts] = useState<string[]>(FALLBACK_PROMPTS);
-  const [hasCustomPrompts, setHasCustomPrompts] = useState(false);
+  const [hasCustomPrompts, setHasCustomPrompts] = useState<'unknown' | 'yes' | 'no'>('unknown');
   const [promptsLoaded, setPromptsLoaded] = useState(false);
   const [rolledFor, setRolledFor] = useState<RolledFor>('self');
   const [rolledForResult, setRolledForResult] = useState<RolledFor>('self');
@@ -157,7 +157,7 @@ export default function DiceTab() {
         const visible = promptsResult.data.filter((d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id));
         if (visible.length > 0) setPrompts(visible.map((d: { text: string }) => d.text));
         const hasCustom = promptsResult.data.some((d: { is_default: boolean; couple_id?: string }) => !d.is_default && d.couple_id === coupleId);
-        setHasCustomPrompts(!!hasCustom);
+        setHasCustomPrompts(hasCustom ? 'yes' : 'no');
       } finally {
         setPromptsLoaded(true);
       }
@@ -637,7 +637,7 @@ export default function DiceTab() {
             </TouchableOpacity>
           )}
 
-          {hasPartner && promptsLoaded && !hasCustomPrompts && (
+          {hasPartner && promptsLoaded && hasCustomPrompts === 'no' && (
             <CustomizePromptsNotice
               onPress={() => router.push('/(app)/customize-prompts?tab=dice')}
               accentColor="#FFB347"
