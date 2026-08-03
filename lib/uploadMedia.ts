@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { logDebugEvent } from './debugLog';
 import { Platform } from 'react-native';
+import { cleanupTempFile } from './mediaCache';
 
 function readAsBlob(uri: string): Promise<Blob> {
   if (!uri.startsWith('file://') && !uri.startsWith('ph://') && !uri.startsWith('content://')) {
@@ -112,6 +113,7 @@ export async function uploadMediaFile(
   let uploadMime = mimeType;
   let uploadStoragePath = storagePath;
   let thumbnailPath: string | undefined;
+  let thumbnailLocalUri: string | null = null;
 
   if (isPhoto) {
     const compressed = await compressImage(localUri, mimeType);
@@ -127,6 +129,7 @@ export async function uploadMediaFile(
   if (isVideo && bucket === 'vault') {
     const thumbUri = await extractVideoThumbnail(localUri);
     if (thumbUri) {
+      thumbnailLocalUri = thumbUri;
       const thumbStoragePath = storagePath.replace(/\.\w+$/, '_thumb.jpg');
       try {
         const thumbBlob = await readAsBlob(thumbUri);
@@ -234,6 +237,17 @@ export async function uploadMediaFile(
   });
 
   onProgress?.(100);
+
+  // Clean up temp files created during upload (compressed image copy, video thumbnail).
+  // These live in the app's sandboxed cache — safe to delete. Original photo-library
+  // references (ph://, content://) are never touched.
+  if (isPhoto && uploadUri !== localUri) {
+    cleanupTempFile(uploadUri).catch(() => {});
+  }
+  if (isVideo && bucket === 'vault' && thumbnailLocalUri) {
+    cleanupTempFile(thumbnailLocalUri).catch(() => {});
+  }
+
   return { storagePath: uploadStoragePath, thumbnailPath };
 }
 

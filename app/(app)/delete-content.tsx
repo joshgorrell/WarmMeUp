@@ -12,6 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { clearLocalImageCache } from '@/lib/mediaCache';
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -295,6 +296,11 @@ export default function DeleteContentScreen() {
       if (selected.has('vault')) await deleteVaultHistory(couple.id);
       if (selected.has('activity')) await deleteActivityHistory(couple.id);
       if (selected.has('points')) await deletePointsAndStreaks(couple.id);
+      // If any media-bearing category was deleted, purge local image cache so
+      // previously-viewed photos can't be recovered from the device.
+      if (selected.has('chat') || selected.has('vault')) {
+        await clearLocalImageCache();
+      }
       if (user?.id && partnerProfile?.id) {
         await notifyPartnerOfDeletion(couple.id, user.id, partnerProfile.id, [...selected]);
       }
@@ -313,6 +319,7 @@ export default function DeleteContentScreen() {
     setBurning(true);
     try {
       await burnItAll(couple.id);
+      await clearLocalImageCache();
       if (user?.id && partnerProfile?.id) {
         await notifyPartnerOfDeletion(couple.id, user.id, partnerProfile.id, ['all']);
       }

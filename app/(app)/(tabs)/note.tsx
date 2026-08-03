@@ -26,6 +26,7 @@ import { useMediaReactions } from '@/hooks/useMediaReactions';
 import { useLayout } from '@/hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logDebugEvent } from '@/lib/debugLog';
+import { clearLocalImageCache } from '@/lib/mediaCache';
 import { setGalleryItems, getCachedUrl, setCachedUrl, evictCachedUrl } from '@/lib/mediaGalleryStore';
 import { logger } from '@/lib/logger';
 import { ChatHeader } from '@/components/note/ChatHeader';
@@ -250,6 +251,10 @@ export default function ChatTab() {
               const bucket = m.media_storage_bucket ?? 'chat_media';
               supabase.storage.from(bucket).remove([m.media_storage_path]).catch(() => {});
             }
+          }
+          // Purge local image cache so expired/burned photos can't be recovered from the device.
+          if (expired.some(m => m.media_storage_path)) {
+            clearLocalImageCache().catch(() => {});
           }
           Promise.resolve(
             supabase
@@ -977,6 +982,7 @@ export default function ChatTab() {
           const bucket = msg.media_storage_bucket ?? 'chat_media';
           supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
         }
+        clearLocalImageCache().catch(() => {});
       };
       if (Platform.OS === 'web') {
         if (window.confirm('Delete from chat? This will remove the photo/video from this chat.')) doDelete();
@@ -1021,6 +1027,7 @@ export default function ChatTab() {
         const bucket = msg.media_storage_bucket ?? 'chat_media';
         supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
       }
+      clearLocalImageCache().catch(() => {});
     };
 
     if (Platform.OS === 'web') {
@@ -1174,6 +1181,8 @@ export default function ChatTab() {
     }
     // Evict any cached signed URL so it doesn't linger.
     if (msg.media_storage_path) evictCachedUrl(msg.media_storage_path);
+    // Purge local image cache so the burned photo can't be recovered from the device.
+    if (msg.media_storage_path) clearLocalImageCache().catch(() => {});
     // Also purge the linked Vault copy so a burn removes it everywhere.
     if (msg.vault_item_id) {
       supabase

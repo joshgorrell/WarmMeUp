@@ -31,6 +31,7 @@ import BottomSheet from '@/components/BottomSheet';
 import TabHeader from '@/components/TabHeader';
 import AppShell from '@/components/AppShell';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { clearLocalImageCache } from '@/lib/mediaCache';
 
 
 export default function VaultScreen() {
@@ -421,6 +422,7 @@ export default function VaultScreen() {
       if (item.blurred_thumbnail_path) evictCachedUrl(item.blurred_thumbnail_path);
       const bucket = item.storage_bucket ?? 'vault';
       if (path) supabase.storage.from(bucket).remove([path]).catch(() => {});
+      clearLocalImageCache().catch(() => {});
       if (item.chat_message_id) {
         const { data: chatMsg } = await supabase
           .from('chat_messages')
