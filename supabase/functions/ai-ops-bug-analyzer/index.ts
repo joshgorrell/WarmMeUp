@@ -59,10 +59,13 @@ Deno.serve(async (req: Request) => {
     });
 
     // Gather diagnostics snapshots from the last 7 days
+    // NOTE: We intentionally do NOT select the `email` column — raw user emails
+    // must never leave our infrastructure. We send only the user_id (a UUID)
+    // so OpenAI can correlate entries without receiving PII.
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: diagnosticsRows } = await admin
       .from("user_diagnostics")
-      .select("user_id, email, snapshot, captured_at")
+      .select("user_id, snapshot, captured_at")
       .gte("captured_at", sevenDaysAgo)
       .order("captured_at", { ascending: false })
       .limit(100);
@@ -76,17 +79,17 @@ Deno.serve(async (req: Request) => {
       .order("started_at", { ascending: false })
       .limit(20);
 
-    // Get open issues titles to avoid duplicates
+    // Get open + pending_review issues titles to avoid duplicates
     const { data: openIssues } = await admin
       .from("ai_issues")
       .select("title")
-      .eq("status", "open");
+      .in("status", ["open", "pending_review"]);
     const openIssueTitles = new Set((openIssues ?? []).map((i: any) => i.title.toLowerCase()));
 
     const diagnosticsSummary = (diagnosticsRows ?? []).map((row: any) => {
       const snap = row.snapshot ?? {};
       return {
-        email: row.email,
+        user_ref: row.user_id, // UUID, not email — non-identifying correlation key
         captured_at: row.captured_at,
         auth_status: snap.auth_status,
         last_auth_error: snap.last_auth_error,
@@ -202,12 +205,20 @@ Rules:
       parsed = { issues: [], summary: "Could not parse AI response" };
     }
 
+    // Check whether this loop type requires human approval before issues go live
+    const { data: loopSetting } = await admin
+      .from("ai_loop_settings")
+      .select("require_human_approval")
+      .eq("loop_type", "bug_analyzer")
+      .maybeSingle();
+    const requireHumanApproval = loopSetting?.require_human_approval ?? false;
+
     const issues = Array.isArray(parsed.issues) ? parsed.issues : [];
     let issuesCreated = 0;
 
     for (const issue of issues) {
       if (!issue.title || typeof issue.title !== "string") continue;
-      // Skip if an open issue with the same title already exists (case-insensitive)
+      // Skip if an open or pending_review issue with the same title already exists
       if (openIssueTitles.has(issue.title.toLowerCase())) continue;
 
       await admin.from("ai_issues").insert({
@@ -216,7 +227,7 @@ Rules:
         severity: ["low", "medium", "high"].includes(issue.severity) ? issue.severity : "medium",
         source_loop_type: "bug_analyzer",
         source_run_id: runId,
-        status: "open",
+        status: requireHumanApproval ? "pending_review" : "open",
       });
       issuesCreated++;
     }

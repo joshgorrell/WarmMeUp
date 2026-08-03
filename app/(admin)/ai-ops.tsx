@@ -7,7 +7,7 @@ import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import {
   Bot, CircleCheck as CheckCircle2, CircleX as XCircle, TriangleAlert as AlertTriangle,
-  RefreshCw, ChevronDown, ChevronUp, Play, CircleDot as Circle,
+  RefreshCw, ChevronDown, ChevronUp, Play, CircleDot as Circle, ShieldCheck,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
@@ -25,7 +25,7 @@ interface AiIssue {
   severity: 'low' | 'medium' | 'high';
   source_loop_type: string | null;
   created_at: string;
-  status: 'open' | 'resolved' | 'dismissed';
+  status: 'open' | 'resolved' | 'dismissed' | 'pending_review';
 }
 
 interface LoopSetting {
@@ -105,6 +105,7 @@ export default function AiOpsScreen() {
   const mountedRef = useRef(true);
 
   const [openIssues, setOpenIssues] = useState<AiIssue[]>([]);
+  const [pendingIssues, setPendingIssues] = useState<AiIssue[]>([]);
   const [settings, setSettings] = useState<LoopSetting[]>([]);
   const [signupHealth, setSignupHealth] = useState<SignupHealth | null>(null);
   const [dailyBrief, setDailyBrief] = useState<DailyBrief | null>(null);
@@ -117,6 +118,7 @@ export default function AiOpsScreen() {
 
   const [expandedIssue, setExpandedIssue] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -134,6 +136,7 @@ export default function AiOpsScreen() {
     try {
       const [
         { data: issues },
+        { data: pending },
         { data: loopSettings },
         { data: alertRow },
         { data: lastBriefRun },
@@ -142,6 +145,12 @@ export default function AiOpsScreen() {
           .from('ai_issues')
           .select('id, title, body, severity, source_loop_type, created_at, status')
           .eq('status', 'open')
+          .order('created_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('ai_issues')
+          .select('id, title, body, severity, source_loop_type, created_at, status')
+          .eq('status', 'pending_review')
           .order('created_at', { ascending: false })
           .limit(20),
         supabase.from('ai_loop_settings').select('loop_type, enabled, last_triggered_at'),
@@ -158,6 +167,7 @@ export default function AiOpsScreen() {
 
       if (!mountedRef.current) return;
       setOpenIssues((issues ?? []) as AiIssue[]);
+      setPendingIssues((pending ?? []) as AiIssue[]);
       setSettings((loopSettings ?? []) as LoopSetting[]);
 
       if (alertRow?.value) {
@@ -205,6 +215,7 @@ export default function AiOpsScreen() {
       const fnSlug =
         loopType === 'signup_monitor' ? 'ai-ops-signup-monitor' :
         loopType === 'bug_analyzer' ? 'ai-ops-bug-analyzer' :
+        loopType === 'security_anomaly_monitor' ? 'ai-ops-security-monitor' :
         'ai-ops-daily-brief';
 
       const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnSlug}`, {
@@ -223,6 +234,7 @@ export default function AiOpsScreen() {
       const label =
         loopType === 'signup_monitor' ? 'Signup monitor complete' :
         loopType === 'bug_analyzer' ? `Bug analyzer complete — ${json.issues_created ?? 0} new issue(s)` :
+        loopType === 'security_anomaly_monitor' ? `Security monitor complete — ${json.issues_created ?? 0} new issue(s)` :
         'Daily brief generated';
       setRunSuccess(label);
       await loadData();
@@ -241,7 +253,22 @@ export default function AiOpsScreen() {
     }).eq('id', id);
     if (mountedRef.current) {
       setOpenIssues(prev => prev.filter(i => i.id !== id));
+      setPendingIssues(prev => prev.filter(i => i.id !== id));
       setResolvingId(null);
+    }
+  };
+
+  const approveIssue = async (id: string) => {
+    setApprovingId(id);
+    const { data: approved } = await supabase.from('ai_issues').update({
+      status: 'open',
+    }).eq('id', id).eq('status', 'pending_review').select('id, title, body, severity, source_loop_type, created_at, status').maybeSingle();
+    if (mountedRef.current) {
+      setPendingIssues(prev => prev.filter(i => i.id !== id));
+      if (approved) {
+        setOpenIssues(prev => [approved as AiIssue, ...prev]);
+      }
+      setApprovingId(null);
     }
   };
 
@@ -381,6 +408,77 @@ export default function AiOpsScreen() {
             )}
           </View>
 
+          {/* ── Section: Pending Review ── */}
+          {pendingIssues.length > 0 ? (
+            <>
+              <AppText style={[styles.sectionLabel, { color: '#FFB347', marginTop: Spacing.lg }]}>
+                PENDING REVIEW ({pendingIssues.length})
+              </AppText>
+              {pendingIssues.map(issue => {
+                const isExpanded = expandedIssue === issue.id;
+                const isApproving = approvingId === issue.id;
+                const isResolving = resolvingId === issue.id;
+                const sColor = severityColor(issue.severity);
+                return (
+                  <View key={issue.id} style={[styles.issueCard, { backgroundColor: colors.card, borderColor: 'rgba(255,179,71,0.35)' }]}>
+                    <TouchableOpacity
+                      onPress={() => setExpandedIssue(isExpanded ? null : issue.id)}
+                      activeOpacity={0.85}
+                      style={styles.issueHeader}
+                    >
+                      <View style={[styles.severityDot, { backgroundColor: sColor }]} />
+                      <View style={{ flex: 1 }}>
+                        <AppText style={[styles.issueTitle, { color: colors.text }]} numberOfLines={isExpanded ? 0 : 2}>
+                          {issue.title}
+                        </AppText>
+                        <AppText style={[styles.issueMeta, { color: colors.textMuted }]}>
+                          {issue.severity.toUpperCase()} · {formatRelative(issue.created_at)}
+                          {issue.source_loop_type ? ` · ${issue.source_loop_type.replace('_', ' ')}` : ''}
+                        </AppText>
+                      </View>
+                      {isExpanded
+                        ? <ChevronUp color={colors.textMuted} size={16} />
+                        : <ChevronDown color={colors.textMuted} size={16} />
+                      }
+                    </TouchableOpacity>
+
+                    {isExpanded && (
+                      <>
+                        {issue.body ? (
+                          <AppText style={[styles.issueBody, { color: colors.textSecondary }]}>
+                            {issue.body}
+                          </AppText>
+                        ) : null}
+                        <View style={styles.issueActions}>
+                          <TouchableOpacity
+                            style={[styles.issueActionBtn, { borderColor: 'rgba(74,144,226,0.35)', backgroundColor: 'rgba(74,144,226,0.08)' }]}
+                            onPress={() => approveIssue(issue.id)}
+                            disabled={isApproving}
+                            activeOpacity={0.8}
+                          >
+                            {isApproving
+                              ? <ActivityIndicator size="small" color="#4A90E2" />
+                              : <ShieldCheck color="#4A90E2" size={14} strokeWidth={2.2} />
+                            }
+                            <AppText style={[styles.issueActionText, { color: '#4A90E2' }]}>Approve</AppText>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.issueActionBtn, { borderColor: colors.borderSubtle, backgroundColor: 'transparent' }]}
+                            onPress={() => resolveIssue(issue.id, 'dismissed')}
+                            disabled={isResolving}
+                            activeOpacity={0.8}
+                          >
+                            <AppText style={[styles.issueActionText, { color: colors.textMuted }]}>Dismiss</AppText>
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                );
+              })}
+            </>
+          ) : null}
+
           {/* ── Section: Open Issues ── */}
           <AppText style={[styles.sectionLabel, { color: colors.textMuted, marginTop: Spacing.lg }]}>
             OPEN ISSUES {openIssues.length > 0 ? `(${openIssues.length})` : ''}
@@ -460,6 +558,7 @@ export default function AiOpsScreen() {
               { type: 'daily_brief', label: 'Daily Product Brief' },
               { type: 'signup_monitor', label: 'Signup Monitor' },
               { type: 'bug_analyzer', label: 'Bug Analyzer' },
+              { type: 'security_anomaly_monitor', label: 'Security Anomaly Monitor' },
             ].map(({ type, label }, i) => (
               <React.Fragment key={type}>
                 {i > 0 && <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />}
