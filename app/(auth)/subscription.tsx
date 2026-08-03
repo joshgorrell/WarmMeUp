@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Flame, Gift, Lock, MessageCircle, Star, Zap,
-  CircleAlert as AlertCircle, Heart, X,
+  CircleAlert as AlertCircle, Heart, X, UserPlus,
 } from 'lucide-react-native';
 import WarmupBrand from '@/components/WarmupBrand';
 import CancellationSurveySheet from '@/components/CancellationSurveySheet';
@@ -416,6 +416,22 @@ export default function SubscriptionScreen() {
               </AppText>
             </TouchableOpacity>
           )}
+
+          {/* Escape route for solo users trapped on the paywall — let them
+              enter a partner's invite code instead of subscribing. */}
+          {!couple?.user_b_id && (
+            <TouchableOpacity
+              style={styles.partnerCodeBtn}
+              onPress={() => router.replace('/(auth)/pair')}
+              activeOpacity={0.7}
+              disabled={loading}
+            >
+              <UserPlus color="rgba(255,90,60,0.7)" size={15} strokeWidth={2} />
+              <AppText style={styles.partnerCodeText}>
+                Have a partner's code? Connect instead
+              </AppText>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
 
@@ -693,5 +709,23 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
+  },
+  partnerCodeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignSelf: 'center',
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(255,90,60,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,90,60,0.20)',
+  },
+  partnerCodeText: {
+    color: 'rgba(255,160,120,0.85)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Medium',
   },
 });

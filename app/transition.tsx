@@ -71,6 +71,9 @@ export default function TransitionScreen() {
   isAdminRef.current = isAdmin;
   isSuperAdminRef.current = isSuperAdmin;
   canInviteRef.current = subscriptionInfo.canInvite;
+  // Whether the user has an actual partner (not just a solo placeholder couple).
+  const hasPartnerRef = useRef(!!couple?.user_b_id);
+  hasPartnerRef.current = !!couple?.user_b_id;
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debugModeRef = useRef(debugModeEnabled);
@@ -105,11 +108,12 @@ export default function TransitionScreen() {
     const isPrivileged = isAdmin || isSuperAdmin;
 
     // For non-privileged users, defer if subscription is still loading —
-    // UNLESS there is no active couple, in which case the destination is
-    // always /pair and subscription status doesn't matter.
+    // UNLESS there is no active couple OR the user is solo (no partner yet),
+    // in which case the destination is /pair and subscription status
+    // doesn't matter.
     if (!isPrivileged && subscriptionInfo.loading) {
-      const noCouple = !couple || couple.active === false;
-      if (!noCouple) {
+      const isSolo = !couple || couple.active === false || !couple.user_b_id;
+      if (!isSolo) {
         if (!subTimeoutRef.current) {
           logger.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — subscriptionInfo.loading=true`, { elapsedMs: elapsed() });
           subTimeoutRef.current = setTimeout(() => {
@@ -163,10 +167,17 @@ export default function TransitionScreen() {
       }
 
       if (couple?.active) {
-        // Check subscription access: isPremium covers active trial AND paid AND partner-paid
+        // Solo users (no partner yet) should go to /pair to enter an invite code,
+        // not the paywall — their partner's subscription will cover them once paired.
+        if (!couple.user_b_id) {
+          logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/pair [solo, no partner]`, { elapsedMs: elapsed() });
+          router.replace('/(auth)/pair');
+          return;
+        }
+        // Paired users: check subscription access (isPremium covers active trial, paid, partner-paid)
         if (!subscriptionInfo.isPremium) {
           const reason = subscriptionInfo.trialExpired ? 'expired_trial' : undefined;
-          logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → subscription [not premium]`, { elapsedMs: elapsed() });
+          logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → subscription [not premium, paired]`, { elapsedMs: elapsed() });
           router.replace({ pathname: '/(auth)/subscription', params: reason ? { reason } : {} });
           return;
         }
@@ -244,10 +255,11 @@ export default function TransitionScreen() {
         let dest: string;
         if (isPrivileged) {
           dest = '/(app)/(tabs)';
-        } else if (!hasActiveCouple) {
+        } else if (!hasActiveCouple || !hasPartnerRef.current) {
+          // No couple, or solo couple without a partner — go to /pair.
           dest = canInviteRef.current ? '/(app)/(tabs)' : '/(auth)/pair';
         } else {
-          // Active couple but subscription still loading — safe fallback to paywall.
+          // Active paired couple but subscription still loading — safe fallback to paywall.
           dest = '/(auth)/subscription';
         }
         console.warn(`[TRANSITION ROUTED] +${elapsed()}ms HARD DEADLINE — fallback to ${dest}`, { elapsedMs: elapsed() });
