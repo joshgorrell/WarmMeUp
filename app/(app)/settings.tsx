@@ -17,6 +17,7 @@ import BottomSheet from '@/components/BottomSheet';
 import WarmupLogo from '@/components/WarmupLogo';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { registerForPushNotifications, savePushToken, clearPushToken } from '@/lib/notifications';
+import { setAppBadge } from '@/lib/appBadge';
 import CommunityGuidelinesModal from '@/components/CommunityGuidelinesModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
 import { useLayout } from '@/hooks/useLayout';
@@ -597,6 +598,16 @@ export default function SettingsScreen() {
                   onChange={v => update({ discreet_notifications: v })}
                   onInfo={() => setShowDiscreetInfo(true)}
                 />
+                <SettingsRow
+                  label="App Icon Badge"
+                  sub="Show a red dot on the app icon when you have unread activity"
+                  toggle
+                  value={s?.app_icon_badge_enabled ?? true}
+                  onChange={async (v) => {
+                    await update({ app_icon_badge_enabled: v });
+                    if (!v) setAppBadge(0);
+                  }}
+                />
                 {(['New activity', 'Something new is waiting', 'You have an update'] as const).map(copy => (
                   <TouchableOpacity
                     key={copy}
@@ -771,6 +782,16 @@ export default function SettingsScreen() {
                 value={s?.discreet_notifications ?? true}
                 onChange={v => update({ discreet_notifications: v })}
                 onInfo={() => setShowDiscreetInfo(true)}
+              />
+              <SettingsRow
+                label="App Icon Badge"
+                sub="Show a red dot on the app icon when you have unread activity"
+                toggle
+                value={s?.app_icon_badge_enabled ?? true}
+                onChange={async (v) => {
+                  await update({ app_icon_badge_enabled: v });
+                  if (!v) setAppBadge(0);
+                }}
               />
               {(['New activity', 'Something new is waiting', 'You have an update'] as const).map(copy => (
                 <TouchableOpacity

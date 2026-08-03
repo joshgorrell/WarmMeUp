@@ -273,7 +273,8 @@ export function SettingsTab({
       </Section>
 
       <Section title="NOTIFICATIONS">
-        <SettingsRow label="Discreet Notifications" sub="Never show content previews" toggle value={s?.discreet_notifications ?? true} onChange={v => update({ discreet_notifications: v })} onInfo={onShowDiscreetInfo} last />
+        <SettingsRow label="Discreet Notifications" sub="Never show content previews" toggle value={s?.discreet_notifications ?? true} onChange={v => update({ discreet_notifications: v })} onInfo={onShowDiscreetInfo} />
+        <SettingsRow label="App Icon Badge" sub="Show a red dot on the app icon when you have unread activity" toggle value={s?.app_icon_badge_enabled ?? true} onChange={async (v) => { await update({ app_icon_badge_enabled: v }); if (!v) { const { setAppBadge } = await import('@/lib/appBadge'); setAppBadge(0); } }} last />
       </Section>
 
       <Section

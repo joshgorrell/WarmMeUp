@@ -53,6 +53,7 @@ export interface UserSettings {
   theme: 'dark' | 'light' | 'system';
   lock_after_seconds: number | null;
   push_notifications_enabled: boolean;
+  app_icon_badge_enabled: boolean;
   challenge_expiry_hours: number;
   celebration_seen: boolean;
   chat_auto_save_to_vault: boolean;

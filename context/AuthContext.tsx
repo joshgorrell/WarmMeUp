@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Couple, Profile, UserSettings, SubscriptionInfo, DEFAULT_SUBSCRIPTION_INFO } from '@/lib/types';
 import { maybeArchiveAndResetScores } from '@/lib/points';
 import { registerForPushNotifications, savePushToken, clearPushToken } from '@/lib/notifications';
+import { clearAppBadge } from '@/lib/appBadge';
 import { secureKey } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
 import { logInRevenueCat, logOutRevenueCat } from '@/lib/purchases';
@@ -695,6 +696,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearUnlockedAt(userId).catch(() => {});
       logOutRevenueCat().catch(() => {});
     }
+    clearAppBadge().catch(() => {});
     supabase.auth.signOut().catch(() => {});
   }, [user]);
 
