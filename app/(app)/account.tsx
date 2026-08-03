@@ -31,6 +31,7 @@ import { ensureConfigured } from '@/lib/purchases';
 import { logger } from '@/lib/logger';
 import { ProfileTab } from '@/components/account/ProfileTab';
 import { SettingsTab } from '@/components/account/SettingsTab';
+import FeedbackSheet from '@/components/FeedbackSheet';
 
 type AccountTab = 'profile' | 'settings';
 
@@ -100,6 +101,10 @@ export default function AccountScreen() {
   const [showCommunityGuidelines, setShowCommunityGuidelines] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+
+  // Feedback
+  const [showFeedbackSheet, setShowFeedbackSheet] = useState(false);
+  const [feedbackEnabled, setFeedbackEnabled] = useState(false);
 
   // Reset Points modal
   const [resetPointsOpen, setResetPointsOpen] = useState(false);
@@ -208,6 +213,18 @@ export default function AccountScreen() {
   useFocusEffect(useCallback(() => {
     refreshSubscription();
   }, []));
+
+  // Fetch feedback_enabled config flag
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('app_config')
+        .select('value')
+        .eq('key', 'feedback_enabled')
+        .maybeSingle();
+      if (data?.value === true) setFeedbackEnabled(true);
+    })();
+  }, []);
 
   const handleRestorePurchase = useCallback(async () => {
     if (Platform.OS === 'web') { Alert.alert('Not Available', 'Restoration is only available in the mobile app.'); return; }
@@ -983,6 +1000,8 @@ export default function AccountScreen() {
               onShowCommunityGuidelines={() => setShowCommunityGuidelines(true)}
               onShowTerms={() => setShowTerms(true)}
               onShowPrivacyPolicy={() => setShowPrivacyPolicy(true)}
+              feedbackEnabled={feedbackEnabled}
+              onSendFeedback={() => setShowFeedbackSheet(true)}
               subscriptionInfo={subscriptionInfo}
               onRestorePurchase={handleRestorePurchase}
               onDeleteAccount={() => { setDeleteAccountError(null); setDeleteAccountStep(1); setDeleteAccountOpen(true); }}
@@ -1133,6 +1152,7 @@ export default function AccountScreen() {
 
       <TermsModal visible={showTerms} onClose={() => setShowTerms(false)} />
       <PrivacyPolicyModal visible={showPrivacyPolicy} onClose={() => setShowPrivacyPolicy(false)} />
+      <FeedbackSheet visible={showFeedbackSheet} onClose={() => setShowFeedbackSheet(false)} />
       <CommunityGuidelinesModal
         visible={showCommunityGuidelines}
         onClose={() => setShowCommunityGuidelines(false)}

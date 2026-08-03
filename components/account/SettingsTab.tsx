@@ -67,6 +67,9 @@ export function SettingsTab({
   onDeleteAccount,
   // Support
   onContactSupport,
+  // Feedback
+  feedbackEnabled,
+  onSendFeedback,
   // Vault section layout ref
   onVaultSectionLayout,
 }: {
@@ -112,6 +115,8 @@ export function SettingsTab({
   onRestorePurchase: () => void;
   onDeleteAccount: () => void;
   onContactSupport: () => void;
+  feedbackEnabled: boolean;
+  onSendFeedback: () => void;
   onVaultSectionLayout: (y: number) => void;
 }) {
   const { colors } = useTheme();
@@ -310,6 +315,13 @@ export function SettingsTab({
       </Section>
 
       <Section title="SUPPORT">
+        {feedbackEnabled && (
+          <SettingsRow
+            label="Send Feedback"
+            sub="Share ideas, report issues, or send us a note"
+            onPress={onSendFeedback}
+          />
+        )}
         <SettingsRow
           label="Contact Support"
           sub="Get help from the Warm Me Up team"
