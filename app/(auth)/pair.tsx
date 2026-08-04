@@ -708,15 +708,24 @@ export default function PairScreen() {
       setActiveModal(null);
       await refreshCouple();
 
-      // Notify User A that a request is pending (fire-and-forget)
+      // Notify User A that a request is pending (with retry)
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (token) {
-        fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ event_type: 'partner_request', couple_id: joinResult.couple_id }),
-        }).catch(() => {});
+        const notifyUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`;
+        const notifyBody = JSON.stringify({ event_type: 'partner_request', couple_id: joinResult.couple_id });
+        const notifyHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+        // Retry up to 3 times with backoff so a transient edge function failure
+        // doesn't leave User A unaware of the pending request.
+        (async () => {
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const res = await fetch(notifyUrl, { method: 'POST', headers: notifyHeaders, body: notifyBody });
+              if (res.ok) return;
+            } catch {}
+            await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+          }
+        })();
       }
     } catch (e: any) {
       setError(e.message || 'Something went wrong.');

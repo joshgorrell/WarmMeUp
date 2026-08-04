@@ -52,7 +52,7 @@ export default function VerifyEmailScreen() {
       // Email is confirmed — handle pending invite code before routing
       const code = pendingCode || (await loadPendingCode()) || '';
       if (code) {
-        const result = await completePendingJoin(user.id, code);
+        const result = await completePendingJoin(code);
         if (result.ok) {
           await clearPendingCode();
           router.replace({

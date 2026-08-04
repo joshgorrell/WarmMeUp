@@ -216,7 +216,7 @@ export default function RegisterScreen() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user?.email_confirmed_at) {
         if (pendingCode) {
-          completePendingJoin(uid, pendingCode).then(async (result) => {
+          completePendingJoin(pendingCode).then(async (result) => {
             await clearPendingCode();
             if (result.ok) {
               router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: pendingCode } });

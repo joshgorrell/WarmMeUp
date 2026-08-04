@@ -435,7 +435,7 @@ export default function AccountScreen() {
     setEnterCodeLoading(true);
     setEnterCodeError(null);
     const { completePendingJoin } = await import('@/lib/coupleJoin');
-    const result = await completePendingJoin(user.id, code);
+    const result = await completePendingJoin(code);
     if (result.ok) {
       setShowEnterCodeSheet(false);
       setEnterCode('');

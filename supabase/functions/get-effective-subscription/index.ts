@@ -54,6 +54,39 @@ function isGrantActive(grant: AdminGrantRow | null): boolean {
   return true;
 }
 
+async function checkRevenueCatEntitlement(
+  rcUserId: string,
+  secretKey: string
+): Promise<{ active: boolean; plan: "monthly" | "yearly"; expiresAt: string | null }> {
+  const url = `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(rcUserId)}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${secretKey}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) return { active: false, plan: "monthly", expiresAt: null };
+
+  const data = await res.json();
+  const entitlement = data?.subscriber?.entitlements?.premium;
+
+  if (!entitlement?.expires_date) {
+    return { active: false, plan: "monthly", expiresAt: null };
+  }
+
+  const expiresAt = entitlement.expires_date;
+  const isActive = new Date(expiresAt) > new Date();
+  const productId: string = entitlement.product_identifier ?? "";
+
+  const plan: "monthly" | "yearly" =
+    productId.includes("annual") || productId.includes("yearly") || productId.includes("year")
+      ? "yearly"
+      : "monthly";
+
+  return { active: isActive, plan, expiresAt };
+}
+
 async function userHasPremiumAccess(
   adminClient: ReturnType<typeof createClient>,
   userId: string
@@ -196,6 +229,49 @@ Deno.serve(async (req: Request) => {
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
+      }
+    }
+
+    // 4. RevenueCat API fallback — if the DB has no active subscription but
+    //    RevenueCat shows an active entitlement (e.g. purchase completed but
+    //    confirm-subscription never ran), sync the DB and return premium.
+    const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
+    if (rcSecretKey) {
+      try {
+        const rc = await checkRevenueCatEntitlement(user.id, rcSecretKey);
+        if (rc.active) {
+          console.log(`[get-effective-subscription] RC fallback hit for user=${user.id} plan=${rc.plan}`);
+          await adminClient
+            .from("subscriptions")
+            .upsert(
+              {
+                user_id: user.id,
+                plan: rc.plan,
+                status: "active",
+                started_at: new Date().toISOString(),
+                expires_at: rc.expiresAt,
+                trial_started_at: null,
+              },
+              { onConflict: "user_id" }
+            );
+          return new Response(
+            JSON.stringify({
+              isPremium: true,
+              source: "self",
+              plan: rc.plan,
+              expiresAt: rc.expiresAt,
+              isOnTrial: false,
+              trialExpiresAt: null,
+              trialExpired: false,
+              canInvite: true,
+              _v: "2026-07-01",
+              _ts: new Date().toISOString(),
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } catch (err) {
+        console.error(`[get-effective-subscription] RC fallback error for user=${user.id}:`, String(err));
       }
     }
 

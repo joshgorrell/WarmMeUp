@@ -170,9 +170,56 @@ export function useSubscription(): SubscriptionState {
     void fetchCustomerInfo();
   }, [fetchCustomerInfo]);
 
+  // Re-fetch when auth state changes (sign in, sign out, user switch, token refresh).
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+        void fetchCustomerInfo();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [fetchCustomerInfo]);
+
+  // Register RevenueCat customer info listener for mid-session subscription changes
+  // (renewals, cancellations, billing issues). Native only.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    let listener: any = null;
+    let active = true;
+    (async () => {
+      try {
+        const Purchases = await ensureConfigured();
+        if (!Purchases || !active) return;
+        listener = Purchases.addCustomerInfoUpdateListener((info: any) => {
+          const entitlement = info?.entitlements?.active?.['premium'];
+          if (entitlement) {
+            const onTrial = entitlement.periodType === 'TRIAL';
+            setIsOnTrial(onTrial);
+            setStatus(onTrial ? 'Trial' : 'Active');
+            setPlan(planFromProductId(entitlement.productIdentifier) === 'yearly' ? 'Annual' : 'Monthly');
+            setRenewalDate(formatDate(entitlement.expirationDate));
+            setIsPremium(true);
+            setPremiumSource('self');
+          } else {
+            // Entitlement lost — re-fetch from server to pick up partner sharing or trial.
+            void fetchCustomerInfo();
+          }
+        });
+      } catch (err: any) {
+        logger.warn('[useSubscription] RC listener setup failed:', err?.message);
+      }
+    })();
+    return () => {
+      active = false;
+      if (listener) {
+        try { listener.remove(); } catch {}
+      }
+    };
+  }, [fetchCustomerInfo]);
+
   const restorePurchases = useCallback(async () => {
     if (Platform.OS === 'web') {
-      Alert.alert('Not Available', 'Purchase restoration is only available on iOS.');
+      Alert.alert('Not Available', 'Purchase restoration is only available in the iOS and Android apps.');
       return;
     }
     try {
@@ -199,7 +246,10 @@ export function useSubscription(): SubscriptionState {
   }, [fetchCustomerInfo]);
 
   const openManageSubscription = useCallback(async () => {
-    await Linking.openURL('https://apps.apple.com/account/subscriptions');
+    const url = Platform.OS === 'android'
+      ? 'https://play.google.com/store/account/subscriptions'
+      : 'https://apps.apple.com/account/subscriptions';
+    await Linking.openURL(url);
   }, []);
 
   return {

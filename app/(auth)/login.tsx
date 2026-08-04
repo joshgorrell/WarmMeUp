@@ -347,7 +347,7 @@ export default function LoginScreen() {
       const codeToRedeem = codeToPreserve || storedCode || '';
 
       if (codeToRedeem && data.user) {
-        const result = await completePendingJoin(data.user.id, codeToRedeem);
+        const result = await completePendingJoin(codeToRedeem);
         await clearPendingCode();
         if (result.ok) {
           router.replace({
@@ -393,7 +393,7 @@ export default function LoginScreen() {
           const storedCode = await loadPendingCode();
           const codeToRedeem = codeToPreserve || storedCode || '';
           if (codeToRedeem) {
-            const result = await completePendingJoin(userId, codeToRedeem);
+            const result = await completePendingJoin(codeToRedeem);
             await clearPendingCode();
             if (result.ok) {
               router.replace({

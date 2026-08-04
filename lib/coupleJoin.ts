@@ -3,9 +3,9 @@ import { logDebugEvent } from '@/lib/debugLog';
 
 export type JoinResult =
   | { ok: true; status: 'b_accepted'; coupleId: string; inviterName: string | null }
-  | { ok: false; reason: 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'error' };
+  | { ok: false; reason: 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'error' };
 
-type JoinReason = 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'error';
+type JoinReason = 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'error';
 
 export type PendingJoinStatus = 'accepted' | 'b_accepted' | 'pending';
 
@@ -110,7 +110,6 @@ export async function getPendingPartnerProfile(): Promise<
  * accept/decline transition.
  */
 export async function completePendingJoin(
-  _userId: string,
   code: string,
 ): Promise<JoinResult> {
   const { data: result, error: joinError } = await supabase

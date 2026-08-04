@@ -181,6 +181,16 @@ export default function SubscriptionScreen() {
       }
       const confirmed = await confirmWithServer();
       logger.log('[Subscription] server confirm result:', confirmed);
+      if (!confirmed) {
+        await new Promise(r => setTimeout(r, 1500));
+        const retried = await confirmWithServer();
+        if (!retried) {
+          Alert.alert(
+            'Purchase Confirmed',
+            'Your purchase succeeded but is still syncing. Your premium access will activate automatically shortly. If it does not, tap "Restore Purchase".'
+          );
+        }
+      }
       await refreshSubscription();
       router.replace('/(app)/(tabs)');
     } catch (e: any) {
