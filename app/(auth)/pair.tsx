@@ -286,32 +286,29 @@ export default function PairScreen() {
   }, [waitingState, waitingCoupleId, user, settings?.celebration_seen, inviterName]);
 
   // User B: polling fallback — if realtime drops, poll every 4s for status changes.
+  // Uses a two-strike rule for decline detection: the first `getMyPendingJoin`
+  // failure is treated as a transient blip and re-checked immediately. Only a
+  // second consecutive failure is treated as a real decline. This prevents
+  // false "declined" resolutions from momentary network errors.
   useEffect(() => {
     if (waitingState !== 'waiting' || !user) return;
     let cancelled = false;
+    let consecutiveFailures = 0;
     const poll = async () => {
       const result = await getMyPendingJoin();
       if (cancelled) return;
       if (result.ok && result.status === 'accepted') {
         await resolveWaiting('accepted');
       } else if (result.ok && (result.status === 'b_accepted' || result.status === 'pending')) {
-        // Still waiting — keep polling.
+        // Still waiting — reset failure counter and keep polling.
+        consecutiveFailures = 0;
         return;
       } else if (!result.ok) {
-        // No pending request found — could be declined or cleared.
-        // Check the couple row directly for declined status.
-        if (waitingCoupleId) {
-          const { data: couple } = await supabase
-            .from('couples')
-            .select('pending_partner_status, user_b_id')
-            .eq('id', waitingCoupleId)
-            .maybeSingle();
-          if (cancelled) return;
-          if (couple?.user_b_id && couple.user_b_id === user.id) {
-            await resolveWaiting('accepted');
-          } else if (couple?.pending_partner_status === 'declined' || (!couple?.pending_partner_status && !couple?.user_b_id)) {
-            await resolveWaiting('declined');
-          }
+        consecutiveFailures += 1;
+        // Two-strike rule: only resolve as declined after two consecutive
+        // failures. A single failure could be a transient network blip.
+        if (consecutiveFailures >= 2) {
+          await resolveWaiting('declined');
         }
       }
     };
@@ -609,7 +606,7 @@ export default function PairScreen() {
     setRefreshing(true);
     setInviteError('');
     logDebugEvent('INVITE CREATE START', { source: 'handleRefreshCode', userId: user?.id ?? null });
-    const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
+    const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code', { force_new: true });
     if (rpcError) {
       // RPC refuses when the user is already paired — redirect rather than surface an error.
       if ((rpcError as any)?.message === 'already_paired') {
