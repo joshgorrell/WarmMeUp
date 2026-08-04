@@ -21,6 +21,7 @@ import { REACTION_EMOJIS } from '@/components/MediaActionRow';
 import HomeMiniCard from '@/components/HomeMiniCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
+import { useTrialExpiryCheck } from '@/hooks/useTrialExpiryCheck';
 import { useLayout } from '@/hooks/useLayout';
 import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
 import { reversePoints, awardPoints, getPointValue } from '@/lib/points';
@@ -81,6 +82,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
+  const trialExpiry = useTrialExpiryCheck();
   const isMountedRef = useRef(true);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -835,6 +837,46 @@ export default function HomeScreen() {
         )}
       </View>
 
+      {/* Trial expired with pending partner request */}
+      <Modal
+        visible={trialExpiry.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={trialExpiry.dismiss}
+      >
+        <Pressable style={trialExpiryStyles.overlay} onPress={trialExpiry.dismiss}>
+          <View style={[trialExpiryStyles.card, { backgroundColor: colors.card }]} onStartShouldSetResponder={() => true} onResponderRelease={(e) => e.stopPropagation()}>
+            <View style={trialExpiryStyles.iconWrap}>
+              <Heart color="#FF2E8A" size={32} strokeWidth={2} />
+            </View>
+            <AppText style={[trialExpiryStyles.title, { color: colors.text }]}>
+              Your free trial has ended
+            </AppText>
+            <AppText style={[trialExpiryStyles.body, { color: colors.textSecondary }]}>
+              {trialExpiry.partnerName ?? 'Your partner'} is waiting for you to confirm their connection. Subscribe now to accept their request and unlock everything.
+            </AppText>
+            <TouchableOpacity
+              style={trialExpiryStyles.subscribeBtn}
+              activeOpacity={0.85}
+              onPress={() => {
+                trialExpiry.dismiss();
+                router.push('/(auth)/subscription');
+              }}
+            >
+              <Text style={trialExpiryStyles.subscribeBtnText}>Subscribe Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={trialExpiry.dismiss}
+              activeOpacity={0.7}
+              style={trialExpiryStyles.laterBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <AppText style={[trialExpiryStyles.laterText, { color: colors.textMuted }]}>Maybe later</AppText>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
       {/* Send love compact emoji picker */}
       <Modal
         visible={showLovePicker}
@@ -1109,5 +1151,70 @@ const lovePickerStyles = StyleSheet.create({
   emojiText: {
     fontSize: 22,
     lineHeight: 28,
+  },
+});
+
+const trialExpiryStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,46,138,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    textAlign: 'center',
+    lineHeight: 26,
+  },
+  body: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 21,
+  },
+  subscribeBtn: {
+    backgroundColor: '#FF2E8A',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  subscribeBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+  },
+  laterBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 2,
+  },
+  laterText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
   },
 });

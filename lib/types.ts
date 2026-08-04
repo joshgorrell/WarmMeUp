@@ -27,6 +27,8 @@ export interface Couple {
   pending_partner_id: string | null;
   pending_partner_status: string | null;
   pending_requested_at: string | null;
+  trial_expired_notified_at: string | null;
+  trial_expired_reminder_sent: boolean;
   created_at: string;
 }
 
