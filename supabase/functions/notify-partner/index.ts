@@ -30,10 +30,12 @@ const EVENT_LABELS: Record<string, string> = {
   partner_disconnected: "ended the partner connection",
   partner_joined: "just joined! Your space is ready.",
   partner_request: "accepted your invite and is ready to join you!",
+  invite_trial_expired: "Your trial has ended! Subscribe now to confirm your partner's connection request.",
+  invite_trial_reminder: "Your partner is still waiting! Subscribe now to confirm your connection.",
 };
 
 // System events shown regardless of discreet_notifications setting
-const ALWAYS_SHOW_EVENTS = new Set(["partner_disconnected", "partner_joined", "partner_request"]);
+const ALWAYS_SHOW_EVENTS = new Set(["partner_disconnected", "partner_joined", "partner_request", "invite_trial_expired", "invite_trial_reminder"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -92,7 +94,8 @@ Deno.serve(async (req: Request) => {
       .select("user_a_id, user_b_id, pending_partner_id, pending_partner_status")
       .eq("id", couple_id);
 
-    if (event_type !== "partner_disconnected" && event_type !== "partner_request") {
+    const pendingEvents = new Set(["partner_request", "invite_trial_expired", "invite_trial_reminder"]);
+    if (event_type !== "partner_disconnected" && !pendingEvents.has(event_type)) {
       coupleQuery.eq("active", true);
     }
 
@@ -107,7 +110,8 @@ Deno.serve(async (req: Request) => {
 
     // For partner_request, the caller is the pending partner (not yet user_b_id).
     // For all other events, the caller must be user_a_id or user_b_id.
-    const isCoupleMember = event_type === "partner_request"
+    const isPendingEvent = pendingEvents.has(event_type);
+    const isCoupleMember = isPendingEvent
       ? (couple.pending_partner_id === user.id && (couple.pending_partner_status === "pending" || couple.pending_partner_status === "b_accepted"))
       : (couple.user_a_id === user.id || couple.user_b_id === user.id);
     if (!isCoupleMember) {
@@ -119,7 +123,7 @@ Deno.serve(async (req: Request) => {
 
     // For partner_request, the recipient is User A (the one who shared the code).
     // For all other events, the recipient is the other member of the couple.
-    const partnerId = event_type === "partner_request"
+    const partnerId = isPendingEvent
       ? couple.user_a_id
       : (couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id);
     if (!partnerId) {

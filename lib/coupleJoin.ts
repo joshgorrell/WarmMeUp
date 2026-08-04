@@ -10,7 +10,7 @@ type JoinReason = 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 
 export type PendingJoinStatus = 'accepted' | 'b_accepted' | 'pending';
 
 export type PendingJoinResult =
-  | { ok: true; status: PendingJoinStatus; coupleId: string; inviterName: string | null; inviterAvatar: string | null }
+  | { ok: true; status: PendingJoinStatus; coupleId: string; inviterName: string | null; inviterAvatar: string | null; inviterPremiumActive: boolean }
   | { ok: false };
 
 /**
@@ -31,7 +31,24 @@ export async function getMyPendingJoin(): Promise<PendingJoinResult> {
     coupleId: data.couple_id as string,
     inviterName: data.inviter_name ?? null,
     inviterAvatar: data.inviter_avatar ?? null,
+    inviterPremiumActive: data.inviter_premium_active ?? true,
   };
+}
+
+/**
+ * Record that the inviter's trial has expired, so the server can schedule
+ * reminder notifications. Returns is_first=true if this was the first time
+ * the expiry was detected (so the client knows to fire the initial push).
+ */
+export async function recordTrialExpired(coupleId: string): Promise<{ ok: boolean; isFirst: boolean }> {
+  const { data, error } = await supabase
+    .rpc('record_trial_expired_notification', { p_couple_id: coupleId }) as { data: any; error: any };
+
+  if (error || !data?.ok) {
+    return { ok: false, isFirst: false };
+  }
+
+  return { ok: true, isFirst: data.is_first === true };
 }
 
 /**

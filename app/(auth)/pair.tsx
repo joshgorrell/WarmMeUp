@@ -28,7 +28,7 @@ import {
   savePendingCode,
   sanitizeInviteCode,
 } from '@/lib/inviteCode';
-import { previewInvite, getPendingPartnerProfile, getMyPendingJoin, type PendingJoinStatus } from '@/lib/coupleJoin';
+import { previewInvite, getPendingPartnerProfile, getMyPendingJoin, recordTrialExpired, type PendingJoinStatus } from '@/lib/coupleJoin';
 import { logDebugEvent } from '@/lib/debugLog';
 import { ensureConfigured } from '@/lib/purchases';
 import { MONTHLY_PRODUCT_ID, ANNUAL_PRODUCT_ID } from '@/lib/productIds';
@@ -61,7 +61,7 @@ const PLANS: {
 ];
 
 type ActiveModal = 'invite' | 'join' | null;
-type WaitingState = 'idle' | 'waiting' | 'accepted' | 'declined';
+type WaitingState = 'idle' | 'waiting' | 'accepted' | 'declined' | 'trial_expired';
 type HelpVariant = 'inviter' | 'joiner' | null;
 
 function HeartOutline({
@@ -141,6 +141,9 @@ export default function PairScreen() {
   const [subscribing, setSubscribing] = useState(false);
   const [subscribeError, setSubscribeError] = useState('');
   const [packages, setPackages] = useState<Record<string, any>>({});
+  const trialExpiredNotifiedRef = useRef(false);
+  const trialReminderSentRef = useRef(false);
+  const [showAcceptSubscribeBtn, setShowAcceptSubscribeBtn] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -156,6 +159,9 @@ export default function PairScreen() {
         setWaitingCoupleId(pending.coupleId);
         setInviterName(pending.inviterName);
         setInviterAvatar(pending.inviterAvatar);
+        if (!pending.inviterPremiumActive) {
+          setWaitingState('trial_expired');
+        }
         setActiveModal(null);
         setResumeChecked(true);
         return;
@@ -320,11 +326,13 @@ export default function PairScreen() {
   const handleAccept = async () => {
     if (!couple?.id || acceptLoading) return;
     setAcceptLoading(true);
+    setShowAcceptSubscribeBtn(false);
     try {
       const { data: result, error } = await supabase.rpc('accept_partner');
       if (error || !result?.ok) {
         if (result?.reason === 'no_subscription') {
           setError('Your trial has ended. Subscribe to confirm your partner.');
+          setShowAcceptSubscribeBtn(true);
         } else {
           setError('Could not accept right now. Try again.');
         }
@@ -1012,6 +1020,22 @@ export default function PairScreen() {
                   : 'Someone entered your invite code.\nConfirm only if they\'re your partner.'}
               </AppText>
               {error ? <AppText style={styles.joinError}>{error}</AppText> : null}
+              {showAcceptSubscribeBtn ? (
+                <TouchableOpacity
+                  style={styles.acceptSubscribeBtn}
+                  onPress={() => router.push('/(auth)/subscription')}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.acceptSubscribeGrad}
+                  >
+                    <AppText style={styles.acceptSubscribeText}>Subscribe now</AppText>
+                  </LinearGradient>
+                </TouchableOpacity>
+              ) : null}
               <View style={styles.pendingRequestActions}>
                 <TouchableOpacity
                   style={[styles.pendingBtn, styles.declineBtn]}
@@ -1303,6 +1327,35 @@ export default function PairScreen() {
         onClose={() => setHelpVisible(false)}
         variant={helpVariant ?? 'joiner'}
       />
+
+      {/* User B: Inviter's trial expired */}
+      <Modal
+        visible={waitingState === 'trial_expired'}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelRequest}
+      >
+        <View style={styles.waitingOverlay}>
+          <View style={styles.waitingCard}>
+            <View style={styles.waitingIconWrap}>
+              <Hourglass color="#FFB84D" size={32} strokeWidth={1.8} />
+            </View>
+            <AppText style={styles.waitingOverlayTitle}>Partner's trial ended</AppText>
+            <AppText style={styles.waitingOverlayDesc}>
+              {inviterName
+                ? `${inviterName}'s free trial has ended. They've been notified to subscribe and confirm your connection.`
+                : "Your partner's free trial has ended. They've been notified to subscribe and confirm your connection."}
+            </AppText>
+            <TouchableOpacity
+              style={styles.cancelWaitingBtn}
+              onPress={handleCancelRequest}
+              activeOpacity={0.7}
+            >
+              <AppText style={styles.cancelWaitingText}>Cancel request</AppText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* User B: Declined */}
       <Modal
@@ -1891,5 +1944,20 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Medium',
+  },
+  acceptSubscribeBtn: {
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+    marginBottom: Spacing.sm,
+  },
+  acceptSubscribeGrad: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acceptSubscribeText: {
+    color: '#fff',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-SemiBold',
   },
 });
