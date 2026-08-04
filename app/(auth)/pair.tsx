@@ -144,9 +144,12 @@ export default function PairScreen() {
 
   useEffect(() => {
     if (!user) return;
-    // Before loading the couple, check whether the user has a pending join request
-    // from a previous session. If so, resume straight into the waiting state.
+    // Refresh subscription first so admin grants / trial status is current
+    // before loadOrCreateCouple checks premium access.
     (async () => {
+      await refreshSubscription();
+      // Before loading the couple, check whether the user has a pending join request
+      // from a previous session. If so, resume straight into the waiting state.
       const pending = await getMyPendingJoin();
       if (pending.ok && (pending.status === 'b_accepted' || pending.status === 'pending')) {
         setWaitingState('waiting');
@@ -222,6 +225,33 @@ export default function PairScreen() {
       setWaitingState('declined');
     }
   };
+
+  // User A: subscribe to the couple row so pending partner requests appear
+  // immediately without needing to close and reopen the screen.
+  useEffect(() => {
+    if (!user || !couple?.id) return;
+    const channelName = `pair-couple:${couple.id}`;
+    supabase.getChannels().forEach((ch) => {
+      if (ch.topic === channelName) supabase.removeChannel(ch);
+    });
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'couples', filter: `id=eq.${couple.id}` },
+          async (payload: any) => {
+            const newStatus = payload?.new?.pending_partner_status;
+            if (newStatus === 'pending' || newStatus === 'b_accepted' || newStatus === 'declined') {
+              await refreshCouple();
+            }
+          },
+        )
+        .subscribe();
+    } catch {}
+    return () => { if (channel) supabase.removeChannel(channel); };
+  }, [user, couple?.id]);
 
   // User B: subscribe to the couple row for accept/decline transitions while waiting.
   useEffect(() => {
@@ -951,6 +981,76 @@ export default function PairScreen() {
             </TouchableOpacity>
           </View>
 
+          {!subscriptionInfo.canInvite && !subscriptionInfo.loading && (
+            <View style={styles.noSubHint}>
+              <AppText style={styles.noSubHintText}>
+                Don't have a subscription? No problem — tap "I have a code" to enter your partner's invite code and join them for free.
+              </AppText>
+            </View>
+          )}
+
+          {/* Pending request card — shown on the main screen so User A sees it
+              even without premium access. Previously this was buried inside the
+              invite modal's canInvite branch, making it invisible to users whose
+              subscription info hadn't loaded or who lacked premium. */}
+          {(couple?.pending_partner_status === 'pending' || couple?.pending_partner_status === 'b_accepted') && (
+            <View style={styles.pendingRequestCard}>
+              <View style={styles.pendingRequestHeader}>
+                {pendingPartnerAvatar ? (
+                  <Image source={{ uri: pendingPartnerAvatar }} style={styles.pendingAvatar} resizeMode="cover" />
+                ) : (
+                  <View style={styles.pendingAvatarFallback}>
+                    <AppText style={styles.pendingAvatarText}>
+                      {(pendingPartnerName ?? '?')[0]?.toUpperCase()}
+                    </AppText>
+                  </View>
+                )}
+                <AppText style={styles.pendingRequestTitle} numberOfLines={1} ellipsizeMode="tail">
+                  {pendingPartnerName ? `${pendingPartnerName} accepted your invite!` : 'A partner wants to connect'}
+                </AppText>
+              </View>
+              <AppText style={styles.pendingRequestDesc}>
+                {pendingPartnerName
+                  ? `${pendingPartnerName} is ready to join you on Warm Me Up! Confirm to open your shared space.`
+                  : 'Someone entered your invite code.\nConfirm only if they\'re your partner.'}
+              </AppText>
+              {error ? <AppText style={styles.joinError}>{error}</AppText> : null}
+              <View style={styles.pendingRequestActions}>
+                <TouchableOpacity
+                  style={[styles.pendingBtn, styles.declineBtn]}
+                  onPress={handleDecline}
+                  activeOpacity={0.8}
+                  disabled={acceptLoading}
+                >
+                  <XCircle color="rgba(255,255,255,0.7)" size={16} />
+                  <AppText style={styles.declineBtnText}>Decline</AppText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.pendingBtn}
+                  onPress={handleAccept}
+                  activeOpacity={0.85}
+                  disabled={acceptLoading}
+                >
+                  <LinearGradient
+                    colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.acceptGrad}
+                  >
+                    {acceptLoading ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <Check color="#fff" size={16} />
+                        <AppText style={styles.acceptBtnText}>Accept</AppText>
+                      </>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           <View style={styles.noteRow}>
             <Lock color="rgba(255,255,255,0.22)" size={13} strokeWidth={1.5} />
             <AppText style={styles.noteText}>Only one partner connection at a time.</AppText>
@@ -1037,63 +1137,6 @@ export default function PairScreen() {
                 </TouchableOpacity>
 
                 <AppText style={styles.waitingText}>Waiting for your partner to join...</AppText>
-
-                {(couple?.pending_partner_status === 'pending' || couple?.pending_partner_status === 'b_accepted') && (
-                  <View style={styles.pendingRequestCard}>
-                    <View style={styles.pendingRequestHeader}>
-                      {pendingPartnerAvatar ? (
-                        <Image source={{ uri: pendingPartnerAvatar }} style={styles.pendingAvatar} resizeMode="cover" />
-                      ) : (
-                        <View style={styles.pendingAvatarFallback}>
-                          <AppText style={styles.pendingAvatarText}>
-                            {(pendingPartnerName ?? '?')[0]?.toUpperCase()}
-                          </AppText>
-                        </View>
-                      )}
-                      <AppText style={styles.pendingRequestTitle} numberOfLines={1} ellipsizeMode="tail">
-                        {pendingPartnerName ? `${pendingPartnerName} accepted your invite!` : 'A partner wants to connect'}
-                      </AppText>
-                    </View>
-                    <AppText style={styles.pendingRequestDesc}>
-                      {pendingPartnerName
-                        ? `${pendingPartnerName} is ready to join you on Warm Me Up! Confirm to open your shared space.`
-                        : 'Someone entered your invite code.\nConfirm only if they\'re your partner.'}
-                    </AppText>
-                    <View style={styles.pendingRequestActions}>
-                      <TouchableOpacity
-                        style={[styles.pendingBtn, styles.declineBtn]}
-                        onPress={handleDecline}
-                        activeOpacity={0.8}
-                        disabled={acceptLoading}
-                      >
-                        <XCircle color="rgba(255,255,255,0.7)" size={16} />
-                        <AppText style={styles.declineBtnText}>Decline</AppText>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.pendingBtn}
-                        onPress={handleAccept}
-                        activeOpacity={0.85}
-                        disabled={acceptLoading}
-                      >
-                        <LinearGradient
-                          colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                          style={styles.acceptGrad}
-                        >
-                          {acceptLoading ? (
-                            <ActivityIndicator color="#fff" size="small" />
-                          ) : (
-                            <>
-                              <Check color="#fff" size={16} />
-                              <AppText style={styles.acceptBtnText}>Accept</AppText>
-                            </>
-                          )}
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
               </>
             ) : (
               <>
@@ -1436,6 +1479,22 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     lineHeight: 19,
+  },
+  noSubHint: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: 'rgba(255, 200, 100, 0.08)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 200, 100, 0.15)',
+    marginBottom: Spacing.md,
+  },
+  noSubHintText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(255, 220, 180, 0.8)',
+    textAlign: 'center',
   },
   noteRow: {
     flexDirection: 'row',
