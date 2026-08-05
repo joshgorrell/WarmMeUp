@@ -30,10 +30,27 @@ const SECTIONS = [
 
 Warm Me Up is not a public social platform or dating marketplace.
 
-The app is intended only for communication and interaction between connected adult partners.`,
+The app is intended only for communication and interaction between connected adult partners who are 18 years of age or older.`,
   },
   {
-    title: '2. Consent Matters',
+    title: '2. Not for Illegal or Nefarious Use',
+    body: `You may not use Warm Me Up for any illegal, unlawful, fraudulent, or harmful purpose.
+
+This includes, but is not limited to:
+
+\u2022 violating, encouraging, or facilitating any crime or unlawful act
+\u2022 distributing, storing, or transmitting illegal content or materials
+\u2022 engaging in fraud, trafficking, money laundering, or other financial crime
+\u2022 using the app to facilitate harm, exploitation, coercion, or abuse
+\u2022 using the app as a tool for blackmail, extortion, or intimidation
+\u2022 attempting to gain unauthorized access to any account, system, or data
+
+You are responsible for ensuring that your use of the app complies with all applicable local, state, national, and international laws.
+
+Violations may result in immediate account termination and, where required by law, referral to law enforcement.`,
+  },
+  {
+    title: '3. Consent Matters',
     body: `Only share messages, photos, videos, dares, prompts, and custom content with the clear consent of your partner.
 
 Respect boundaries at all times.
@@ -43,7 +60,7 @@ Respect boundaries at all times.
 Users are responsible for ensuring all interactions remain consensual, respectful, and appropriate for both participants.`,
   },
   {
-    title: '3. Respectful Communication',
+    title: '4. Respectful Communication',
     body: `Warm Me Up should never be used to:
 
 \u2022 harass
@@ -60,7 +77,7 @@ We encourage users to communicate openly and respectfully with their partners.
 Keep things playful. Keep things healthy.`,
   },
   {
-    title: '4. Privacy & Trust',
+    title: '5. Privacy & Trust',
     body: `Warm Me Up was built to help couples share more privately and comfortably.
 
 Please respect the privacy and trust of your partner.
@@ -76,24 +93,34 @@ Users may not:
 While Warm Me Up includes privacy-focused features, users should always understand that digital communication carries some level of risk.`,
   },
   {
-    title: '5. Prohibited Content',
-    body: `The following content is strictly prohibited:
+    title: '6. No Guarantee of Privacy or Security',
+    body: `Warm Me Up includes features designed to enhance privacy, such as Vault, Stealth Mode, biometric authentication, and screenshot notifications. These features are tools to help you manage your privacy — they are not guarantees.
 
-\u2022 content involving minors
-\u2022 exploitation or abuse
-\u2022 non-consensual intimate imagery
-\u2022 illegal activity
-\u2022 violent threats
-\u2022 coercive behavior
-\u2022 trafficking-related content
-\u2022 harassment
-\u2022 malicious software or scams
-\u2022 impersonation or fraud
+No app, device, or network can guarantee absolute privacy or security. Users may still screenshot, record, photograph, or otherwise capture content externally. Warm Me Up cannot prevent all forms of unauthorized capture once content is displayed on a device screen.
 
-Violation of these rules may result in immediate suspension or permanent account removal.`,
+The tagline "A private space for playful couples" describes the app\u2019s intended purpose and design philosophy. It is not a guarantee, contract, warranty, or promise of absolute privacy or security.
+
+By using the app, you acknowledge and accept these inherent limitations. For more detail, see our Terms of Service, Section 7 (Privacy Features; No Warranty of Privacy or Security).`,
   },
   {
-    title: '6. Safety & Responsibility',
+    title: '7. Prohibited Content',
+    body: `The following content is strictly prohibited:
+
+\u2022 content involving minors in any way
+\u2022 exploitation or abuse of any person
+\u2022 non-consensual intimate imagery, including revenge porn
+\u2022 content that facilitates, promotes, or depicts any crime
+\u2022 illegal activity of any kind
+\u2022 violent threats or coercive behavior
+\u2022 trafficking-related content
+\u2022 harassment or stalking behavior
+\u2022 malicious software, scams, or fraud
+\u2022 impersonation or identity fraud
+
+Violation of these rules may result in immediate suspension or permanent account removal. Where required by law, violations may be reported to law enforcement.`,
+  },
+  {
+    title: '8. Safety & Responsibility',
     body: `Warm Me Up provides tools for communication, games, prompts, dares, and media sharing.
 
 Users are solely responsible for:
@@ -108,22 +135,22 @@ Never pressure another user into participating in anything that makes them uncom
 Respect boundaries and communicate clearly.`,
   },
   {
-    title: '7. Reporting Abuse',
+    title: '9. Reporting Abuse',
     body: `If you believe someone is:
 
 \u2022 abusing the platform
 \u2022 violating these Guidelines
 \u2022 sharing non-consensual content
-\u2022 engaging in harmful behavior
+\u2022 engaging in harmful or illegal behavior
 
 please contact us at:
 
 support@warmmeup.app
 
-We reserve the right to investigate and take appropriate action, including suspension or permanent removal of accounts.`,
+We reserve the right to investigate and take appropriate action, including suspension or permanent removal of accounts. Where required by law, we may report violations to law enforcement.`,
   },
   {
-    title: '8. Enforcement',
+    title: '10. Enforcement',
     body: `Warm Me Up may suspend or terminate accounts that:
 
 \u2022 violate these Guidelines
@@ -134,12 +161,14 @@ We reserve the right to investigate and take appropriate action, including suspe
 We reserve the right to remove content or restrict access at our discretion.`,
   },
   {
-    title: '9. Final Thoughts',
+    title: '11. Final Thoughts',
     body: `Warm Me Up was created for couples who want a fun, private space to connect and stay playful together.
 
 Use the app responsibly.
 Respect each other.
 Protect each other's trust.
+
+This document should be read alongside our Terms of Service and Privacy Policy.
 
 Stay Playful.`,
   },
