@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform,
-  TextInput, ActivityIndicator,
+  TextInput, ActivityIndicator, Image,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
-import { ChevronRight, Check, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, ShieldOff, Shield, MessageSquare } from 'lucide-react-native';
+import { ChevronRight, Check, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, ShieldOff, Shield, MessageSquare, Share2 } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -21,6 +21,7 @@ import { setAppBadge } from '@/lib/appBadge';
 import CommunityGuidelinesModal from '@/components/CommunityGuidelinesModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
 import { useLayout } from '@/hooks/useLayout';
+import { shareApp } from '@/lib/shareApp';
 
 function OwnershipNote({ text }: { text: string }) {
   const { colors } = useTheme();
@@ -869,7 +870,20 @@ export default function SettingsScreen() {
           </>
         )}
 
-        <View style={{ height: 60 }} />
+        {/* Footer logo */}
+        <View style={styles.footerLogoWrap}>
+          <Image
+            source={require('@/assets/images/image_(2).png')}
+            style={styles.footerLogo}
+            resizeMode="contain"
+          />
+        </View>
+
+        {/* Share app with a friend — subtle link, not a button */}
+        <TouchableOpacity onPress={shareApp} activeOpacity={0.6} style={styles.shareAppLink}>
+          <Share2 color={colors.textMuted} size={13} strokeWidth={2} />
+          <AppText style={[styles.shareAppLinkText, { color: colors.textMuted }]}>Share Warm Me Up with a friend</AppText>
+        </TouchableOpacity>
       </ScrollView>
 
       <CommunityGuidelinesModal
@@ -1125,5 +1139,20 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',
     textAlign: 'center',
+  },
+  footerLogoWrap: { alignItems: 'center', paddingTop: Spacing.xxl, paddingBottom: Spacing.xl, opacity: 0.7 },
+  footerLogo: { width: 320, height: 160 },
+  shareAppLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingBottom: Spacing.xl,
+  },
+  shareAppLinkText: {
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    textDecorationLine: 'underline',
+    textDecorationColor: 'rgba(150,150,160,0.35)',
   },
 });
