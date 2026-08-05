@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
-import { ChevronRight, Check, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, ShieldOff, Shield, MessageSquare, Share2 } from 'lucide-react-native';
+import { ChevronRight, Check, ScanFace, FingerprintPattern as Fingerprint, CircleQuestionMark, ShieldOff, Shield, MessageSquare } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -21,7 +21,6 @@ import { setAppBadge } from '@/lib/appBadge';
 import CommunityGuidelinesModal from '@/components/CommunityGuidelinesModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
 import { useLayout } from '@/hooks/useLayout';
-import { shareApp } from '@/lib/shareApp';
 
 function OwnershipNote({ text }: { text: string }) {
   const { colors } = useTheme();
@@ -672,11 +671,6 @@ export default function SettingsScreen() {
               </Section>
 
               <Section title="ACCOUNT">
-                <SettingsRow
-                  label="Share Warm Me Up"
-                  sub="Tell a friend about Warm Me Up"
-                  onPress={shareApp}
-                />
                 {feedbackEnabled && (
                   <SettingsRow
                     label="Send Feedback"
@@ -862,11 +856,6 @@ export default function SettingsScreen() {
             </Section>
 
             <Section title="ACCOUNT">
-              <SettingsRow
-                label="Share Warm Me Up"
-                sub="Tell a friend about Warm Me Up"
-                onPress={shareApp}
-              />
               {feedbackEnabled && (
                 <SettingsRow
                   label="Send Feedback"

@@ -1004,7 +1004,6 @@ export default function AccountScreen() {
               onShowPrivacyPolicy={() => setShowPrivacyPolicy(true)}
               feedbackEnabled={feedbackEnabled}
               onSendFeedback={() => setShowFeedbackSheet(true)}
-              onShareApp={shareApp}
               subscriptionInfo={subscriptionInfo}
               onRestorePurchase={handleRestorePurchase}
               onDeleteAccount={() => { setDeleteAccountError(null); setDeleteAccountStep(1); setDeleteAccountOpen(true); }}

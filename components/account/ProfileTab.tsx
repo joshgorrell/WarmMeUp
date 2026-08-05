@@ -278,19 +278,6 @@ export function ProfileTab({
         </TouchableOpacity>
       )}
 
-      {/* Share Warm Me Up with a friend */}
-      <TouchableOpacity
-        style={[styles.shareAppRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-        onPress={onShareApp}
-        activeOpacity={0.75}
-      >
-        <View style={[styles.enterCodeIcon, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
-          <Share2 color="#FF2E8A" size={16} strokeWidth={2} />
-        </View>
-        <AppText style={[styles.shareAppText, { color: colors.textSecondary }]}>Share Warm Me Up with a friend</AppText>
-        <ChevronRight color={colors.textMuted} size={15} strokeWidth={2} />
-      </TouchableOpacity>
-
       {/* Profile menu */}
       <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
         <TouchableOpacity
@@ -430,6 +417,12 @@ export function ProfileTab({
           resizeMode="contain"
         />
       </View>
+
+      {/* Share app with a friend — subtle link, not a button */}
+      <TouchableOpacity onPress={onShareApp} activeOpacity={0.6} style={styles.shareAppLink}>
+        <Share2 color={colors.textMuted} size={13} strokeWidth={2} />
+        <AppText style={[styles.shareAppLinkText, { color: colors.textMuted }]}>Share Warm Me Up with a friend</AppText>
+      </TouchableOpacity>
     </>
   );
 }
@@ -508,20 +501,18 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Medium',
   },
-  shareAppRow: {
+  shareAppLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.md,
+    justifyContent: 'center',
+    gap: 6,
+    paddingBottom: Spacing.xl,
   },
-  shareAppText: {
-    flex: 1,
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Medium',
+  shareAppLinkText: {
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    textDecorationLine: 'underline',
+    textDecorationColor: 'rgba(150,150,160,0.35)',
   },
   menuCard: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden', marginBottom: Spacing.md },
   sectionLabel: { fontSize: FontSize.label, fontFamily: 'Inter-SemiBold', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: Spacing.sm },
