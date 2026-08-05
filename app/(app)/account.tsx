@@ -27,6 +27,7 @@ import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
 import { useLayout } from '@/hooks/useLayout';
+import { shareApp } from '@/lib/shareApp';
 import { ensureConfigured } from '@/lib/purchases';
 import { logger } from '@/lib/logger';
 import { ProfileTab } from '@/components/account/ProfileTab';
@@ -938,6 +939,7 @@ export default function AccountScreen() {
               avatarError={avatarError}
               onCopyCode={handleCopyCode}
               onShareCode={handleShareCode}
+              onShareApp={shareApp}
               onRefreshCode={handleRefreshCode}
               onInviteCardPress={handleInviteCardPress}
               onManagePairing={() => setShowLeaveSheet(true)}
@@ -1002,6 +1004,7 @@ export default function AccountScreen() {
               onShowPrivacyPolicy={() => setShowPrivacyPolicy(true)}
               feedbackEnabled={feedbackEnabled}
               onSendFeedback={() => setShowFeedbackSheet(true)}
+              onShareApp={shareApp}
               subscriptionInfo={subscriptionInfo}
               onRestorePurchase={handleRestorePurchase}
               onDeleteAccount={() => { setDeleteAccountError(null); setDeleteAccountStep(1); setDeleteAccountOpen(true); }}

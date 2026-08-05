@@ -2,7 +2,7 @@ import React from 'react';
 import {
   View, TouchableOpacity, ActivityIndicator, Linking,
 } from 'react-native';
-import { Mail, Check, X, ChevronRight } from 'lucide-react-native';
+import { Mail, Check, X, ChevronRight, Share2 } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -13,6 +13,7 @@ import {
   type UnlockMethod,
 } from '@/components/account/SecurityRows';
 import type { UserSettings } from '@/lib/types';
+import { shareApp } from '@/lib/shareApp';
 
 export function SettingsTab({
   // Auth
@@ -70,6 +71,8 @@ export function SettingsTab({
   // Feedback
   feedbackEnabled,
   onSendFeedback,
+  // Share app
+  onShareApp,
   // Vault section layout ref
   onVaultSectionLayout,
 }: {
@@ -117,6 +120,7 @@ export function SettingsTab({
   onContactSupport: () => void;
   feedbackEnabled: boolean;
   onSendFeedback: () => void;
+  onShareApp: () => void;
   onVaultSectionLayout: (y: number) => void;
 }) {
   const { colors } = useTheme();
@@ -316,6 +320,11 @@ export function SettingsTab({
       </Section>
 
       <Section title="SUPPORT">
+        <SettingsRow
+          label="Share Warm Me Up"
+          sub="Tell a friend about Warm Me Up"
+          onPress={onShareApp}
+        />
         {feedbackEnabled && (
           <SettingsRow
             label="Send Feedback"

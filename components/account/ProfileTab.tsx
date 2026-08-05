@@ -47,6 +47,7 @@ export function ProfileTab({
   // Handlers
   onCopyCode,
   onShareCode,
+  onShareApp,
   onRefreshCode,
   onInviteCardPress,
   onManagePairing,
@@ -87,6 +88,7 @@ export function ProfileTab({
   avatarError: string | null;
   onCopyCode: () => void;
   onShareCode: () => void;
+  onShareApp: () => void;
   onRefreshCode: () => void;
   onInviteCardPress: () => void;
   onManagePairing: () => void;
@@ -275,6 +277,19 @@ export function ProfileTab({
           <ChevronRight color={colors.textMuted} size={15} strokeWidth={2} />
         </TouchableOpacity>
       )}
+
+      {/* Share Warm Me Up with a friend */}
+      <TouchableOpacity
+        style={[styles.shareAppRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+        onPress={onShareApp}
+        activeOpacity={0.75}
+      >
+        <View style={[styles.enterCodeIcon, { backgroundColor: 'rgba(255,46,138,0.10)' }]}>
+          <Share2 color="#FF2E8A" size={16} strokeWidth={2} />
+        </View>
+        <AppText style={[styles.shareAppText, { color: colors.textSecondary }]}>Share Warm Me Up with a friend</AppText>
+        <ChevronRight color={colors.textMuted} size={15} strokeWidth={2} />
+      </TouchableOpacity>
 
       {/* Profile menu */}
       <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
@@ -489,6 +504,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   enterCodeText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Medium',
+  },
+  shareAppRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  shareAppText: {
     flex: 1,
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Medium',
