@@ -250,8 +250,10 @@ export default function DareTab() {
       const pts = await getPointValue('dare_accept');
       await awardPoints(couple.id, user.id, pts, 'Dare accepted', incomingDare.id);
       await incrementMonthlyCounter(couple.id, user.id, 'dares_accepted', pts);
+      setIncomingDare({ ...incomingDare, status: 'accepted' });
     } else {
       await incrementMonthlyCounter(couple.id, user.id, 'dares_skipped', 0);
+      setIncomingDare(null);
     }
   };
 
@@ -348,7 +350,7 @@ export default function DareTab() {
               </View>
               <ReceivedDareCard
                 text={incomingDare.content_text}
-                awaitingConfirmation={incomingDare.status === 'pending_verification'}
+                status={incomingDare.status}
                 expiresAt={incomingDare.expires_at}
                 totalExpirySeconds={expirySeconds}
                 coupleId={couple?.id}

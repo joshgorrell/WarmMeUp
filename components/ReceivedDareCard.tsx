@@ -17,7 +17,7 @@ interface DeclinePrompt {
 
 interface ReceivedDareCardProps {
   text?: string | null;
-  awaitingConfirmation?: boolean;
+  status?: string | null;
   expiresAt?: string | null;
   totalExpirySeconds?: number;
   coupleId?: string;
@@ -27,9 +27,15 @@ interface ReceivedDareCardProps {
   onTimeout?: () => void;
 }
 
+function resolveStage(status?: string | null): Stage {
+  if (status === 'pending_verification') return 'waiting';
+  if (status === 'accepted') return 'accepted';
+  return 'pending';
+}
+
 export default function ReceivedDareCard({
   text,
-  awaitingConfirmation = false,
+  status,
   expiresAt,
   totalExpirySeconds = 86400,
   coupleId,
@@ -39,7 +45,7 @@ export default function ReceivedDareCard({
   onTimeout,
 }: ReceivedDareCardProps) {
   const { colors } = useTheme();
-  const [stage, setStage] = useState<Stage>(awaitingConfirmation ? 'waiting' : 'pending');
+  const [stage, setStage] = useState<Stage>(resolveStage(status));
   const [busy, setBusy] = useState(false);
   const [declinePrompts, setDeclinePrompts] = useState<DeclinePrompt[]>([]);
   const [loadingPrompts, setLoadingPrompts] = useState(false);

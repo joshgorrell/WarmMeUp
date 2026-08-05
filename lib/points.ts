@@ -88,14 +88,25 @@ export async function verifyCompletion(
   receiverId: string,
   eventKey: 'dare_complete' | 'dice_complete'
 ) {
-  await supabase
+  const { data: current } = await supabase
+    .from('interactions')
+    .select('status')
+    .eq('id', interactionId)
+    .maybeSingle();
+
+  if (current?.status === 'completed') return;
+
+  const { error } = await supabase
     .from('interactions')
     .update({
       status: 'completed',
       completed_at: new Date().toISOString(),
       completed_verified_by: verifierId,
     })
-    .eq('id', interactionId);
+    .eq('id', interactionId)
+    .eq('status', 'pending_verification');
+
+  if (error) return;
 
   const pts = await getPointValue(eventKey);
   await awardPoints(coupleId, receiverId, pts, `${eventKey === 'dare_complete' ? 'Dare' : 'Dice'} completed`, interactionId);
