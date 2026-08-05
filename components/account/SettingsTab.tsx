@@ -1,12 +1,13 @@
 import React from 'react';
 import {
-  View, TouchableOpacity, ActivityIndicator, Linking,
+  View, TouchableOpacity, ActivityIndicator, Linking, Image, StyleSheet,
 } from 'react-native';
-import { Mail, Check, X, ChevronRight } from 'lucide-react-native';
+import { Mail, Check, X, ChevronRight, Share2 } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useRouter } from 'expo-router';
+import { shareApp } from '@/lib/shareApp';
 import { Section, SettingsRow, InlineField } from '@/components/account/SharedSections';
 import {
   RequireUnlockRow, RequireUnlockAfterRow, VaultProtectionRow, ChatFontSizeRow,
@@ -426,9 +427,42 @@ export function SettingsTab({
         <SettingsRow label="Privacy Policy" sub="How we handle your data" onPress={onShowPrivacyPolicy} />
         <SettingsRow label="Delete My Account" danger onPress={onDeleteAccount} last />
       </Section>
+
+      {/* Footer logo */}
+      <View style={styles.footerLogoWrap}>
+        <Image
+          source={require('@/assets/images/image_(2).png')}
+          style={styles.footerLogo}
+          resizeMode="contain"
+        />
+      </View>
+
+      {/* Share app with a friend — subtle link, not a button */}
+      <TouchableOpacity onPress={shareApp} activeOpacity={0.6} style={styles.shareAppLink}>
+        <Share2 color={colors.textMuted} size={13} strokeWidth={2} />
+        <AppText style={[styles.shareAppLinkText, { color: colors.textMuted }]}>Share Warm Me Up with a friend</AppText>
+      </TouchableOpacity>
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  footerLogoWrap: { alignItems: 'center', paddingTop: Spacing.xxl, paddingBottom: Spacing.xl, opacity: 0.7 },
+  footerLogo: { width: 320, height: 160 },
+  shareAppLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingBottom: Spacing.xl,
+  },
+  shareAppLinkText: {
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+    textDecorationLine: 'underline',
+    textDecorationColor: 'rgba(150,150,160,0.35)',
+  },
+});
 
 // Shared row styles (mirror of SharedSections styles, used for the LOGIN & SECURITY inline rows)
 const stylesShared = {
