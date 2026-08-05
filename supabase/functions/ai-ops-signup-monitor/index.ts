@@ -182,7 +182,7 @@ Deno.serve(async (req: Request) => {
   } catch (err: any) {
     console.error("[ai-ops-signup-monitor] Unhandled error:", err?.message ?? String(err));
     return new Response(
-      JSON.stringify({ error: "Internal server error", detail: err?.message ?? String(err) }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

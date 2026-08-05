@@ -261,6 +261,6 @@ Deno.serve(async (req: Request) => {
       receipt_response: receiptResponse,
     });
   } catch (err: any) {
-    return json({ error: "Internal server error", detail: err?.message ?? String(err) }, 500);
+    return json({ error: "Internal server error" }, 500);
   }
 });

@@ -122,7 +122,7 @@ Deno.serve(async (req: Request) => {
 
     if (upsertError) {
       console.error("[confirm-subscription] DB upsert error:", upsertError.message);
-      return new Response(JSON.stringify({ error: upsertError.message }), {
+      return new Response(JSON.stringify({ error: "Could not save your subscription" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -150,7 +150,7 @@ Deno.serve(async (req: Request) => {
     );
   } catch (err: any) {
     console.error("[confirm-subscription] Unexpected error:", err?.message);
-    return new Response(JSON.stringify({ error: err?.message ?? "Internal server error" }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

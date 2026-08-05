@@ -237,7 +237,7 @@ Deno.serve(async (req: Request) => {
     });
   } catch (err: any) {
     console.error("[notify-partner] Unhandled error:", err?.message ?? String(err));
-    return new Response(JSON.stringify({ error: "Internal server error", detail: err?.message ?? String(err) }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Mail } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { friendlyAuthError } from '@/lib/authError';
 import WarmupBrand from '@/components/WarmupBrand';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
@@ -37,7 +38,7 @@ export default function ForgotPasswordScreen() {
       if (err) throw err;
       setSent(true);
     } catch (e: any) {
-      setError(e.message || 'Could not send reset email.');
+      setError(friendlyAuthError(e) || 'Could not send reset email.');
     } finally {
       setLoading(false);
     }

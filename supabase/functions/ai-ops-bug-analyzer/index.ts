@@ -257,7 +257,7 @@ Rules:
   } catch (err: any) {
     console.error("[ai-ops-bug-analyzer] Unhandled error:", err?.message ?? String(err));
     return new Response(
-      JSON.stringify({ error: "Internal server error", detail: err?.message ?? String(err) }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

@@ -216,7 +216,7 @@ Only include issues that represent genuine security concerns. If nothing is conc
   } catch (err: any) {
     console.error("[ai-ops-security-monitor] Unhandled error:", err?.message ?? String(err));
     return new Response(
-      JSON.stringify({ error: "Internal server error", detail: err?.message ?? String(err) }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

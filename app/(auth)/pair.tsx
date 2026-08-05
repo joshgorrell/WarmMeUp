@@ -30,6 +30,7 @@ import {
 } from '@/lib/inviteCode';
 import { previewInvite, getPendingPartnerProfile, getMyPendingJoin, recordTrialExpired, type PendingJoinStatus } from '@/lib/coupleJoin';
 import { logDebugEvent } from '@/lib/debugLog';
+import { logger } from '@/lib/logger';
 import { ensureConfigured } from '@/lib/purchases';
 import { MONTHLY_PRODUCT_ID, ANNUAL_PRODUCT_ID } from '@/lib/productIds';
 import PairHelpModal from '@/components/PairHelpModal';
@@ -341,7 +342,8 @@ export default function PairScreen() {
       await refreshCouple();
       // Realtime will pick up user_b_id and redirect
     } catch (e: any) {
-      setError(e.message || 'Something went wrong.');
+      logger.warn('[pair] error:', e?.message);
+      setError('Something went wrong. Please try again.');
     } finally {
       setAcceptLoading(false);
     }
@@ -359,7 +361,8 @@ export default function PairScreen() {
       }
       await refreshCouple();
     } catch (e: any) {
-      setError(e.message || 'Something went wrong.');
+      logger.warn('[pair] error:', e?.message);
+      setError('Something went wrong. Please try again.');
     } finally {
       setAcceptLoading(false);
     }
@@ -728,7 +731,8 @@ export default function PairScreen() {
         })();
       }
     } catch (e: any) {
-      setError(e.message || 'Something went wrong.');
+      logger.warn('[pair] error:', e?.message);
+      setError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -769,7 +773,8 @@ export default function PairScreen() {
       }
       setPreAuthPreview({ name: result.inviterName });
     } catch (e: any) {
-      setError(e.message || 'Something went wrong.');
+      logger.warn('[pair] error:', e?.message);
+      setError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }

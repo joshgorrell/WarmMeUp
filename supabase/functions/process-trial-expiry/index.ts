@@ -7,6 +7,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+/** Length-independent, constant-time string comparison. */
+function safeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ba = enc.encode(a);
+  const bb = enc.encode(b);
+  let diff = ba.length ^ bb.length;
+  const len = Math.max(ba.length, bb.length);
+  for (let i = 0; i < len; i++) {
+    diff |= (ba[i] ?? 0) ^ (bb[i] ?? 0);
+  }
+  return diff === 0;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -15,6 +28,40 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    // ── Authorization ────────────────────────────────────────────────────
+    // This job sends push notifications and stamps notification bookkeeping
+    // columns, so it must only run for the scheduler (service-role key) or
+    // for an admin triggering it manually. Never for an anonymous caller.
+    const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const isCron = token.length > 0 && safeEqual(token, serviceRoleKey);
+
+    if (!isCron) {
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+      const { data: { user }, error: authError } = await userClient.auth.getUser();
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const gateClient = createClient(supabaseUrl, serviceRoleKey);
+      const { data: profile } = await gateClient
+        .from("profiles")
+        .select("is_admin, is_super_admin")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!profile?.is_admin && !profile?.is_super_admin) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     let processedFirst = 0;
@@ -147,7 +194,7 @@ Deno.serve(async (req: Request) => {
   } catch (err: any) {
     console.error("[process-trial-expiry] unhandled error:", err?.message ?? String(err));
     return new Response(
-      JSON.stringify({ error: "Internal server error", detail: err?.message ?? String(err) }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
