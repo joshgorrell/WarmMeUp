@@ -10,7 +10,7 @@
 -- INSERT violations DO throw (42501), so those use throws_ok with NULL
 -- error matching (any exception satisfies the test).
 
-SELECT plan(50);
+SELECT plan(64);
 
 -- ═══════════════════════════════════════════════════════════════
 -- Test Setup: Create two couples with test users
@@ -232,6 +232,109 @@ SELECT results_eq(
   $q$SELECT display_name FROM profiles WHERE id = '11111111-1111-1111-1111-111111111111'$q$,
   ARRAY['Updated Name']::text[],
   'Non-admin can still update own display_name'
+);
+
+-- ═══════════════════════════════════════════════════════════════
+-- 51-64: SECURITY HARDENING — anon revocation, admin function access,
+--        and column-level UPDATE restrictions
+-- ═══════════════════════════════════════════════════════════════
+
+-- 51: anon cannot SELECT from profiles
+SELECT throws_ok(
+  $ SELECT * FROM profiles LIMIT 1 $,
+  'permission denied for table profiles',
+  'Anon cannot read profiles (table grant revoked)'
+);
+
+-- 52: anon cannot SELECT from chat_messages
+SELECT throws_ok(
+  $ SELECT * FROM chat_messages LIMIT 1 $,
+  'permission denied for table chat_messages',
+  'Anon cannot read chat_messages (table grant revoked)'
+);
+
+-- 53: anon cannot SELECT from vault_items
+SELECT throws_ok(
+  $ SELECT * FROM vault_items LIMIT 1 $,
+  'permission denied for table vault_items',
+  'Anon cannot read vault_items (table grant revoked)'
+);
+
+-- 54: anon cannot SELECT from couples
+SELECT throws_ok(
+  $ SELECT * FROM couples LIMIT 1 $,
+  'permission denied for table couples',
+  'Anon cannot read couples (table grant revoked)'
+);
+
+-- 55: anon cannot call accept_partner RPC
+SELECT throws_ok(
+  $ SELECT * FROM accept_partner() $,
+  'permission denied for function accept_partner',
+  'Anon cannot call accept_partner (EXECUTE revoked)'
+);
+
+-- 56: anon cannot call preview_invite RPC
+SELECT throws_ok(
+  $ SELECT * FROM preview_invite('TESTCODE') $,
+  'permission denied for function preview_invite',
+  'Anon cannot call preview_invite (EXECUTE revoked)'
+);
+
+-- 57: anon cannot call get_pending_partner_profile RPC
+SELECT throws_ok(
+  $ SELECT * FROM get_pending_partner_profile() $,
+  'permission denied for function get_pending_partner_profile',
+  'Anon cannot call get_pending_partner_profile (EXECUTE revoked)'
+);
+
+-- 58: authenticated cannot call admin_search_user_by_email
+SELECT throws_ok(
+  $ SELECT * FROM admin_search_user_by_email('someone@example.com') $,
+  'permission denied for function admin_search_user_by_email',
+  'Authenticated cannot call admin_search_user_by_email (EXECUTE revoked from authenticated)'
+);
+
+-- 59: authenticated cannot call admin_set_global_debug_access
+SELECT throws_ok(
+  $ SELECT * FROM admin_set_global_debug_access(true, 'hash', now() + interval '1 hour', 'enable') $,
+  'permission denied for function admin_set_global_debug_access',
+  'Authenticated cannot call admin_set_global_debug_access (EXECUTE revoked from authenticated)'
+);
+
+-- 60: authenticated cannot call debug_database_identity
+SELECT throws_ok(
+  $ SELECT * FROM debug_database_identity() $,
+  'permission denied for function debug_database_identity',
+  'Authenticated cannot call debug_database_identity (EXECUTE revoked from authenticated)'
+);
+
+-- 61: authenticated cannot UPDATE profiles.is_admin column
+SELECT throws_ok(
+  $ UPDATE profiles SET is_admin = true WHERE id = '00000000-0000-0000-0000-000000000000' $,
+  'permission denied for column is_admin of table profiles',
+  'Authenticated cannot UPDATE profiles.is_admin (column privilege revoked)'
+);
+
+-- 62: authenticated cannot UPDATE profiles.is_super_admin column
+SELECT throws_ok(
+  $ UPDATE profiles SET is_super_admin = true WHERE id = '00000000-0000-0000-0000-000000000000' $,
+  'permission denied for column is_super_admin of table profiles',
+  'Authenticated cannot UPDATE profiles.is_super_admin (column privilege revoked)'
+);
+
+-- 63: authenticated cannot UPDATE couples.user_a_id column
+SELECT throws_ok(
+  $ UPDATE couples SET user_a_id = '00000000-0000-0000-0000-000000000000' WHERE id = '00000000-0000-0000-0000-000000000000' $,
+  'permission denied for column user_a_id of table couples',
+  'Authenticated cannot UPDATE couples.user_a_id (column privilege revoked)'
+);
+
+-- 64: authenticated cannot UPDATE couples.pending_partner_id column
+SELECT throws_ok(
+  $ UPDATE couples SET pending_partner_id = '00000000-0000-0000-0000-000000000000' WHERE id = '00000000-0000-0000-0000-000000000000' $,
+  'permission denied for column pending_partner_id of table couples',
+  'Authenticated cannot UPDATE couples.pending_partner_id (column privilege revoked)'
 );
 
 SELECT * FROM finish();
