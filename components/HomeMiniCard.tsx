@@ -34,12 +34,14 @@ export default function HomeMiniCard({
       <View style={[styles.iconWrap, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
         {icon}
       </View>
-      <AppText style={[styles.value, { color: colors.text }]} numberOfLines={1}>
-        {value}
-      </AppText>
-      <AppText style={[styles.label, { color: colors.textMuted }]} numberOfLines={1}>
-        {label}
-      </AppText>
+      <View style={styles.textWrap}>
+        <AppText style={[styles.value, { color: colors.text }]} numberOfLines={1}>
+          {value}
+        </AppText>
+        <AppText style={[styles.label, { color: colors.textMuted }]} numberOfLines={1}>
+          {label}
+        </AppText>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -49,25 +51,33 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: Radius.md,
     borderWidth: 1,
-    padding: Spacing.sm + 2,
-    gap: 3,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   iconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
+    flexShrink: 0,
+  },
+  textWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
   },
   value: {
     fontSize: FontSize.body,
     fontFamily: 'Inter-Bold',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   label: {
     fontSize: 10,
     fontFamily: 'Inter-Medium',
-    lineHeight: 13,
+    lineHeight: 12,
   },
 });
