@@ -124,7 +124,6 @@ export default function RegisterScreen() {
   const [avatarDone, setAvatarDone] = useState(false);
   const [avatarSkip, setAvatarSkip] = useState(false);
 
-  const tosAcceptedAt = new Date().toISOString();
   const maxDate = getMaxDate();
 
   // When arriving from login-screen OAuth (oauthComplete=1), check if the session
@@ -263,7 +262,6 @@ export default function RegisterScreen() {
             ...(fn ? { first_name: fn } : {}),
             ...(ln ? { last_name: ln } : {}),
             ...(fullName ? { display_name: fullName } : {}),
-            tos_accepted_at: tosAcceptedAt,
           })
           .eq('id', userId)
           .is('tos_accepted_at', null)
@@ -351,7 +349,7 @@ export default function RegisterScreen() {
       if (data.user) {
         await supabase
           .from('profiles')
-          .update({ first_name: fn, last_name: ln, display_name: fullName, tos_accepted_at: tosAcceptedAt })
+          .update({ first_name: fn, last_name: ln, display_name: fullName })
           .eq('id', data.user.id);
 
         setCreatedUserId(data.user.id);

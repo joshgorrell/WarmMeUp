@@ -37,6 +37,17 @@ export default function UnlockScreen() {
   const [authError, setAuthError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
 
+  // Client-side rate limiting for email fallback sign-in
+  const failedAttemptsRef = useRef(0);
+  const cooldownEndsAtRef = useRef(0);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+
+  useEffect(() => {
+    if (cooldownRemaining <= 0) return;
+    const timer = setTimeout(() => setCooldownRemaining(c => Math.max(0, c - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldownRemaining]);
+
   const vXs = Math.round(height * 0.012);
   const vSm = Math.round(height * 0.02);
   const vMd = Math.round(height * 0.03);
@@ -126,6 +137,13 @@ export default function UnlockScreen() {
       setAuthError('Please enter your email and password.');
       return;
     }
+
+    // Rate limit: after 5 failed attempts, enforce a 30-second cooldown
+    if (Date.now() < cooldownEndsAtRef.current) {
+      setAuthError('Too many attempts. Please wait before trying again.');
+      return;
+    }
+
     setSigningIn(true);
     setAuthError('');
 
@@ -169,8 +187,16 @@ export default function UnlockScreen() {
           SecureStore.setItemAsync('debug_login_error_full_json', errJson).catch(() => {}),
         ]);
         console.error('[unlock] signInWithPassword error:', error.message, '| status:', (error as any).status);
-        setAuthError(visibleMsg);
+        failedAttemptsRef.current += 1;
+        if (failedAttemptsRef.current >= 5) {
+          cooldownEndsAtRef.current = Date.now() + 30_000;
+          setCooldownRemaining(30);
+          setAuthError('Too many failed attempts. Please wait 30 seconds before trying again.');
+        } else {
+          setAuthError(visibleMsg);
+        }
       } else {
+        failedAttemptsRef.current = 0;
         await SecureStore.setItemAsync('debug_login_error_source', 'none:success').catch(() => {});
         logDebugEvent('LOGIN SIGN_IN_SUCCESS', { handler: 'unlock.tsx:handleEmailSignIn' });
         proceed();
@@ -186,7 +212,14 @@ export default function UnlockScreen() {
         SecureStore.setItemAsync('debug_login_error_full_json', errJson).catch(() => {}),
       ]);
       console.error('[unlock] signInWithPassword threw:', e?.message);
-      setAuthError(visibleMsg);
+      failedAttemptsRef.current += 1;
+      if (failedAttemptsRef.current >= 5) {
+        cooldownEndsAtRef.current = Date.now() + 30_000;
+        setCooldownRemaining(30);
+        setAuthError('Too many failed attempts. Please wait 30 seconds before trying again.');
+      } else {
+        setAuthError(visibleMsg);
+      }
     } finally {
       setSigningIn(false);
     }
