@@ -144,7 +144,6 @@ export default function PairScreen() {
   const [packages, setPackages] = useState<Record<string, any>>({});
   const trialExpiredNotifiedRef = useRef(false);
   const trialReminderSentRef = useRef(false);
-  const [showAcceptSubscribeBtn, setShowAcceptSubscribeBtn] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -155,15 +154,21 @@ export default function PairScreen() {
       // Before loading the couple, check whether the user has a pending join request
       // from a previous session. If so, resume straight into the waiting state.
       const pending = await getMyPendingJoin();
-      if (pending.ok && (pending.status === 'b_accepted' || pending.status === 'pending')) {
-        setWaitingState('waiting');
-        setWaitingCoupleId(pending.coupleId);
-        setInviterName(pending.inviterName);
-        setInviterAvatar(pending.inviterAvatar);
-        if (!pending.inviterPremiumActive) {
-          setWaitingState('trial_expired');
+      if (pending.ok && (pending.status === 'accepted' || pending.status === 'b_accepted' || pending.status === 'pending')) {
+        // With auto-finalize, a pending status of 'accepted' means the connection
+        // is already complete — navigate immediately.
+        // A stale 'b_accepted' or 'pending' (from before the migration) should
+        // also be treated as accepted since request_join now finalizes immediately.
+        await refreshCouple();
+        refreshSubscription().catch(() => {});
+        if (!settings?.celebration_seen) {
+          router.replace({
+            pathname: '/(auth)/paired-celebration',
+            params: { partnerName: pending.inviterName || '' },
+          });
+        } else {
+          router.replace('/(app)/(tabs)');
         }
-        setActiveModal(null);
         setResumeChecked(true);
         return;
       }
@@ -324,39 +329,14 @@ export default function PairScreen() {
   }, [waitingState, waitingCoupleId, user, inviterName]);
 
   // User A: accept a pending request
-  const handleAccept = async () => {
-    if (!couple?.id || acceptLoading) return;
-    setAcceptLoading(true);
-    setShowAcceptSubscribeBtn(false);
-    try {
-      const { data: result, error } = await supabase.rpc('accept_partner');
-      if (error || !result?.ok) {
-        if (result?.reason === 'no_subscription') {
-          setError('Your trial has ended. Subscribe to confirm your partner.');
-          setShowAcceptSubscribeBtn(true);
-        } else {
-          setError('Could not accept right now. Try again.');
-        }
-        return;
-      }
-      await refreshCouple();
-      // Realtime will pick up user_b_id and redirect
-    } catch (e: any) {
-      logger.warn('[pair] error:', e?.message);
-      setError('Something went wrong. Please try again.');
-    } finally {
-      setAcceptLoading(false);
-    }
-  };
-
-  // User A: decline a pending request
-  const handleDecline = async () => {
+  // User A: cancel a pending invite they sent
+  const handleCancelInvite = async () => {
     if (!couple?.id || acceptLoading) return;
     setAcceptLoading(true);
     try {
-      const { error } = await supabase.rpc('decline_partner');
+      const { error } = await supabase.rpc('cancel_pending_partner');
       if (error) {
-        setError('Could not decline right now. Try again.');
+        setError('Could not cancel right now. Try again.');
         return;
       }
       await refreshCouple();
@@ -699,36 +679,39 @@ export default function PairScreen() {
           case 'rate_limited':
             setError('Too many attempts. Wait a moment and try again.');
             break;
+          case 'no_subscription':
+            setError("Your partner's free trial has ended. Ask them to subscribe and try again.");
+            break;
           default:
             setError('Something went wrong. Please try again.');
         }
         return;
       }
 
-      // Request created — move to waiting state. Realtime handles accept/decline.
-      setWaitingState('waiting');
-      setWaitingCoupleId(joinResult.couple_id);
+      // Connection finalized immediately — navigate to celebration.
       setActiveModal(null);
       await refreshCouple();
+      refreshSubscription().catch(() => {});
 
-      // Notify User A that a request is pending (with retry)
+      // Notify partner that the connection is complete
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
-      if (token) {
-        const notifyUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`;
-        const notifyBody = JSON.stringify({ event_type: 'partner_request', couple_id: joinResult.couple_id });
-        const notifyHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
-        // Retry up to 3 times with backoff so a transient edge function failure
-        // doesn't leave User A unaware of the pending request.
-        (async () => {
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              const res = await fetch(notifyUrl, { method: 'POST', headers: notifyHeaders, body: notifyBody });
-              if (res.ok) return;
-            } catch {}
-            await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
-          }
-        })();
+      if (token && joinResult.couple_id) {
+        fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ event_type: 'partner_joined', couple_id: joinResult.couple_id }),
+        }).catch(() => {});
+      }
+
+      const partnerName = preview.inviterName || inviterName || '';
+      if (!settings?.celebration_seen) {
+        router.replace({
+          pathname: '/(auth)/paired-celebration',
+          params: { partnerName },
+        });
+      } else {
+        router.replace('/(app)/(tabs)');
       }
     } catch (e: any) {
       logger.warn('[pair] error:', e?.message);
@@ -887,7 +870,7 @@ export default function PairScreen() {
 
                 <AppText style={styles.preAuthNote}>
                   {preAuthPreview
-                    ? 'Your partner will confirm the connection after you create your account.'
+                    ? 'You\'ll be connected as soon as you create your account.'
                     : "You'll see who's inviting you, then create your account."}
                 </AppText>
               </View>
@@ -982,7 +965,7 @@ export default function PairScreen() {
             <TouchableOpacity
               style={styles.optionCard}
               activeOpacity={0.8}
-              onPress={() => setActiveModal('join')}
+              onPress={() => { setJoinCode(''); setError(''); setActiveModal('join'); }}
             >
               <View style={styles.optionIconOuter}>
                 <LinearGradient
@@ -1008,10 +991,9 @@ export default function PairScreen() {
             </View>
           )}
 
-          {/* Pending request card — shown on the main screen so User A sees it
-              even without premium access. Previously this was buried inside the
-              invite modal's canInvite branch, making it invisible to users whose
-              subscription info hadn't loaded or who lacked premium. */}
+          {/* Pending invite card — shown if User A has a stale pending request.
+              With auto-finalize, this should rarely appear, but if it does,
+              User A can cancel the invite. */}
           {(couple?.pending_partner_status === 'pending' || couple?.pending_partner_status === 'b_accepted') && (
             <View style={styles.pendingRequestCard}>
               <View style={styles.pendingRequestHeader}>
@@ -1025,62 +1007,30 @@ export default function PairScreen() {
                   </View>
                 )}
                 <AppText style={styles.pendingRequestTitle} numberOfLines={1} ellipsizeMode="tail">
-                  {pendingPartnerName ? `${pendingPartnerName} accepted your invite!` : 'A partner wants to connect'}
+                  {pendingPartnerName ? `${pendingPartnerName} wants to connect` : 'A partner wants to connect'}
                 </AppText>
               </View>
               <AppText style={styles.pendingRequestDesc}>
                 {pendingPartnerName
-                  ? `${pendingPartnerName} is ready to join you on Warm Me Up! Confirm to open your shared space.`
-                  : 'Someone entered your invite code.\nConfirm only if they\'re your partner.'}
+                  ? `${pendingPartnerName} entered your invite code. Ask them to enter it again to finalize the connection.`
+                  : 'Someone entered your invite code. Ask them to enter it again to finalize the connection.'}
               </AppText>
               {error ? <AppText style={styles.joinError}>{error}</AppText> : null}
-              {showAcceptSubscribeBtn ? (
-                <TouchableOpacity
-                  style={styles.acceptSubscribeBtn}
-                  onPress={() => router.push('/(auth)/subscription')}
-                  activeOpacity={0.85}
-                >
-                  <LinearGradient
-                    colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.acceptSubscribeGrad}
-                  >
-                    <AppText style={styles.acceptSubscribeText}>Subscribe now</AppText>
-                  </LinearGradient>
-                </TouchableOpacity>
-              ) : null}
               <View style={styles.pendingRequestActions}>
                 <TouchableOpacity
                   style={[styles.pendingBtn, styles.declineBtn]}
-                  onPress={handleDecline}
+                  onPress={handleCancelInvite}
                   activeOpacity={0.8}
                   disabled={acceptLoading}
                 >
-                  <XCircle color="rgba(255,255,255,0.7)" size={16} />
-                  <AppText style={styles.declineBtnText}>Decline</AppText>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.pendingBtn}
-                  onPress={handleAccept}
-                  activeOpacity={0.85}
-                  disabled={acceptLoading}
-                >
-                  <LinearGradient
-                    colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.acceptGrad}
-                  >
-                    {acceptLoading ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <>
-                        <Check color="#fff" size={16} />
-                        <AppText style={styles.acceptBtnText}>Accept</AppText>
-                      </>
-                    )}
-                  </LinearGradient>
+                  {acceptLoading ? (
+                    <ActivityIndicator color="rgba(255,255,255,0.7)" size="small" />
+                  ) : (
+                    <>
+                      <XCircle color="rgba(255,255,255,0.7)" size={16} />
+                      <AppText style={styles.declineBtnText}>Cancel invite</AppText>
+                    </>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -1172,6 +1122,24 @@ export default function PairScreen() {
                 </TouchableOpacity>
 
                 <AppText style={styles.waitingText}>Waiting for your partner to join...</AppText>
+
+                {(couple?.pending_partner_status === 'pending' || couple?.pending_partner_status === 'b_accepted') && (
+                  <TouchableOpacity
+                    style={[styles.pendingBtn, styles.declineBtn, { marginTop: 12, alignSelf: 'center', paddingHorizontal: 20 }]}
+                    onPress={handleCancelInvite}
+                    activeOpacity={0.8}
+                    disabled={acceptLoading}
+                  >
+                    {acceptLoading ? (
+                      <ActivityIndicator color="rgba(255,255,255,0.7)" size="small" />
+                    ) : (
+                      <>
+                        <XCircle color="rgba(255,255,255,0.7)" size={16} />
+                        <AppText style={styles.declineBtnText}>Cancel invite</AppText>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
               </>
             ) : (
               <>

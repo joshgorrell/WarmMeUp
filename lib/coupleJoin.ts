@@ -2,10 +2,10 @@ import { supabase } from '@/lib/supabase';
 import { logDebugEvent } from '@/lib/debugLog';
 
 export type JoinResult =
-  | { ok: true; status: 'b_accepted'; coupleId: string; inviterName: string | null }
-  | { ok: false; reason: 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'error' };
+  | { ok: true; status: 'accepted'; coupleId: string; inviterName: string | null }
+  | { ok: false; reason: 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'no_subscription' | 'error' };
 
-type JoinReason = 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'error';
+type JoinReason = 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'no_subscription' | 'error';
 
 export type PendingJoinStatus = 'accepted' | 'b_accepted' | 'pending';
 
@@ -95,19 +95,11 @@ export async function getPendingPartnerProfile(): Promise<
 }
 
 /**
- * Phase 1 of mutual-consent pairing. Sends a join request to the couple
- * identified by `code`. Does NOT form a couple — it sets a pending request
- * that User A must accept via `accept_partner()` before any couple-scoped
- * data becomes accessible.
+ * Finalizes the pairing immediately. Calls `request_join` which now sets
+ * user_b_id and active=true in a single step — no separate accept step needed.
  *
- * Finalization (subscription stamping, scores seeding, solo-couple cleanup)
- * now runs server-side inside `accept_partner()`, so the client no longer
- * needs to call a separate finalize step.
- *
- * Returns `{ ok: true, status: 'b_accepted', coupleId, inviterName }` when
- * the request was created. The caller should navigate to a "waiting for
- * confirmation" state and subscribe to the couple row via realtime for the
- * accept/decline transition.
+ * Returns `{ ok: true, status: 'accepted', coupleId, inviterName }` when
+ * the connection is complete. The caller should navigate to celebration.
  */
 export async function completePendingJoin(
   code: string,
@@ -121,20 +113,20 @@ export async function completePendingJoin(
     return { ok: false, reason: (result?.reason as JoinReason) ?? 'error' };
   }
 
-  // Notify User A that a request is pending (fire-and-forget)
+  // Notify User A that the connection is complete (fire-and-forget)
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData?.session?.access_token;
   if (token) {
     fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ event_type: 'partner_request', couple_id: result.couple_id }),
+      body: JSON.stringify({ event_type: 'partner_joined', couple_id: result.couple_id }),
     }).catch(() => {});
   }
 
   return {
     ok: true,
-    status: 'b_accepted',
+    status: 'accepted',
     coupleId: result.couple_id,
     inviterName: result.inviter_name ?? null,
   };

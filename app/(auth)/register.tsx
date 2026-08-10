@@ -74,7 +74,7 @@ export default function RegisterScreen() {
   const { pendingCode, oauthComplete } = useLocalSearchParams<{ pendingCode?: string; oauthComplete?: string }>();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
-  const { refreshSubscription } = useAuth();
+  const { refreshSubscription, refreshProfile } = useAuth();
 
   const vXs = Math.round(height * 0.01);
   const vSm = Math.round(height * 0.016);
@@ -212,6 +212,10 @@ export default function RegisterScreen() {
     if (!createdUserId) return;
     const uid = createdUserId;
 
+    // Refresh the in-memory profile so the avatar and name are immediately
+    // available throughout the app without requiring a re-login.
+    refreshProfile().catch(() => {});
+
     // If email was already confirmed (OAuth or auto-confirm), go straight to onboarding/pair.
     // Otherwise go to verify-email.
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -312,6 +316,7 @@ export default function RegisterScreen() {
           .from('profiles')
           .update({ first_name: fn, last_name: ln, display_name: fullName })
           .eq('id', createdUserId);
+        await refreshProfile();
       }
       setStep('avatar');
     } catch (e: unknown) {
@@ -351,6 +356,7 @@ export default function RegisterScreen() {
           .from('profiles')
           .update({ first_name: fn, last_name: ln, display_name: fullName })
           .eq('id', data.user.id);
+        await refreshProfile();
 
         setCreatedUserId(data.user.id);
         setStep('avatar');
