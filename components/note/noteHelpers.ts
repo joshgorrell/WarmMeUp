@@ -268,7 +268,7 @@ export const noteStyles = StyleSheet.create({
     backgroundColor: 'rgba(255,46,138,0.14)',
     borderColor: 'rgba(255,46,138,0.40)',
   },
-  reactionPillEmoji: { fontSize: 13, lineHeight: 18 },
+  reactionPillEmoji: { fontSize: 16, lineHeight: 20 },
   reactionPillCount: { fontFamily: 'Inter-SemiBold' },
 
   // Edit banner

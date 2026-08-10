@@ -287,6 +287,7 @@ export const PICKER_OPTIONS = {
   videoMaxDuration: 60,
   allowsEditing: false,
   exportsVideoAsCopy: true,
+  flashMode: 'off' as const,
 };
 
 /**

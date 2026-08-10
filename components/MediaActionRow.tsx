@@ -364,8 +364,8 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.1 }],
   },
   emojiText: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 30,
+    lineHeight: 36,
   },
   separator: {
     height: 1,
