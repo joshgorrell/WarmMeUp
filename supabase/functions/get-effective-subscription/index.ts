@@ -229,6 +229,49 @@ Deno.serve(async (req: Request) => {
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
+
+        // Partner has no DB subscription — check RevenueCat directly. If the
+        // partner purchased but confirm-subscription never completed, we still
+        // grant access and backfill their subscription row for future checks.
+        const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
+        if (rcSecretKey) {
+          try {
+            const partnerRc = await checkRevenueCatEntitlement(partnerId, rcSecretKey);
+            if (partnerRc.active) {
+              console.log(`[get-effective-subscription] RC partner fallback hit for partner=${partnerId} plan=${partnerRc.plan}`);
+              await adminClient
+                .from("subscriptions")
+                .upsert(
+                  {
+                    user_id: partnerId,
+                    plan: partnerRc.plan,
+                    status: "active",
+                    started_at: new Date().toISOString(),
+                    expires_at: partnerRc.expiresAt,
+                    trial_started_at: null,
+                  },
+                  { onConflict: "user_id" }
+                );
+              return new Response(
+                JSON.stringify({
+                  isPremium: true,
+                  source: "partner",
+                  plan: partnerRc.plan,
+                  expiresAt: partnerRc.expiresAt,
+                  isOnTrial: false,
+                  trialExpiresAt: null,
+                  trialExpired: false,
+                  canInvite: false,
+                  _v: "2026-07-01",
+                  _ts: new Date().toISOString(),
+                }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+          } catch (err) {
+            console.error(`[get-effective-subscription] RC partner fallback error for partner=${partnerId}:`, String(err));
+          }
+        }
       }
     }
 
