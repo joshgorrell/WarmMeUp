@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
-import { Image } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Sparkles, Plus, Heart, X, Check, ChevronRight,
@@ -56,6 +56,7 @@ type TabKey = 'mine' | 'shared' | 'theirs' | 'granted';
 interface WishWithReactions extends Wish {
   reactions: WishReaction[];
   resolvedImageUri?: string | null;
+  resolvedThumbUri?: string | null;
   resolvedMemoryUri?: string | null;
 }
 
@@ -85,7 +86,7 @@ function WishCard({
   onOpenDetail: (wish: WishWithReactions) => void;
 }) {
   const { colors } = useTheme();
-  const imgUri = wish.resolvedImageUri ?? null;
+  const thumbUri = wish.resolvedThumbUri ?? wish.resolvedImageUri ?? null;
 
   const reactionCounts: Record<string, number> = {};
   wish.reactions.forEach(r => { reactionCounts[r.emoji] = (reactionCounts[r.emoji] ?? 0) + 1; });
@@ -100,13 +101,19 @@ function WishCard({
       activeOpacity={0.85}
     >
       <View style={styles.wishCardRow}>
-        {imgUri ? (
+        {thumbUri ? (
           <View style={styles.wishCardThumbWrap}>
-            <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill as any} resizeMode="cover" />
+            <Image
+              source={{ uri: thumbUri }}
+              style={StyleSheet.absoluteFill as any}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={150}
+            />
           </View>
         ) : null}
 
-        <View style={[styles.wishCardBody, !imgUri && styles.wishCardBodyNoImg]}>
+        <View style={[styles.wishCardBody, !thumbUri && styles.wishCardBodyNoImg]}>
           <AppText style={[styles.wishTitle, { color: colors.text }]} numberOfLines={2}>{wish.title}</AppText>
 
           <AppText style={[styles.wishSubtitle, { color: colors.textMuted }]}>
@@ -183,7 +190,7 @@ function GrantedCard({
         ) : null}
       </View>
       {memImgUri && (
-        <Image source={{ uri: memImgUri }} style={styles.grantedMemImg} resizeMode="cover" />
+        <Image source={{ uri: memImgUri }} style={styles.grantedMemImg} contentFit="cover" cachePolicy="memory-disk" transition={150} />
       )}
       {wish.fulfilled_note ? (
         <AppText style={[styles.grantedNote, { color: colors.textSecondary }]} numberOfLines={2}>"{wish.fulfilled_note}"</AppText>
@@ -232,7 +239,7 @@ function WishDetailSheet({
       scrollable
     >
       {imgUri && (
-        <Image source={{ uri: imgUri }} style={styles.detailImage} resizeMode="cover" />
+        <Image source={{ uri: imgUri }} style={styles.detailImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
       )}
 
       <AppText style={[styles.detailMeta, { color: colors.textMuted }]}>
@@ -263,7 +270,7 @@ function WishDetailSheet({
       {isGranted && (
         <View style={styles.detailGrantedSection}>
           {memImgUri && (
-            <Image source={{ uri: memImgUri }} style={styles.detailMemImage} resizeMode="cover" />
+            <Image source={{ uri: memImgUri }} style={styles.detailMemImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
           )}
           {wish.fulfilled_note && (
             <AppText style={[styles.detailFulfilledNote, { color: colors.textSecondary }]}>
@@ -642,7 +649,7 @@ function WishForm({
               {uploading ? (
                 <ActivityIndicator color={WISH_ACCENT} />
               ) : imgUri ? (
-                <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill as any} resizeMode="cover" />
+                <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill as any} contentFit="cover" cachePolicy="memory-disk" transition={150} />
               ) : (
                 <>
                   <ImageIcon color="rgba(255,255,255,0.35)" size={22} strokeWidth={1.5} />
@@ -890,7 +897,7 @@ function FulfillSheet({
                   {uploading ? <ActivityIndicator color={WISH_GOLD} size="small" /> :
                     memImgUri ? (
                       <>
-                        <Image source={{ uri: memImgUri }} style={StyleSheet.absoluteFill as any} resizeMode="cover" />
+                        <Image source={{ uri: memImgUri }} style={StyleSheet.absoluteFill as any} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                         <View style={styles.imgPickerOverlay}><AppText style={styles.imgPickerChange}>Tap to change</AppText></View>
                       </>
                     ) : (
@@ -950,6 +957,9 @@ export default function WishTab() {
   const handledWishLinkRef = useRef<string | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const lastInactiveAtRef = useRef<number | null>(null);
+  // Cache signed URLs by storage path to avoid re-signing on every realtime
+  // update (e.g. a reaction change) when the underlying image hasn't changed.
+  const urlCacheRef = useRef<Map<string, { url: string; expiresAt: number }>>(new Map());
 
   const TAB_DEFS: { key: TabKey; label: string }[] = [
     { key: 'shared',  label: 'Ours' },
@@ -982,26 +992,110 @@ export default function WishTab() {
         reactionMap[r.wish_id].push(r);
       });
 
-      // Sign all images in one parallel batch
-      const signed = await Promise.all(
-        wishData.map(async w => {
-          let resolvedImageUri: string | null = null;
-          let resolvedMemoryUri: string | null = null;
-          if (w.image_storage_path && w.image_storage_bucket) {
-            const { data } = await supabase.storage
-              .from(w.image_storage_bucket)
-              .createSignedUrl(w.image_storage_path, 3600);
-            resolvedImageUri = data?.signedUrl ?? null;
-          }
-          if (w.fulfilled_image_path) {
-            const { data } = await supabase.storage
-              .from('vault')
-              .createSignedUrl(w.fulfilled_image_path, 3600);
-            resolvedMemoryUri = data?.signedUrl ?? null;
-          }
-          return { ...w, reactions: reactionMap[w.id] ?? [], resolvedImageUri, resolvedMemoryUri };
+      // ── Batch sign all image URLs in a single request per bucket ──────────
+      // Group paths by bucket so we can use createSignedUrls (plural) instead
+      // of N individual createSignedUrl calls.
+      const SIGNED_TTL = 12 * 60 * 60; // 12 hours — matches vault screen
+      const THUMB_WIDTH = 200;
+      const NOW = Date.now();
+      const cache = urlCacheRef.current;
+
+      // Helper to get a cached URL if still valid
+      const getCached = (cacheKey: string): string | null => {
+        const c = cache.get(cacheKey);
+        if (c && c.expiresAt > NOW) return c.url;
+        return null;
+      };
+      // Helper to store a signed URL in the cache
+      const setCached = (cacheKey: string, url: string) => {
+        cache.set(cacheKey, { url, expiresAt: NOW + SIGNED_TTL * 1000 - 60000 });
+      };
+
+      type PathEntry = { wishId: string; path: string; bucket: string; kind: 'image' | 'thumb' | 'memory'; cacheKey: string };
+      const entries: PathEntry[] = [];
+
+      for (const w of wishData) {
+        if (w.image_storage_path && w.image_storage_bucket) {
+          entries.push({ wishId: w.id, path: w.image_storage_path, bucket: w.image_storage_bucket, kind: 'image', cacheKey: `img:${w.image_storage_bucket}:${w.image_storage_path}` });
+          entries.push({ wishId: w.id, path: w.image_storage_path, bucket: w.image_storage_bucket, kind: 'thumb', cacheKey: `thumb:${w.image_storage_bucket}:${w.image_storage_path}` });
+        }
+        if (w.fulfilled_image_path) {
+          entries.push({ wishId: w.id, path: w.fulfilled_image_path, bucket: 'vault', kind: 'memory', cacheKey: `mem:vault:${w.fulfilled_image_path}` });
+        }
+      }
+
+      // Split into cached (reuse) vs. needs-signing
+      const cachedResults: { wishId: string; kind: string; url: string | null }[] = [];
+      const toSign: PathEntry[] = [];
+      for (const e of entries) {
+        const cached = getCached(e.cacheKey);
+        if (cached) {
+          cachedResults.push({ wishId: e.wishId, kind: e.kind, url: cached });
+        } else {
+          toSign.push(e);
+        }
+      }
+
+      // Batch full-size images by bucket (createSignedUrls supports plural).
+      // Thumbnails need transforms (resize), which only createSignedUrl (singular)
+      // supports, so those are individual calls — but still parallelized.
+      const fullSizeToSign = toSign.filter(e => e.kind !== 'thumb');
+      const thumbToSign = toSign.filter(e => e.kind === 'thumb');
+
+      // Group full-size entries by bucket for batch signing
+      const byBucket = new Map<string, PathEntry[]>();
+      for (const e of fullSizeToSign) {
+        if (!byBucket.has(e.bucket)) byBucket.set(e.bucket, []);
+        byBucket.get(e.bucket)!.push(e);
+      }
+
+      const batchResults = await Promise.all(
+        Array.from(byBucket.entries()).map(async ([bucket, items]) => {
+          const paths = items.map(i => i.path);
+          const { data: urlData } = await supabase.storage
+            .from(bucket)
+            .createSignedUrls(paths, SIGNED_TTL);
+          if (!urlData) return [];
+          const pathToUrl = new Map(urlData.map(d => [d.path, d.signedUrl]));
+          return items.map(i => {
+            const url = pathToUrl.get(i.path) ?? null;
+            if (url) setCached(i.cacheKey, url);
+            return { wishId: i.wishId, kind: i.kind, url };
+          });
         })
       );
+
+      // Thumbnail URLs with transform (parallel individual calls)
+      const thumbResults = await Promise.all(
+        thumbToSign.map(async e => {
+          const { data } = await supabase.storage
+            .from(e.bucket)
+            .createSignedUrl(e.path, SIGNED_TTL, { transform: { width: THUMB_WIDTH, resize: 'cover', quality: 70 } });
+          const url = data?.signedUrl ?? null;
+          if (url) setCached(e.cacheKey, url);
+          return { wishId: e.wishId, kind: 'thumb' as const, url };
+        })
+      );
+
+      // Map results back to wishes
+      const urlByWish: Record<string, { image?: string | null; thumb?: string | null; memory?: string | null }> = {};
+      for (const r of [...cachedResults, ...batchResults.flat(), ...thumbResults]) {
+        if (!urlByWish[r.wishId]) urlByWish[r.wishId] = {};
+        if (r.kind === 'image') urlByWish[r.wishId].image = r.url;
+        else if (r.kind === 'thumb') urlByWish[r.wishId].thumb = r.url;
+        else if (r.kind === 'memory') urlByWish[r.wishId].memory = r.url;
+      }
+
+      const signed: WishWithReactions[] = wishData.map(w => {
+        const u = urlByWish[w.id] ?? {};
+        return {
+          ...w,
+          reactions: reactionMap[w.id] ?? [],
+          resolvedImageUri: u.image ?? null,
+          resolvedThumbUri: u.thumb ?? null,
+          resolvedMemoryUri: u.memory ?? null,
+        };
+      });
 
       setWishes(signed);
     } finally {
