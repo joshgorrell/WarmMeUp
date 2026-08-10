@@ -3,7 +3,7 @@ import {
   View, StyleSheet, TouchableOpacity, Platform, Animated,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { Trash2, Pencil, Copy, Lock, Check, Reply, Timer } from 'lucide-react-native';
+import { Trash2, Pencil, Lock, Check, Reply, Timer } from 'lucide-react-native';
 import { MediaReaction } from '@/lib/types';
 
 type VaultFeedback = 'idle' | 'saved' | 'already';
@@ -23,7 +23,6 @@ type Props = {
   onAlreadyInVault?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
-  onCopy?: () => void;
   onReply?: (emoji: string) => void;
   onSetTimer?: () => void;
   onDismiss: () => void;
@@ -42,7 +41,6 @@ export default function MediaActionRow({
   onAlreadyInVault,
   onDelete,
   onEdit,
-  onCopy,
   onReply,
   onSetTimer,
   onDismiss,
@@ -252,23 +250,9 @@ export default function MediaActionRow({
             </>
           ) : (
             <>
-              {onCopy && (
-                <>
-                  {onReply && <View style={styles.actionDivider} />}
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => { onDismiss(); onCopy?.(); }}
-                    activeOpacity={0.65}
-                  >
-                    <Copy color="rgba(255,255,255,0.70)" size={15} strokeWidth={2} />
-                    <AppText style={styles.actionLabel}>Copy</AppText>
-                  </TouchableOpacity>
-                </>
-              )}
-
               {isMine && onEdit && (
                 <>
-                  {(onReply || onCopy) && <View style={styles.actionDivider} />}
+                  {onReply && <View style={styles.actionDivider} />}
                   <TouchableOpacity
                     style={styles.actionBtn}
                     onPress={() => { onDismiss(); onEdit?.(); }}
@@ -282,7 +266,7 @@ export default function MediaActionRow({
 
               {onSetTimer && (
                 <>
-                  {(onReply || onCopy || onEdit) && <View style={styles.actionDivider} />}
+                  {(onReply || onEdit) && <View style={styles.actionDivider} />}
                   <TouchableOpacity
                     style={[styles.actionBtn, burnAfterSeconds ? styles.actionBtnTimerActive : null]}
                     onPress={() => { onDismiss(); onSetTimer(); }}
@@ -308,7 +292,7 @@ export default function MediaActionRow({
 
               {isMine && onDelete && (
                 <>
-                  {(onReply || onCopy || onEdit || onSetTimer) && <View style={styles.actionDivider} />}
+                  {(onReply || onEdit || onSetTimer) && <View style={styles.actionDivider} />}
                   <TouchableOpacity
                     style={styles.actionBtn}
                     onPress={() => { onDismiss(); onDelete?.(); }}

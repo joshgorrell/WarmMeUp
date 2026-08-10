@@ -1205,17 +1205,6 @@ export default function ChatTab() {
     }
   }, [couple]);
 
-  const handleCopy = useCallback((msg: ChatMessage) => {
-    if (!msg.content_text) return;
-    if (Platform.OS === 'web') {
-      navigator.clipboard?.writeText(msg.content_text).catch(() => {});
-    } else {
-      import('expo-clipboard').then(Clipboard => {
-        Clipboard.setStringAsync(msg.content_text!).catch(() => {});
-      }).catch(() => {});
-    }
-  }, []);
-
   const messagesWithPrev = useMemo(() =>
     messages.map((m, i) => ({
       ...m,
@@ -1542,7 +1531,7 @@ export default function ChatTab() {
                 onAlreadyInVault={() => {}}
                 onDelete={() => handleDeleteMessage(activeMsg)}
                 onEdit={!hasMedia ? () => handleStartEdit(activeMsg) : undefined}
-                onCopy={!hasMedia ? () => handleCopy(activeMsg) : undefined}
+
                 onReply={() => handleStartReply(activeMsg)}
                 onSetTimer={() => setTimerSheetMsg(activeMsg)}
                 burnAfterSeconds={activeMsg.burn_after_seconds}
