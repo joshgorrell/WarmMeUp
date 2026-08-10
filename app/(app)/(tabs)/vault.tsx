@@ -7,7 +7,7 @@ import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { ResizeMode, Video } from 'expo-av';
 import AppText from '@/components/AppText';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Video as VideoIcon, Check, Trash2, X } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
@@ -154,6 +154,17 @@ export default function VaultScreen() {
     });
     return () => sub.remove();
   }, [blurEnabled]);
+
+  // Re-blur thumbnails when navigating away from the Vault tab so they're
+  // blurred again on return. Tabs stay mounted in memory, so without this
+  // pageRevealed would persist as true across tab switches.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        if (blurEnabled) setPageRevealed(false);
+      };
+    }, [blurEnabled]),
+  );
 
   useEffect(() => {
     if (!couple?.id) return;
