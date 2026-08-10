@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
-  View, TouchableOpacity, ActivityIndicator, Linking, Image, StyleSheet,
+  View, TouchableOpacity, ActivityIndicator, Linking, Image, StyleSheet, Alert,
 } from 'react-native';
 import { Mail, Check, X, ChevronRight, Share2 } from 'lucide-react-native';
 import AppText from '@/components/AppText';
@@ -23,6 +23,7 @@ export function SettingsTab({
   couple,
   // Security/biometric
   bioAvailable,
+  hasHardware,
   biometricLabel,
   bioAuthenticate,
   update,
@@ -78,8 +79,9 @@ export function SettingsTab({
   s: UserSettings | null;
   couple: any;
   bioAvailable: boolean;
+  hasHardware: boolean;
   biometricLabel: string;
-  bioAuthenticate: (msg: string) => Promise<{ success: boolean }>;
+  bioAuthenticate: (msg: string) => Promise<{ success: boolean; error?: string }>
   update: (patch: Record<string, unknown>) => Promise<void>;
   optimisticPointsEnabled: boolean | null;
   optimisticStreaksEnabled: boolean | null;
@@ -122,6 +124,23 @@ export function SettingsTab({
 }) {
   const { colors } = useTheme();
   const router = useRouter();
+  const didProbingRef = useRef(false);
+
+  // Proactively trigger the iOS Face ID permission prompt once when the user
+  // visits Settings and the device has biometric hardware but hasn't been
+  // confirmed as enrolled yet. This is what makes the app appear in
+  // iOS Settings > Face ID so the user can grant permission.
+  useEffect(() => {
+    if (didProbingRef.current) return;
+    if (!hasHardware || bioAvailable) return;
+    didProbingRef.current = true;
+    bioAuthenticate('Warm Me Up wants to use Face ID').then((result) => {
+      // If it succeeded, the permission is now granted and the app will
+      // appear in iOS Settings > Face ID. If it failed (user cancelled or
+      // face not enrolled), we silently ignore — the tile is still tappable
+      // and will re-prompt when the user taps it.
+    });
+  }, [hasHardware, bioAvailable, bioAuthenticate]);
 
   return (
     <>
@@ -222,12 +241,23 @@ export function SettingsTab({
         <RequireUnlockRow
           current={(s?.login_method === 'biometric' ? 'biometric' : 'none') as UnlockMethod}
           bioAvailable={bioAvailable}
+          hasHardware={hasHardware}
           biometricLabel={biometricLabel}
           colors={colors}
           onSelect={async (method) => {
             if (method === 'biometric') {
               const result = await bioAuthenticate('Confirm biometrics to enable this method');
-              if (!result.success) return;
+              if (!result.success) {
+                if (result.error && !result.error.includes('cancel')) {
+                  Alert.alert(
+                    'Face ID Not Available',
+                    result.error.includes('not enrolled') || result.error.includes('not set')
+                      ? 'Face ID is not set up on this device. Go to iPhone Settings > Face ID & Passcode to enroll your face, then try again.'
+                      : result.error,
+                  );
+                }
+                return;
+              }
             }
             update({ login_method: method });
           }}
@@ -242,12 +272,23 @@ export function SettingsTab({
         <VaultProtectionRow
           isAdditional={s?.vault_face_id_required ?? false}
           bioAvailable={bioAvailable}
+          hasHardware={hasHardware}
           biometricLabel={biometricLabel}
           colors={colors}
           onSelect={async (additional) => {
             if (additional) {
               const result = await bioAuthenticate('Confirm biometrics to enable Vault protection');
-              if (!result.success) return;
+              if (!result.success) {
+                if (result.error && !result.error.includes('cancel')) {
+                  Alert.alert(
+                    'Face ID Not Available',
+                    result.error.includes('not enrolled') || result.error.includes('not set')
+                      ? 'Face ID is not set up on this device. Go to iPhone Settings > Face ID & Passcode to enroll your face, then try again.'
+                      : result.error,
+                  );
+                }
+                return;
+              }
             }
             update({ vault_face_id_required: additional });
           }}

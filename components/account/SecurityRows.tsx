@@ -62,12 +62,14 @@ const LOCK_TIMEOUT_OPTIONS: { label: string; value: number }[] = [
 export function RequireUnlockRow({
   current,
   bioAvailable,
+  hasHardware,
   biometricLabel,
   colors,
   onSelect,
 }: {
   current: UnlockMethod;
   bioAvailable: boolean;
+  hasHardware: boolean;
   biometricLabel: string;
   colors: any;
   onSelect: (method: UnlockMethod) => void;
@@ -84,8 +86,8 @@ export function RequireUnlockRow({
     {
       key: 'biometric',
       label: biometricLabel,
-      icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={16} strokeWidth={1.8} />,
-      disabled: !bioAvailable,
+      icon: <BiometricIcon color={hasHardware ? '#FF8A3D' : colors.textDisabled} size={16} strokeWidth={1.8} />,
+      disabled: !hasHardware,
     },
   ];
 
@@ -113,6 +115,11 @@ export function RequireUnlockRow({
               <AppText style={[slm.chipLabel, { color: opt.disabled ? colors.textDisabled : sel ? '#fff' : colors.textSecondary }]}>
                 {opt.label}
               </AppText>
+              {!opt.disabled && !bioAvailable && opt.key === 'biometric' && (
+                <AppText style={{ fontSize: 9, fontFamily: 'Inter-Regular', color: colors.textMuted, textAlign: 'center', marginTop: 1 }}>
+                  Tap to set up
+                </AppText>
+              )}
               {sel && <Check color="#FF2E8A" size={10} strokeWidth={2.5} />}
             </TouchableOpacity>
           );
@@ -177,12 +184,14 @@ export function RequireUnlockAfterRow({
 export function VaultProtectionRow({
   isAdditional,
   bioAvailable,
+  hasHardware,
   biometricLabel,
   colors,
   onSelect,
 }: {
   isAdditional: boolean;
   bioAvailable: boolean;
+  hasHardware: boolean;
   biometricLabel: string;
   colors: any;
   onSelect: (additional: boolean) => void;
@@ -201,8 +210,8 @@ export function VaultProtectionRow({
       key: true,
       label: biometricLabel,
       sub: 'Biometric step to open Vault',
-      icon: <BiometricIcon color={bioAvailable ? '#FF8A3D' : colors.textDisabled} size={15} strokeWidth={1.8} />,
-      disabled: !bioAvailable,
+      icon: <BiometricIcon color={hasHardware ? '#FF8A3D' : colors.textDisabled} size={15} strokeWidth={1.8} />,
+      disabled: !hasHardware,
     },
   ];
 

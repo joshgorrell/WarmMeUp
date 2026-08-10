@@ -41,7 +41,7 @@ export default function AccountScreen() {
   const router = useRouter();
   const { profile, partnerProfile, couple, signOut, isAdmin, isSuperAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple, patchCouple, subscriptionInfo, refreshSubscription, notifyScoreReset, scoreResetAt } = useAuth();
   const { colors } = useTheme();
-  const { available: bioAvailable, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
+  const { available: bioAvailable, hasHardware: bioHasHardware, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
   const { contentPadding } = useLayout();
 
   const params = useLocalSearchParams<{ tab?: string; section?: string }>();
@@ -968,6 +968,7 @@ export default function AccountScreen() {
               s={s}
               couple={couple}
               bioAvailable={bioAvailable}
+              hasHardware={bioHasHardware}
               biometricLabel={biometricLabel}
               bioAuthenticate={bioAuthenticate}
               update={update}
