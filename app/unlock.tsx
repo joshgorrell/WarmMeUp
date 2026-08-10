@@ -21,7 +21,7 @@ import { logger } from '@/lib/logger';
 export default function UnlockScreen() {
   const router = useRouter();
   const { user, profile, settings, unlockApp, isAuthenticatingRef, debugModeEnabled, globalDebugAccessEnabled } = useAuth();
-  const { available: bioAvailable, biometricLabel, authenticate } = useBiometricAuth();
+  const { available: bioAvailable, hasHardware: bioHasHardware, biometricLabel, authenticate } = useBiometricAuth();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
 
@@ -56,7 +56,7 @@ export default function UnlockScreen() {
   }, [unlockApp, router, isAuthenticatingRef, user, settings]);
 
   const tryBiometric = useCallback(async () => {
-    if (!bioAvailable) {
+    if (!bioHasHardware) {
       setShowEmailFallback(true);
       return;
     }
@@ -73,7 +73,7 @@ export default function UnlockScreen() {
     } catch {
       isAuthenticatingRef.current = false;
     }
-  }, [bioAvailable, authenticate, proceed, isAuthenticatingRef]);
+  }, [bioHasHardware, authenticate, proceed, isAuthenticatingRef]);
 
   // One-shot: set the initial mode when settings first become available.
   useEffect(() => {
@@ -280,7 +280,7 @@ export default function UnlockScreen() {
                 }
               </TouchableOpacity>
 
-              {bioAvailable && (
+              {bioHasHardware && (
                 <TouchableOpacity style={styles.altLink} onPress={handleBiometricRetry} activeOpacity={0.7}>
                   <BiometricIcon color="rgba(255,255,255,0.4)" size={14} />
                   <AppText style={styles.altLinkText}>Try {biometricLabel} again</AppText>

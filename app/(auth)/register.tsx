@@ -165,7 +165,9 @@ export default function RegisterScreen() {
   const lastNameError = lastName.trim().length === 0
     ? 'Last name is required'
     : lastName.trim().length < 2 ? 'Must be at least 2 characters' : null;
-  const emailError = email.trim().length === 0 ? 'Email is required' : null;
+  const emailError = email.trim().length === 0
+    ? 'Email is required'
+    : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? 'Please enter a valid email address' : null;
   const passwordError = password.length === 0
     ? 'Password is required'
     : password.length < 8 ? 'Must be at least 8 characters' : null;
