@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { notifyPartner } from '@/lib/notifications';
+import { clearLocalImageCache } from '@/lib/mediaCache';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 
 interface LeavePartnerSheetProps {
@@ -46,50 +46,44 @@ export default function LeavePartnerSheet({ visible, onClose, partnerName }: Lea
     setLeaving(true);
     setError(null);
     try {
-      // Notify partner before deactivating (function checks active couple)
-      await notifyPartner({ event_type: 'partner_disconnected', couple_id: couple.id });
+      // Call the server-side disconnect function which:
+      // 1. Sends partner a push notification
+      // 2. Deletes all storage files (chat_media + vault) for this couple
+      // 3. Wipes all shared DB data atomically via wipe_couple_data()
+      // 4. Deactivates the couple and resets celebration flags
+      const { data: { session } } = await supabase.auth.getSession();
+      const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+      const res = await fetch(`${baseUrl}/functions/v1/disconnect-couple`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+          Apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+        },
+      });
 
-      // Deactivate the couple
-      const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-      const { error: updateError } = await supabase
-        .from('couples')
-        .update({
-          active: false,
-          user_b_id: null,
-          disconnected_at: new Date().toISOString(),
-          subscription_owner_id: null,
-        })
-        .eq('id', couple.id);
-
-      if (updateError) throw updateError;
-
-      // Reset celebration flag for both partners so re-pairing shows celebration
-      const userIds = [user.id, partnerId].filter(Boolean) as string[];
-      if (userIds.length > 0) {
-        await supabase
-          .from('user_settings')
-          .update({ celebration_seen: false })
-          .in('user_id', userIds);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error ?? 'Failed to disconnect');
       }
 
+      // Purge local image cache so previously-viewed photos can't be recovered
+      await clearLocalImageCache();
+
       await refreshCouple();
-      // Refresh subscription: a former User B riding on partner's sub
-      // will now have isPremium=false — route them to the paywall with context.
       await refreshSubscription();
       resetAndClose();
 
       // Re-check subscription status to decide whether to show paywall or sign out
       try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-        const res = await fetch(`${baseUrl}/functions/v1/get-effective-subscription`, {
+        const subRes = await fetch(`${baseUrl}/functions/v1/get-effective-subscription`, {
           headers: {
-            Authorization: `Bearer ${currentSession?.access_token ?? ''}`,
+            Authorization: `Bearer ${session?.access_token ?? ''}`,
             Apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
           },
         });
-        if (res.ok) {
-          const subData = await res.json();
+        if (subRes.ok) {
+          const subData = await subRes.json();
           if (!subData.isPremium) {
             router.replace({ pathname: '/(auth)/subscription', params: { reason: 'post_unpairing' } });
             return;
@@ -195,13 +189,13 @@ function Step1({
 
       <View style={styles.bulletList}>
         <BulletItem colors={colors} text={`Your connection with ${partnerName} will be removed.`} />
-        <BulletItem colors={colors} text="Shared features — Dares, Dice, Notes, Vault, and Wishes — will stop working for both of you." />
+        <BulletItem colors={colors} text="ALL shared content — chat messages, photos, videos, dares, dice rolls, wishes, vault items, points, and activity history — will be permanently deleted for both of you." />
         <BulletItem colors={colors} text="If your partner holds the subscription, you will lose premium access immediately." />
-        <BulletItem colors={colors} text="Reconnecting later requires a new invite code." />
+        <BulletItem colors={colors} text="Reconnecting later requires a new invite code and starts a fresh relationship with no previous data." />
       </View>
 
       <AppText style={[styles.bodyNote, { color: colors.textMuted }]}>
-        This action affects both partners. It cannot be undone automatically.
+        This action affects both partners. All shared data is permanently destroyed and cannot be recovered.
       </AppText>
 
       <View style={styles.buttonRow}>
