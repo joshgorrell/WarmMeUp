@@ -342,7 +342,7 @@ export default function DeleteContentScreen() {
 
   return (
     <AppShell scrollable={false} noTopPadding>
-      <ScreenHeader title="Delete Content" onBack={() => router.back()} />
+      <ScreenHeader title="Delete & Reset" onBack={() => router.back()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -351,8 +351,7 @@ export default function DeleteContentScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <AppText style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Choose exactly what content you would like to permanently remove.
-          All deletions apply to both partners.
+          Choose exactly what you want to permanently remove or reset. Changes apply to both partners.
         </AppText>
 
         {/* ── Category checkboxes ── */}
