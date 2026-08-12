@@ -886,7 +886,7 @@ export default function VaultScreen() {
         <View style={styles.vaultHeader}>
           <Shield color="#FF2E8A" size={14} strokeWidth={2} />
           <AppText style={[styles.vaultHeaderText, { color: colors.textSecondary }]}>
-            Protected Media{items.length > 0 ? '  ·  Tap any item to view.' : ''}
+            Protected Media{items.length > 0 ? `  ·  ${thumbnailsVisible ? 'Tap any item to expand or blur.' : 'Tap any item to view.'}` : ''}
           </AppText>
         </View>
 
