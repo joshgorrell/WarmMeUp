@@ -4,7 +4,6 @@ import { ArrowLeft } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, usePathname } from 'expo-router';
 import WarmupLogo from './WarmupLogo';
-import WarmupWordmark from './WarmupWordmark';
 import AppText from './AppText';
 import { useTheme } from '@/context/ThemeContext';
 import { logDebugEvent } from '@/lib/debugLog';
@@ -53,8 +52,7 @@ export default function ScreenHeader({ title, onBack, rightSlot }: ScreenHeaderP
         activeOpacity={0.7}
         style={styles.brand}
       >
-        <WarmupLogo size={title ? 22 : 26} />
-        <WarmupWordmark size={title ? 11 : 12} />
+        <WarmupLogo size={title ? 24 : 26} />
         {title ? (
           <>
             <View style={[styles.brandDivider, { backgroundColor: colors.borderSubtle }]} />

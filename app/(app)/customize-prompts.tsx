@@ -6,12 +6,13 @@ import {
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Plus, Pencil, Trash2, ChevronLeft, Dices, Zap, X as XIcon } from 'lucide-react-native';
+import { Plus, Pencil, Trash2, Dices, Zap, X as XIcon } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
+import ScreenHeader from '@/components/ScreenHeader';
 import WarmTextInput from '@/components/WarmTextInput';
 import PrimaryButton from '@/components/PrimaryButton';
 import SecondaryButton from '@/components/SecondaryButton';
@@ -242,14 +243,7 @@ export default function CustomizePromptsScreen() {
 
   return (
     <AppShell scrollable={false}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.borderSubtle }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <ChevronLeft color={colors.text} size={24} strokeWidth={2} />
-        </TouchableOpacity>
-        <AppText style={[styles.headerTitle, { color: colors.text }]}>Customize Prompts</AppText>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title="Customize Prompts" onBack={() => router.back()} />
 
       {/* Tab Bar */}
       <View style={[styles.tabBar, { borderBottomColor: colors.borderSubtle }]}>
@@ -423,16 +417,6 @@ export default function CustomizePromptsScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.screen,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-  },
-  backBtn: { width: 40, alignItems: 'flex-start' },
-  headerTitle: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold' },
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
