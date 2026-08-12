@@ -68,9 +68,6 @@ export default function VaultScreen() {
   // Use a ref instead of state so changes don't cause useCallback/useEffect identity churn,
   // which was causing the AppState listener to re-register mid-auth and fire stale closures.
   const unlockingRef = useRef(false);
-  // Tracks whether we've already prompted this vault visit — prevents re-prompting
-  // on background/foreground while the vault tab stays mounted.
-  const biometricAttemptedThisVisit = useRef(false);
 
   const vaultFaceIdRequired = (settings?.vault_face_id_required ?? false) && Platform.OS !== 'web';
 
@@ -129,18 +126,6 @@ export default function VaultScreen() {
     }
   }, [bioAvailable, bioAuthenticate, isAuthenticatingRef]);
 
-  // On mount, prompt once if vault Face ID is required and not yet unlocked this session.
-  // Reset the "attempted" flag on unmount so navigating away and back triggers a fresh prompt.
-  useEffect(() => {
-    if (vaultFaceIdRequired && !vaultUnlocked && !biometricAttemptedThisVisit.current) {
-      biometricAttemptedThisVisit.current = true;
-      unlockVault();
-    }
-    return () => {
-      biometricAttemptedThisVisit.current = false;
-    };
-  }, [vaultFaceIdRequired]);
-
   // Re-blur thumbnails when returning from background (visual only — never re-locks vault
   // or re-triggers Face ID; app-level BackgroundLockManager handles session lock policy).
   useEffect(() => {
@@ -155,15 +140,20 @@ export default function VaultScreen() {
     return () => sub.remove();
   }, [blurEnabled]);
 
-  // Re-blur thumbnails when navigating away from the Vault tab so they're
-  // blurred again on return. Tabs stay mounted in memory, so without this
-  // pageRevealed would persist as true across tab switches.
+  // Re-lock the vault biometric gate and re-prompt on every tab visit.
+  // Tabs stay mounted in memory, so useFocusEffect fires on focus/blur.
+  // On blur: clear the unlock so the gate shows again on return.
+  // On focus: if Face ID is required, prompt immediately.
   useFocusEffect(
     useCallback(() => {
+      if (vaultFaceIdRequired && !vaultUnlocked) {
+        unlockVault();
+      }
       return () => {
         if (blurEnabled) setPageRevealed(false);
+        setVaultUnlocked(false);
       };
-    }, [blurEnabled]),
+    }, [vaultFaceIdRequired, blurEnabled, vaultUnlocked, setVaultUnlocked, unlockVault]),
   );
 
   useEffect(() => {

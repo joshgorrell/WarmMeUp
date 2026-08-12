@@ -207,11 +207,12 @@ function SessionGuard() {
 }
 
 function BackgroundLockManager() {
-  const { session, settings, lockIfNeeded, isAuthenticatingRef, refreshCouple } = useAuth();
+  const { session, settings, lockApp, isAuthenticatingRef, refreshCouple } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const wasBackgroundedRef = useRef(false);
+  const backgroundedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -221,6 +222,7 @@ function BackgroundLockManager() {
 
       if (next === 'background' || next === 'inactive') {
         wasBackgroundedRef.current = true;
+        backgroundedAtRef.current = Date.now();
       } else if (next === 'active' && wasBackgroundedRef.current) {
         wasBackgroundedRef.current = false;
 
@@ -235,11 +237,21 @@ function BackgroundLockManager() {
         // screen will handle the lock state themselves once the prompt resolves.
         if (isAuthenticatingRef.current) return;
 
-        // Use lockIfNeeded() — it measures elapsed time from the last unlock
-        // timestamp (persisted in SecureStore), so "5 min" means 5 minutes from
-        // last unlock regardless of how many background trips occurred.
-        const didLock = lockIfNeeded();
-        if (didLock) {
+        // Measure how long the app was actually in the background, not total
+        // wall-clock time since the last unlock. This makes "5 minutes" mean
+        // 5 minutes away from the app, not 5 minutes since you last unlocked.
+        const lockAfter = settings?.lock_after_seconds ?? null;
+        const bgStart = backgroundedAtRef.current;
+        backgroundedAtRef.current = null;
+
+        if (lockAfter === null || lockAfter < 0) return; // Never re-lock
+        if (bgStart === null) return;
+
+        const bgSeconds = (Date.now() - bgStart) / 1000;
+        const shouldLock = lockAfter === 0 || bgSeconds >= lockAfter;
+
+        if (shouldLock) {
+          lockApp();
           const currentRoute = segments[segments.length - 1];
           // 'weather' handles its own lock decision via handleCoastIsClear.
           // 'transition' and 'unlock' are already in the lock/auth flow.
@@ -252,7 +264,7 @@ function BackgroundLockManager() {
     });
 
     return () => sub.remove();
-  }, [session, settings?.login_method, lockIfNeeded, isAuthenticatingRef, refreshCouple]);
+  }, [session, settings?.login_method, settings?.lock_after_seconds, lockApp, isAuthenticatingRef, refreshCouple]);
 
   return null;
 }
