@@ -1555,7 +1555,7 @@ export default function ChatTab() {
         visible={!!timerSheetMsg}
         onClose={() => setTimerSheetMsg(null)}
         title="Self-destruct timer"
-        subtitle="This message will disappear from chat when the timer ends."
+        subtitle="This message will automatically disappear from both partners' chat when the timer expires."
       >
         <View style={styles.timerSheetBody}>
           {timerSheetMsg?.burn_after_seconds ? (
