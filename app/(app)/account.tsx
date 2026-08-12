@@ -26,6 +26,7 @@ import CommunityGuidelinesModal from '@/components/CommunityGuidelinesModal';
 import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
+import ConfirmSheet from '@/components/ConfirmSheet';
 import { useLayout } from '@/hooks/useLayout';
 import { shareApp } from '@/lib/shareApp';
 import { ensureConfigured } from '@/lib/purchases';
@@ -120,6 +121,9 @@ export default function AccountScreen() {
 
   // Leave partner sheet
   const [showLeaveSheet, setShowLeaveSheet] = useState(false);
+
+  // Sign out confirmation
+  const [showSignOutSheet, setShowSignOutSheet] = useState(false);
 
   // Cancel pending invite
   const [showCancelInviteSheet, setShowCancelInviteSheet] = useState(false);
@@ -950,7 +954,7 @@ export default function AccountScreen() {
               onSaveName={saveName}
               onCancelEditName={cancelEditName}
               onResetPoints={() => setResetPointsOpen(true)}
-              onSignOut={signOut}
+              onSignOut={() => setShowSignOutSheet(true)}
               onAnniversaryPress={(existing) => {
                 setAnniversaryDate(existing);
                 setAnnivMonth(existing ? String(existing.getMonth() + 1).padStart(2, '0') : '');
@@ -1164,6 +1168,17 @@ export default function AccountScreen() {
         visible={showLeaveSheet}
         onClose={() => setShowLeaveSheet(false)}
         partnerName={partnerProfile?.display_name ?? 'your partner'}
+      />
+
+      <ConfirmSheet
+        visible={showSignOutSheet}
+        title="Sign Out?"
+        message="You'll need to sign back in to continue using Warm Me Up."
+        actions={[
+          { label: 'Cancel', style: 'cancel', onPress: () => {} },
+          { label: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+        ]}
+        onDismiss={() => setShowSignOutSheet(false)}
       />
 
       {/* Cancel pending invite confirmation sheet */}

@@ -20,6 +20,7 @@ import { registerForPushNotifications, savePushToken, clearPushToken } from '@/l
 import { setAppBadge } from '@/lib/appBadge';
 import CommunityGuidelinesModal from '@/components/CommunityGuidelinesModal';
 import LeavePartnerSheet from '@/components/LeavePartnerSheet';
+import ConfirmSheet from '@/components/ConfirmSheet';
 import { useLayout } from '@/hooks/useLayout';
 import { shareApp } from '@/lib/shareApp';
 
@@ -377,6 +378,7 @@ export default function SettingsScreen() {
   const [showLeaveSheet, setShowLeaveSheet] = useState(false);
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
   const [feedbackSheetVisible, setFeedbackSheetVisible] = useState(false);
+  const [showSignOutSheet, setShowSignOutSheet] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState(false);
@@ -680,7 +682,7 @@ export default function SettingsScreen() {
                   />
                 )}
                 <SettingsRow label="End Partner Connection" danger onPress={() => setShowLeaveSheet(true)} />
-                <SettingsRow label="Sign Out" danger onPress={signOut} />
+                <SettingsRow label="Sign Out" danger onPress={() => setShowSignOutSheet(true)} />
               </Section>
             </View>
           </View>
@@ -865,7 +867,7 @@ export default function SettingsScreen() {
                 />
               )}
               <SettingsRow label="End Partner Connection" danger onPress={() => setShowLeaveSheet(true)} />
-              <SettingsRow label="Sign Out" danger onPress={signOut} />
+              <SettingsRow label="Sign Out" danger onPress={() => setShowSignOutSheet(true)} />
             </Section>
           </>
         )}
@@ -946,6 +948,17 @@ export default function SettingsScreen() {
         visible={showLeaveSheet}
         onClose={() => setShowLeaveSheet(false)}
         partnerName={partnerProfile?.display_name ?? 'your partner'}
+      />
+
+      <ConfirmSheet
+        visible={showSignOutSheet}
+        title="Sign Out?"
+        message="You'll need to sign back in to continue using Warm Me Up."
+        actions={[
+          { label: 'Cancel', style: 'cancel', onPress: () => {} },
+          { label: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+        ]}
+        onDismiss={() => setShowSignOutSheet(false)}
       />
 
       <BottomSheet
