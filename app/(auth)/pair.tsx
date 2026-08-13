@@ -450,14 +450,18 @@ export default function PairScreen() {
   };
 
   // Auto-submit when a full 6-character code is entered
+  const autoSubmitRef = useRef<string | null>(null);
   useEffect(() => {
     if (joinCode.length !== 6) return;
+    // Guard against double-fire for the same code
+    if (autoSubmitRef.current === joinCode) return;
+    autoSubmitRef.current = joinCode;
     if (user) {
       handleJoin();
     } else {
       handlePreAuthJoin();
     }
-  }, [joinCode]);
+  }, [joinCode, user]);
 
   const loadOrCreateCouple = async () => {
     if (!user) return;
@@ -506,43 +510,34 @@ export default function PairScreen() {
       // For older accounts, refresh subscription (which now includes the entitlement
       // grant fallback) and retry once more before showing a visible error.
       if ((result as any)?.success === false && (result as any)?.reason === 'no_subscription') {
-        const profileAge = profile?.created_at ? Date.now() - new Date(profile.created_at).getTime() : Infinity;
-        if (profileAge < 30_000) {
-          await new Promise(r => setTimeout(r, 1000));
+        // Retry up to 3 times with escalating delays to handle the race where
+        // the trial subscription trigger hasn't committed yet.
+        let lastRetryResult: any = result;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const delay = attempt === 1 ? 1000 : attempt === 2 ? 1500 : 2000;
+          await new Promise(r => setTimeout(r, delay));
           await refreshSubscription();
           const { data: retry } = await supabase.rpc('generate_invite_code');
-          if ((retry as any)?.success === false && (retry as any)?.reason === 'no_subscription') {
-            logDebugEvent('INVITE CREATE NO_SUBSCRIPTION', { source: 'new_profile_retry_failed', userId: user.id });
-            setInviteError('Your free trial is being set up. Please reopen the app in a moment.');
-            return;
-          }
-          const retryCode = (retry as any)?.invite_code ?? null;
-          if (retryCode) {
-            logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc_retry', inviteCode: retryCode });
-            setMyCode(retryCode);
-            await refreshCouple();
-            return;
+          lastRetryResult = retry;
+          if ((retry as any)?.success !== false || (retry as any)?.reason !== 'no_subscription') {
+            const retryCode = (retry as any)?.invite_code ?? null;
+            if (retryCode) {
+              logDebugEvent('INVITE CREATE SUCCESS', { source: `rpc_retry_${attempt}`, inviteCode: retryCode });
+              setMyCode(retryCode);
+              await refreshCouple();
+              return;
+            }
           }
         }
-        // Older account — the entitlement grant fallback in refreshSubscription
-        // may not have been applied yet. Refresh and retry once.
-        logDebugEvent('INVITE CREATE NO_SUBSCRIPTION', { source: 'old_profile_retry', userId: user.id });
-        await refreshSubscription();
-        await new Promise(r => setTimeout(r, 500));
-        const { data: retry2 } = await supabase.rpc('generate_invite_code');
-        if ((retry2 as any)?.success === false && (retry2 as any)?.reason === 'no_subscription') {
-          logDebugEvent('INVITE CREATE NO_SUBSCRIPTION', { source: 'old_profile_retry_failed', userId: user.id, canInvite: subscriptionInfo.canInvite });
-          setInviteError('Could not generate an invite code. If you have an active subscription or entitlement, please try again or contact support.');
+        logDebugEvent('INVITE CREATE NO_SUBSCRIPTION', { source: 'retry_exhausted', userId: user.id, canInvite: subscriptionInfo.canInvite });
+        // If the couple already has an invite code from the signup trigger, show it
+        // rather than showing an error — the code is valid even if generate_invite_code failed.
+        if (couple?.invite_code) {
+          logDebugEvent('INVITE CREATE SUCCESS', { source: 'fallback_existing_code', inviteCode: couple.invite_code });
+          setMyCode(couple.invite_code);
           return;
         }
-        const retryCode2 = (retry2 as any)?.invite_code ?? null;
-        if (retryCode2) {
-          logDebugEvent('INVITE CREATE SUCCESS', { source: 'rpc_old_profile_retry', inviteCode: retryCode2 });
-          setMyCode(retryCode2);
-          await refreshCouple();
-          return;
-        }
-        setInviteError('Invite code generation failed. Please try again.');
+        setInviteError('Your free trial is being set up. Please reopen the app in a moment and try again.');
         return;
       }
       const inviteCode = (result as any)?.invite_code ?? null;
@@ -648,14 +643,19 @@ export default function PairScreen() {
     setError('');
     setLoading(true);
     try {
-      // Preview inviter name first so we can show it in the waiting overlay
+      // Preview inviter name first so we can show it in the celebration overlay.
+      // If preview fails, still attempt the join — request_join has its own
+      // validation and cleanup, and a stale pending request shouldn't block a
+      // valid join.
+      let previewName: string | null = null;
+      let previewAvatar: string | null = null;
       const preview = await previewInvite(normalized);
-      if (!preview.ok) {
-        setError('Invalid code. Check with your partner.');
-        return;
+      if (preview.ok) {
+        previewName = preview.inviterName;
+        previewAvatar = preview.inviterAvatar;
+        setInviterName(preview.inviterName);
+        setInviterAvatar(preview.inviterAvatar);
       }
-      setInviterName(preview.inviterName);
-      setInviterAvatar(preview.inviterAvatar);
 
       const { data: joinResult, error: joinError } = await supabase
         .rpc('request_join', { invite_code: normalized });
@@ -704,7 +704,7 @@ export default function PairScreen() {
         }).catch(() => {});
       }
 
-      const partnerName = preview.inviterName || inviterName || '';
+      const partnerName = previewName || inviterName || '';
       if (!settings?.celebration_seen) {
         router.replace({
           pathname: '/(auth)/paired-celebration',
