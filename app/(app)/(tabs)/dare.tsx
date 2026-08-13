@@ -340,6 +340,7 @@ export default function DareTab() {
             <Flame color="#FF2E8A" size={44} strokeWidth={2} fill="rgba(255,46,138,0.12)" />
           </View>
 
+          <View style={styles.bodyWrap}>
           {/* Incoming dare from partner */}
           {incomingDare && (
             <View style={[styles.incomingSection, highlightDare && styles.incomingHighlight]}>
@@ -491,6 +492,7 @@ export default function DareTab() {
               )}
             </View>
           )}
+          </View>
         </ScrollView>
       </AppShell>
     </KeyboardAvoidingView>
@@ -498,8 +500,9 @@ export default function DareTab() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 60 },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing.screen, paddingBottom: 60 },
   iconWrap: { alignItems: 'center', marginBottom: Spacing.md },
+  bodyWrap: { flex: 1, justifyContent: 'center' },
   soloPlaceholder: {
     borderRadius: Radius.lg,
     borderWidth: 1,
