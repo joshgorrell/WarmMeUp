@@ -22,6 +22,8 @@ import HomeMiniCard from '@/components/HomeMiniCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
 import { useTrialExpiryCheck } from '@/hooks/useTrialExpiryCheck';
+import { useEntitlementExpiryCheck } from '@/hooks/useEntitlementExpiryCheck';
+import { Clock } from 'lucide-react-native';
 import { useLayout } from '@/hooks/useLayout';
 import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
 import { reversePoints, awardPoints, getPointValue } from '@/lib/points';
@@ -83,6 +85,7 @@ export default function HomeScreen() {
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
   const trialExpiry = useTrialExpiryCheck();
+  const entitlementExpiry = useEntitlementExpiryCheck();
   const isMountedRef = useRef(true);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -867,6 +870,48 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               onPress={trialExpiry.dismiss}
+              activeOpacity={0.7}
+              style={trialExpiryStyles.laterBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <AppText style={[trialExpiryStyles.laterText, { color: colors.textMuted }]}>Maybe later</AppText>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Entitlement (admin grant) expiring within 7 days */}
+      <Modal
+        visible={entitlementExpiry.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={entitlementExpiry.dismiss}
+      >
+        <Pressable style={trialExpiryStyles.overlay} onPress={entitlementExpiry.dismiss}>
+          <View style={[trialExpiryStyles.card, { backgroundColor: colors.card }]} onStartShouldSetResponder={() => true} onResponderRelease={(e) => e.stopPropagation()}>
+            <View style={[trialExpiryStyles.iconWrap, { backgroundColor: 'rgba(255,154,61,0.12)' }]}>
+              <Clock color="#FF9A3D" size={32} strokeWidth={2} />
+            </View>
+            <AppText style={[trialExpiryStyles.title, { color: colors.text }]}>
+              Your access expires soon
+            </AppText>
+            <AppText style={[trialExpiryStyles.body, { color: colors.textSecondary }]}>
+              {entitlementExpiry.expiryDate
+                ? `Your complimentary access expires on ${new Date(entitlementExpiry.expiryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Subscribe now to keep uninterrupted access.`
+                : 'Your complimentary access is expiring soon. Subscribe now to keep uninterrupted access.'}
+            </AppText>
+            <TouchableOpacity
+              style={trialExpiryStyles.subscribeBtn}
+              activeOpacity={0.85}
+              onPress={() => {
+                entitlementExpiry.dismiss();
+                router.push({ pathname: '/(auth)/subscription', params: { reason: 'expiring_entitlement' } });
+              }}
+            >
+              <Text style={trialExpiryStyles.subscribeBtnText}>Subscribe Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={entitlementExpiry.dismiss}
               activeOpacity={0.7}
               style={trialExpiryStyles.laterBtn}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

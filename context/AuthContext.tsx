@@ -258,14 +258,16 @@ async function applyEntitlementGrantFallbackAsync(info: SubscriptionInfo, userId
       if (!expired) {
         logger.log('[Subscription] entitlement grant fallback applied — canInvite forced true');
         return {
-          ...info,
-          isPremium: true,
-          canInvite: true,
-          source: 'admin_grant',
-          plan: null,
-          expiresAt: grant.expires_at,
-          loading: false,
-        };
+            ...info,
+            isPremium: true,
+            canInvite: true,
+            source: 'admin_grant',
+            plan: null,
+            expiresAt: grant.expires_at,
+            grantExpiresAt: grant.expires_at,
+            grantExpired: false,
+            loading: false,
+          };
       }
     }
   } catch (err: any) {
@@ -309,6 +311,8 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
       trialExpiresAt: data.trialExpiresAt ?? null,
       trialExpired: data.trialExpired ?? false,
       canInvite: data.canInvite ?? false,
+      grantExpiresAt: data.grantExpiresAt ?? null,
+      grantExpired: data.grantExpired ?? false,
       loading: false,
     };
   } catch (err: any) {
