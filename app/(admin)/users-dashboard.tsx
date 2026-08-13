@@ -21,6 +21,7 @@ import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
 import type { DiagnosticsSnapshot } from '@/lib/diagnosticsSnapshot';
 import { buildDiagnosticsReport } from '@/lib/diagnosticsSnapshot';
+import { Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
 type TabKey = 'users' | 'couples' | 'subscribers' | 'trials';
@@ -42,7 +43,7 @@ interface CoupleRow {
   id: string;
   user_a_id: string;
   user_b_id: string | null;
-  invite_code: string;
+  invite_code: string | null;
   active: boolean;
   admin_notes: string;
   created_at: string;
@@ -306,9 +307,17 @@ export default function UsersDashboard() {
       diagUser?.display_name,
       diagData.email,
     );
-    await Clipboard.setStringAsync(report);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      if (Platform.OS === 'web' && navigator.clipboard) {
+        await navigator.clipboard.writeText(report);
+      } else {
+        await Clipboard.setStringAsync(report);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      if (mountedRef.current) setDiagError('Could not copy to clipboard. Please copy manually.');
+    }
   };
 
   // ── Couple actions ──
@@ -827,7 +836,7 @@ export default function UsersDashboard() {
 
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
                   <AppText style={[styles.detailLabel, { color: colors.textMuted }]}>INVITE CODE</AppText>
-                  <AppText style={[styles.codeText, { color: colors.text }]}>{selectedCouple.invite_code}</AppText>
+                  <AppText style={[styles.codeText, { color: colors.text }]}>{selectedCouple.invite_code || '—'}</AppText>
                 </View>
 
                 <View style={[styles.detailBlock, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
