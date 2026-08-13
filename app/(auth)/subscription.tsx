@@ -27,7 +27,7 @@ import { MONTHLY_PRODUCT_ID, ANNUAL_PRODUCT_ID } from '@/lib/productIds';
 import { logger } from '@/lib/logger';
 
 type Plan = 'monthly' | 'yearly';
-type Reason = 'expired_trial' | 'post_unpairing' | 'expiring_entitlement' | 'expired_entitlement' | undefined;
+type Reason = 'expired_trial' | 'post_unpairing' | undefined;
 
 const PLANS: {
   id: Plan;
@@ -270,10 +270,6 @@ export default function SubscriptionScreen() {
       ? { Icon: Heart, text: "Your partner's subscription no longer covers you. Subscribe to continue." }
       : reason === 'expired_trial'
       ? { Icon: AlertCircle, text: 'Your 7-day free trial has ended. Subscribe to keep access.' }
-      : reason === 'expiring_entitlement'
-      ? { Icon: AlertCircle, text: 'Your complimentary access expires soon. Subscribe now to keep uninterrupted access — all your data is saved and waiting.' }
-      : reason === 'expired_entitlement'
-      ? { Icon: AlertCircle, text: 'Your complimentary access has ended. Subscribe to restore full access — all your messages, vault, streaks, and points are saved and waiting.' }
       : null;
 
   return (
@@ -318,14 +314,6 @@ export default function SubscriptionScreen() {
             <View style={styles.partnerHint}>
               <AppText style={styles.partnerHintText}>
                 Only one of you needs to subscribe — it covers both of you.
-              </AppText>
-            </View>
-          )}
-
-          {(reason === 'expiring_entitlement' || reason === 'expired_entitlement') && (
-            <View style={styles.partnerHint}>
-              <AppText style={styles.partnerHintText}>
-                All your messages, vault photos, streaks, and points are preserved. Subscribe anytime to restore full access.
               </AppText>
             </View>
           )}

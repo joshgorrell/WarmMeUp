@@ -268,10 +268,6 @@ export interface SubscriptionInfo {
   trialExpired: boolean;
   /** True when this user can generate an invite code (own active sub or active trial) */
   canInvite: boolean;
-  /** When premium comes from an admin grant, the grant's expiry date (for pre-expiry warnings) */
-  grantExpiresAt: string | null;
-  /** True when the user had an admin grant that has fully expired */
-  grantExpired: boolean;
   loading: boolean;
 }
 
@@ -284,8 +280,6 @@ export const DEFAULT_SUBSCRIPTION_INFO: SubscriptionInfo = {
   trialExpiresAt: null,
   trialExpired: false,
   canInvite: false,
-  grantExpiresAt: null,
-  grantExpired: false,
   loading: true,
 };
 

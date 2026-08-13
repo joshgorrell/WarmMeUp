@@ -30,8 +30,6 @@ interface AccessResult {
   plan: string | null;
   expiresAt: string | null;
   canInvite: boolean;
-  /** Expiry date of the admin grant when source is admin_grant */
-  grantExpiresAt: string | null;
 }
 
 function isSubActive(row: SubscriptionRow | null): boolean {
@@ -101,10 +99,10 @@ async function userHasPremiumAccess(
     .maybeSingle();
 
   if (profile?.is_super_admin === true) {
-    return { hasPremium: true, isOnTrial: false, source: "super_admin", plan: null, expiresAt: null, canInvite: true, grantExpiresAt: null };
+    return { hasPremium: true, isOnTrial: false, source: "super_admin", plan: null, expiresAt: null, canInvite: true };
   }
   if (profile?.is_admin === true) {
-    return { hasPremium: true, isOnTrial: false, source: "admin", plan: null, expiresAt: null, canInvite: true, grantExpiresAt: null };
+    return { hasPremium: true, isOnTrial: false, source: "admin", plan: null, expiresAt: null, canInvite: true };
   }
 
   // 2. Own subscription row — paid plan or active 7-day trial
@@ -115,11 +113,11 @@ async function userHasPremiumAccess(
     .maybeSingle();
 
   if (isSubActive(sub) && isPaidPlan(sub!.plan)) {
-    return { hasPremium: true, isOnTrial: false, source: "self", plan: sub!.plan, expiresAt: sub!.expires_at, canInvite: true, grantExpiresAt: null };
+    return { hasPremium: true, isOnTrial: false, source: "self", plan: sub!.plan, expiresAt: sub!.expires_at, canInvite: true };
   }
 
   if (isSubActive(sub) && isTrialPlan(sub!.plan)) {
-    return { hasPremium: true, isOnTrial: true, source: "trial", plan: "trial", expiresAt: sub!.expires_at, canInvite: true, grantExpiresAt: null };
+    return { hasPremium: true, isOnTrial: true, source: "trial", plan: "trial", expiresAt: sub!.expires_at, canInvite: true };
   }
 
   // 3. Admin grant
@@ -138,11 +136,10 @@ async function userHasPremiumAccess(
       plan: null,
       expiresAt: grant!.expires_at,
       canInvite: grant!.can_invite,
-      grantExpiresAt: grant!.expires_at,
     };
   }
 
-  return { hasPremium: false, isOnTrial: false, source: "none", plan: null, expiresAt: null, canInvite: false, grantExpiresAt: null };
+  return { hasPremium: false, isOnTrial: false, source: "none", plan: null, expiresAt: null, canInvite: false };
 }
 
 Deno.serve(async (req: Request) => {
@@ -189,9 +186,7 @@ Deno.serve(async (req: Request) => {
           trialExpiresAt: ownAccess.isOnTrial ? ownAccess.expiresAt : null,
           trialExpired: false,
           canInvite: ownAccess.canInvite,
-          grantExpiresAt: ownAccess.grantExpiresAt,
-          grantExpired: false,
-          _v: "2026-08-13",
+          _v: "2026-07-01",
           _ts: new Date().toISOString(),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -326,20 +321,6 @@ Deno.serve(async (req: Request) => {
     // No active premium from any source. Only flag trialExpired for trial plan rows.
     const trialExpired = ownSub !== null && isTrialPlan(ownSub.plan) && !isSubActive(ownSub);
 
-    // Check for an expired admin grant so the app can show the right messaging.
-    const { data: expiredGrant } = await adminClient
-      .from("admin_grants")
-      .select("expires_at, active")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const grantExpired =
-      expiredGrant !== null &&
-      expiredGrant.active === true &&
-      expiredGrant.expires_at !== null &&
-      new Date(expiredGrant.expires_at) < new Date();
-
     return new Response(
       JSON.stringify({
         isPremium: false,
@@ -350,9 +331,7 @@ Deno.serve(async (req: Request) => {
         trialExpiresAt: ownSub?.expires_at ?? null,
         trialExpired,
         canInvite: false,
-        grantExpiresAt: null,
-        grantExpired,
-        _v: "2026-08-13",
+        _v: "2026-07-01",
         _ts: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
