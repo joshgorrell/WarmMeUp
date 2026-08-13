@@ -51,6 +51,8 @@ export default function ChatTab() {
   const insets = useSafeAreaInsets();
   const hasPartner = !!couple?.user_b_id;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
   const [chatLoading, setChatLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -470,6 +472,7 @@ export default function ChatTab() {
               media_type: m.media_type ?? updated.media_type,
               burn_after_seconds: updated.burn_after_seconds,
               burns_at: updated.burns_at,
+              first_viewed_at: updated.first_viewed_at,
             };
           }));
         }
@@ -688,6 +691,7 @@ export default function ChatTab() {
       reply_to: replyingTo?.id ?? null,
       burn_after_seconds: null,
       burns_at: null,
+      first_viewed_at: null,
       created_at: new Date().toISOString(),
       edited_at: null,
       deleted_at: null,
@@ -1131,13 +1135,29 @@ export default function ChatTab() {
 
   const handleRevealMedia = useCallback((id: string) => {
     setRevealedMedia(prev => new Set([...prev, id]));
-  }, []);
+    // Mark the message as viewed by the recipient (if not already and not our own)
+    const msg = messagesRef.current.find(m => m.id === id);
+    if (msg && msg.sender_id !== user?.id && !msg.first_viewed_at) {
+      const now = new Date().toISOString();
+      setMessages(prev => prev.map(m => m.id === id ? { ...m, first_viewed_at: now } : m));
+      supabase
+        .from('chat_messages')
+        .update({ first_viewed_at: now })
+        .eq('id', id)
+        .eq('couple_id', couple!.id)
+        .then(({ error }) => {
+          if (error) logDebugEvent('chat_mark_viewed_failed', { messageId: id, error: error.message });
+        });
+    }
+  }, [user?.id, couple]);
 
   const handleSetBurnTimer = useCallback(async (msg: ChatMessage, seconds: number | null) => {
     const prevBurn = msg.burn_after_seconds;
     const prevBurnsAt = msg.burns_at;
-    // Optimistic update so the countdown starts/clears instantly.
-    const optimisticBurnsAt = seconds ? new Date(Date.now() + seconds * 1000).toISOString() : null;
+    // Optimistic update: burns_at only starts if the recipient has already viewed it.
+    const optimisticBurnsAt = (seconds && msg.first_viewed_at)
+      ? new Date(new Date(msg.first_viewed_at).getTime() + seconds * 1000).toISOString()
+      : null;
     setMessages(prev => prev.map(m =>
       m.id === msg.id
         ? { ...m, burn_after_seconds: seconds, burns_at: optimisticBurnsAt }
@@ -1158,6 +1178,30 @@ export default function ChatTab() {
       Alert.alert('Timer Failed', 'Could not set the self-destruct timer. Please try again.');
     }
   }, [couple]);
+
+  // Mark incoming text messages with burn timers as viewed when the chat loads.
+  // Text is visible immediately, so the timer should start as soon as the recipient sees it.
+  useEffect(() => {
+    if (!user?.id || !couple?.id) return;
+    const toMark = messages.filter(m =>
+      m.sender_id !== user.id &&
+      !m.first_viewed_at &&
+      !m.media_storage_path &&
+      m.burn_after_seconds
+    );
+    if (toMark.length === 0) return;
+    const now = new Date().toISOString();
+    const ids = toMark.map(m => m.id);
+    setMessages(prev => prev.map(m => ids.includes(m.id) ? { ...m, first_viewed_at: now } : m));
+    supabase
+      .from('chat_messages')
+      .update({ first_viewed_at: now })
+      .in('id', ids)
+      .eq('couple_id', couple.id)
+      .then(({ error }) => {
+        if (error) logDebugEvent('chat_mark_text_viewed_failed', { error: error.message });
+      });
+  }, [user?.id, couple?.id, messages]);
 
   const handleBurnMessage = useCallback((msg: ChatMessage) => {
     // Remove from local state immediately.

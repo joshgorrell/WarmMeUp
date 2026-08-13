@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { BlurView } from 'expo-blur';
-import { Lock, EyeOff } from 'lucide-react-native';
+import { Lock, EyeOff, Eye, Clock } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import CountdownRing from '@/components/CountdownRing';
 import { supabase } from '@/lib/supabase';
@@ -42,6 +42,7 @@ export function MediaBubble({
   bubbleWidth,
   bubbleHeight,
   radii,
+  isMine,
 }: {
   msg: ChatMessage;
   blurEnabled: boolean;
@@ -54,6 +55,7 @@ export function MediaBubble({
   bubbleWidth: number;
   bubbleHeight: number;
   radii: ReturnType<typeof getBubbleRadii>;
+  isMine: boolean;
 }) {
   const loaded = signedUrl !== undefined;
   const isBlurred = blurEnabled && !revealed;
@@ -185,6 +187,22 @@ export function MediaBubble({
             onExpire={() => onBurn(msg)}
             size={44}
           />
+        </View>
+      )}
+      {/* Sender-side "seen" indicator on all outgoing media */}
+      {isMine && loaded && (retryUrl ?? signedUrl) && !imgError && !msg.burns_at && (
+        <View style={styles.seenBadge} pointerEvents="none">
+          <View style={styles.seenBadgeBg} />
+          {msg.first_viewed_at ? (
+            <Eye color="rgba(255,255,255,0.92)" size={16} strokeWidth={2.5} />
+          ) : msg.burn_after_seconds ? (
+            <View style={styles.seenBadgeArmed}>
+              <Eye color="rgba(255,255,255,0.92)" size={13} strokeWidth={2.5} />
+              <Clock color="rgba(255,179,71,0.95)" size={10} strokeWidth={2.5} style={styles.seenBadgeClock} />
+            </View>
+          ) : (
+            <Eye color="rgba(255,255,255,0.55)" size={16} strokeWidth={2} />
+          )}
         </View>
       )}
     </Pressable>

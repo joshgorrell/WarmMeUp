@@ -504,6 +504,34 @@ export const noteStyles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
 
+  // Sender-side "seen" eye badge on outgoing media
+  seenBadge: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seenBadgeBg: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  seenBadgeArmed: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seenBadgeClock: {
+    position: 'absolute',
+    bottom: -2,
+    right: -3,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+
   // Timer picker sheet
   timerSheetBody: {
     gap: 10,

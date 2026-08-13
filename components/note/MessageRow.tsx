@@ -230,6 +230,7 @@ export const MessageRow = React.memo(function MessageRow({
                     bubbleWidth={mediaBubbleWidth}
                     bubbleHeight={mediaBubbleHeight}
                     radii={item.content_text ? { ...radii, borderBottomLeftRadius: 4, borderBottomRightRadius: 4 } : radii}
+                    isMine={isMine}
                   />
                 )}
                 {item.content_text ? (
@@ -293,6 +294,7 @@ export const MessageRow = React.memo(function MessageRow({
                     bubbleWidth={mediaBubbleWidth}
                     bubbleHeight={mediaBubbleHeight}
                     radii={item.content_text ? { ...radii, borderBottomLeftRadius: 4, borderBottomRightRadius: 4 } : radii}
+                    isMine={isMine}
                   />
                 )}
                 {item.content_text ? (

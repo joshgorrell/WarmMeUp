@@ -115,6 +115,7 @@ export interface ChatMessage {
   reply_to: string | null;
   burn_after_seconds: number | null;
   burns_at: string | null;
+  first_viewed_at: string | null;
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
