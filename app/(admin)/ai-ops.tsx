@@ -247,28 +247,40 @@ export default function AiOpsScreen() {
 
   const resolveIssue = async (id: string, newStatus: 'resolved' | 'dismissed') => {
     setResolvingId(id);
-    await supabase.from('ai_issues').update({
-      status: newStatus,
-      resolved_at: new Date().toISOString(),
-    }).eq('id', id);
-    if (mountedRef.current) {
-      setOpenIssues(prev => prev.filter(i => i.id !== id));
-      setPendingIssues(prev => prev.filter(i => i.id !== id));
-      setResolvingId(null);
+    try {
+      const { error } = await supabase.from('ai_issues').update({
+        status: newStatus,
+        resolved_at: new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw error;
+      if (mountedRef.current) {
+        setOpenIssues(prev => prev.filter(i => i.id !== id));
+        setPendingIssues(prev => prev.filter(i => i.id !== id));
+      }
+    } catch (e: any) {
+      if (mountedRef.current) setRunError(e?.message ?? 'Failed to resolve issue');
+    } finally {
+      if (mountedRef.current) setResolvingId(null);
     }
   };
 
   const approveIssue = async (id: string) => {
     setApprovingId(id);
-    const { data: approved } = await supabase.from('ai_issues').update({
-      status: 'open',
-    }).eq('id', id).eq('status', 'pending_review').select('id, title, body, severity, source_loop_type, created_at, status').maybeSingle();
-    if (mountedRef.current) {
-      setPendingIssues(prev => prev.filter(i => i.id !== id));
-      if (approved) {
-        setOpenIssues(prev => [approved as AiIssue, ...prev]);
+    try {
+      const { data: approved, error } = await supabase.from('ai_issues').update({
+        status: 'open',
+      }).eq('id', id).eq('status', 'pending_review').select('id, title, body, severity, source_loop_type, created_at, status').maybeSingle();
+      if (error) throw error;
+      if (mountedRef.current) {
+        setPendingIssues(prev => prev.filter(i => i.id !== id));
+        if (approved) {
+          setOpenIssues(prev => [approved as AiIssue, ...prev]);
+        }
       }
-      setApprovingId(null);
+    } catch (e: any) {
+      if (mountedRef.current) setRunError(e?.message ?? 'Failed to approve issue');
+    } finally {
+      if (mountedRef.current) setApprovingId(null);
     }
   };
 

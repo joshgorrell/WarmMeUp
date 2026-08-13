@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -71,6 +71,13 @@ export default function EntitlementsScreen() {
   const [grantLoading, setGrantLoading] = useState(false);
   const [showTypeMenu, setShowTypeMenu] = useState(false);
 
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const [revokeLoading, setRevokeLoading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -79,8 +86,9 @@ export default function EntitlementsScreen() {
 
   const loadActiveGrants = useCallback(async () => {
     logger.log('[ADMIN ENTITLEMENT] Loading active grants...');
+    if (!mountedRef.current) return;
     setGrantsLoading(true);
-    setGrantsError(null);
+    if (mountedRef.current) setGrantsError(null);
     try {
       const { data, error } = await supabase
         .from('admin_grants')
@@ -90,8 +98,8 @@ export default function EntitlementsScreen() {
 
       if (error) {
         console.error('[ADMIN ENTITLEMENT ERROR]', error.message);
-        setGrantsError(error.message);
-        setGrantsLoading(false);
+        if (mountedRef.current) setGrantsError(error.message);
+        if (mountedRef.current) setGrantsLoading(false);
         return;
       }
 
@@ -110,12 +118,12 @@ export default function EntitlementsScreen() {
           profile: nameMap.has(g.user_id) ? { display_name: nameMap.get(g.user_id)! } : undefined,
         }));
       }
-      setActiveGrants(enriched);
+      if (mountedRef.current) setActiveGrants(enriched);
     } catch (err: any) {
       console.error('[ADMIN ENTITLEMENT ERROR]', err?.message);
-      setGrantsError(err?.message ?? 'Unknown error');
+      if (mountedRef.current) setGrantsError(err?.message ?? 'Unknown error');
     } finally {
-      setGrantsLoading(false);
+      if (mountedRef.current) setGrantsLoading(false);
     }
   }, []);
 
@@ -208,9 +216,9 @@ export default function EntitlementsScreen() {
         subscriptionStatus: sub?.status ?? null,
       });
     } catch (err: any) {
-      setSearchError(err?.message ?? 'Search failed');
+      if (mountedRef.current) setSearchError(err?.message ?? 'Search failed');
     } finally {
-      setSearchLoading(false);
+      if (mountedRef.current) setSearchLoading(false);
     }
   };
 
@@ -265,16 +273,16 @@ export default function EntitlementsScreen() {
       if (searchResult.id === user?.id) {
         await refreshSubscription();
       }
-      setSearchResult(null);
-      setSearchEmail('');
-      setGrantExpiry('');
-      setGrantNotes('');
-      setGrantCanInvite(true);
+      if (mountedRef.current) setSearchResult(null);
+      if (mountedRef.current) setSearchEmail('');
+      if (mountedRef.current) setGrantExpiry('');
+      if (mountedRef.current) setGrantNotes('');
+      if (mountedRef.current) setGrantCanInvite(true);
       await loadActiveGrants();
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Failed to grant access.');
+      if (mountedRef.current) Alert.alert('Error', err?.message ?? 'Failed to grant access.');
     } finally {
-      setGrantLoading(false);
+      if (mountedRef.current) setGrantLoading(false);
     }
   };
 
@@ -289,16 +297,20 @@ export default function EntitlementsScreen() {
           style: 'destructive',
           onPress: async () => {
             setRevokeLoading(grant.id);
-            const { error } = await supabase
-              .from('admin_grants')
-              .update({ active: false })
-              .eq('id', grant.id);
-            if (error) {
-              Alert.alert('Error', error.message);
-            } else {
-              await loadActiveGrants();
+            try {
+              const { error } = await supabase
+                .from('admin_grants')
+                .update({ active: false })
+                .eq('id', grant.id);
+              if (error) throw error;
+              if (mountedRef.current) await loadActiveGrants();
+            } catch {
+              if (mountedRef.current) {
+                Alert.alert('Error', 'Failed to revoke access. Please try again.');
+              }
+            } finally {
+              if (mountedRef.current) setRevokeLoading(null);
             }
-            setRevokeLoading(null);
           },
         },
       ]

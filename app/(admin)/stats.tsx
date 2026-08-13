@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity,
 } from 'react-native';
@@ -112,6 +112,13 @@ export default function StatsAdmin() {
   const [totals, setTotals] = useState({ dice: 0, dare: 0, tell_me: 0, wish: 0, chat: 0, dare_skipped: 0, dice_skipped: 0 });
   const [loading, setLoading] = useState(true);
   const [queryErrors, setQueryErrors] = useState<{ query: string; code?: string; message: string }[]>([]);
+  const [fatalError, setFatalError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const [activePreset, setActivePreset] = useState<PresetKey>('all');
   const [dateRange, setDateRange] = useState<DateRange>({ from: null, to: null });
@@ -122,8 +129,11 @@ export default function StatsAdmin() {
   // ── Fetch ────────────────────────────────────────────────────────────────────
 
   const fetchStats = useCallback(async (range: DateRange) => {
+    if (!mountedRef.current) return;
     setLoading(true);
+    setFatalError(null);
 
+    try {
     const fromTs = range.from ? `${range.from}T00:00:00.000Z` : null;
     const toTs   = range.to   ? `${range.to}T23:59:59.999Z`   : null;
 
@@ -136,8 +146,12 @@ export default function StatsAdmin() {
       const timeout = new Promise<{ data: null; error: { message: string } }>((resolve) =>
         setTimeout(() => resolve({ data: null, error: { message: `Timed out after ${TIMEOUT_MS / 1000}s` } }), TIMEOUT_MS),
       );
-      const result = await Promise.race([builder, timeout]);
-      return { name, ...result };
+      try {
+        const result = await Promise.race([builder, timeout]);
+        return { name, ...result };
+      } catch (e: any) {
+        return { name, data: null, error: { message: e?.message ?? 'Query failed' } };
+      }
     }
 
     let intQ = supabase.from('interactions').select('couple_id, type, status');
@@ -162,7 +176,7 @@ export default function StatsAdmin() {
       monthlyQ = monthlyQ.or(`year.lt.${t.year},and(year.eq.${t.year},month.lte.${t.month})`);
     }
 
-    const results = await Promise.all([
+    const results = await Promise.allSettled([
       runQuery('couples',       supabase.from('couples').select('id, user_a_id, user_b_id')),
       runQuery('interactions',  intQ),
       runQuery('scores',        supabase.from('scores').select('user_id, points').order('points', { ascending: false }).limit(10)),
@@ -172,21 +186,25 @@ export default function StatsAdmin() {
       runQuery('wishes',        wishQ),
     ]);
 
+    if (!mountedRef.current) return;
+
+    const settled = results.map(r => r.status === 'fulfilled' ? r.value : { name: 'unknown', data: null, error: { message: 'Query rejected' } }) as { name: string; data: any; error: { code?: string; message: string } | null }[];
+
     const errs: { query: string; code?: string; message: string }[] = [];
-    for (const r of results) {
+    for (const r of settled) {
       if (r.error) errs.push({ query: r.name, code: (r.error as { code?: string }).code, message: r.error.message });
     }
     setQueryErrors(errs);
 
-    const [couplesRes, interactionsRes, scoresRes, profilesRes, chatRes, monthlyRes, wishRes] = results;
+    const [couplesRes, interactionsRes, scoresRes, profilesRes, chatRes, monthlyRes, wishRes] = settled;
 
-    const couples      = couplesRes.data      ?? [];
-    const interactions = interactionsRes.data  ?? [];
-    const scores       = scoresRes.data        ?? [];
-    const profiles     = profilesRes.data      ?? [];
-    const chatMessages = chatRes.data          ?? [];
-    const monthly      = monthlyRes.data       ?? [];
-    const wishRows     = wishRes.data          ?? [];
+    const couples: { id: string; user_a_id: string; user_b_id: string | null }[] = couplesRes.data ?? [];
+    const interactions: { couple_id: string; type: string; status: string }[] = interactionsRes.data ?? [];
+    const scores: { user_id: string; points: number }[] = scoresRes.data ?? [];
+    const profiles: { id: string; display_name: string }[] = profilesRes.data ?? [];
+    const chatMessages: { couple_id: string }[] = chatRes.data ?? [];
+    const monthly: { couple_id: string; dares_skipped: number; dice_skipped: number; year: number; month: number }[] = monthlyRes.data ?? [];
+    const wishRows: { couple_id: string }[] = wishRes.data ?? [];
 
     const nameMap = Object.fromEntries(profiles.map(p => [p.id, p.display_name]));
 
@@ -254,7 +272,11 @@ export default function StatsAdmin() {
     setCoupleStats(builtStats);
     setTotals(overall);
     setTopScores(enrichedScores);
-    setLoading(false);
+    } catch (e: any) {
+      if (mountedRef.current) setFatalError(e?.message ?? 'Failed to load stats');
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchStats(dateRange); }, [dateRange]);
@@ -350,6 +372,13 @@ export default function StatsAdmin() {
 
       {/* Sub-label */}
       <AppText style={[styles.sublabel, { color: colors.textMuted }]}>{sublabel}</AppText>
+
+      {fatalError && !loading && (
+        <View style={styles.errorBanner}>
+          <AppText style={styles.errorBannerTitle}>Failed to load</AppText>
+          <AppText style={styles.errorBannerRow}>{fatalError}</AppText>
+        </View>
+      )}
 
       {queryErrors.length > 0 && (
         <View style={styles.errorBanner}>

@@ -96,23 +96,24 @@ export default function AnalyticsDashboard() {
         Apikey: SUPABASE_ANON_KEY,
       };
 
-      const [ovRes, healthRes, chatRes, trialsRes, cancelRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/functions/v1/analytics-overview?range=${range}`, { headers }),
-        fetch(`${SUPABASE_URL}/functions/v1/analytics-couple-health`, { headers }),
-        fetch(`${SUPABASE_URL}/functions/v1/analytics-chat`, { headers }),
-        fetch(`${SUPABASE_URL}/functions/v1/analytics-trials`, { headers }),
-        fetch(`${SUPABASE_URL}/functions/v1/analytics-cancellations`, { headers }),
-      ]);
+      const fetchSafe = async (url: string): Promise<any | null> => {
+        try {
+          const res = await fetch(url, { headers });
+          const json = await res.json();
+          if (json?.error) throw new Error(json.error);
+          return json;
+        } catch {
+          return null;
+        }
+      };
 
       const [ovJson, healthJson, chatJson, trialsJson, cancelJson] = await Promise.all([
-        ovRes.json(), healthRes.json(), chatRes.json(), trialsRes.json(), cancelRes.json(),
+        fetchSafe(`${SUPABASE_URL}/functions/v1/analytics-overview?range=${range}`),
+        fetchSafe(`${SUPABASE_URL}/functions/v1/analytics-couple-health`),
+        fetchSafe(`${SUPABASE_URL}/functions/v1/analytics-chat`),
+        fetchSafe(`${SUPABASE_URL}/functions/v1/analytics-trials`),
+        fetchSafe(`${SUPABASE_URL}/functions/v1/analytics-cancellations`),
       ]);
-
-      if (ovJson?.error) throw new Error(ovJson.error);
-      if (healthJson?.error) throw new Error(healthJson.error);
-      if (chatJson?.error) throw new Error(chatJson.error);
-      if (trialsJson?.error) throw new Error(trialsJson.error);
-      if (cancelJson?.error) throw new Error(cancelJson.error);
 
       if (mountedRef.current) {
         setOverview(ovJson ?? EMPTY_OVERVIEW);

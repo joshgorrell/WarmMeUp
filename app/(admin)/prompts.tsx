@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
   Modal, ActivityIndicator, Switch,
@@ -74,35 +74,54 @@ export default function PromptsAdmin() {
   const [savingLabel, setSavingLabel] = useState(false);
   const [deletingPromptId, setDeletingPromptId] = useState<string | null>(null);
   const [deletingLabelId, setDeletingLabelId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const accentColor = TAB_COLORS[activeTab];
 
   const fetchFaceLabels = useCallback(async () => {
-    const { data } = await supabase
-      .from('dice_face_labels')
-      .select('*')
-      .order('sort_order', { ascending: true });
-    setFaceLabels(data ?? []);
+    try {
+      const { data, error: err } = await supabase
+        .from('dice_face_labels')
+        .select('*')
+        .order('sort_order', { ascending: true });
+      if (err) throw err;
+      if (mountedRef.current) setFaceLabels(data ?? []);
+    } catch (e: any) {
+      if (mountedRef.current) setError(e?.message ?? 'Failed to load face labels');
+    }
   }, []);
 
   const fetchPrompts = useCallback(async (tab: Tab) => {
     setLoading(true);
-    const { data } = await supabase
-      .from(TABLE_MAP[tab])
-      .select('*')
-      .eq('is_default', true)
-      .order('created_at', { ascending: true });
-    setPrompts(data ?? []);
-    setLoading(false);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from(TABLE_MAP[tab])
+        .select('*')
+        .eq('is_default', true)
+        .order('created_at', { ascending: true });
+      if (err) throw err;
+      if (mountedRef.current) setPrompts(data ?? []);
+    } catch (e: any) {
+      if (mountedRef.current) setError(e?.message ?? 'Failed to load prompts');
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     fetchFaceLabels();
-  }, []);
+  }, [fetchFaceLabels]);
 
   useEffect(() => {
     fetchPrompts(activeTab);
-  }, [activeTab]);
+  }, [activeTab, fetchPrompts]);
 
   const openCreate = () => {
     setEditingPrompt(null);
@@ -123,29 +142,43 @@ export default function PromptsAdmin() {
     setSaving(true);
     const table = TABLE_MAP[activeTab];
     const extraFields = activeTab === 'dice' ? { face_label: draftFaceLabel } : {};
-    if (editingPrompt) {
-      await supabase.from(table).update({ text: draftText.trim(), ...extraFields }).eq('id', editingPrompt.id);
-    } else {
-      await supabase.from(table).insert({
-        text: draftText.trim(),
-        is_default: true,
-        is_active: true,
-        couple_id: null,
-        created_by_user_id: null,
-        ...extraFields,
-      });
+    try {
+      if (editingPrompt) {
+        const { error: err } = await supabase.from(table).update({ text: draftText.trim(), ...extraFields }).eq('id', editingPrompt.id);
+        if (err) throw err;
+      } else {
+        const { error: err } = await supabase.from(table).insert({
+          text: draftText.trim(),
+          is_default: true,
+          is_active: true,
+          couple_id: null,
+          created_by_user_id: null,
+          ...extraFields,
+        });
+        if (err) throw err;
+      }
+      if (mountedRef.current) {
+        setModalVisible(false);
+        fetchPrompts(activeTab);
+      }
+    } catch (e: any) {
+      if (mountedRef.current) setError(e?.message ?? 'Failed to save prompt');
+    } finally {
+      if (mountedRef.current) setSaving(false);
     }
-    setSaving(false);
-    setModalVisible(false);
-    fetchPrompts(activeTab);
   };
 
   const handleToggle = async (prompt: AnyPrompt) => {
-    await supabase
-      .from(TABLE_MAP[activeTab])
-      .update({ is_active: !prompt.is_active })
-      .eq('id', prompt.id);
-    fetchPrompts(activeTab);
+    try {
+      const { error: err } = await supabase
+        .from(TABLE_MAP[activeTab])
+        .update({ is_active: !prompt.is_active })
+        .eq('id', prompt.id);
+      if (err) throw err;
+      fetchPrompts(activeTab);
+    } catch (e: any) {
+      if (mountedRef.current) setError(e?.message ?? 'Failed to toggle prompt');
+    }
   };
 
   const handleDelete = (prompt: AnyPrompt) => {
@@ -153,9 +186,17 @@ export default function PromptsAdmin() {
   };
 
   const confirmDeletePrompt = async (prompt: AnyPrompt) => {
-    const { error } = await supabase.from(TABLE_MAP[activeTab]).delete().eq('id', prompt.id);
-    setDeletingPromptId(null);
-    if (!error) fetchPrompts(activeTab);
+    try {
+      const { error: err } = await supabase.from(TABLE_MAP[activeTab]).delete().eq('id', prompt.id);
+      if (err) throw err;
+      if (mountedRef.current) setDeletingPromptId(null);
+      fetchPrompts(activeTab);
+    } catch (e: any) {
+      if (mountedRef.current) {
+        setDeletingPromptId(null);
+        setError(e?.message ?? 'Failed to delete prompt');
+      }
+    }
   };
 
   const openCreateLabel = () => {
@@ -176,22 +217,31 @@ export default function PromptsAdmin() {
     if (!draftLabelName.trim()) return;
     setSavingLabel(true);
     const nameUpper = draftLabelName.trim().toUpperCase();
-    if (editingLabel) {
-      await supabase
-        .from('dice_face_labels')
-        .update({ label: nameUpper, color: draftLabelColor })
-        .eq('id', editingLabel.id);
-    } else {
-      const nextOrder = faceLabels.length > 0 ? Math.max(...faceLabels.map(l => l.sort_order)) + 1 : 1;
-      await supabase.from('dice_face_labels').insert({
-        label: nameUpper,
-        color: draftLabelColor,
-        sort_order: nextOrder,
-      });
+    try {
+      if (editingLabel) {
+        const { error: err } = await supabase
+          .from('dice_face_labels')
+          .update({ label: nameUpper, color: draftLabelColor })
+          .eq('id', editingLabel.id);
+        if (err) throw err;
+      } else {
+        const nextOrder = faceLabels.length > 0 ? Math.max(...faceLabels.map(l => l.sort_order)) + 1 : 1;
+        const { error: err } = await supabase.from('dice_face_labels').insert({
+          label: nameUpper,
+          color: draftLabelColor,
+          sort_order: nextOrder,
+        });
+        if (err) throw err;
+      }
+      if (mountedRef.current) {
+        setLabelModalVisible(false);
+        fetchFaceLabels();
+      }
+    } catch (e: any) {
+      if (mountedRef.current) setError(e?.message ?? 'Failed to save label');
+    } finally {
+      if (mountedRef.current) setSavingLabel(false);
     }
-    setSavingLabel(false);
-    setLabelModalVisible(false);
-    fetchFaceLabels();
   };
 
   const handleDeleteLabel = (label: FaceLabel) => {
@@ -199,9 +249,17 @@ export default function PromptsAdmin() {
   };
 
   const confirmDeleteLabel = async (label: FaceLabel) => {
-    const { error } = await supabase.from('dice_face_labels').delete().eq('id', label.id);
-    setDeletingLabelId(null);
-    if (!error) fetchFaceLabels();
+    try {
+      const { error: err } = await supabase.from('dice_face_labels').delete().eq('id', label.id);
+      if (err) throw err;
+      if (mountedRef.current) setDeletingLabelId(null);
+      fetchFaceLabels();
+    } catch (e: any) {
+      if (mountedRef.current) {
+        setDeletingLabelId(null);
+        setError(e?.message ?? 'Failed to delete label');
+      }
+    }
   };
 
   const faceLabelColorMap: Record<string, string> = {};
@@ -235,6 +293,11 @@ export default function PromptsAdmin() {
         ))}
       </View>
 
+      {error && (
+        <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,90,0.10)', borderColor: 'rgba(255,90,90,0.30)' }]}>
+          <AppText style={[styles.errorText, { color: colors.danger }]}>{error}</AppText>
+        </View>
+      )}
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator color={accentColor} />
@@ -641,6 +704,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabText: { fontSize: FontSize.body, fontFamily: 'Inter-SemiBold' },
+  errorBanner: { marginHorizontal: Spacing.screen, marginBottom: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md },
+  errorText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingHorizontal: Spacing.screen, gap: Spacing.sm },
   emptyWrap: { alignItems: 'center', paddingTop: 60 },

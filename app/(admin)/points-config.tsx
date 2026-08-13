@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity,
   KeyboardAvoidingView, Platform,
@@ -50,15 +50,30 @@ export default function PointsConfigAdmin() {
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('point_config').select('*').order('event_key');
-    if (data) setConfigs(data);
-    setLoading(false);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase.from('point_config').select('*').order('event_key');
+      if (err) throw err;
+      if (mountedRef.current) setConfigs(data ?? []);
+    } catch (e: any) {
+      if (mountedRef.current) setError(e?.message ?? 'Failed to load point config');
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const getValue = (key: string): number => {
     if (edited[key] !== undefined) return edited[key];
@@ -78,13 +93,22 @@ export default function PointsConfigAdmin() {
     const pts = edited[key] ?? configs.find(c => c.event_key === key)?.points;
     if (pts === undefined) return;
     setSaving(key);
-    await supabase.from('point_config').update({ points: pts, updated_at: new Date().toISOString() }).eq('event_key', key);
-    invalidatePointConfigCache();
-    setConfigs(prev => prev.map(c => c.event_key === key ? { ...c, points: pts } : c));
-    setEdited(prev => { const n = { ...prev }; delete n[key]; return n; });
-    setSaving(null);
-    setSaved(key);
-    setTimeout(() => setSaved(null), 1800);
+    setSaveError(null);
+    try {
+      const { error: err } = await supabase.from('point_config').update({ points: pts, updated_at: new Date().toISOString() }).eq('event_key', key);
+      if (err) throw err;
+      invalidatePointConfigCache();
+      if (mountedRef.current) {
+        setConfigs(prev => prev.map(c => c.event_key === key ? { ...c, points: pts! } : c));
+        setEdited(prev => { const n = { ...prev }; delete n[key]; return n; });
+        setSaved(key);
+        setTimeout(() => { if (mountedRef.current) setSaved(null); }, 1800);
+      }
+    } catch (e: any) {
+      if (mountedRef.current) setSaveError(e?.message ?? 'Failed to save');
+    } finally {
+      if (mountedRef.current) setSaving(null);
+    }
   };
 
   const isDirty = (key: string) => edited[key] !== undefined;
@@ -99,6 +123,16 @@ export default function PointsConfigAdmin() {
       ) : (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          {error && (
+            <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,90,0.10)', borderColor: 'rgba(255,90,90,0.30)' }]}>
+              <AppText style={[styles.errorText, { color: colors.danger }]}>{error}</AppText>
+            </View>
+          )}
+          {saveError && (
+            <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,90,0.10)', borderColor: 'rgba(255,90,90,0.30)' }]}>
+              <AppText style={[styles.errorText, { color: colors.danger }]}>{saveError}</AppText>
+            </View>
+          )}
           <View style={[styles.noticeBanner, { backgroundColor: 'rgba(255,179,71,0.08)', borderColor: 'rgba(255,179,71,0.25)' }]}>
             <AppText style={[styles.noticeText, { color: colors.textSecondary }]}>
               Changes apply to all new point events immediately. Existing earned points are not affected.
@@ -179,6 +213,8 @@ export default function PointsConfigAdmin() {
 const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 60 },
+  errorBanner: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.sm, gap: 4 },
+  errorText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
   noticeBanner: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.lg, marginTop: Spacing.sm },
   noticeText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20, textAlign: 'center' },
   section: { marginBottom: Spacing.lg },

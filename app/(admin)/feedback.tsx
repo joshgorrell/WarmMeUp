@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl,
 } from 'react-native';
@@ -35,32 +35,66 @@ export default function FeedbackAdminScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const loadConfig = useCallback(async () => {
-    const [{ data: enData }, { data: emData }] = await Promise.all([
-      supabase.from('app_config').select('value').eq('key', 'feedback_enabled').maybeSingle(),
-      supabase.from('app_config').select('value').eq('key', 'feedback_emails').maybeSingle(),
-    ]);
-    setEnabled(enData?.value === true);
-    setEnabledLoading(false);
-    const arr = Array.isArray(emData?.value) ? (emData!.value as string[]) : [];
-    setEmails(arr.join(', '));
-    setEmailsLoading(false);
+    try {
+      const [{ data: enData }, { data: emData }] = await Promise.all([
+        supabase.from('app_config').select('value').eq('key', 'feedback_enabled').maybeSingle(),
+        supabase.from('app_config').select('value').eq('key', 'feedback_emails').maybeSingle(),
+      ]);
+      if (mountedRef.current) {
+        setEnabled(enData?.value === true);
+        setEnabledLoading(false);
+        const arr = Array.isArray(emData?.value) ? (emData!.value as string[]) : [];
+        setEmails(arr.join(', '));
+        setEmailsLoading(false);
+      }
+    } catch (e) {
+      if (mountedRef.current) {
+        setError(e instanceof Error ? e.message : 'Failed to load config');
+        setEnabledLoading(false);
+        setEmailsLoading(false);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setEnabledLoading(false);
+        setEmailsLoading(false);
+      }
+    }
   }, []);
 
   const loadFeedback = useCallback(async () => {
-    setFeedbackLoading(true);
-    setError(null);
-    const { data, error: err } = await supabase
-      .from('user_feedback')
-      .select('id, user_email, content, created_at')
-      .order('created_at', { ascending: false })
-      .limit(100);
-    if (err) {
-      setError(err.message);
-    } else {
-      setFeedback(data ?? []);
+    try {
+      if (mountedRef.current) {
+        setFeedbackLoading(true);
+        setError(null);
+      }
+      const { data, error: err } = await supabase
+        .from('user_feedback')
+        .select('id, user_email, content, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (!mountedRef.current) return;
+      if (err) {
+        setError(err.message);
+      } else {
+        setFeedback(data ?? []);
+      }
+    } catch (e) {
+      if (mountedRef.current) {
+        setError(e instanceof Error ? e.message : 'Failed to load feedback');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setFeedbackLoading(false);
+      }
     }
-    setFeedbackLoading(false);
   }, []);
 
   useEffect(() => {
@@ -75,34 +109,55 @@ export default function FeedbackAdminScreen() {
   };
 
   const toggleEnabled = async (next: boolean) => {
-    setEnabled(next);
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase
-      .from('app_config')
-      .update({ value: next, updated_at: new Date().toISOString(), updated_by: user?.id ?? null })
-      .eq('key', 'feedback_enabled');
+    const prev = enabled;
+    if (mountedRef.current) setEnabled(next);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error: err } = await supabase
+        .from('app_config')
+        .update({ value: next, updated_at: new Date().toISOString(), updated_by: user?.id ?? null })
+        .eq('key', 'feedback_enabled');
+      if (err) throw err;
+    } catch (e) {
+      if (mountedRef.current) {
+        setEnabled(prev);
+        setError(e instanceof Error ? e.message : 'Failed to toggle feedback');
+      }
+    }
   };
 
   const saveEmails = async () => {
-    setSavingEmails(true);
-    setEmailsSaved(false);
-    const parsed = emails
-      .split(',')
-      .map((e) => e.trim())
-      .filter((e) => e.includes('@') && e.length > 3);
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error: err } = await supabase
-      .from('app_config')
-      .update({ value: parsed, updated_at: new Date().toISOString(), updated_by: user?.id ?? null })
-      .eq('key', 'feedback_emails');
-    if (err) {
-      setError(err.message);
-    } else {
-      setEmails(parsed.join(', '));
-      setEmailsSaved(true);
-      setTimeout(() => setEmailsSaved(false), 2500);
+    try {
+      if (mountedRef.current) {
+        setSavingEmails(true);
+        setEmailsSaved(false);
+      }
+      const parsed = emails
+        .split(',')
+        .map((e) => e.trim())
+        .filter((e) => e.includes('@') && e.length > 3);
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error: err } = await supabase
+        .from('app_config')
+        .update({ value: parsed, updated_at: new Date().toISOString(), updated_by: user?.id ?? null })
+        .eq('key', 'feedback_emails');
+      if (!mountedRef.current) return;
+      if (err) {
+        setError(err.message);
+      } else {
+        setEmails(parsed.join(', '));
+        setEmailsSaved(true);
+        setTimeout(() => { if (mountedRef.current) setEmailsSaved(false); }, 2500);
+      }
+    } catch (e) {
+      if (mountedRef.current) {
+        setError(e instanceof Error ? e.message : 'Failed to save emails');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setSavingEmails(false);
+      }
     }
-    setSavingEmails(false);
   };
 
   const formatDate = (iso: string) => {

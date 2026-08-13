@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -48,20 +48,33 @@ export default function GreetingsScreen() {
   const [deleteConfirm, setDeleteConfirm] = useState<GreetingSubtitle | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const loadPhrases = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { data, error: err } = await supabase
-      .from('greeting_subtitles')
-      .select('*')
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: true });
-    if (err) {
-      setError(err.message);
-    } else {
-      setPhrases(data ?? []);
+    try {
+      const { data, error: err } = await supabase
+        .from('greeting_subtitles')
+        .select('*')
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
+      if (!mountedRef.current) return;
+      if (err) {
+        setError(err.message);
+      } else {
+        setPhrases(data ?? []);
+      }
+    } catch (e) {
+      if (mountedRef.current) setError(e instanceof Error ? e.message : 'Failed to load phrases');
+    } finally {
+      if (mountedRef.current) setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { loadPhrases(); }, [loadPhrases]);
@@ -95,50 +108,70 @@ export default function GreetingsScreen() {
     setSaving(true);
     setModalError(null);
 
-    if (modalMode === 'add') {
-      const nextOrder = phrases.length > 0 ? Math.max(...phrases.map(p => p.sort_order)) + 1 : 1;
-      const { error: err } = await supabase
-        .from('greeting_subtitles')
-        .insert({ text, is_active: true, sort_order: nextOrder });
-      if (err) { setModalError(err.message); setSaving(false); return; }
-    } else if (editTarget) {
-      const { error: err } = await supabase
-        .from('greeting_subtitles')
-        .update({ text })
-        .eq('id', editTarget.id);
-      if (err) { setModalError(err.message); setSaving(false); return; }
-    }
+    try {
+      if (modalMode === 'add') {
+        const nextOrder = phrases.length > 0 ? Math.max(...phrases.map(p => p.sort_order)) + 1 : 1;
+        const { error: err } = await supabase
+          .from('greeting_subtitles')
+          .insert({ text, is_active: true, sort_order: nextOrder });
+        if (!mountedRef.current) return;
+        if (err) { setModalError(err.message); return; }
+      } else if (editTarget) {
+        const { error: err } = await supabase
+          .from('greeting_subtitles')
+          .update({ text })
+          .eq('id', editTarget.id);
+        if (!mountedRef.current) return;
+        if (err) { setModalError(err.message); return; }
+      }
 
-    setSaving(false);
-    closeModal();
-    loadPhrases();
+      if (mountedRef.current) closeModal();
+      loadPhrases();
+    } catch (e) {
+      if (mountedRef.current) setModalError(e instanceof Error ? e.message : 'Failed to save phrase');
+    } finally {
+      if (mountedRef.current) setSaving(false);
+    }
   };
 
   const handleToggleActive = async (phrase: GreetingSubtitle) => {
     const next = !phrase.is_active;
     setPhrases(prev => prev.map(p => p.id === phrase.id ? { ...p, is_active: next } : p));
-    const { error: err } = await supabase
-      .from('greeting_subtitles')
-      .update({ is_active: next })
-      .eq('id', phrase.id);
-    if (err) {
-      // revert on failure
-      setPhrases(prev => prev.map(p => p.id === phrase.id ? { ...p, is_active: phrase.is_active } : p));
+    try {
+      const { error: err } = await supabase
+        .from('greeting_subtitles')
+        .update({ is_active: next })
+        .eq('id', phrase.id);
+      if (!mountedRef.current) return;
+      if (err) {
+        // revert on failure
+        setPhrases(prev => prev.map(p => p.id === phrase.id ? { ...p, is_active: phrase.is_active } : p));
+      }
+    } catch (e) {
+      if (mountedRef.current) {
+        setPhrases(prev => prev.map(p => p.id === phrase.id ? { ...p, is_active: phrase.is_active } : p));
+      }
     }
   };
 
   const handleDelete = async () => {
     if (!deleteConfirm) return;
     setDeleting(true);
-    const { error: err } = await supabase
-      .from('greeting_subtitles')
-      .delete()
-      .eq('id', deleteConfirm.id);
-    setDeleting(false);
-    if (!err) {
-      setPhrases(prev => prev.filter(p => p.id !== deleteConfirm.id));
-      setDeleteConfirm(null);
-      if (modalVisible && editTarget?.id === deleteConfirm.id) closeModal();
+    try {
+      const { error: err } = await supabase
+        .from('greeting_subtitles')
+        .delete()
+        .eq('id', deleteConfirm.id);
+      if (!mountedRef.current) return;
+      if (!err) {
+        setPhrases(prev => prev.filter(p => p.id !== deleteConfirm.id));
+        setDeleteConfirm(null);
+        if (modalVisible && editTarget?.id === deleteConfirm.id) closeModal();
+      }
+    } catch (e) {
+      // deletion failed; leave state as-is so user can retry
+    } finally {
+      if (mountedRef.current) setDeleting(false);
     }
   };
 

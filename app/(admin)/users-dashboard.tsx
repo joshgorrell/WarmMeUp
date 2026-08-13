@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
   Modal, ActivityIndicator,
@@ -114,58 +114,73 @@ export default function UsersDashboard() {
   const [diagLoading, setDiagLoading] = useState(false);
   const [diagError, setDiagError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const [profilesResult, couplesResult, subsResult] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('id, display_name, is_admin, is_super_admin, created_at')
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('couples')
-        .select('*')
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('subscriptions')
-        .select('user_id, plan, status, started_at, expires_at, trial_started_at')
-        .order('started_at', { ascending: false }),
-    ]);
+    setLoadError(null);
+    try {
+      const [profilesResult, couplesResult, subsResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, display_name, is_admin, is_super_admin, created_at')
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('couples')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('subscriptions')
+          .select('user_id, plan, status, started_at, expires_at, trial_started_at')
+          .order('started_at', { ascending: false }),
+      ]);
 
-    const profileList = profilesResult.data ?? [];
-    const nameMap = Object.fromEntries(profileList.map(p => [p.id, p.display_name]));
+      if (profilesResult.error) throw profilesResult.error;
+      if (couplesResult.error) throw couplesResult.error;
+      if (subsResult.error) throw subsResult.error;
 
-    // Build couple context map for users tab
-    const map: Record<string, CoupleContext> = {};
-    for (const couple of couplesResult.data ?? []) {
-      const { user_a_id, user_b_id, active } = couple;
-      if (user_a_id) {
-        map[user_a_id] = { partnerName: user_b_id ? (nameMap[user_b_id] ?? 'Unknown') : null, active };
+      if (!mountedRef.current) return;
+
+      const profileList = profilesResult.data ?? [];
+      const nameMap = Object.fromEntries(profileList.map(p => [p.id, p.display_name]));
+
+      const map: Record<string, CoupleContext> = {};
+      for (const couple of couplesResult.data ?? []) {
+        const { user_a_id, user_b_id, active } = couple;
+        if (user_a_id) {
+          map[user_a_id] = { partnerName: user_b_id ? (nameMap[user_b_id] ?? 'Unknown') : null, active };
+        }
+        if (user_b_id) {
+          map[user_b_id] = { partnerName: nameMap[user_a_id] ?? 'Unknown', active };
+        }
       }
-      if (user_b_id) {
-        map[user_b_id] = { partnerName: nameMap[user_a_id] ?? 'Unknown', active };
-      }
+      setUsers(profileList);
+      setCoupleMap(map);
+
+      const enrichedCouples: CoupleRow[] = (couplesResult.data ?? []).map(c => ({
+        ...c,
+        admin_notes: c.admin_notes ?? '',
+        user_a_name: nameMap[c.user_a_id] ?? 'Unknown',
+        user_b_name: c.user_b_id ? (nameMap[c.user_b_id] ?? 'Unknown') : null,
+      }));
+      setCouples(enrichedCouples);
+
+      const enrichedSubs: SubscriptionRow[] = (subsResult.data ?? []).map(s => ({
+        ...s,
+        display_name: nameMap[s.user_id] ?? 'Unknown',
+      }));
+      setSubscriptions(enrichedSubs);
+    } catch (e: any) {
+      if (mountedRef.current) setLoadError(e?.message ?? 'Failed to load data');
+    } finally {
+      if (mountedRef.current) setLoading(false);
     }
-    setUsers(profileList);
-    setCoupleMap(map);
-
-    // Enrich couples
-    const enrichedCouples: CoupleRow[] = (couplesResult.data ?? []).map(c => ({
-      ...c,
-      admin_notes: c.admin_notes ?? '',
-      user_a_name: nameMap[c.user_a_id] ?? 'Unknown',
-      user_b_name: c.user_b_id ? (nameMap[c.user_b_id] ?? 'Unknown') : null,
-    }));
-    setCouples(enrichedCouples);
-
-    // Enrich subscriptions
-    const enrichedSubs: SubscriptionRow[] = (subsResult.data ?? []).map(s => ({
-      ...s,
-      display_name: nameMap[s.user_id] ?? 'Unknown',
-    }));
-    setSubscriptions(enrichedSubs);
-
-    setLoading(false);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -180,18 +195,24 @@ export default function UsersDashboard() {
 
   const executeToggleAdmin = async (user: UserRow) => {
     setSaving(true);
-    const { error } = await supabase
-      .from('profiles')
-      .update({ is_admin: !user.is_admin })
-      .eq('id', user.id);
-    if (error) {
-      setSheetState({ kind: 'alert', title: 'Error', message: 'Could not update admin status. Please try again.' });
-    } else {
-      const updated = { ...user, is_admin: !user.is_admin };
-      setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
-      setSelectedUser(updated);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_admin: !user.is_admin })
+        .eq('id', user.id);
+      if (error) throw error;
+      if (mountedRef.current) {
+        const updated = { ...user, is_admin: !user.is_admin };
+        setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
+        setSelectedUser(updated);
+      }
+    } catch {
+      if (mountedRef.current) {
+        setSheetState({ kind: 'alert', title: 'Error', message: 'Could not update admin status. Please try again.' });
+      }
+    } finally {
+      if (mountedRef.current) setSaving(false);
     }
-    setSaving(false);
   };
 
   const [deleting, setDeleting] = useState(false);
@@ -256,19 +277,25 @@ export default function UsersDashboard() {
     setDiagLoading(true);
     setSelectedUser(null);
 
-    const { data, error } = await supabase
-      .from('user_diagnostics')
-      .select('user_id, email, snapshot, captured_at')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from('user_diagnostics')
+        .select('user_id, email, snapshot, captured_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-    setDiagLoading(false);
-    if (error) {
-      setDiagError('Failed to load snapshot: ' + error.message);
-    } else if (!data) {
-      setDiagError('No diagnostic snapshot saved for this user yet.');
-    } else {
-      setDiagData(data as UserDiagnosticsRow);
+      if (!mountedRef.current) return;
+      if (error) {
+        setDiagError('Failed to load snapshot: ' + error.message);
+      } else if (!data) {
+        setDiagError('No diagnostic snapshot saved for this user yet.');
+      } else {
+        setDiagData(data as UserDiagnosticsRow);
+      }
+    } catch (e: any) {
+      if (mountedRef.current) setDiagError(e?.message ?? 'Failed to load snapshot');
+    } finally {
+      if (mountedRef.current) setDiagLoading(false);
     }
   };
 
@@ -294,10 +321,20 @@ export default function UsersDashboard() {
   const handleSaveNotes = async () => {
     if (!selectedCouple) return;
     setSaving(true);
-    await supabase.from('couples').update({ admin_notes: notes }).eq('id', selectedCouple.id);
-    setSaving(false);
-    setSelectedCouple(prev => prev ? { ...prev, admin_notes: notes } : null);
-    setCouples(prev => prev.map(c => c.id === selectedCouple.id ? { ...c, admin_notes: notes } : c));
+    try {
+      const { error } = await supabase.from('couples').update({ admin_notes: notes }).eq('id', selectedCouple.id);
+      if (error) throw error;
+      if (mountedRef.current) {
+        setSelectedCouple(prev => prev ? { ...prev, admin_notes: notes } : null);
+        setCouples(prev => prev.map(c => c.id === selectedCouple.id ? { ...c, admin_notes: notes } : c));
+      }
+    } catch {
+      if (mountedRef.current) {
+        setSheetState({ kind: 'alert', title: 'Error', message: 'Failed to save notes. Please try again.' });
+      }
+    } finally {
+      if (mountedRef.current) setSaving(false);
+    }
   };
 
   const handleToggleActive = (couple: CoupleRow) => {
@@ -305,9 +342,18 @@ export default function UsersDashboard() {
   };
 
   const executeToggleActive = async (couple: CoupleRow) => {
-    await supabase.from('couples').update({ active: !couple.active }).eq('id', couple.id);
-    setCouples(prev => prev.map(c => c.id === couple.id ? { ...c, active: !c.active } : c));
-    setSelectedCouple(prev => prev && prev.id === couple.id ? { ...prev, active: !prev.active } : prev);
+    try {
+      const { error } = await supabase.from('couples').update({ active: !couple.active }).eq('id', couple.id);
+      if (error) throw error;
+      if (mountedRef.current) {
+        setCouples(prev => prev.map(c => c.id === couple.id ? { ...c, active: !c.active } : c));
+        setSelectedCouple(prev => prev && prev.id === couple.id ? { ...prev, active: !prev.active } : prev);
+      }
+    } catch {
+      if (mountedRef.current) {
+        setSheetState({ kind: 'alert', title: 'Error', message: 'Failed to toggle couple status. Please try again.' });
+      }
+    }
   };
 
   // ── Derived data ──
@@ -396,6 +442,11 @@ export default function UsersDashboard() {
         ))}
       </View>
 
+      {loadError && !loading && (
+        <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,90,0.10)', borderColor: 'rgba(255,90,90,0.30)' }]}>
+          <AppText style={[styles.errorText, { color: colors.danger }]}>{loadError}</AppText>
+        </View>
+      )}
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator color="#FF2E8A" />
@@ -928,6 +979,8 @@ export default function UsersDashboard() {
 }
 
 const styles = StyleSheet.create({
+  errorBanner: { marginHorizontal: Spacing.screen, marginVertical: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md },
+  errorText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tabBar: {
     flexDirection: 'row',

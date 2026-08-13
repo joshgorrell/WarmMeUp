@@ -100,48 +100,66 @@ export default function AdminDashboard() {
   }, [authLoading, user?.id]));
 
   const fetchSignupAlert = async () => {
-    const { data } = await supabase
-      .from('app_config')
-      .select('value')
-      .eq('key', 'aiops_signup_alert')
-      .maybeSingle();
-    if (mountedRef.current) setSignupAlert(!!data?.value);
+    try {
+      const { data } = await supabase
+        .from('app_config')
+        .select('value')
+        .eq('key', 'aiops_signup_alert')
+        .maybeSingle();
+      if (mountedRef.current) setSignupAlert(!!data?.value);
+    } catch {
+      // silent — non-critical
+    }
   };
 
   const fetchDebugMode = async () => {
-    const { data } = await supabase
-      .from('app_config')
-      .select('value')
-      .eq('key', 'debug_mode_enabled')
-      .maybeSingle();
-    if (data) setDebugModeEnabled(data.value === true);
+    try {
+      const { data } = await supabase
+        .from('app_config')
+        .select('value')
+        .eq('key', 'debug_mode_enabled')
+        .maybeSingle();
+      if (data && mountedRef.current) setDebugModeEnabled(data.value === true);
+    } catch {
+      // silent — non-critical
+    }
   };
 
   const fetchGlobalDebugMode = async () => {
-    const { data } = await supabase
-      .from('app_config')
-      .select('value')
-      .eq('key', 'global_debug_access')
-      .maybeSingle();
-    if (data?.value) {
-      const val = data.value;
-      const enabled = val?.enabled === true;
-      const expiresAt: string | null = val?.expires_at ?? null;
-      const expired = expiresAt ? Date.now() > new Date(expiresAt).getTime() : false;
-      setGlobalDebugEnabled(enabled && !expired);
-      setGlobalDebugExpiresAt(expired ? null : expiresAt);
+    try {
+      const { data } = await supabase
+        .from('app_config')
+        .select('value')
+        .eq('key', 'global_debug_access')
+        .maybeSingle();
+      if (data?.value && mountedRef.current) {
+        const val = data.value;
+        const enabled = val?.enabled === true;
+        const expiresAt: string | null = val?.expires_at ?? null;
+        const expired = expiresAt ? Date.now() > new Date(expiresAt).getTime() : false;
+        setGlobalDebugEnabled(enabled && !expired);
+        setGlobalDebugExpiresAt(expired ? null : expiresAt);
+      }
+    } catch {
+      // silent — non-critical
     }
   };
 
   const toggleDebugMode = async (next: boolean) => {
     setDebugToggleLoading(true);
     setDebugModeEnabled(next);
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    await supabase
-      .from('app_config')
-      .update({ value: next, updated_at: new Date().toISOString(), updated_by: authUser?.id ?? null })
-      .eq('key', 'debug_mode_enabled');
-    setDebugToggleLoading(false);
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from('app_config')
+        .update({ value: next, updated_at: new Date().toISOString(), updated_by: authUser?.id ?? null })
+        .eq('key', 'debug_mode_enabled');
+      if (error) throw error;
+    } catch {
+      if (mountedRef.current) setDebugModeEnabled(!next);
+    } finally {
+      if (mountedRef.current) setDebugToggleLoading(false);
+    }
   };
 
   const expiryMs = (expiry: typeof globalDebugExpiry): number | null => {
@@ -309,97 +327,101 @@ export default function AdminDashboard() {
     ];
     setDiag([...checks]);
 
-    const { data: { user: authUser } } = await supabase.auth.getUser();
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
 
-    // 0. Auth session
-    checks[0] = authUser
-      ? { name: 'Auth session', status: 'pass', detail: authUser.id }
-      : { name: 'Auth session', status: 'fail', detail: 'No auth session' };
-    setDiag([...checks]);
+      // 0. Auth session
+      checks[0] = authUser
+        ? { name: 'Auth session', status: 'pass', detail: authUser.id }
+        : { name: 'Auth session', status: 'fail', detail: 'No auth session' };
+      if (mountedRef.current) setDiag([...checks]);
 
-    if (!authUser) {
-      checks.forEach((c, i) => { if (i > 0) { c.status = 'fail'; c.detail = 'No auth session'; } });
-      setDiag([...checks]);
-      setDiagRunning(false);
-      return;
-    }
-
-    // 1. Admin flags
-    {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('is_admin, is_super_admin')
-        .eq('id', authUser.id)
-        .maybeSingle();
-      checks[1] = error
-        ? { name: 'Admin flags (is_admin / is_super_admin)', status: 'fail', detail: error.message }
-        : { name: 'Admin flags (is_admin / is_super_admin)', status: data?.is_admin || data?.is_super_admin ? 'pass' : 'fail', detail: `is_admin=${data?.is_admin} is_super_admin=${data?.is_super_admin}` };
-      setDiag([...checks]);
-    }
-
-    // 2. Read all profiles
-    {
-      const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true });
-      checks[2] = error
-        ? { name: 'Read all profiles', status: 'fail', detail: error.message }
-        : { name: 'Read all profiles', status: 'pass', detail: `${count ?? 0} rows` };
-      setDiag([...checks]);
-    }
-
-    // 3. Read all couples
-    {
-      const { count, error } = await supabase.from('couples').select('id', { count: 'exact', head: true });
-      checks[3] = error
-        ? { name: 'Read all couples', status: 'fail', detail: error.message }
-        : { name: 'Read all couples', status: 'pass', detail: `${count ?? 0} rows` };
-      setDiag([...checks]);
-    }
-
-    // 4. Read all subscriptions
-    {
-      const { count, error } = await supabase.from('subscriptions').select('user_id', { count: 'exact', head: true });
-      checks[4] = error
-        ? { name: 'Read all subscriptions', status: 'fail', detail: error.message }
-        : { name: 'Read all subscriptions', status: 'pass', detail: `${count ?? 0} rows` };
-      setDiag([...checks]);
-    }
-
-    // 5. Read all admin_grants
-    {
-      const { count, error } = await supabase.from('admin_grants').select('id', { count: 'exact', head: true });
-      checks[5] = error
-        ? { name: 'Read all admin_grants', status: 'fail', detail: error.message }
-        : { name: 'Read all admin_grants', status: 'pass', detail: `${count ?? 0} rows` };
-      setDiag([...checks]);
-    }
-
-    // 6. Read all wishes
-    {
-      const { count, error } = await supabase.from('wishes').select('id', { count: 'exact', head: true });
-      checks[6] = error
-        ? { name: 'Read all wishes', status: 'fail', detail: error.message }
-        : { name: 'Read all wishes', status: 'pass', detail: `${count ?? 0} rows` };
-      setDiag([...checks]);
-    }
-
-    // 7. Email search RPC (search for own email)
-    {
-      const ownEmail = authUser.email ?? '';
-      if (!ownEmail) {
-        checks[7] = { name: 'Email search RPC', status: 'fail', detail: 'No email on auth session' };
-      } else {
-        const { data, error } = await supabase.rpc('admin_search_user_by_email', { p_email: ownEmail });
-        const found = Array.isArray(data) ? data[0] : data;
-        checks[7] = error
-          ? { name: 'Email search RPC', status: 'fail', detail: error.message }
-          : found?.user_id === authUser.id
-            ? { name: 'Email search RPC', status: 'pass', detail: `found ${found.display_name} (${found.user_id.slice(0, 8)}…)` }
-            : { name: 'Email search RPC', status: 'fail', detail: found ? `wrong user: ${found.user_id}` : 'no result returned' };
+      if (!authUser) {
+        checks.forEach((c, i) => { if (i > 0) { c.status = 'fail'; c.detail = 'No auth session'; } });
+        if (mountedRef.current) setDiag([...checks]);
+        return;
       }
-      setDiag([...checks]);
-    }
 
-    setDiagRunning(false);
+      // 1. Admin flags
+      {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('is_admin, is_super_admin')
+          .eq('id', authUser.id)
+          .maybeSingle();
+        checks[1] = error
+          ? { name: 'Admin flags (is_admin / is_super_admin)', status: 'fail', detail: error.message }
+          : { name: 'Admin flags (is_admin / is_super_admin)', status: data?.is_admin || data?.is_super_admin ? 'pass' : 'fail', detail: `is_admin=${data?.is_admin} is_super_admin=${data?.is_super_admin}` };
+        if (mountedRef.current) setDiag([...checks]);
+      }
+
+      // 2. Read all profiles
+      {
+        const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true });
+        checks[2] = error
+          ? { name: 'Read all profiles', status: 'fail', detail: error.message }
+          : { name: 'Read all profiles', status: 'pass', detail: `${count ?? 0} rows` };
+        if (mountedRef.current) setDiag([...checks]);
+      }
+
+      // 3. Read all couples
+      {
+        const { count, error } = await supabase.from('couples').select('id', { count: 'exact', head: true });
+        checks[3] = error
+          ? { name: 'Read all couples', status: 'fail', detail: error.message }
+          : { name: 'Read all couples', status: 'pass', detail: `${count ?? 0} rows` };
+        if (mountedRef.current) setDiag([...checks]);
+      }
+
+      // 4. Read all subscriptions
+      {
+        const { count, error } = await supabase.from('subscriptions').select('user_id', { count: 'exact', head: true });
+        checks[4] = error
+          ? { name: 'Read all subscriptions', status: 'fail', detail: error.message }
+          : { name: 'Read all subscriptions', status: 'pass', detail: `${count ?? 0} rows` };
+        if (mountedRef.current) setDiag([...checks]);
+      }
+
+      // 5. Read all admin_grants
+      {
+        const { count, error } = await supabase.from('admin_grants').select('id', { count: 'exact', head: true });
+        checks[5] = error
+          ? { name: 'Read all admin_grants', status: 'fail', detail: error.message }
+          : { name: 'Read all admin_grants', status: 'pass', detail: `${count ?? 0} rows` };
+        if (mountedRef.current) setDiag([...checks]);
+      }
+
+      // 6. Read all wishes
+      {
+        const { count, error } = await supabase.from('wishes').select('id', { count: 'exact', head: true });
+        checks[6] = error
+          ? { name: 'Read all wishes', status: 'fail', detail: error.message }
+          : { name: 'Read all wishes', status: 'pass', detail: `${count ?? 0} rows` };
+        if (mountedRef.current) setDiag([...checks]);
+      }
+
+      // 7. Email search RPC (search for own email)
+      {
+        const ownEmail = authUser.email ?? '';
+        if (!ownEmail) {
+          checks[7] = { name: 'Email search RPC', status: 'fail', detail: 'No email on auth session' };
+        } else {
+          const { data, error } = await supabase.rpc('admin_search_user_by_email', { p_email: ownEmail });
+          const found = Array.isArray(data) ? data[0] : data;
+          checks[7] = error
+            ? { name: 'Email search RPC', status: 'fail', detail: error.message }
+            : found?.user_id === authUser.id
+              ? { name: 'Email search RPC', status: 'pass', detail: `found ${found.display_name} (${found.user_id.slice(0, 8)}…)` }
+              : { name: 'Email search RPC', status: 'fail', detail: found ? `wrong user: ${found.user_id}` : 'no result returned' };
+        }
+        if (mountedRef.current) setDiag([...checks]);
+      }
+    } catch (e: any) {
+      checks.forEach((c, i) => { if (c.status === 'pending') { c.status = 'fail'; c.detail = e?.message ?? 'Diagnostics aborted'; } });
+      if (mountedRef.current) setDiag([...checks]);
+    } finally {
+      if (mountedRef.current) setDiagRunning(false);
+    }
   };
 
   const statVal = (entry: StatEntry) => {
