@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Search, ShieldCheck, X, Calendar, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react-native';
+import { Search, ShieldCheck, X, Calendar, ChevronDown, ChevronUp, Plus, Trash2, TriangleAlert as AlertTriangle } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
@@ -41,6 +41,8 @@ interface UserSearchResult {
   currentGrant: AdminGrant | null;
   subscriptionPlan: string | null;
   subscriptionStatus: string | null;
+  partnerName: string | null;
+  partnerHasPremium: boolean;
 }
 
 const ENTITLEMENT_TYPES: { value: string; label: string }[] = [
@@ -207,6 +209,49 @@ export default function EntitlementsScreen() {
         .eq('user_id', matchedId)
         .maybeSingle();
 
+      // Check if user is in an active couple with a partner who has premium
+      let partnerName: string | null = null;
+      let partnerHasPremium = false;
+      const { data: couple } = await supabase
+        .from('couples')
+        .select('user_a_id, user_b_id')
+        .or(`user_a_id.eq.${matchedId},user_b_id.eq.${matchedId}`)
+        .eq('active', true)
+        .maybeSingle();
+
+      if (couple && couple.user_b_id) {
+        const partnerId = couple.user_a_id === matchedId ? couple.user_b_id : couple.user_a_id;
+        const { data: partnerProfile } = await supabase
+          .from('profiles')
+          .select('display_name, is_admin, is_super_admin')
+          .eq('id', partnerId)
+          .maybeSingle();
+
+        if (partnerProfile) {
+          partnerName = partnerProfile.display_name;
+          // Check partner's subscription
+          const { data: partnerSub } = await supabase
+            .from('subscriptions')
+            .select('plan, status, expires_at')
+            .eq('user_id', partnerId)
+            .maybeSingle();
+          const partnerSubActive = partnerSub?.status === 'active'
+            && (!partnerSub?.expires_at || new Date(partnerSub.expires_at) > new Date())
+            && (partnerSub?.plan === 'monthly' || partnerSub?.plan === 'yearly');
+          // Check partner's active admin grant
+          const { data: partnerGrant } = await supabase
+            .from('admin_grants')
+            .select('id, expires_at')
+            .eq('user_id', partnerId)
+            .eq('active', true)
+            .maybeSingle();
+          const partnerGrantActive = !!partnerGrant
+            && (!partnerGrant.expires_at || new Date(partnerGrant.expires_at) > new Date());
+          const partnerIsAdmin = partnerProfile.is_admin || partnerProfile.is_super_admin;
+          partnerHasPremium = partnerSubActive || partnerGrantActive || partnerIsAdmin;
+        }
+      }
+
       setSearchResult({
         id: matchedId!,
         display_name: matchedName,
@@ -214,6 +259,8 @@ export default function EntitlementsScreen() {
         currentGrant: grant ?? null,
         subscriptionPlan: sub?.plan ?? null,
         subscriptionStatus: sub?.status ?? null,
+        partnerName,
+        partnerHasPremium,
       });
     } catch (err: any) {
       if (mountedRef.current) setSearchError(err?.message ?? 'Search failed');
@@ -229,61 +276,79 @@ export default function EntitlementsScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    setGrantLoading(true);
-    try {
-      let expiresAt: string | null = null;
-      if (grantExpiry.trim()) {
-        const d = new Date(grantExpiry.trim());
-        if (isNaN(d.getTime())) {
-          Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format.');
+    const doGrant = async () => {
+      setGrantLoading(true);
+      try {
+        let expiresAt: string | null = null;
+        if (grantExpiry.trim()) {
+          const d = new Date(grantExpiry.trim());
+          if (isNaN(d.getTime())) {
+            Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format.');
+            setGrantLoading(false);
+            return;
+          }
+          expiresAt = d.toISOString();
+        }
+
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('grant_entitlement', {
+          p_user_id: searchResult.id,
+          p_entitlement_type: grantType,
+          p_expires_at: expiresAt,
+          p_notes: grantNotes.trim() || null,
+          p_can_invite: grantCanInvite,
+        });
+
+        if (rpcError) {
+          console.error('[ADMIN ENTITLEMENT ERROR] grant RPC:', rpcError.message);
+          Alert.alert('Error', rpcError.message);
           setGrantLoading(false);
           return;
         }
-        expiresAt = d.toISOString();
-      }
 
-      // Revoke any existing active grant first
-      if (searchResult.currentGrant) {
-        await supabase
-          .from('admin_grants')
-          .update({ active: false })
-          .eq('id', searchResult.currentGrant.id);
-      }
+        const result = (Array.isArray(rpcResult) ? rpcResult[0] : rpcResult) as
+          { success: boolean; warning: string | null; already_covered_by_partner: boolean } | null;
 
-      const { error } = await supabase.from('admin_grants').insert({
-        user_id: searchResult.id,
-        entitlement_type: grantType,
-        expires_at: expiresAt,
-        notes: grantNotes.trim() || null,
-        active: true,
-        granted_by: user.id,
-        can_invite: grantCanInvite,
-      });
-
-      if (error) {
-        console.error('[ADMIN ENTITLEMENT ERROR] grant insert:', error.message);
-        Alert.alert('Error', error.message);
-        setGrantLoading(false);
-        return;
+        const typeLabel = ENTITLEMENT_TYPES.find(t => t.value === grantType)?.label ?? grantType;
+        if (result?.already_covered_by_partner) {
+          Alert.alert(
+            'Access Granted (Redundant)',
+            `${searchResult.display_name} now has ${typeLabel} access, but they were already covered by their partner's premium. This grant is not strictly needed.`
+          );
+        } else {
+          Alert.alert('Access Granted', `${searchResult.display_name} now has ${typeLabel} access.`);
+        }
+        // If the admin granted themselves, refresh subscription state so the
+        // account screen immediately reflects canInvite = true on return.
+        if (searchResult.id === user?.id) {
+          await refreshSubscription();
+        }
+        if (mountedRef.current) setSearchResult(null);
+        if (mountedRef.current) setSearchEmail('');
+        if (mountedRef.current) setGrantExpiry('');
+        if (mountedRef.current) setGrantNotes('');
+        if (mountedRef.current) setGrantCanInvite(true);
+        await loadActiveGrants();
+      } catch (err: any) {
+        if (mountedRef.current) Alert.alert('Error', err?.message ?? 'Failed to grant access.');
+      } finally {
+        if (mountedRef.current) setGrantLoading(false);
       }
+    };
 
-      Alert.alert('Access Granted', `${searchResult.display_name} now has ${ENTITLEMENT_TYPES.find(t => t.value === grantType)?.label ?? grantType} access.`);
-      // If the admin granted themselves, refresh subscription state so the
-      // account screen immediately reflects canInvite = true on return.
-      if (searchResult.id === user?.id) {
-        await refreshSubscription();
-      }
-      if (mountedRef.current) setSearchResult(null);
-      if (mountedRef.current) setSearchEmail('');
-      if (mountedRef.current) setGrantExpiry('');
-      if (mountedRef.current) setGrantNotes('');
-      if (mountedRef.current) setGrantCanInvite(true);
-      await loadActiveGrants();
-    } catch (err: any) {
-      if (mountedRef.current) Alert.alert('Error', err?.message ?? 'Failed to grant access.');
-    } finally {
-      if (mountedRef.current) setGrantLoading(false);
+    // If the user is already covered by their partner, confirm before granting.
+    if (searchResult.partnerHasPremium) {
+      Alert.alert(
+        'Already Covered by Partner',
+        `${searchResult.display_name} is connected to ${searchResult.partnerName ?? 'their partner'}, who already has premium access. This user already gets full access through their partner.\n\nDo you want to grant individual access anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Grant Anyway', style: 'destructive', onPress: doGrant },
+        ]
+      );
+      return;
     }
+
+    doGrant();
   };
 
   const handleRevoke = async (grant: AdminGrant) => {
@@ -397,6 +462,22 @@ export default function EntitlementsScreen() {
                   : 'None'}
               </AppText>
             </View>
+            <View style={styles.stateRow}>
+              <AppText style={[styles.stateLabel, { color: colors.textMuted }]}>Partner:</AppText>
+              <AppText style={[styles.stateValue, { color: colors.text }]}>
+                {searchResult.partnerName ?? 'Not connected'}
+              </AppText>
+            </View>
+
+            {/* Already-covered-by-partner warning */}
+            {searchResult.partnerHasPremium ? (
+              <View style={[styles.coveredWarning, { backgroundColor: 'rgba(255,179,71,0.10)', borderColor: 'rgba(255,179,71,0.30)' }]}>
+                <AlertTriangle color="#FFB347" size={16} strokeWidth={2} />
+                <AppText style={[styles.coveredWarningText, { color: colors.textSecondary }]}>
+                  Already covered by partner{searchResult.partnerName ? ` (${searchResult.partnerName})` : ''}. A grant is redundant — this user already has full access through their partner.
+                </AppText>
+              </View>
+            ) : null}
 
             <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
 
@@ -627,6 +708,22 @@ const styles = StyleSheet.create({
   grantMeta: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', marginTop: 2 },
   grantNotes: { fontSize: 11, fontFamily: 'Inter-Regular', marginTop: 2, fontStyle: 'italic' },
   revokeBtn: { padding: 4, marginTop: 2 },
+  coveredWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  coveredWarningText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 20,
+  },
   canInviteRow: {
     flexDirection: 'row',
     alignItems: 'center',
