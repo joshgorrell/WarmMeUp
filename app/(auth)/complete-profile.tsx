@@ -109,9 +109,9 @@ export default function CompleteProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <AppText style={styles.title}>Complete Your Profile</AppText>
+          <AppText style={styles.title}>Give your partner a little more of you</AppText>
           <AppText style={styles.subtitle}>
-            A photo makes chat feel so much more personal. Look how great it looks — your partner will see it everywhere in the app.
+            Add a photo to make your shared space feel unmistakably yours. Pick one now, or come back to it whenever you’re ready.
           </AppText>
         </View>
 
@@ -183,7 +183,7 @@ export default function CompleteProfileScreen() {
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <AppText style={styles.continueLabel}>
-                {avatarUploaded ? 'Looking great! Continue' : 'Continue'}
+                {avatarUploaded ? 'Looking great — continue' : 'Continue'}
               </AppText>
             )}
           </LinearGradient>
@@ -194,7 +194,7 @@ export default function CompleteProfileScreen() {
           activeOpacity={0.7}
           disabled={saving || uploadingAvatar}
         >
-          <AppText style={styles.skipText}>Skip for now</AppText>
+          <AppText style={styles.skipText}>I’ll add one later</AppText>
         </TouchableOpacity>
       </ScrollView>
     </View>
