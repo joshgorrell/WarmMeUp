@@ -176,7 +176,11 @@ export default function TransitionScreen() {
         }
         // Paired users: check subscription access (isPremium covers active trial, paid, partner-paid)
         if (!subscriptionInfo.isPremium) {
-          const reason = subscriptionInfo.trialExpired ? 'expired_trial' : undefined;
+          const reason = subscriptionInfo.trialExpired
+            ? 'expired_trial'
+            : subscriptionInfo.grantExpired
+            ? 'expired_entitlement'
+            : undefined;
           logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → subscription [not premium, paired]`, { elapsedMs: elapsed() });
           router.replace({ pathname: '/(auth)/subscription', params: reason ? { reason } : {} });
           return;

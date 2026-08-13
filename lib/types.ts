@@ -266,6 +266,10 @@ export interface SubscriptionInfo {
   trialExpiresAt: string | null;
   /** True when the user's own trial row exists but has expired */
   trialExpired: boolean;
+  /** True when an admin grant has expired and the user no longer has premium */
+  grantExpired: boolean;
+  /** Expiry date of the active admin grant, if premium comes from a grant */
+  grantExpiresAt: string | null;
   /** True when this user can generate an invite code (own active sub or active trial) */
   canInvite: boolean;
   loading: boolean;
@@ -279,6 +283,8 @@ export const DEFAULT_SUBSCRIPTION_INFO: SubscriptionInfo = {
   isOnTrial: false,
   trialExpiresAt: null,
   trialExpired: false,
+  grantExpired: false,
+  grantExpiresAt: null,
   canInvite: false,
   loading: true,
 };

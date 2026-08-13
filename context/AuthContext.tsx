@@ -299,7 +299,7 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
       logger.log('[Subscription] JSON parse failed. Raw:', rawText.slice(0, 500));
       return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
     }
-    logger.log('[Subscription] parsed:', JSON.stringify({ isPremium: data.isPremium, source: data.source, canInvite: data.canInvite, trialExpired: data.trialExpired }));
+    logger.log('[Subscription] parsed:', JSON.stringify({ isPremium: data.isPremium, source: data.source, canInvite: data.canInvite, trialExpired: data.trialExpired, grantExpired: data.grantExpired }));
     return {
       isPremium: data.isPremium ?? false,
       source: data.source ?? 'none',
@@ -308,6 +308,8 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
       isOnTrial: data.isOnTrial ?? false,
       trialExpiresAt: data.trialExpiresAt ?? null,
       trialExpired: data.trialExpired ?? false,
+      grantExpired: data.grantExpired ?? false,
+      grantExpiresAt: data.grantExpiresAt ?? null,
       canInvite: data.canInvite ?? false,
       loading: false,
     };

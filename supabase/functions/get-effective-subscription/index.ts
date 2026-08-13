@@ -185,6 +185,8 @@ Deno.serve(async (req: Request) => {
           isOnTrial: ownAccess.isOnTrial,
           trialExpiresAt: ownAccess.isOnTrial ? ownAccess.expiresAt : null,
           trialExpired: false,
+          grantExpired: false,
+          grantExpiresAt: ownAccess.source === "admin_grant" ? ownAccess.expiresAt : null,
           canInvite: ownAccess.canInvite,
           _v: "2026-07-01",
           _ts: new Date().toISOString(),
@@ -321,6 +323,17 @@ Deno.serve(async (req: Request) => {
     // No active premium from any source. Only flag trialExpired for trial plan rows.
     const trialExpired = ownSub !== null && isTrialPlan(ownSub.plan) && !isSubActive(ownSub);
 
+    // Check for an expired admin grant so the app can show the right messaging.
+    const { data: expiredGrant } = await adminClient
+      .from("admin_grants")
+      .select("expires_at")
+      .eq("user_id", user.id)
+      .eq("active", true)
+      .not("expires_at", "is", null)
+      .lt("expires_at", new Date().toISOString())
+      .maybeSingle();
+    const grantExpired = expiredGrant !== null;
+
     return new Response(
       JSON.stringify({
         isPremium: false,
@@ -330,6 +343,8 @@ Deno.serve(async (req: Request) => {
         isOnTrial: false,
         trialExpiresAt: ownSub?.expires_at ?? null,
         trialExpired,
+        grantExpired,
+        grantExpiresAt: null,
         canInvite: false,
         _v: "2026-07-01",
         _ts: new Date().toISOString(),
