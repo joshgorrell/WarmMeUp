@@ -24,6 +24,7 @@ import GoogleIcon from '@/components/icons/GoogleIcon';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import TermsModal from '@/components/TermsModal';
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
+import AvatarPreviewMock from '@/components/AvatarPreviewMock';
 import { useLayout } from '@/hooks/useLayout';
 import { savePendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
@@ -123,6 +124,7 @@ export default function RegisterScreen() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarDone, setAvatarDone] = useState(false);
   const [avatarSkip, setAvatarSkip] = useState(false);
+  const [uploadedAvatarUri, setUploadedAvatarUri] = useState<string | null>(null);
 
   const maxDate = getMaxDate();
 
@@ -518,7 +520,7 @@ export default function RegisterScreen() {
               </View>
               <AppText style={styles.avatarStepTitle}>Add your photo</AppText>
               <AppText style={styles.avatarStepSub}>
-                Your partner will see it in chat and throughout the app. It makes everything feel more personal — but you can skip if you prefer.
+                A photo makes chat feel so much more personal. Look how great it looks — your partner will see it everywhere in the app.
               </AppText>
             </View>
 
@@ -528,8 +530,17 @@ export default function RegisterScreen() {
                 displayName={[firstName.trim(), lastName.trim()].filter(Boolean).join(' ').trim() || undefined}
                 size={120}
                 onUploadStart={() => setAvatarUploading(true)}
-                onUploaded={() => { setAvatarDone(true); setAvatarUploading(false); }}
+                onUploaded={(url) => { setAvatarDone(true); setAvatarUploading(false); setUploadedAvatarUri(url); }}
                 onError={() => setAvatarUploading(false)}
+              />
+            </View>
+
+            {/* Chat preview mock — shows how the avatar looks in context */}
+            <View style={styles.avatarPreviewWrap}>
+              <AvatarPreviewMock
+                displayName={[firstName.trim(), lastName.trim()].filter(Boolean).join(' ').trim() || undefined}
+                avatarUri={uploadedAvatarUri}
+                exampleUri={avatarDone ? undefined : 'https://images.pexels.com/photos/774909/774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop'}
               />
             </View>
 
@@ -548,7 +559,9 @@ export default function RegisterScreen() {
                 {avatarUploading ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <AppText style={styles.avatarStepContinueLabel}>Continue</AppText>
+                  <AppText style={styles.avatarStepContinueLabel}>
+                    {avatarDone ? 'Looking great! Continue' : 'Continue'}
+                  </AppText>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -1306,7 +1319,10 @@ const styles = StyleSheet.create({
   },
   avatarStepUploader: {
     alignItems: 'center',
-    marginBottom: Spacing.xxl,
+    marginBottom: Spacing.lg,
+  },
+  avatarPreviewWrap: {
+    marginBottom: Spacing.xl,
   },
   avatarStepContinueBtn: {
     borderRadius: Radius.pill,

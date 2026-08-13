@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import AvatarUploader from '@/components/AvatarUploader';
+import AvatarPreviewMock from '@/components/AvatarPreviewMock';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Radius, Spacing, FontSize } from '@/constants/theme';
@@ -26,6 +27,7 @@ export default function CompleteProfileScreen() {
   const [firstName, setFirstName] = useState(profile?.first_name ?? '');
   const [lastName, setLastName] = useState(profile?.last_name ?? '');
   const [avatarUri, setAvatarUri] = useState<string | null>(profile?.avatar_url ?? null);
+  const [avatarUploaded, setAvatarUploaded] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingComplete, setPendingComplete] = useState(false);
@@ -109,7 +111,7 @@ export default function CompleteProfileScreen() {
         <View style={styles.header}>
           <AppText style={styles.title}>Complete Your Profile</AppText>
           <AppText style={styles.subtitle}>
-            Add a photo so your partner recognizes you — it makes the app look so much better.
+            A photo makes chat feel so much more personal. Look how great it looks — your partner will see it everywhere in the app.
           </AppText>
         </View>
 
@@ -121,8 +123,17 @@ export default function CompleteProfileScreen() {
             displayName={displayName || undefined}
             size={120}
             onUploadStart={() => setUploadingAvatar(true)}
-            onUploaded={(url) => { setAvatarUri(url); setUploadingAvatar(false); }}
+            onUploaded={(url) => { setAvatarUri(url); setAvatarUploaded(true); setUploadingAvatar(false); }}
             onError={() => setUploadingAvatar(false)}
+          />
+        </View>
+
+        {/* Chat preview mock */}
+        <View style={styles.previewSection}>
+          <AvatarPreviewMock
+            displayName={displayName || undefined}
+            avatarUri={avatarUri}
+            exampleUri={avatarUploaded ? undefined : 'https://images.pexels.com/photos/774909/774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop'}
           />
         </View>
 
@@ -171,7 +182,9 @@ export default function CompleteProfileScreen() {
             {saving ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <AppText style={styles.continueLabel}>Continue</AppText>
+              <AppText style={styles.continueLabel}>
+                {avatarUploaded ? 'Looking great! Continue' : 'Continue'}
+              </AppText>
             )}
           </LinearGradient>
         </TouchableOpacity>
@@ -208,7 +221,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 12,
   },
-  avatarSection: { alignItems: 'center', marginBottom: 32 },
+  avatarSection: { alignItems: 'center', marginBottom: Spacing.lg },
+  previewSection: { marginBottom: Spacing.xl },
   fieldsSection: { gap: 16, marginBottom: 32 },
   field: { gap: 6 },
   label: {
