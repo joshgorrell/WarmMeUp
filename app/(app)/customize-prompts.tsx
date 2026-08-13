@@ -242,7 +242,7 @@ export default function CustomizePromptsScreen() {
   };
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} noTopPadding>
       <ScreenHeader title="Customize Prompts" onBack={() => router.back()} />
 
       {/* Tab Bar */}
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
-  scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 60, paddingTop: Spacing.lg },
+  scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 60, paddingTop: Spacing.md },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
   sectionHeader: {
     flexDirection: 'row',
