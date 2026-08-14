@@ -1,112 +1,435 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import AppText from '@/components/AppText';
 import { supabase } from '@/lib/supabase';
 
-type Result = {
-  label: string;
-  status: 'idle' | 'loading' | 'success' | 'error';
-  detail: string;
+type TabKey = 'users' | 'couples' | 'subscribers' | 'trials';
+
+type ProfileRow = {
+  id: string;
+  display_name: string | null;
+  is_admin: boolean | null;
+  is_super_admin: boolean | null;
+  created_at: string | null;
 };
 
-const initial = (label: string): Result => ({ label, status: 'idle', detail: 'Not tested yet' });
+type CoupleRow = {
+  id: string;
+  user_a_id: string;
+  user_b_id: string | null;
+  invite_code: string | null;
+  active: boolean | null;
+  created_at: string | null;
+};
 
-export default function UsersDashboardDiagnostic() {
+type SubscriptionRow = {
+  user_id: string;
+  plan: string | null;
+  status: string | null;
+  started_at: string | null;
+  expires_at: string | null;
+  trial_started_at: string | null;
+};
+
+type SelectedUser = {
+  profile: ProfileRow;
+  couple: CoupleRow | null;
+  partnerName: string | null;
+  subscription: SubscriptionRow | null;
+};
+
+const safeName = (profile?: ProfileRow | null) => {
+  const value = profile?.display_name?.trim();
+  return value || 'Unnamed user';
+};
+
+const fmtDate = (value?: string | null) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString();
+};
+
+export default function UsersDashboard() {
   const router = useRouter();
-  const [profiles, setProfiles] = useState<Result>(initial('Profiles'));
-  const [couples, setCouples] = useState<Result>(initial('Couples'));
-  const [subscriptions, setSubscriptions] = useState<Result>(initial('Subscriptions'));
+  const [activeTab, setActiveTab] = useState<TabKey>('users');
+  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [couples, setCouples] = useState<CoupleRow[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
 
-  const run = async (
-    setter: React.Dispatch<React.SetStateAction<Result>>,
-    label: string,
-    fn: () => PromiseLike<{ data: any; error: any }>,
-  ) => {
-    setter({ label, status: 'loading', detail: 'Loading…' });
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+
     try {
-      const { data, error } = await fn();
-      if (error) {
-        setter({ label, status: 'error', detail: `${error.code ?? ''} ${error.message ?? String(error)}`.trim() });
-        return;
-      }
-      const count = Array.isArray(data) ? data.length : data ? 1 : 0;
-      setter({ label, status: 'success', detail: `Loaded ${count} row${count === 1 ? '' : 's'}` });
+      const [profilesResult, couplesResult, subscriptionsResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, display_name, is_admin, is_super_admin, created_at')
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('couples')
+          .select('id, user_a_id, user_b_id, invite_code, active, created_at')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('subscriptions')
+          .select('user_id, plan, status, started_at, expires_at, trial_started_at')
+          .order('started_at', { ascending: false }),
+      ]);
+
+      if (profilesResult.error) throw profilesResult.error;
+      if (couplesResult.error) throw couplesResult.error;
+      if (subscriptionsResult.error) throw subscriptionsResult.error;
+
+      setProfiles((profilesResult.data ?? []) as ProfileRow[]);
+      setCouples((couplesResult.data ?? []) as CoupleRow[]);
+      setSubscriptions((subscriptionsResult.data ?? []) as SubscriptionRow[]);
     } catch (e: any) {
-      setter({ label, status: 'error', detail: e?.message ?? String(e) });
+      setError(e?.message ?? 'Could not load users dashboard.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const profileById = useMemo(() => {
+    const map: Record<string, ProfileRow> = {};
+    profiles.forEach(profile => { map[profile.id] = profile; });
+    return map;
+  }, [profiles]);
+
+  const subscriptionByUser = useMemo(() => {
+    const map: Record<string, SubscriptionRow> = {};
+    subscriptions.forEach(subscription => {
+      if (!map[subscription.user_id]) map[subscription.user_id] = subscription;
+    });
+    return map;
+  }, [subscriptions]);
+
+  const coupleByUser = useMemo(() => {
+    const map: Record<string, CoupleRow> = {};
+    couples.forEach(couple => {
+      if (couple.user_a_id) map[couple.user_a_id] = couple;
+      if (couple.user_b_id) map[couple.user_b_id] = couple;
+    });
+    return map;
+  }, [couples]);
+
+  const pairedCouples = useMemo(() => couples.filter(c => !!c.user_b_id), [couples]);
+  const paidSubscriptions = useMemo(
+    () => subscriptions.filter(s => s.plan !== 'trial' && s.status === 'active'),
+    [subscriptions],
+  );
+  const trialSubscriptions = useMemo(
+    () => subscriptions.filter(s => s.plan === 'trial' && s.status === 'active'),
+    [subscriptions],
+  );
+
+  const openUser = (profile: ProfileRow) => {
+    const couple = coupleByUser[profile.id] ?? null;
+    let partnerName: string | null = null;
+    if (couple) {
+      const partnerId = couple.user_a_id === profile.id ? couple.user_b_id : couple.user_a_id;
+      partnerName = partnerId ? safeName(profileById[partnerId]) : null;
+    }
+    setSelectedUser({
+      profile,
+      couple,
+      partnerName,
+      subscription: subscriptionByUser[profile.id] ?? null,
+    });
   };
 
-  const testProfiles = () => run(
-    setProfiles,
-    'Profiles',
-    () => supabase.from('profiles').select('id, display_name, is_admin, is_super_admin, created_at').order('created_at', { ascending: true }),
+  const q = search.trim().toLowerCase();
+
+  const filteredProfiles = useMemo(
+    () => profiles.filter(p => !q || safeName(p).toLowerCase().includes(q)),
+    [profiles, q],
   );
 
-  const testCouples = () => run(
-    setCouples,
-    'Couples',
-    () => supabase.from('couples').select('*').order('created_at', { ascending: false }),
+  const filteredCouples = useMemo(
+    () => pairedCouples.filter(c => {
+      const a = safeName(profileById[c.user_a_id]).toLowerCase();
+      const b = safeName(c.user_b_id ? profileById[c.user_b_id] : null).toLowerCase();
+      return !q || a.includes(q) || b.includes(q);
+    }),
+    [pairedCouples, profileById, q],
   );
 
-  const testSubscriptions = () => run(
-    setSubscriptions,
-    'Subscriptions',
-    () => supabase.from('subscriptions').select('user_id, plan, status, started_at, expires_at, trial_started_at').order('started_at', { ascending: false }),
+  const filteredPaid = useMemo(
+    () => paidSubscriptions.filter(s => !q || safeName(profileById[s.user_id]).toLowerCase().includes(q)),
+    [paidSubscriptions, profileById, q],
   );
 
-  const renderTest = (result: Result, onPress: () => void) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <AppText style={styles.cardTitle}>{result.label}</AppText>
-        {result.status === 'loading' && <ActivityIndicator size="small" color="#FF2E8A" />}
-      </View>
-      <AppText style={[
-        styles.detail,
-        result.status === 'success' && styles.success,
-        result.status === 'error' && styles.error,
-      ]} selectable>
-        {result.detail}
-      </AppText>
-      <TouchableOpacity style={styles.button} onPress={onPress} activeOpacity={0.8} disabled={result.status === 'loading'}>
-        <AppText style={styles.buttonText}>{result.status === 'idle' ? `Test ${result.label}` : `Retest ${result.label}`}</AppText>
+  const filteredTrials = useMemo(
+    () => trialSubscriptions.filter(s => !q || safeName(profileById[s.user_id]).toLowerCase().includes(q)),
+    [trialSubscriptions, profileById, q],
+  );
+
+  const tabs: { key: TabKey; label: string; count: number }[] = [
+    { key: 'users', label: 'Users', count: profiles.length },
+    { key: 'couples', label: 'Couples', count: pairedCouples.length },
+    { key: 'subscribers', label: 'Paid', count: paidSubscriptions.length },
+    { key: 'trials', label: 'Trials', count: trialSubscriptions.length },
+  ];
+
+  const roleLabel = (profile: ProfileRow) =>
+    profile.is_super_admin ? 'Super Admin' : profile.is_admin ? 'Admin' : 'User';
+
+  const renderUserRow = (profile: ProfileRow) => {
+    const couple = coupleByUser[profile.id];
+    const sub = subscriptionByUser[profile.id];
+    const partnerId = couple
+      ? (couple.user_a_id === profile.id ? couple.user_b_id : couple.user_a_id)
+      : null;
+    const partner = partnerId ? safeName(profileById[partnerId]) : null;
+
+    return (
+      <TouchableOpacity key={profile.id} style={styles.rowCard} onPress={() => openUser(profile)} activeOpacity={0.8}>
+        <View style={styles.rowTop}>
+          <AppText style={styles.rowTitle}>{safeName(profile)}</AppText>
+          <AppText style={styles.chevron}>›</AppText>
+        </View>
+        <View style={styles.metaWrap}>
+          <Badge text={roleLabel(profile)} />
+          <Badge text={partner ? `w/ ${partner}` : 'Solo'} />
+          {sub ? <Badge text={`${sub.plan ?? 'Plan'} · ${sub.status ?? 'unknown'}`} /> : <Badge text="No subscription" />}
+        </View>
       </TouchableOpacity>
-    </View>
-  );
+    );
+  };
+
+  if (selectedUser) {
+    const { profile, couple, partnerName, subscription } = selectedUser;
+    return (
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <TouchableOpacity onPress={() => setSelectedUser(null)} style={styles.backLink}>
+            <AppText style={styles.backLinkText}>‹ Users Dashboard</AppText>
+          </TouchableOpacity>
+
+          <AppText style={styles.title}>{safeName(profile)}</AppText>
+          <AppText style={styles.subtitle}>Account details</AppText>
+
+          <DetailCard label="ROLE" value={roleLabel(profile)} />
+          <DetailCard label="USER ID" value={profile.id} mono />
+          <DetailCard label="CREATED" value={fmtDate(profile.created_at)} />
+          <DetailCard label="PARTNER" value={partnerName ?? 'Not paired'} />
+          <DetailCard label="COUPLE STATUS" value={couple ? (couple.active === false ? 'Inactive' : 'Active') : 'No couple record'} />
+          <DetailCard label="INVITE CODE" value={couple?.invite_code || '—'} mono />
+          <DetailCard
+            label="SUBSCRIPTION"
+            value={subscription ? `${subscription.plan ?? 'Unknown plan'} · ${subscription.status ?? 'unknown'}` : 'None'}
+          />
+          <DetailCard label="SUBSCRIPTION START" value={fmtDate(subscription?.started_at)} />
+          <DetailCard label="EXPIRES" value={fmtDate(subscription?.expires_at)} />
+
+          <AppText style={styles.note}>
+            This rebuilt dashboard is intentionally read-only while we confirm stability. Admin actions can be added back safely after this version is verified.
+          </AppText>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <AppText style={styles.title}>Users Dashboard Diagnostic</AppText>
-        <AppText style={styles.subtitle}>
-          This temporary screen does no database work when it opens. If you can see this page, the route itself is healthy. Test each dataset one at a time and note which action, if any, closes the app.
-        </AppText>
-
-        {renderTest(profiles, testProfiles)}
-        {renderTest(couples, testCouples)}
-        {renderTest(subscriptions, testSubscriptions)}
-
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.8}>
-          <AppText style={styles.backText}>Back to Admin</AppText>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor="#FF2E8A" />}
+      >
+        <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
+          <AppText style={styles.backLinkText}>‹ Admin</AppText>
         </TouchableOpacity>
+
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <AppText style={styles.title}>Users Dashboard</AppText>
+            <AppText style={styles.subtitle}>Users, couples and subscriptions</AppText>
+          </View>
+          <TouchableOpacity style={styles.refreshButton} onPress={() => loadData(true)} activeOpacity={0.8}>
+            <AppText style={styles.refreshText}>Refresh</AppText>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.tabBar}>
+          {tabs.map(tab => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+              onPress={() => { setActiveTab(tab.key); setSearch(''); }}
+              activeOpacity={0.8}
+            >
+              <AppText style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>{tab.label}</AppText>
+              <View style={[styles.countBadge, activeTab === tab.key && styles.countBadgeActive]}>
+                <AppText style={[styles.countText, activeTab === tab.key && styles.countTextActive]}>{tab.count}</AppText>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder={`Search ${activeTab}…`}
+          placeholderTextColor="rgba(255,255,255,0.35)"
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.search}
+        />
+
+        {error ? (
+          <View style={styles.errorCard}>
+            <AppText style={styles.errorTitle}>Could not load dashboard</AppText>
+            <AppText style={styles.errorText} selectable>{error}</AppText>
+          </View>
+        ) : loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator color="#FF2E8A" />
+            <AppText style={styles.loadingText}>Loading users…</AppText>
+          </View>
+        ) : (
+          <View style={styles.listWrap}>
+            {activeTab === 'users' && filteredProfiles.map(renderUserRow)}
+
+            {activeTab === 'couples' && filteredCouples.map(couple => (
+              <View key={couple.id} style={styles.rowCard}>
+                <AppText style={styles.rowTitle}>
+                  {safeName(profileById[couple.user_a_id])} & {safeName(couple.user_b_id ? profileById[couple.user_b_id] : null)}
+                </AppText>
+                <View style={styles.metaWrap}>
+                  <Badge text={couple.active === false ? 'Inactive' : 'Active'} />
+                  <Badge text={`Since ${fmtDate(couple.created_at)}`} />
+                </View>
+              </View>
+            ))}
+
+            {activeTab === 'subscribers' && filteredPaid.map((sub, index) => (
+              <TouchableOpacity
+                key={`${sub.user_id}-${sub.started_at ?? index}`}
+                style={styles.rowCard}
+                onPress={() => profileById[sub.user_id] && openUser(profileById[sub.user_id])}
+                activeOpacity={0.8}
+              >
+                <View style={styles.rowTop}>
+                  <AppText style={styles.rowTitle}>{safeName(profileById[sub.user_id])}</AppText>
+                  <AppText style={styles.chevron}>›</AppText>
+                </View>
+                <View style={styles.metaWrap}>
+                  <Badge text={sub.plan ?? 'Unknown plan'} />
+                  <Badge text={sub.status ?? 'Unknown status'} />
+                </View>
+              </TouchableOpacity>
+            ))}
+
+            {activeTab === 'trials' && filteredTrials.map((sub, index) => (
+              <TouchableOpacity
+                key={`${sub.user_id}-${sub.started_at ?? index}`}
+                style={styles.rowCard}
+                onPress={() => profileById[sub.user_id] && openUser(profileById[sub.user_id])}
+                activeOpacity={0.8}
+              >
+                <View style={styles.rowTop}>
+                  <AppText style={styles.rowTitle}>{safeName(profileById[sub.user_id])}</AppText>
+                  <AppText style={styles.chevron}>›</AppText>
+                </View>
+                <View style={styles.metaWrap}>
+                  <Badge text="Trial" />
+                  <Badge text={`Started ${fmtDate(sub.trial_started_at ?? sub.started_at)}`} />
+                  <Badge text={`Ends ${fmtDate(sub.expires_at)}`} />
+                </View>
+              </TouchableOpacity>
+            ))}
+
+            {((activeTab === 'users' && filteredProfiles.length === 0) ||
+              (activeTab === 'couples' && filteredCouples.length === 0) ||
+              (activeTab === 'subscribers' && filteredPaid.length === 0) ||
+              (activeTab === 'trials' && filteredTrials.length === 0)) && (
+              <View style={styles.emptyCard}>
+                <AppText style={styles.emptyText}>No matching records.</AppText>
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
+    </View>
+  );
+}
+
+function Badge({ text }: { text: string }) {
+  return (
+    <View style={styles.badge}>
+      <AppText style={styles.badgeText}>{text}</AppText>
+    </View>
+  );
+}
+
+function DetailCard({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <View style={styles.detailCard}>
+      <AppText style={styles.detailLabel}>{label}</AppText>
+      <AppText style={[styles.detailValue, mono && styles.mono]} selectable>{value}</AppText>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#07070A' },
-  content: { paddingTop: 70, paddingHorizontal: 20, paddingBottom: 40, gap: 14 },
-  title: { color: '#FFFFFF', fontSize: 22, fontFamily: 'Inter-Bold' },
-  subtitle: { color: 'rgba(255,255,255,0.65)', fontSize: 14, lineHeight: 20, fontFamily: 'Inter-Regular', marginBottom: 8 },
-  card: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', backgroundColor: '#111119', borderRadius: 16, padding: 16, gap: 12 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardTitle: { color: '#FFFFFF', fontSize: 16, fontFamily: 'Inter-SemiBold' },
-  detail: { color: 'rgba(255,255,255,0.55)', fontSize: 13, fontFamily: 'Inter-Regular' },
-  success: { color: '#33D17A' },
-  error: { color: '#FF6464' },
-  button: { alignSelf: 'flex-start', backgroundColor: '#FF2E8A', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 22 },
-  buttonText: { color: '#FFFFFF', fontSize: 13, fontFamily: 'Inter-SemiBold' },
-  backButton: { alignItems: 'center', paddingVertical: 14, marginTop: 8 },
-  backText: { color: 'rgba(255,255,255,0.70)', fontSize: 14, fontFamily: 'Inter-SemiBold' },
+  content: { paddingTop: 62, paddingHorizontal: 18, paddingBottom: 44 },
+  backLink: { alignSelf: 'flex-start', paddingVertical: 8, paddingRight: 14, marginBottom: 6 },
+  backLinkText: { color: 'rgba(255,255,255,0.65)', fontSize: 14, fontFamily: 'Inter-SemiBold' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
+  title: { color: '#FFFFFF', fontSize: 24, fontFamily: 'Inter-Bold' },
+  subtitle: { color: 'rgba(255,255,255,0.52)', fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 4 },
+  refreshButton: { backgroundColor: '#171720', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
+  refreshText: { color: '#FFFFFF', fontSize: 12, fontFamily: 'Inter-SemiBold' },
+  tabBar: { flexDirection: 'row', gap: 6, marginBottom: 14 },
+  tab: { flex: 1, minHeight: 54, borderRadius: 14, backgroundColor: '#111119', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', gap: 3 },
+  tabActive: { borderColor: 'rgba(255,46,138,0.50)', backgroundColor: 'rgba(255,46,138,0.10)' },
+  tabText: { color: 'rgba(255,255,255,0.50)', fontSize: 11, fontFamily: 'Inter-SemiBold' },
+  tabTextActive: { color: '#FF2E8A' },
+  countBadge: { minWidth: 22, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.07)', alignItems: 'center' },
+  countBadgeActive: { backgroundColor: 'rgba(255,46,138,0.18)' },
+  countText: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontFamily: 'Inter-Bold' },
+  countTextActive: { color: '#FF2E8A' },
+  search: { color: '#FFFFFF', backgroundColor: '#111119', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, marginBottom: 14 },
+  listWrap: { gap: 10 },
+  rowCard: { backgroundColor: '#111119', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', borderRadius: 16, padding: 15, gap: 9 },
+  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rowTitle: { flex: 1, color: '#FFFFFF', fontSize: 15, fontFamily: 'Inter-SemiBold' },
+  chevron: { color: 'rgba(255,255,255,0.35)', fontSize: 24, lineHeight: 24 },
+  metaWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  badge: { borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.065)', paddingHorizontal: 8, paddingVertical: 4 },
+  badgeText: { color: 'rgba(255,255,255,0.60)', fontSize: 10, fontFamily: 'Inter-SemiBold' },
+  loadingWrap: { paddingVertical: 50, alignItems: 'center', gap: 12 },
+  loadingText: { color: 'rgba(255,255,255,0.50)', fontSize: 13 },
+  errorCard: { backgroundColor: 'rgba(255,90,90,0.08)', borderColor: 'rgba(255,90,90,0.28)', borderWidth: 1, borderRadius: 16, padding: 16, gap: 7 },
+  errorTitle: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Inter-SemiBold' },
+  errorText: { color: '#FF7777', fontSize: 12, lineHeight: 18 },
+  emptyCard: { paddingVertical: 40, alignItems: 'center' },
+  emptyText: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
+  detailCard: { backgroundColor: '#111119', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', borderRadius: 16, padding: 15, gap: 6, marginTop: 10 },
+  detailLabel: { color: 'rgba(255,255,255,0.38)', fontSize: 10, fontFamily: 'Inter-Bold', letterSpacing: 0.7 },
+  detailValue: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Inter-Regular' },
+  mono: { fontFamily: 'monospace', fontSize: 12 },
+  note: { color: 'rgba(255,255,255,0.45)', fontSize: 12, lineHeight: 18, marginTop: 18, textAlign: 'center' },
 });
