@@ -186,12 +186,19 @@ export function MediaBubble({
         </View>
       )}
 
+      {/* For videos, the center play control is a real button. It opens the
+          full-screen viewer/player. Tapping elsewhere on the bubble still
+          toggles blur on/off when blur is enabled. */}
       {msg.media_type === 'video' && loaded && (retryUrl ?? signedUrl) && !isBlurred && !imgError && (
-        <View style={styles.playOverlay} pointerEvents="none">
+        <Pressable
+          onPress={handleExpandPress}
+          hitSlop={12}
+          style={styles.playOverlay}
+        >
           <View style={styles.playCircle}>
             <AppText style={styles.playTriangle}>&#9654;</AppText>
           </View>
-        </View>
+        </Pressable>
       )}
 
       {loaded && (retryUrl ?? signedUrl) && !imgError && (
