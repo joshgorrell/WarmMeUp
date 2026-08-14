@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, ActivityIndicator,
+  Modal, ActivityIndicator, Platform,
 } from 'react-native';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
@@ -21,7 +21,6 @@ import AppShell from '@/components/AppShell';
 import ScreenHeader from '@/components/ScreenHeader';
 import type { DiagnosticsSnapshot } from '@/lib/diagnosticsSnapshot';
 import { buildDiagnosticsReport } from '@/lib/diagnosticsSnapshot';
-import { Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
 type TabKey = 'users' | 'couples' | 'subscribers' | 'trials';
@@ -479,7 +478,7 @@ export default function UsersDashboard() {
 
           {/* ── Users Tab ── */}
           {activeTab === 'users' && (() => {
-            const filtered = q ? users.filter(u => u.display_name.toLowerCase().includes(q)) : users;
+            const filtered = q ? users.filter(u => (u.display_name ?? '').toLowerCase().includes(q)) : users;
             if (filtered.length === 0) return (
               <View style={styles.emptyWrap}>
                 <UserCog color={colors.textMuted} size={36} strokeWidth={1.5} />
@@ -597,7 +596,7 @@ export default function UsersDashboard() {
           {/* ── Subscribers Tab ── */}
           {activeTab === 'subscribers' && (() => {
             const filtered = q
-              ? paidSubs.filter(s => s.display_name.toLowerCase().includes(q))
+              ? paidSubs.filter(s => (s.display_name ?? '').toLowerCase().includes(q))
               : paidSubs;
             if (filtered.length === 0) return (
               <View style={styles.emptyWrap}>
@@ -635,7 +634,7 @@ export default function UsersDashboard() {
           {/* ── Trials Tab ── */}
           {activeTab === 'trials' && (() => {
             const filtered = q
-              ? trialSubs.filter(s => s.display_name.toLowerCase().includes(q))
+              ? trialSubs.filter(s => (s.display_name ?? '').toLowerCase().includes(q))
               : trialSubs;
             if (filtered.length === 0) return (
               <View style={styles.emptyWrap}>
