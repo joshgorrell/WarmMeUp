@@ -4,13 +4,13 @@ import {
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { BlurView } from 'expo-blur';
-import { Lock, EyeOff, Eye, Clock } from 'lucide-react-native';
+import { Lock, EyeOff, Eye, Clock, Maximize2 } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import CountdownRing from '@/components/CountdownRing';
 import { supabase } from '@/lib/supabase';
 import { logDebugEvent } from '@/lib/debugLog';
 import { ChatMessage } from '@/lib/types';
-import { noteStyles as styles, getBubbleRadii, GroupPos } from './noteHelpers';
+import { noteStyles as styles, getBubbleRadii } from './noteHelpers';
 
 // Animated shimmer for media loading state
 export function ShimmerPlaceholder() {
@@ -58,39 +58,63 @@ export function MediaBubble({
   isMine: boolean;
 }) {
   const loaded = signedUrl !== undefined;
-  const isBlurred = blurEnabled && !revealed;
+
+  // Keep the privacy toggle local to the media bubble. The parent `revealed`
+  // state still records first-view and resets all media when chat loses focus.
+  const [locallyRevealed, setLocallyRevealed] = useState(revealed);
+  const effectiveRevealed = blurEnabled ? locallyRevealed : true;
+  const isBlurred = blurEnabled && !effectiveRevealed;
+
   const [imgError, setImgError] = useState(false);
   const [retryUrl, setRetryUrl] = useState<string | null>(null);
   const retryAttempted = useRef(false);
   // Fade-in animation for the reveal: 0 = overlay visible, 1 = overlay hidden
   const overlayOpacity = useRef(new Animated.Value(isBlurred ? 1 : 0)).current;
-  const prevRevealedRef = useRef(revealed);
+  const prevEffectiveRevealedRef = useRef(effectiveRevealed);
+
+  // If the parent re-blurs media (leaving Chat/backgrounding), honor it locally.
+  useEffect(() => {
+    if (!revealed && blurEnabled) {
+      setLocallyRevealed(false);
+    }
+  }, [revealed, blurEnabled]);
 
   useEffect(() => {
-    if (prevRevealedRef.current !== revealed) {
-      prevRevealedRef.current = revealed;
+    if (prevEffectiveRevealedRef.current !== effectiveRevealed) {
+      prevEffectiveRevealedRef.current = effectiveRevealed;
       Animated.timing(overlayOpacity, {
-        toValue: revealed ? 0 : 1,
-        duration: 280,
+        toValue: effectiveRevealed ? 0 : 1,
+        duration: 220,
         useNativeDriver: true,
       }).start();
     }
-  }, [revealed]);
+  }, [effectiveRevealed, overlayOpacity]);
 
   // Sync overlay when blur is re-enabled (e.g. tab leave)
   useEffect(() => {
     if (isBlurred) {
       overlayOpacity.setValue(1);
     }
-  }, [isBlurred]);
+  }, [isBlurred, overlayOpacity]);
 
   const handleImagePress = () => {
+    if (!blurEnabled) return;
+
     if (isBlurred) {
+      setLocallyRevealed(true);
+      // Parent callback records the first view and starts any burn timer.
       onReveal(msg.id);
     } else {
-      // Small delay so the screen-push doesn't race with any in-flight image transition
-      setTimeout(() => onOpen(msg), 30);
+      // A second tap simply hides the media again. Full-screen is handled by
+      // the dedicated expand control below.
+      setLocallyRevealed(false);
     }
+  };
+
+  const handleExpandPress = (event: any) => {
+    event?.stopPropagation?.();
+    if (isBlurred) return;
+    onOpen(msg);
   };
 
   // Cap portrait height so tall images don't dominate the chat
@@ -161,23 +185,38 @@ export function MediaBubble({
           )}
         </View>
       )}
+
       {msg.media_type === 'video' && loaded && (retryUrl ?? signedUrl) && !isBlurred && !imgError && (
-        <View style={styles.playOverlay}>
+        <View style={styles.playOverlay} pointerEvents="none">
           <View style={styles.playCircle}>
             <AppText style={styles.playTriangle}>&#9654;</AppText>
           </View>
         </View>
       )}
+
       {loaded && (retryUrl ?? signedUrl) && !imgError && (
         <Animated.View
           style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay, { opacity: overlayOpacity }]}
-          pointerEvents={isBlurred ? 'none' : 'none'}
+          pointerEvents="none"
         >
           <View style={styles.blurRevealBtn}>
             <EyeOff color="rgba(255,255,255,0.92)" size={20} strokeWidth={2} />
           </View>
         </Animated.View>
       )}
+
+      {/* Full-screen is intentionally a separate action from tapping the media.
+          Only show it after the photo/video is visible. */}
+      {loaded && (retryUrl ?? signedUrl) && !imgError && !isBlurred && (
+        <Pressable
+          onPress={handleExpandPress}
+          hitSlop={8}
+          style={localStyles.expandButton}
+        >
+          <Maximize2 color="#fff" size={17} strokeWidth={2.4} />
+        </Pressable>
+      )}
+
       {msg.burns_at && msg.burn_after_seconds && new Date(msg.burns_at).getTime() > Date.now() && (
         <View style={styles.burnBadge} pointerEvents="none">
           <View style={styles.burnBadgeBg} />
@@ -208,5 +247,22 @@ export function MediaBubble({
     </Pressable>
   );
 }
+
+const localStyles = StyleSheet.create({
+  expandButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.58)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    zIndex: 20,
+  },
+});
 
 export default MediaBubble;
