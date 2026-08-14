@@ -3,8 +3,9 @@ import {
   View, StyleSheet, Platform, Pressable, Animated,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { Video, ResizeMode } from 'expo-av';
 import { BlurView } from 'expo-blur';
-import { Lock, EyeOff, Eye, Clock, Maximize2 } from 'lucide-react-native';
+import { Lock, EyeOff, Eye, Clock, Maximize2, Play, Pause } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import CountdownRing from '@/components/CountdownRing';
 import { supabase } from '@/lib/supabase';
@@ -12,7 +13,6 @@ import { logDebugEvent } from '@/lib/debugLog';
 import { ChatMessage } from '@/lib/types';
 import { noteStyles as styles, getBubbleRadii } from './noteHelpers';
 
-// Animated shimmer for media loading state
 export function ShimmerPlaceholder() {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -58,9 +58,8 @@ export function MediaBubble({
   isMine: boolean;
 }) {
   const loaded = signedUrl !== undefined;
+  const isVideo = msg.media_type === 'video';
 
-  // Keep the privacy toggle local to the media bubble. The parent `revealed`
-  // state still records first-view and resets all media when chat loses focus.
   const [locallyRevealed, setLocallyRevealed] = useState(revealed);
   const effectiveRevealed = blurEnabled ? locallyRevealed : true;
   const isBlurred = blurEnabled && !effectiveRevealed;
@@ -68,16 +67,24 @@ export function MediaBubble({
   const [imgError, setImgError] = useState(false);
   const [retryUrl, setRetryUrl] = useState<string | null>(null);
   const retryAttempted = useRef(false);
-  // Fade-in animation for the reveal: 0 = overlay visible, 1 = overlay hidden
   const overlayOpacity = useRef(new Animated.Value(isBlurred ? 1 : 0)).current;
   const prevEffectiveRevealedRef = useRef(effectiveRevealed);
 
-  // If the parent re-blurs media (leaving Chat/backgrounding), honor it locally.
+  const videoRef = useRef<Video | null>(null);
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+
+  const mediaUrl = retryUrl ?? signedUrl ?? null;
+
   useEffect(() => {
     if (!revealed && blurEnabled) {
       setLocallyRevealed(false);
+      if (isVideo) {
+        videoRef.current?.pauseAsync?.().catch(() => {});
+        setVideoPlaying(false);
+      }
     }
-  }, [revealed, blurEnabled]);
+  }, [revealed, blurEnabled, isVideo]);
 
   useEffect(() => {
     if (prevEffectiveRevealedRef.current !== effectiveRevealed) {
@@ -90,39 +97,69 @@ export function MediaBubble({
     }
   }, [effectiveRevealed, overlayOpacity]);
 
-  // Sync overlay when blur is re-enabled (e.g. tab leave)
   useEffect(() => {
     if (isBlurred) {
       overlayOpacity.setValue(1);
+      if (isVideo) {
+        videoRef.current?.pauseAsync?.().catch(() => {});
+        setVideoPlaying(false);
+      }
     }
-  }, [isBlurred, overlayOpacity]);
+  }, [isBlurred, overlayOpacity, isVideo]);
 
-  const handleImagePress = () => {
-    if (!blurEnabled) return;
+  const revealMedia = () => {
+    setLocallyRevealed(true);
+    onReveal(msg.id);
+  };
 
+  const handlePhotoPress = () => {
     if (isBlurred) {
-      setLocallyRevealed(true);
-      // Parent callback records the first view and starts any burn timer.
-      onReveal(msg.id);
-    } else {
-      // A second tap simply hides the media again. Full-screen is handled by
-      // the dedicated expand control below.
+      revealMedia();
+    } else if (blurEnabled) {
       setLocallyRevealed(false);
+    }
+  };
+
+  const handleVideoOuterPress = () => {
+    if (isBlurred) revealMedia();
+  };
+
+  const toggleVideoPlayback = async (event?: any) => {
+    event?.stopPropagation?.();
+    if (isBlurred || !videoRef.current) return;
+    try {
+      if (videoPlaying) {
+        await videoRef.current.pauseAsync();
+      } else {
+        await videoRef.current.playAsync();
+      }
+    } catch (e: any) {
+      setVideoError(true);
+      logDebugEvent('chat_video_playback_failed', { messageId: msg.id, error: e?.message ?? String(e) });
     }
   };
 
   const handleExpandPress = (event: any) => {
     event?.stopPropagation?.();
     if (isBlurred) return;
+    videoRef.current?.pauseAsync?.().catch(() => {});
+    setVideoPlaying(false);
     onOpen(msg);
   };
 
-  // Cap portrait height so tall images don't dominate the chat
+  const handleReblurVideo = (event: any) => {
+    event?.stopPropagation?.();
+    if (!blurEnabled || isBlurred) return;
+    videoRef.current?.pauseAsync?.().catch(() => {});
+    setVideoPlaying(false);
+    setLocallyRevealed(false);
+  };
+
   const cappedHeight = Math.min(bubbleHeight, Math.round(bubbleWidth * 1.35));
 
   return (
     <Pressable
-      onPress={handleImagePress}
+      onPress={isVideo ? handleVideoOuterPress : handlePhotoPress}
       onLongPress={() => onLongPress(msg)}
       delayLongPress={350}
       android_ripple={null}
@@ -136,72 +173,97 @@ export function MediaBubble({
         <View style={styles.mediaPlaceholder}>
           <ShimmerPlaceholder />
         </View>
-      ) : (retryUrl ?? signedUrl) && !imgError ? (
+      ) : mediaUrl && !imgError ? (
         <>
-          <ExpoImage
-            key={retryUrl ?? signedUrl ?? 'img'}
-            source={{ uri: retryUrl ?? signedUrl! }}
-            style={[
-              StyleSheet.absoluteFill,
-              isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.1)' } as any : undefined,
-            ]}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            onError={() => {
-              if (retryAttempted.current) {
-                logDebugEvent('chat_message_image_load_error_hard', { messageId: msg.id });
-                setImgError(true);
-                return;
-              }
-              retryAttempted.current = true;
-              logDebugEvent('chat_message_image_load_error_retrying', { messageId: msg.id });
-              if (msg.media_storage_path) {
-                const bucket = msg.media_storage_bucket ?? 'chat_media';
-                supabase.storage.from(bucket).createSignedUrl(msg.media_storage_path, 12 * 3600)
-                  .then(({ data }) => {
-                    if (data?.signedUrl) {
-                      setRetryUrl(data.signedUrl);
-                    } else {
-                      setImgError(true);
-                    }
-                  })
-                  .catch(() => setImgError(true));
-              } else {
-                setImgError(true);
-              }
-            }}
-          />
-          {/* Native blur via BlurView — matches vault blur quality; blurRadius on expo-image is broken on iOS */}
+          {isVideo && !isBlurred ? (
+            <Video
+              ref={videoRef}
+              source={{ uri: mediaUrl }}
+              style={StyleSheet.absoluteFill}
+              resizeMode={ResizeMode.COVER}
+              shouldPlay={false}
+              isLooping={false}
+              useNativeControls={false}
+              onPlaybackStatusUpdate={(status: any) => {
+                if (status?.isLoaded) {
+                  setVideoPlaying(!!status.isPlaying);
+                  setVideoError(false);
+                } else if (status?.error) {
+                  setVideoError(true);
+                  logDebugEvent('chat_video_status_error', { messageId: msg.id, error: status.error });
+                }
+              }}
+              onError={(error: string) => {
+                setVideoError(true);
+                logDebugEvent('chat_video_load_error', { messageId: msg.id, error });
+              }}
+            />
+          ) : (
+            <ExpoImage
+              key={mediaUrl}
+              source={{ uri: mediaUrl }}
+              style={[
+                StyleSheet.absoluteFill,
+                isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.1)' } as any : undefined,
+              ]}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              onError={() => {
+                if (isVideo) return;
+                if (retryAttempted.current) {
+                  logDebugEvent('chat_message_image_load_error_hard', { messageId: msg.id });
+                  setImgError(true);
+                  return;
+                }
+                retryAttempted.current = true;
+                logDebugEvent('chat_message_image_load_error_retrying', { messageId: msg.id });
+                if (msg.media_storage_path) {
+                  const bucket = msg.media_storage_bucket ?? 'chat_media';
+                  supabase.storage.from(bucket).createSignedUrl(msg.media_storage_path, 12 * 3600)
+                    .then(({ data }) => {
+                      if (data?.signedUrl) {
+                        setRetryUrl(data.signedUrl);
+                      } else {
+                        setImgError(true);
+                      }
+                    })
+                    .catch(() => setImgError(true));
+                } else {
+                  setImgError(true);
+                }
+              }}
+            />
+          )}
+
           {isBlurred && Platform.OS !== 'web' && (
             <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
           )}
         </>
       ) : (
         <View style={styles.mediaPlaceholder}>
-          {imgError ? (
-            <AppText style={styles.mediaErrorText}>Image failed to load</AppText>
+          {imgError || videoError ? (
+            <AppText style={styles.mediaErrorText}>{videoError ? 'Video could not be played' : 'Image failed to load'}</AppText>
           ) : (
             <Lock color="rgba(255,255,255,0.5)" size={20} />
           )}
         </View>
       )}
 
-      {/* For videos, the center play control is a real button. It opens the
-          full-screen viewer/player. Tapping elsewhere on the bubble still
-          toggles blur on/off when blur is enabled. */}
-      {msg.media_type === 'video' && loaded && (retryUrl ?? signedUrl) && !isBlurred && !imgError && (
+      {isVideo && loaded && mediaUrl && !isBlurred && !imgError && !videoError && (
         <Pressable
-          onPress={handleExpandPress}
+          onPress={toggleVideoPlayback}
           hitSlop={12}
-          style={styles.playOverlay}
+          style={localStyles.videoPlayButton}
         >
           <View style={styles.playCircle}>
-            <AppText style={styles.playTriangle}>&#9654;</AppText>
+            {videoPlaying
+              ? <Pause color="#fff" size={20} strokeWidth={2.2} />
+              : <Play color="#fff" size={20} strokeWidth={2.2} fill="#fff" />}
           </View>
         </Pressable>
       )}
 
-      {loaded && (retryUrl ?? signedUrl) && !imgError && (
+      {loaded && mediaUrl && !imgError && (
         <Animated.View
           style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay, { opacity: overlayOpacity }]}
           pointerEvents="none"
@@ -212,15 +274,23 @@ export function MediaBubble({
         </Animated.View>
       )}
 
-      {/* Full-screen is intentionally a separate action from tapping the media.
-          Only show it after the photo/video is visible. */}
-      {loaded && (retryUrl ?? signedUrl) && !imgError && !isBlurred && (
+      {loaded && mediaUrl && !imgError && !isBlurred && (
         <Pressable
           onPress={handleExpandPress}
           hitSlop={8}
           style={localStyles.expandButton}
         >
           <Maximize2 color="#fff" size={17} strokeWidth={2.4} />
+        </Pressable>
+      )}
+
+      {isVideo && blurEnabled && loaded && mediaUrl && !imgError && !isBlurred && (
+        <Pressable
+          onPress={handleReblurVideo}
+          hitSlop={8}
+          style={localStyles.reblurButton}
+        >
+          <EyeOff color="#fff" size={16} strokeWidth={2.3} />
         </Pressable>
       )}
 
@@ -235,8 +305,8 @@ export function MediaBubble({
           />
         </View>
       )}
-      {/* Sender-side "seen" indicator on all outgoing media */}
-      {isMine && loaded && (retryUrl ?? signedUrl) && !imgError && !msg.burns_at && (
+
+      {isMine && loaded && mediaUrl && !imgError && !msg.burns_at && (
         <View style={styles.seenBadge} pointerEvents="none">
           <View style={styles.seenBadgeBg} />
           {msg.first_viewed_at ? (
@@ -256,10 +326,30 @@ export function MediaBubble({
 }
 
 const localStyles = StyleSheet.create({
+  videoPlayButton: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 15,
+  },
   expandButton: {
     position: 'absolute',
     top: 10,
     right: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.58)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    zIndex: 20,
+  },
+  reblurButton: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
     width: 34,
     height: 34,
     borderRadius: 17,
