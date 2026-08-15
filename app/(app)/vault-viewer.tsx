@@ -24,6 +24,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { getGalleryItems, GalleryItem, evictCachedUrl } from '@/lib/mediaGalleryStore';
 import { clearLocalImageCache } from '@/lib/mediaCache';
+import { extensionToMime, mimeToExtension, uploadMediaFile } from '@/lib/uploadMedia';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const BADGE_SHOW_MS = 200;
@@ -225,15 +226,47 @@ function MediaPage({ item, isActive, screenWidth, screenHeight, insetTop, insetB
     if (!couple?.id || !user?.id || !item.storagePath || savingToVault || savedToVault || !mediaUri) return;
     setSavingToVault(true);
     try {
-      const ext = isVideo ? 'mp4' : 'jpg';
-      const newPath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
-      const response = await fetch(mediaUri); const blob = await response.blob();
-      const { error: uploadError } = await supabase.storage.from('vault').upload(newPath, blob, { contentType: isVideo ? 'video/mp4' : 'image/jpeg', upsert: false });
-      if (uploadError) return;
-      const { data } = await supabase.from('vault_items').insert({ couple_id: couple.id, uploaded_by_user_id: user.id, media_type: isVideo ? 'video' : 'photo', file_path: newPath, storage_path: newPath, storage_bucket: 'vault', allow_screenshot: canScreenshot, allow_save: canSave, allow_share: canShare, screenshot_detected: false, viewed_by_partner: false }).select().single();
-      if (data) { await awardPoints(couple.id, user.id, 5, 'Saved chat media to Vault', data.id); if (isMountedRef.current) setSavedToVault(true); }
-    } catch {}
-    if (isMountedRef.current) setSavingToVault(false);
+      const sourceExt = item.storagePath.split('.').pop()?.toLowerCase() ?? '';
+      const sourceMime = isVideo ? extensionToMime(sourceExt) : 'image/jpeg';
+      const ext = mimeToExtension(sourceMime);
+      const requestedPath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
+      const uploadResult = await uploadMediaFile(
+        mediaUri,
+        'vault',
+        requestedPath,
+        sourceMime,
+        undefined,
+        user.id,
+        couple.id,
+      );
+      const newPath = uploadResult.storagePath;
+      const { data, error: insertError } = await supabase.from('vault_items').insert({
+        couple_id: couple.id,
+        uploaded_by_user_id: user.id,
+        media_type: isVideo ? 'video' : 'photo',
+        file_path: newPath,
+        storage_path: newPath,
+        storage_bucket: 'vault',
+        blurred_thumbnail_path: uploadResult.thumbnailPath ?? null,
+        allow_screenshot: canScreenshot,
+        allow_save: canSave,
+        allow_share: canShare,
+        screenshot_detected: false,
+        viewed_by_partner: false,
+      }).select().single();
+      if (insertError) {
+        supabase.storage.from('vault').remove([newPath]).catch(() => {});
+        throw insertError;
+      }
+      if (data) {
+        await awardPoints(couple.id, user.id, 5, 'Saved chat media to Vault', data.id);
+        if (isMountedRef.current) setSavedToVault(true);
+      }
+    } catch (e: any) {
+      Alert.alert('Vault Save Failed', e?.message ?? 'Could not save this media to the Vault.');
+    } finally {
+      if (isMountedRef.current) setSavingToVault(false);
+    }
   }, [couple?.id, user?.id, item.storagePath, mediaUri, isVideo, canScreenshot, canSave, canShare, savingToVault, savedToVault]);
 
   const togglePlayPause = () => { if (!videoRef.current) return; if (videoPlaying) videoRef.current.pauseAsync?.(); else videoRef.current.playAsync?.(); setVideoPlaying(!videoPlaying); };
