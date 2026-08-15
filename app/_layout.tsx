@@ -15,10 +15,9 @@ import type { NotificationData } from '@/lib/notifications';
 import { logDebugEvent } from '@/lib/debugLog';
 import { emitIncoming } from '@/lib/incomingEvents';
 import IncomingSlash from '@/components/IncomingSlash';
+import UploadProgressOverlay from '@/components/UploadProgressOverlay';
 import { logger } from '@/lib/logger';
 
-// Warm the image decode cache as early as possible — before the transition/unlock screens mount.
-// resolveAssetSource works on both native (file URI) and web (network URL).
 const PREFETCH_LOGO = require('@/assets/images/image_(3).png');
 const PREFETCH_SLOGAN = require('@/assets/images/image_(2).png');
 if (Platform.OS !== 'web') {
@@ -27,308 +26,114 @@ if (Platform.OS !== 'web') {
 }
 
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; errorMsg: string }> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false, errorMsg: '' };
-  }
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, errorMsg: error?.message ?? String(error) };
-  }
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[ErrorBoundary]', error, info.componentStack);
-  }
+  constructor(props: { children: React.ReactNode }) { super(props); this.state = { hasError: false, errorMsg: '' }; }
+  static getDerivedStateFromError(error: Error) { return { hasError: true, errorMsg: error?.message ?? String(error) }; }
+  componentDidCatch(error: Error, info: React.ErrorInfo) { console.error('[ErrorBoundary]', error, info.componentStack); }
   render() {
     if (this.state.hasError) {
-      return (
-        <View style={{ flex: 1, backgroundColor: '#07070A', alignItems: 'center', justifyContent: 'center', gap: 20, padding: 24 }}>
-          <AppText style={{ color: '#fff', fontSize: 16, textAlign: 'center' }}>
-            Something went wrong.
-          </AppText>
-          <AppText style={{ color: 'rgba(255,100,100,0.9)', fontSize: 12, textAlign: 'center', fontFamily: 'monospace' }}>
-            {this.state.errorMsg}
-          </AppText>
-          <TouchableOpacity
-            onPress={() => {
-              this.setState({ hasError: false, errorMsg: '' });
-              try { expoRouter.replace('/(app)/(tabs)/'); } catch {}
-            }}
-            style={{ backgroundColor: '#FF2E8A', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24 }}
-            activeOpacity={0.8}
-          >
-            <AppText style={{ color: '#fff', fontSize: 15, fontFamily: 'Inter-SemiBold' }}>Try Again</AppText>
-          </TouchableOpacity>
-        </View>
-      );
+      return <View style={{ flex: 1, backgroundColor: '#07070A', alignItems: 'center', justifyContent: 'center', gap: 20, padding: 24 }}><AppText style={{ color: '#fff', fontSize: 16, textAlign: 'center' }}>Something went wrong.</AppText><AppText style={{ color: 'rgba(255,100,100,0.9)', fontSize: 12, textAlign: 'center', fontFamily: 'monospace' }}>{this.state.errorMsg}</AppText><TouchableOpacity onPress={() => { this.setState({ hasError: false, errorMsg: '' }); try { expoRouter.replace('/(app)/(tabs)/'); } catch {} }} style={{ backgroundColor: '#FF2E8A', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24 }} activeOpacity={0.8}><AppText style={{ color: '#fff', fontSize: 15, fontFamily: 'Inter-SemiBold' }}>Try Again</AppText></TouchableOpacity></View>;
     }
     return this.props.children;
   }
 }
 
-// Shared ref to store a pending deep-link intent from a notification tap.
-// The gate sequence (stealth → unlock → transition) reads this and navigates after passing all gates.
 export const pendingNotificationRoute = { current: null as NotificationData | null };
 
-// Foreground pushes should not create a second wave of banners/sounds while the
-// user is already inside Warm Me Up. Background/closed-app pushes are still
-// presented normally by the OS. Foreground activity uses the subtle in-app slash.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: false,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-    shouldShowBanner: false,
-    shouldShowList: false,
-  }),
-});
-
+Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldShowAlert: false, shouldPlaySound: false, shouldSetBadge: false, shouldShowBanner: false, shouldShowList: false }) });
 SplashScreen.preventAutoHideAsync();
 
 function PrivacyOverlay() {
   const { settings } = useAuth();
   const [hidden, setHidden] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-
-  // Native: hide content in OS app switcher
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      const prev = appStateRef.current;
-      appStateRef.current = next;
+      const prev = appStateRef.current; appStateRef.current = next;
       const blurEnabled = settings?.blur_on_background ?? true;
       if (!blurEnabled) { setHidden(false); return; }
-      if (next === 'inactive' || next === 'background') {
-        setHidden(true);
-      } else if (next === 'active' && (prev === 'inactive' || prev === 'background')) {
-        setHidden(false);
-      }
+      if (next === 'inactive' || next === 'background') setHidden(true);
+      else if (next === 'active' && (prev === 'inactive' || prev === 'background')) setHidden(false);
     });
     return () => sub.remove();
   }, [settings?.blur_on_background]);
-
-  // Web: hide content when the tab/window loses visibility (tab switch, minimize, lock screen)
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    const onVisibility = () => {
-      const blurEnabled = settings?.blur_on_background ?? true;
-      if (!blurEnabled) { setHidden(false); return; }
-      setHidden(document.hidden);
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+    const onVisibility = () => { const blurEnabled = settings?.blur_on_background ?? true; if (!blurEnabled) { setHidden(false); return; } setHidden(document.hidden); };
+    document.addEventListener('visibilitychange', onVisibility); return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [settings?.blur_on_background]);
-
-  // Web: CSS print-media rule so browser print/screenshot tools render a blank page
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    const style = document.createElement('style');
-    style.id = 'warmup-print-guard';
-    style.textContent = '@media print { body { visibility: hidden !important; filter: blur(40px) !important; } }';
-    document.head.appendChild(style);
-    const onBeforePrint = () => setHidden(true);
-    const onAfterPrint = () => setHidden(false);
-    window.addEventListener('beforeprint', onBeforePrint);
-    window.addEventListener('afterprint', onAfterPrint);
-    return () => {
-      style.remove();
-      window.removeEventListener('beforeprint', onBeforePrint);
-      window.removeEventListener('afterprint', onAfterPrint);
-    };
+    const style = document.createElement('style'); style.id = 'warmup-print-guard'; style.textContent = '@media print { body { visibility: hidden !important; filter: blur(40px) !important; } }'; document.head.appendChild(style);
+    const onBeforePrint = () => setHidden(true); const onAfterPrint = () => setHidden(false);
+    window.addEventListener('beforeprint', onBeforePrint); window.addEventListener('afterprint', onAfterPrint);
+    return () => { style.remove(); window.removeEventListener('beforeprint', onBeforePrint); window.removeEventListener('afterprint', onAfterPrint); };
   }, []);
-
   if (!hidden) return null;
-  return (
-    <View
-      style={[StyleSheet.absoluteFillObject, { backgroundColor: '#07070A', zIndex: 9999 }]}
-      pointerEvents="none"
-    />
-  );
+  return <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#07070A', zIndex: 9999 }]} pointerEvents="none" />;
 }
 
-/**
- * Listens for notification taps and stores the intent in pendingNotificationRoute.
- * Navigation is deferred — the gate sequence (stealth/unlock/transition) reads the
- * pending intent after the user has passed all locks and routes accordingly.
- */
 function NotificationHandler() {
   useEffect(() => {
     if (Platform.OS === 'web') return;
-
-    // Handle taps on notifications received while app is backgrounded / closed
-    const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data as unknown as NotificationData | undefined;
-      if (data && typeof data.event_type === 'string') {
-        pendingNotificationRoute.current = data;
-      }
-    });
-
-    // Log every notification that arrives while app is in foreground — confirms device-side receipt.
-    // The notification handler above suppresses duplicate banners/sounds while active;
-    // the subtle pink slash is the only foreground cue.
+    const responseSub = Notifications.addNotificationResponseReceivedListener(response => { const data = response.notification.request.content.data as unknown as NotificationData | undefined; if (data && typeof data.event_type === 'string') pendingNotificationRoute.current = data; });
     const receivedSub = Notifications.addNotificationReceivedListener(notification => {
       const { title, body, data } = notification.request.content;
-      logDebugEvent('PUSH_RECEIVED_FOREGROUND', {
-        title: title ?? null,
-        body: body ?? null,
-        event_type: (data as any)?.event_type ?? null,
-        identifier: notification.request.identifier,
-      });
-      if (AppState.currentState === 'active') {
-        emitIncoming();
-      }
+      logDebugEvent('PUSH_RECEIVED_FOREGROUND', { title: title ?? null, body: body ?? null, event_type: (data as any)?.event_type ?? null, identifier: notification.request.identifier });
+      if (AppState.currentState === 'active') emitIncoming();
     });
-
-    return () => {
-      responseSub.remove();
-      receivedSub.remove();
-    };
+    return () => { responseSub.remove(); receivedSub.remove(); };
   }, []);
-
   return null;
 }
 
 function SessionGuard() {
-  const { session, loading } = useAuth();
-  const router = useRouter();
-  const segments = useSegments();
-
+  const { session, loading } = useAuth(); const router = useRouter(); const segments = useSegments();
   useEffect(() => {
-    if (loading) return;
-    if (session) return;
-    // Protect authenticated app/admin routes AND the weather/unlock screens —
-    // those must only be reachable by a confirmed logged-in user.
-    const inAuthenticatedRoute =
-      segments[0] === '(app)' ||
-      segments[0] === '(admin)' ||
-      segments[0] === 'weather' ||
-      segments[0] === 'unlock';
-    if (inAuthenticatedRoute) {
-      router.replace('/(auth)/welcome');
-    }
+    if (loading || session) return;
+    const inAuthenticatedRoute = segments[0] === '(app)' || segments[0] === '(admin)' || segments[0] === 'weather' || segments[0] === 'unlock';
+    if (inAuthenticatedRoute) router.replace('/(auth)/welcome');
   }, [session, loading, segments]);
-
   return null;
 }
 
 function BackgroundLockManager() {
-  const { session, settings, lockApp, isAuthenticatingRef, refreshCouple } = useAuth();
-  const router = useRouter();
-  const segments = useSegments();
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const wasBackgroundedRef = useRef(false);
-  const backgroundedAtRef = useRef<number | null>(null);
-
+  const { session, settings, lockApp, isAuthenticatingRef, refreshCouple } = useAuth(); const router = useRouter(); const segments = useSegments();
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState); const wasBackgroundedRef = useRef(false); const backgroundedAtRef = useRef<number | null>(null);
   useEffect(() => {
     if (Platform.OS === 'web') return;
-
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       appStateRef.current = next;
-
-      if (next === 'background' || next === 'inactive') {
-        wasBackgroundedRef.current = true;
-        backgroundedAtRef.current = Date.now();
-      } else if (next === 'active' && wasBackgroundedRef.current) {
-        wasBackgroundedRef.current = false;
-
-        // Refresh couple data on every foreground trip so invite codes and
-        // partner status are never stale after background/OTA transitions.
-        refreshCouple();
-
-        const method = settings?.login_method ?? 'none';
-        if (!session || method === 'none' || method === 'password') return;
-
-        // Don't interrupt an already-open biometric prompt. The vault or unlock
-        // screen will handle the lock state themselves once the prompt resolves.
-        if (isAuthenticatingRef.current) return;
-
-        // Measure how long the app was actually in the background, not total
-        // wall-clock time since the last unlock. This makes "5 minutes" mean
-        // 5 minutes away from the app, not 5 minutes since you last unlocked.
-        const lockAfter = settings?.lock_after_seconds ?? null;
-        const bgStart = backgroundedAtRef.current;
-        backgroundedAtRef.current = null;
-
-        if (lockAfter === null || lockAfter < 0) return; // Never re-lock
-        if (bgStart === null) return;
-
-        const bgSeconds = (Date.now() - bgStart) / 1000;
-        const shouldLock = lockAfter === 0 || bgSeconds >= lockAfter;
-
-        if (shouldLock) {
-          lockApp();
-          const currentRoute = segments[segments.length - 1];
-          // 'weather' handles its own lock decision via handleCoastIsClear.
-          // 'transition' and 'unlock' are already in the lock/auth flow.
-          const safeRoutes = ['unlock', 'transition', 'weather'];
-          if (!safeRoutes.includes(currentRoute)) {
-            router.replace('/unlock');
-          }
-        }
+      if (next === 'background' || next === 'inactive') { wasBackgroundedRef.current = true; backgroundedAtRef.current = Date.now(); }
+      else if (next === 'active' && wasBackgroundedRef.current) {
+        wasBackgroundedRef.current = false; refreshCouple();
+        const method = settings?.login_method ?? 'none'; if (!session || method === 'none' || method === 'password' || isAuthenticatingRef.current) return;
+        const lockAfter = settings?.lock_after_seconds ?? null; const bgStart = backgroundedAtRef.current; backgroundedAtRef.current = null;
+        if (lockAfter === null || lockAfter < 0 || bgStart === null) return;
+        const bgSeconds = (Date.now() - bgStart) / 1000; const shouldLock = lockAfter === 0 || bgSeconds >= lockAfter;
+        if (shouldLock) { lockApp(); const currentRoute = segments[segments.length - 1]; const safeRoutes = ['unlock', 'transition', 'weather']; if (!safeRoutes.includes(currentRoute)) router.replace('/unlock'); }
       }
     });
-
     return () => sub.remove();
   }, [session, settings?.login_method, settings?.lock_after_seconds, lockApp, isAuthenticatingRef, refreshCouple]);
-
   return null;
 }
 
 export default function RootLayout() {
   useFrameworkReady();
-
-  const [fontsLoaded, fontError] = useFonts({
-    'Inter-Regular': Inter_400Regular,
-    'Inter-Medium': Inter_500Medium,
-    'Inter-SemiBold': Inter_600SemiBold,
-    'Inter-Bold': Inter_700Bold,
-  });
-
-  useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded, fontError]);
-
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
-
+  const [fontsLoaded, fontError] = useFonts({ 'Inter-Regular': Inter_400Regular, 'Inter-Medium': Inter_500Medium, 'Inter-SemiBold': Inter_600SemiBold, 'Inter-Bold': Inter_700Bold });
+  useEffect(() => { if (fontsLoaded || fontError) SplashScreen.hideAsync(); }, [fontsLoaded, fontError]);
+  if (!fontsLoaded && !fontError) return null;
   return (
-    <ErrorBoundary>
-    <GestureHandlerRootView style={styles.root}>
-      <NavThemeProvider value={DarkTheme}>
-      <ThemeProvider>
-        <AuthProvider>
-          <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: '#05040A' } }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="weather" />
-            <Stack.Screen name="transition" />
-            <Stack.Screen name="unlock" />
-            {__DEV__ && (
-              <>
-                <Stack.Screen name="debug" />
-                <Stack.Screen name="debug-access" />
-                <Stack.Screen name="debug-fallback" />
-              </>
-            )}
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(app)" />
-            <Stack.Screen name="(admin)" />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          <IncomingSlash />
-          <PrivacyOverlay />
-          <SessionGuard />
-          <BackgroundLockManager />
-          <NotificationHandler />
-          <StatusBar style="light" />
-        </AuthProvider>
-      </ThemeProvider>
-      </NavThemeProvider>
-    </GestureHandlerRootView>
-    </ErrorBoundary>
+    <ErrorBoundary><GestureHandlerRootView style={styles.root}><NavThemeProvider value={DarkTheme}><ThemeProvider><AuthProvider>
+      <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: '#05040A' } }}>
+        <Stack.Screen name="index" /><Stack.Screen name="weather" /><Stack.Screen name="transition" /><Stack.Screen name="unlock" />
+        {__DEV__ && <><Stack.Screen name="debug" /><Stack.Screen name="debug-access" /><Stack.Screen name="debug-fallback" /></>}
+        <Stack.Screen name="(auth)" /><Stack.Screen name="(app)" /><Stack.Screen name="(admin)" /><Stack.Screen name="+not-found" />
+      </Stack>
+      <IncomingSlash /><UploadProgressOverlay /><PrivacyOverlay /><SessionGuard /><BackgroundLockManager /><NotificationHandler /><StatusBar style="light" />
+    </AuthProvider></ThemeProvider></NavThemeProvider></GestureHandlerRootView></ErrorBoundary>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#05040A' },
-});
+const styles = StyleSheet.create({ root: { flex: 1, backgroundColor: '#05040A' } });
