@@ -96,7 +96,7 @@ export default function CameraCaptureScreen() {
         if (result?.uri) setPendingCapture({ uri: result.uri, mediaType: 'video', mimeType: videoMimeFromUri(result.uri) });
       } else {
         setBusy(true);
-        const result = await cameraRef.current.takePictureAsync({ quality: 0.75 });
+        const result = await cameraRef.current.takePictureAsync({ quality: 1 });
         if (result?.uri) setPendingCapture({ uri: result.uri, mediaType: 'photo', mimeType: 'image/jpeg' });
       }
     } catch (e: any) {
@@ -153,6 +153,7 @@ export default function CameraCaptureScreen() {
         style={StyleSheet.absoluteFill}
         facing={facing}
         mode={mode === 'video' ? 'video' : 'picture'}
+        videoQuality="1080p"
         flash={mode === 'photo' && flashEnabled ? 'on' : 'off'}
         enableTorch={mode === 'video' && flashEnabled}
         onCameraReady={() => setCameraReady(true)}
