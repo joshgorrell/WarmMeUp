@@ -21,6 +21,7 @@ import {
   Camera,
   Check,
   ChevronLeft,
+  Download,
   Pause,
   Play,
   Share2,
@@ -65,7 +66,9 @@ function MediaPage({
   const canScreenshot = item.allowScreenshot;
   const canShare = item.allowShare;
   const canSave = item.allowSave;
-  const showSaveToVault = !!item.interactionId && canSave;
+  // Saving inside Warm Me Up is not the same as exporting/downloading to the device.
+  // Internal saves must preserve the original sender permissions rather than reinterpret them.
+  const showSaveToVault = !!item.interactionId;
 
   const [mediaUri, setMediaUri] = useState<string | null>(item.signedUri ?? null);
   const [loading, setLoading] = useState(true);
@@ -197,6 +200,7 @@ function MediaPage({
           storage_path: uploadResult.storagePath,
           storage_bucket: 'vault',
           blurred_thumbnail_path: uploadResult.thumbnailPath ?? null,
+          // Preserve the original sender's permissions exactly.
           allow_screenshot: canScreenshot,
           allow_save: canSave,
           allow_share: canShare,
@@ -365,8 +369,13 @@ function MediaPage({
         <View style={styles.permissionRow}>
           <PermissionBadge
             icon={<Camera color={canScreenshot ? '#FF2E8A' : 'rgba(255,255,255,0.35)'} size={14} />}
-            label={canScreenshot ? 'Screenshot OK' : 'Partner notified'}
+            label={canScreenshot ? 'Screenshot OK' : 'Screenshot restricted'}
             allowed={canScreenshot}
+          />
+          <PermissionBadge
+            icon={<Download color={canSave ? '#FF2E8A' : 'rgba(255,255,255,0.35)'} size={14} />}
+            label={canSave ? 'Device save OK' : 'No downloads'}
+            allowed={canSave}
           />
           {canShare ? (
             <TouchableOpacity onPress={handleShare} activeOpacity={0.8}>
