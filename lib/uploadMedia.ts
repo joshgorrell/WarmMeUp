@@ -22,14 +22,8 @@ export type UploadResult = {
   thumbnailPath?: string;
 };
 
-/**
- * Compress a local image URI to JPEG at ≤1600px on the long edge, quality 0.72.
- * Falls back to the original URI if expo-image-manipulator is unavailable (e.g. web).
- * Returns the compressed local URI and the resolved MIME type (always image/jpeg after compression).
- */
 async function compressImage(uri: string, mimeType: string): Promise<{ uri: string; mimeType: string }> {
   if (Platform.OS === 'web') return { uri, mimeType };
-  // HEIC/HEIF must be converted — they can't be read back as blobs on all devices.
   const needsConversion = mimeType === 'image/heic' || mimeType === 'image/heif' || mimeType === 'image/heif-sequence';
   if (!needsConversion && !mimeType.startsWith('image/')) return { uri, mimeType };
   try {
@@ -45,10 +39,6 @@ async function compressImage(uri: string, mimeType: string): Promise<{ uri: stri
   }
 }
 
-/**
- * Generate a JPEG thumbnail frame from a local video URI.
- * Returns null if expo-video-thumbnails is unavailable or fails.
- */
 async function extractVideoThumbnail(uri: string): Promise<string | null> {
   if (Platform.OS === 'web') return null;
   try {
@@ -83,9 +73,6 @@ export async function uploadMediaFile(
   userId?: string,
   coupleId?: string,
 ): Promise<UploadResult> {
-  // Try getSession() first (local, no network) — only call getUser() (which
-  // validates the token server-side and can trigger a refresh) if the session
-  // is missing. This avoids a network round-trip on every upload.
   const { data: { session: initialSession } } = await supabase.auth.getSession();
   let session = initialSession;
   if (!session) {
@@ -106,7 +93,6 @@ export async function uploadMediaFile(
 
   onProgress?.(0);
 
-  // ── Compress images before upload ────────────────────────────────────────
   const isPhoto = mimeType.startsWith('image/');
   const isVideo = mimeType.startsWith('video/');
   let uploadUri = localUri;
@@ -119,18 +105,28 @@ export async function uploadMediaFile(
     const compressed = await compressImage(localUri, mimeType);
     uploadUri = compressed.uri;
     uploadMime = compressed.mimeType;
-    // If MIME changed (HEIC → JPEG), update the storage path extension too.
     if (uploadMime !== mimeType) {
       uploadStoragePath = storagePath.replace(/\.\w+$/, '.jpg');
     }
   }
 
-  // ── Extract and upload video thumbnail ───────────────────────────────────
+  // A file's extension must agree with the MIME/container we upload. This is
+  // especially important for iOS QuickTime recordings: renaming MOV bytes to
+  // .mp4 does not convert them and causes native players to reject playback.
+  if (isVideo) {
+    const expectedExt = mimeToExtension(uploadMime);
+    if (/\.\w+$/.test(uploadStoragePath)) {
+      uploadStoragePath = uploadStoragePath.replace(/\.\w+$/, `.${expectedExt}`);
+    } else {
+      uploadStoragePath = `${uploadStoragePath}.${expectedExt}`;
+    }
+  }
+
   if (isVideo && bucket === 'vault') {
     const thumbUri = await extractVideoThumbnail(localUri);
     if (thumbUri) {
       thumbnailLocalUri = thumbUri;
-      const thumbStoragePath = storagePath.replace(/\.\w+$/, '_thumb.jpg');
+      const thumbStoragePath = uploadStoragePath.replace(/\.\w+$/, '_thumb.jpg');
       try {
         const thumbBlob = await readAsBlob(thumbUri);
         await fetch(
@@ -147,18 +143,13 @@ export async function uploadMediaFile(
           },
         );
         thumbnailPath = thumbStoragePath;
-      } catch {
-        // Thumbnail upload is best-effort — don't block the main upload
-      }
+      } catch {}
     }
   }
 
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${uploadStoragePath}`;
 
-  // React Native's fetch() cannot open local file:// or ph:// URIs — only HTTP/HTTPS.
-  // Use XMLHttpRequest with responseType='blob' for local paths (camera/library picks);
-  // keep fetch for HTTP/HTTPS (e.g. signed URLs used in the auto-save flow).
   let blob: Blob;
   try {
     blob = await readAsBlob(uploadUri);
@@ -238,9 +229,6 @@ export async function uploadMediaFile(
 
   onProgress?.(100);
 
-  // Clean up temp files created during upload (compressed image copy, video thumbnail).
-  // These live in the app's sandboxed cache — safe to delete. Original photo-library
-  // references (ph://, content://) are never touched.
   if (isPhoto && uploadUri !== localUri) {
     cleanupTempFile(uploadUri).catch(() => {});
   }
@@ -251,7 +239,6 @@ export async function uploadMediaFile(
   return { storagePath: uploadStoragePath, thumbnailPath };
 }
 
-/** Infer MIME type from a file extension (lower-case, no dot). */
 export function extensionToMime(ext: string): string {
   switch (ext) {
     case 'heic':
@@ -260,14 +247,14 @@ export function extensionToMime(ext: string): string {
     case 'webp': return 'image/webp';
     case 'gif':  return 'image/gif';
     case 'mov':  return 'video/quicktime';
+    case 'm4v':  return 'video/x-m4v';
     case 'mp4':  return 'video/mp4';
     default:     return 'image/jpeg';
   }
 }
 
-/** Derive the correct file extension from a resolved MIME type. */
 export function mimeToExtension(mimeType: string): string {
-  switch (mimeType) {
+  switch (mimeType.toLowerCase()) {
     case 'image/heic':
     case 'image/heif':
     case 'image/heif-sequence': return 'heic';
@@ -275,12 +262,12 @@ export function mimeToExtension(mimeType: string): string {
     case 'image/webp':          return 'webp';
     case 'image/gif':           return 'gif';
     case 'video/quicktime':     return 'mov';
+    case 'video/x-m4v':         return 'm4v';
     case 'video/mp4':           return 'mp4';
     default:                    return mimeType.startsWith('video/') ? 'mov' : 'jpg';
   }
 }
 
-/** Picker options shared between Vault and Chat to keep quality/size consistent */
 export const PICKER_OPTIONS = {
   mediaTypes: ['images', 'videos'] as any,
   quality: 0.6,
@@ -290,23 +277,9 @@ export const PICKER_OPTIONS = {
   flashMode: 'off' as const,
 };
 
-/**
- * Resolve the correct MIME type from an expo-image-picker asset, normalising
- * iOS-specific types to what the Supabase storage buckets allow.
- *
- * Normalisations applied:
- *   video/hevc, video/x-m4v, video/mpeg → video/quicktime
- *     (iOS camera records MOV/QuickTime; map non-standard variants to the
- *     canonical type the bucket accepts instead of video/mp4 which won't match
- *     the actual bytes)
- *
- * HEIC/HEIF images are passed through unchanged — the vault bucket explicitly
- * allows image/heic, image/heif, and image/heif-sequence, so remapping them to
- * image/jpeg causes a MIME mismatch that Supabase rejects.
- */
 export function resolveAssetMimeType(asset: { mimeType?: string | null; type?: string | null }): string {
   const raw = asset.mimeType?.toLowerCase() ?? '';
-  if (raw === 'video/hevc' || raw === 'video/x-m4v' || raw === 'video/mpeg') {
+  if (raw === 'video/hevc' || raw === 'video/mpeg') {
     return 'video/quicktime';
   }
   if (raw) return raw;
