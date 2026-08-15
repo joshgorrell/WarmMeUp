@@ -10,8 +10,7 @@ type Mode = 'photo' | 'video';
 
 function videoMimeFromUri(uri: string): string {
   const clean = uri.split('?')[0].toLowerCase();
-  if (clean.endsWith('.mov') || clean.endsWith('.qt')) return 'video/quicktime';
-  if (clean.endsWith('.m4v')) return 'video/x-m4v';
+  if (clean.endsWith('.mov') || clean.endsWith('.qt') || clean.endsWith('.m4v')) return 'video/quicktime';
   return 'video/mp4';
 }
 
@@ -26,6 +25,7 @@ export default function CameraCaptureScreen() {
   const [flashEnabled, setFlashEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
 
   useEffect(() => {
     clearCameraCaptureResult();
@@ -47,19 +47,29 @@ export default function CameraCaptureScreen() {
   };
 
   const switchMode = (next: Mode) => {
-    if (recording || busy) return;
+    if (recording || busy || next === mode) return;
+    setCameraReady(false);
     setMode(next);
     setFlashEnabled(false);
   };
 
+  const switchFacing = () => {
+    if (recording || busy) return;
+    setCameraReady(false);
+    setFacing(v => v === 'back' ? 'front' : 'back');
+  };
+
   const capture = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || busy) return;
 
     if (mode === 'video' && recording) {
       cameraRef.current.stopRecording();
       return;
     }
-    if (busy) return;
+
+    if (!cameraReady) {
+      return;
+    }
 
     try {
       if (mode === 'video') {
@@ -119,6 +129,11 @@ export default function CameraCaptureScreen() {
         mode={mode === 'video' ? 'video' : 'picture'}
         flash={mode === 'photo' && flashEnabled ? 'on' : 'off'}
         enableTorch={mode === 'video' && flashEnabled}
+        onCameraReady={() => setCameraReady(true)}
+        onMountError={(error) => {
+          setCameraReady(false);
+          Alert.alert('Camera Error', error?.message ?? 'The camera could not start.');
+        }}
       />
 
       <View style={styles.topBar}>
@@ -128,14 +143,14 @@ export default function CameraCaptureScreen() {
         <TouchableOpacity
           style={[styles.iconButton, flashEnabled && styles.activeButton]}
           onPress={() => setFlashEnabled(v => !v)}
-          disabled={recording}
+          disabled={recording || !cameraReady}
         >
           <Flashlight color="#fff" size={24} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={() => setFacing(v => v === 'back' ? 'front' : 'back')}
-          disabled={recording}
+          onPress={switchFacing}
+          disabled={recording || busy}
         >
           <RefreshCcw color="#fff" size={23} />
         </TouchableOpacity>
@@ -143,24 +158,24 @@ export default function CameraCaptureScreen() {
 
       <View style={styles.bottomBar}>
         <View style={styles.modeSwitcher}>
-          <TouchableOpacity onPress={() => switchMode('photo')} disabled={recording}>
+          <TouchableOpacity onPress={() => switchMode('photo')} disabled={recording || busy}>
             <AppText style={[styles.modeOption, mode === 'photo' && styles.modeOptionActive]}>PHOTO</AppText>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => switchMode('video')} disabled={recording}>
+          <TouchableOpacity onPress={() => switchMode('video')} disabled={recording || busy}>
             <AppText style={[styles.modeOption, mode === 'video' && styles.modeOptionActive]}>VIDEO</AppText>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity
-          style={[styles.shutterOuter, recording && styles.recordingOuter]}
+          style={[styles.shutterOuter, recording && styles.recordingOuter, !cameraReady && styles.shutterDisabled]}
           onPress={capture}
-          disabled={busy && !recording}
+          disabled={(busy && !recording) || !cameraReady}
         >
           <View style={[styles.shutterInner, mode === 'video' && styles.videoShutter, recording && styles.recordingInner]} />
         </TouchableOpacity>
 
         <AppText style={styles.flashText}>
-          {mode === 'video' ? 'Light' : 'Flash'} {flashEnabled ? 'On' : 'Off'}
+          {!cameraReady ? 'Camera starting…' : `${mode === 'video' ? 'Light' : 'Flash'} ${flashEnabled ? 'On' : 'Off'}`}
         </AppText>
         {recording && <AppText style={styles.recordingText}>Recording… tap stop</AppText>}
       </View>
@@ -178,6 +193,7 @@ const styles = StyleSheet.create({
   modeOption: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '700' },
   modeOptionActive: { color: '#fff' },
   shutterOuter: { width: 78, height: 78, borderRadius: 39, borderWidth: 5, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  shutterDisabled: { opacity: 0.45 },
   shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#fff' },
   videoShutter: { backgroundColor: '#FF2E8A' },
   recordingOuter: { borderColor: '#fff' },
