@@ -93,26 +93,28 @@ export async function uploadMediaFile(
 
   onProgress?.(0);
 
-  const isPhoto = mimeType.startsWith('image/');
-  const isVideo = mimeType.startsWith('video/');
+  let normalizedMime = mimeType.toLowerCase();
+  if (normalizedMime === 'video/hevc' || normalizedMime === 'video/x-m4v' || normalizedMime === 'video/mpeg') {
+    normalizedMime = 'video/quicktime';
+  }
+
+  const isPhoto = normalizedMime.startsWith('image/');
+  const isVideo = normalizedMime.startsWith('video/');
   let uploadUri = localUri;
-  let uploadMime = mimeType;
+  let uploadMime = normalizedMime;
   let uploadStoragePath = storagePath;
   let thumbnailPath: string | undefined;
   let thumbnailLocalUri: string | null = null;
 
   if (isPhoto) {
-    const compressed = await compressImage(localUri, mimeType);
+    const compressed = await compressImage(localUri, normalizedMime);
     uploadUri = compressed.uri;
     uploadMime = compressed.mimeType;
-    if (uploadMime !== mimeType) {
+    if (uploadMime !== normalizedMime) {
       uploadStoragePath = storagePath.replace(/\.\w+$/, '.jpg');
     }
   }
 
-  // A file's extension must agree with the MIME/container we upload. This is
-  // especially important for iOS QuickTime recordings: renaming MOV bytes to
-  // .mp4 does not convert them and causes native players to reject playback.
   if (isVideo) {
     const expectedExt = mimeToExtension(uploadMime);
     if (/\.\w+$/.test(uploadStoragePath)) {
@@ -157,7 +159,7 @@ export async function uploadMediaFile(
     logDebugEvent('VAULT UPLOAD ERROR', {
       reason: 'Failed to read local file',
       error: readErr?.message ?? String(readErr),
-      bucket, storagePath, mimeType, userId: userId ?? null, coupleId: coupleId ?? null,
+      bucket, storagePath, mimeType: uploadMime, userId: userId ?? null, coupleId: coupleId ?? null,
     });
     throw new Error('Could not read media file — please try again.');
   }
@@ -246,8 +248,8 @@ export function extensionToMime(ext: string): string {
     case 'png':  return 'image/png';
     case 'webp': return 'image/webp';
     case 'gif':  return 'image/gif';
-    case 'mov':  return 'video/quicktime';
-    case 'm4v':  return 'video/x-m4v';
+    case 'mov':
+    case 'm4v':  return 'video/quicktime';
     case 'mp4':  return 'video/mp4';
     default:     return 'image/jpeg';
   }
@@ -261,8 +263,8 @@ export function mimeToExtension(mimeType: string): string {
     case 'image/png':           return 'png';
     case 'image/webp':          return 'webp';
     case 'image/gif':           return 'gif';
-    case 'video/quicktime':     return 'mov';
-    case 'video/x-m4v':         return 'm4v';
+    case 'video/quicktime':
+    case 'video/x-m4v':         return 'mov';
     case 'video/mp4':           return 'mp4';
     default:                    return mimeType.startsWith('video/') ? 'mov' : 'jpg';
   }
@@ -279,7 +281,7 @@ export const PICKER_OPTIONS = {
 
 export function resolveAssetMimeType(asset: { mimeType?: string | null; type?: string | null }): string {
   const raw = asset.mimeType?.toLowerCase() ?? '';
-  if (raw === 'video/hevc' || raw === 'video/mpeg') {
+  if (raw === 'video/hevc' || raw === 'video/x-m4v' || raw === 'video/mpeg') {
     return 'video/quicktime';
   }
   if (raw) return raw;
