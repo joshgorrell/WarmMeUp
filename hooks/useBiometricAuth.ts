@@ -14,7 +14,7 @@ interface BiometricAuth {
 export function useBiometricAuth(): BiometricAuth {
   const [available, setAvailable] = useState(false);
   const [hasHardware, setHasHardware] = useState(false);
-  const [biometricLabel, setBiometricLabel] = useState('Face ID');
+  const [biometricLabel, setBiometricLabel] = useState(Platform.OS === 'ios' ? 'Face ID' : 'Biometrics');
   const inProgressRef = useRef(false);
 
   useEffect(() => {
@@ -36,23 +36,24 @@ export function useBiometricAuth(): BiometricAuth {
         setHasHardware(isAvail);
         if (isAvail && isEnrolled) {
           setAvailable(true);
-          // Detect whether device has facial recognition or fingerprint
           const types = await LA.supportedAuthenticationTypesAsync();
           const AuthType = LA.AuthenticationType;
           if (types.includes(AuthType.FACIAL_RECOGNITION)) {
-            setBiometricLabel('Face ID');
+            setBiometricLabel(Platform.OS === 'ios' ? 'Face ID' : 'Face Unlock');
           } else if (types.includes(AuthType.FINGERPRINT)) {
-            setBiometricLabel('Touch ID');
+            setBiometricLabel(Platform.OS === 'ios' ? 'Touch ID' : 'Fingerprint');
           } else {
             setBiometricLabel('Biometrics');
           }
         } else {
           setAvailable(false);
+          setBiometricLabel(Platform.OS === 'ios' ? 'Face ID' : 'Biometrics');
         }
       } catch (e: any) {
         logDebugEvent('BIOMETRIC_PROBE_ERROR', { message: e?.message ?? String(e) });
         setAvailable(false);
         setHasHardware(false);
+        setBiometricLabel(Platform.OS === 'ios' ? 'Face ID' : 'Biometrics');
       }
     })();
   }, []);
