@@ -18,6 +18,12 @@ function videoMimeFromUri(uri: string): string {
   return 'video/mp4';
 }
 
+function formatRecordingTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
 export default function CameraCaptureScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
@@ -30,6 +36,7 @@ export default function CameraCaptureScreen() {
   const [flashEnabled, setFlashEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [cameraGeneration, setCameraGeneration] = useState(0);
   const [pendingCapture, setPendingCapture] = useState<PendingCapture | null>(null);
 
@@ -45,6 +52,17 @@ export default function CameraCaptureScreen() {
   useEffect(() => {
     if (mode === 'video' && !micPermission?.granted) requestMicPermission();
   }, [mode, micPermission?.granted, requestMicPermission]);
+
+  useEffect(() => {
+    if (!recording) {
+      setRecordingSeconds(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setRecordingSeconds(current => current + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [recording]);
 
   const remountCamera = () => setCameraGeneration(v => v + 1);
 
@@ -69,11 +87,14 @@ export default function CameraCaptureScreen() {
   };
 
   const capture = async () => {
-    if (!cameraRef.current || busy || pendingCapture) return;
+    if (!cameraRef.current || pendingCapture) return;
+
     if (mode === 'video' && recording) {
       cameraRef.current.stopRecording();
       return;
     }
+
+    if (busy) return;
 
     try {
       if (mode === 'video') {
@@ -85,6 +106,7 @@ export default function CameraCaptureScreen() {
           }
         }
         setBusy(true);
+        setRecordingSeconds(0);
         setRecording(true);
         const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
         setRecording(false);
@@ -174,7 +196,13 @@ export default function CameraCaptureScreen() {
           <View style={[styles.shutterInner, mode === 'video' && styles.videoShutter, recording && styles.recordingInner]} />
         </TouchableOpacity>
         <AppText style={styles.flashText}>{`${mode === 'video' ? 'Light' : 'Flash'} ${flashEnabled ? 'On' : 'Off'}`}</AppText>
-        {recording && <AppText style={styles.recordingText}>Recording… tap stop</AppText>}
+        {recording && (
+          <View style={styles.recordingStatus}>
+            <View style={styles.recordingDot} />
+            <AppText style={styles.recordingTimer}>{formatRecordingTime(recordingSeconds)}</AppText>
+            <AppText style={styles.recordingText}>Tap stop</AppText>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -194,7 +222,11 @@ const styles = StyleSheet.create({
   modeOption: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '700' }, modeOptionActive: { color: '#fff' },
   shutterOuter: { width: 78, height: 78, borderRadius: 39, borderWidth: 5, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#fff' }, videoShutter: { backgroundColor: '#FF2E8A' }, recordingOuter: { borderColor: '#fff' }, recordingInner: { width: 34, height: 34, borderRadius: 7, backgroundColor: '#FF2E8A' },
-  flashText: { color: 'rgba(255,255,255,0.8)', fontSize: 13 }, recordingText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  flashText: { color: 'rgba(255,255,255,0.8)', fontSize: 13 },
+  recordingStatus: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 7 },
+  recordingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF2E8A' },
+  recordingTimer: { color: '#fff', fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  recordingText: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600' },
   permission: { flex: 1, backgroundColor: '#08080b', alignItems: 'center', justifyContent: 'center', padding: 28, gap: 18 }, permissionTitle: { color: '#fff', fontSize: 18, textAlign: 'center' },
   permissionButton: { backgroundColor: '#FF2E8A', paddingHorizontal: 22, paddingVertical: 13, borderRadius: 22 }, permissionButtonText: { color: '#fff', fontWeight: '700' },
 });
