@@ -8,6 +8,13 @@ import { clearCameraCaptureResult, setCameraCaptureResult } from '@/lib/cameraCa
 
 type Mode = 'photo' | 'video';
 
+function videoMimeFromUri(uri: string): string {
+  const clean = uri.split('?')[0].toLowerCase();
+  if (clean.endsWith('.mov') || clean.endsWith('.qt')) return 'video/quicktime';
+  if (clean.endsWith('.m4v')) return 'video/x-m4v';
+  return 'video/mp4';
+}
+
 export default function CameraCaptureScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
@@ -22,7 +29,7 @@ export default function CameraCaptureScreen() {
 
   useEffect(() => {
     clearCameraCaptureResult();
-    setFlashEnabled(false); // Every camera session starts with flash/torch OFF.
+    setFlashEnabled(false);
   }, []);
 
   useEffect(() => {
@@ -42,7 +49,6 @@ export default function CameraCaptureScreen() {
   const switchMode = (next: Mode) => {
     if (recording || busy) return;
     setMode(next);
-    // Never carry flash state across mode changes; user must explicitly opt in.
     setFlashEnabled(false);
   };
 
@@ -69,7 +75,11 @@ export default function CameraCaptureScreen() {
         const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
         setRecording(false);
         if (result?.uri) {
-          setCameraCaptureResult({ uri: result.uri, mediaType: 'video', mimeType: 'video/mp4' });
+          setCameraCaptureResult({
+            uri: result.uri,
+            mediaType: 'video',
+            mimeType: videoMimeFromUri(result.uri),
+          });
           router.back();
         }
       } else {
