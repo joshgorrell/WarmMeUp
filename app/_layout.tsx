@@ -68,14 +68,16 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
 // The gate sequence (stealth → unlock → transition) reads this and navigates after passing all gates.
 export const pendingNotificationRoute = { current: null as NotificationData | null };
 
-// Configure how notifications appear when the app is in the foreground
+// Foreground pushes should not create a second wave of banners/sounds while the
+// user is already inside Warm Me Up. Background/closed-app pushes are still
+// presented normally by the OS. Foreground activity uses the subtle in-app slash.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
+    shouldShowAlert: false,
+    shouldPlaySound: false,
     shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
+    shouldShowBanner: false,
+    shouldShowList: false,
   }),
 });
 
@@ -159,7 +161,9 @@ function NotificationHandler() {
       }
     });
 
-    // Log every notification that arrives while app is in foreground — confirms device-side receipt
+    // Log every notification that arrives while app is in foreground — confirms device-side receipt.
+    // The notification handler above suppresses duplicate banners/sounds while active;
+    // the subtle pink slash is the only foreground cue.
     const receivedSub = Notifications.addNotificationReceivedListener(notification => {
       const { title, body, data } = notification.request.content;
       logDebugEvent('PUSH_RECEIVED_FOREGROUND', {
@@ -168,7 +172,6 @@ function NotificationHandler() {
         event_type: (data as any)?.event_type ?? null,
         identifier: notification.request.identifier,
       });
-      // Subtle pink slash at the top edge when a new item arrives while the app is open.
       if (AppState.currentState === 'active') {
         emitIncoming();
       }
