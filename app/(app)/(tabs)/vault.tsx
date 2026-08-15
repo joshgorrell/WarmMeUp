@@ -9,7 +9,7 @@ import { ResizeMode, Video } from 'expo-av';
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Video as VideoIcon, Check, Trash2, X } from 'lucide-react-native';
+import { Plus, Shield, EyeOff, Settings, Camera, Image as ImageIcon, Play, Check, Trash2, X } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -32,6 +32,7 @@ import TabHeader from '@/components/TabHeader';
 import AppShell from '@/components/AppShell';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { clearLocalImageCache } from '@/lib/mediaCache';
+import { consumeCameraCaptureResult } from '@/lib/cameraCaptureStore';
 
 
 export default function VaultScreen() {
@@ -73,6 +74,8 @@ export default function VaultScreen() {
 
   const blurEnabled = settings?.blur_vault_media ?? settings?.blur_media ?? true;
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  // True only while our in-app camera route is open. Used both to avoid
+  // re-locking the Vault during capture and to know when to consume a result.
   const cameraActiveRef = useRef(false);
 
   // Whether thumbnails are currently visible (blur off, or user has tapped to reveal)
@@ -142,8 +145,9 @@ export default function VaultScreen() {
 
   // Re-lock the vault biometric gate and re-prompt on every tab visit.
   // Tabs stay mounted in memory, so useFocusEffect fires on focus/blur.
-  // On blur: clear the unlock so the gate shows again on return.
-  // On focus: if Face ID is required, prompt immediately.
+  // When the user temporarily leaves for our camera we deliberately keep the
+  // Vault unlocked; otherwise taking one photo would immediately trigger a
+  // second biometric prompt on return.
   useFocusEffect(
     useCallback(() => {
       if (vaultFaceIdRequired && !vaultUnlocked) {
@@ -151,7 +155,7 @@ export default function VaultScreen() {
       }
       return () => {
         if (blurEnabled) setPageRevealed(false);
-        setVaultUnlocked(false);
+        if (!cameraActiveRef.current) setVaultUnlocked(false);
       };
     }, [vaultFaceIdRequired, blurEnabled, vaultUnlocked, setVaultUnlocked, unlockVault]),
   );
@@ -687,6 +691,27 @@ export default function VaultScreen() {
     }
   };
 
+  // Consume a photo/video captured by the shared Warm Me Up camera whenever we
+  // return to the Vault. The camera always starts with flash/torch OFF.
+  useFocusEffect(
+    useCallback(() => {
+      if (!cameraActiveRef.current) return;
+      const captured = consumeCameraCaptureResult();
+      cameraActiveRef.current = false;
+      if (!captured) return;
+
+      logDebugEvent('VAULT PICK', {
+        source: 'in_app_camera',
+        mediaType: captured.mediaType,
+        mimeType: captured.mimeType,
+        uriPrefix: captured.uri.substring(0, 12),
+        userId: user?.id ?? null,
+        coupleId: couple?.id ?? null,
+      });
+      uploadToVault(captured.uri, captured.mediaType, captured.mimeType);
+    }, [user?.id, couple?.id]),
+  );
+
   const handlePickFromLibrary = async () => {
     setShowAdd(false);
     try {
@@ -719,103 +744,14 @@ export default function VaultScreen() {
     }
   };
 
-  const handleTakePhoto = async () => {
+  const handleOpenCamera = (mode: 'photo' | 'video' = 'photo') => {
+    if (Platform.OS === 'web') return;
     setShowAdd(false);
-    await new Promise(r => setTimeout(r, 350));
-    try {
-      const ImagePicker = await import('expo-image-picker');
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert('Camera Access Required', 'Allow camera access in Settings to capture media for the Vault.', [
-          { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-        return;
-      }
-      cameraActiveRef.current = true;
-      let result;
-      try {
-        result = await ImagePicker.launchCameraAsync(PICKER_OPTIONS);
-      } finally {
-        cameraActiveRef.current = false;
-      }
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      const isVideo = asset.type === 'video';
-      const mimeType = resolveAssetMimeType(asset);
-      logDebugEvent('VAULT PICK', {
-        source: 'camera',
-        mediaType: isVideo ? 'video' : 'photo',
-        mimeType,
-        uriPrefix: asset.uri.substring(0, 12),
-        userId: user?.id ?? null,
-        coupleId: couple?.id ?? null,
-      });
-      await uploadToVault(asset.uri, isVideo ? 'video' : 'photo', mimeType);
-    } catch (e: any) {
-      setUploading(false);
-      Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
-    }
-  };
-
-  const handleTakePhotoOnly = async () => {
-    setShowAdd(false);
-    await new Promise(r => setTimeout(r, 350));
-    try {
-      const ImagePicker = await import('expo-image-picker');
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert('Camera Access Required', 'Allow camera access in Settings to capture media for the Vault.', [
-          { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-        return;
-      }
-      cameraActiveRef.current = true;
-      let result;
-      try {
-        result = await ImagePicker.launchCameraAsync({ ...PICKER_OPTIONS, mediaTypes: ['images'] as any });
-      } finally {
-        cameraActiveRef.current = false;
-      }
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      const mimeType = resolveAssetMimeType(asset);
-      await uploadToVault(asset.uri, 'photo', mimeType);
-    } catch (e: any) {
-      setUploading(false);
-      Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
-    }
-  };
-
-  const handleRecordVideo = async () => {
-    setShowAdd(false);
-    await new Promise(r => setTimeout(r, 350));
-    try {
-      const ImagePicker = await import('expo-image-picker');
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert('Camera Access Required', 'Allow camera access in Settings to capture media for the Vault.', [
-          { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-        return;
-      }
-      cameraActiveRef.current = true;
-      let result;
-      try {
-        result = await ImagePicker.launchCameraAsync({ ...PICKER_OPTIONS, mediaTypes: ['videos'] as any });
-      } finally {
-        cameraActiveRef.current = false;
-      }
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-      const mimeType = resolveAssetMimeType(asset);
-      await uploadToVault(asset.uri, 'video', mimeType);
-    } catch (e: any) {
-      setUploading(false);
-      Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.');
-    }
+    cameraActiveRef.current = true;
+    router.push({
+      pathname: '/(app)/camera-capture',
+      params: { mode },
+    });
   };
 
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
@@ -1146,40 +1082,18 @@ export default function VaultScreen() {
               <AppText style={[styles.pickerLabel, { color: colors.text }]}>Photo Library</AppText>
               <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Choose existing</AppText>
             </TouchableOpacity>
-            {Platform.OS !== 'web' && Platform.OS !== 'android' && (
+            {Platform.OS !== 'web' && (
               <TouchableOpacity
                 style={[styles.pickerBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
-                onPress={handleTakePhoto}
+                onPress={() => handleOpenCamera('photo')}
                 activeOpacity={0.75}
               >
                 <Camera color="#FF8A3D" size={24} strokeWidth={1.8} />
                 <AppText style={[styles.pickerLabel, { color: colors.text }]}>Camera</AppText>
-                <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Photo or video</AppText>
+                <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Photo or video · flash off</AppText>
               </TouchableOpacity>
             )}
           </View>
-          {Platform.OS === 'android' && (
-            <View style={styles.pickerRow}>
-              <TouchableOpacity
-                style={[styles.pickerBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
-                onPress={handleTakePhotoOnly}
-                activeOpacity={0.75}
-              >
-                <Camera color="#FF8A3D" size={24} strokeWidth={1.8} />
-                <AppText style={[styles.pickerLabel, { color: colors.text }]}>Take Photo</AppText>
-                <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Camera</AppText>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.pickerBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
-                onPress={handleRecordVideo}
-                activeOpacity={0.75}
-              >
-                <VideoIcon color="#FF8A3D" size={24} strokeWidth={1.8} />
-                <AppText style={[styles.pickerLabel, { color: colors.text }]}>Record Video</AppText>
-                <AppText style={[styles.pickerSub, { color: colors.textMuted }]}>Camera</AppText>
-              </TouchableOpacity>
-            </View>
-          )}
           <SecondaryButton label="Cancel" onPress={() => setShowAdd(false)} style={{ marginTop: Spacing.sm }} />
         </View>
       </BottomSheet>
