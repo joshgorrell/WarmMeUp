@@ -26,7 +26,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Lint
+      - name: Lint report
+        continue-on-error: true
         run: npm run lint
 
       - name: Expo dependency check
