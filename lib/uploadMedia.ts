@@ -7,10 +7,12 @@ import { beginUploadProgress, cancelUploadProgress, finishUploadProgress, setUpl
 function readAsBlob(uri: string): Promise<Blob> {
   if (!uri.startsWith('file://') && !uri.startsWith('ph://') && !uri.startsWith('content://')) return fetch(uri).then(r => r.blob());
   return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest(); xhr.responseType = 'blob';
+    const xhr = new XMLHttpRequest();
+    xhr.responseType = 'blob';
     xhr.onload = () => resolve(xhr.response as Blob);
     xhr.onerror = () => reject(new Error('Could not read local media file.'));
-    xhr.open('GET', uri); xhr.send();
+    xhr.open('GET', uri);
+    xhr.send();
   });
 }
 
@@ -24,13 +26,20 @@ async function compressImage(uri: string, mimeType: string): Promise<{ uri: stri
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
     const result = await manipulateAsync(uri, [{ resize: { width: 3000 } }], { compress: 0.92, format: SaveFormat.JPEG });
     return { uri: result.uri, mimeType: 'image/jpeg' };
-  } catch { return { uri, mimeType }; }
+  } catch {
+    return { uri, mimeType };
+  }
 }
 
 async function extractVideoThumbnail(uri: string): Promise<string | null> {
   if (Platform.OS === 'web') return null;
-  try { const { getThumbnailAsync } = await import('expo-video-thumbnails'); const result = await getThumbnailAsync(uri, { time: 0, quality: 0.8 }); return result.uri; }
-  catch { return null; }
+  try {
+    const { getThumbnailAsync } = await import('expo-video-thumbnails');
+    const result = await getThumbnailAsync(uri, { time: 0, quality: 0.8 });
+    return result.uri;
+  } catch {
+    return null;
+  }
 }
 
 function mapStorageError(status: number, body: { error?: string; message?: string; statusCode?: string } | null): string {
@@ -44,26 +53,36 @@ function mapStorageError(status: number, body: { error?: string; message?: strin
   return `Upload failed (HTTP ${status}).`;
 }
 
-function uploadBlobWithProgress(url: string, blob: Blob, headers: Record<string, string>, onProgress?: (pct: number) => void): Promise<{ status: number; bodyText: string }> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', url);
-    Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
-    xhr.upload.onprogress = event => {
-      if (!event.lengthComputable || event.total <= 0) return;
-      onProgress?.(Math.round((event.loaded / event.total) * 100));
-    };
-    xhr.onload = () => resolve({ status: xhr.status, bodyText: xhr.responseText ?? '' });
-    xhr.onerror = () => reject(new Error('Network error — check your connection and try again.'));
-    xhr.ontimeout = () => reject(new Error('Upload timed out — please try again.'));
-    xhr.send(blob);
-  });
+function startProgressPulse(report: (pct: number) => void): () => void {
+  let pct = 8;
+  report(pct);
+  const timer = setInterval(() => {
+    if (pct >= 90) return;
+    const step = pct < 45 ? 5 : pct < 70 ? 3 : 1;
+    pct = Math.min(90, pct + step);
+    report(pct);
+  }, 450);
+  return () => clearInterval(timer);
 }
 
-export async function uploadMediaFile(localUri: string, bucket: string, storagePath: string, mimeType: string, onProgress?: (pct: number) => void, userId?: string, coupleId?: string): Promise<UploadResult> {
+export async function uploadMediaFile(
+  localUri: string,
+  bucket: string,
+  storagePath: string,
+  mimeType: string,
+  onProgress?: (pct: number) => void,
+  userId?: string,
+  coupleId?: string,
+): Promise<UploadResult> {
   const showGlobalProgress = !!onProgress;
   if (showGlobalProgress) beginUploadProgress(bucket === 'vault' ? 'Uploading to Vault…' : 'Sending media…');
-  const reportProgress = (pct: number) => { onProgress?.(pct); if (showGlobalProgress) setUploadProgressPct(pct); };
+  const reportProgress = (pct: number) => {
+    onProgress?.(pct);
+    if (showGlobalProgress) setUploadProgressPct(pct);
+  };
+
+  let stopPulse: (() => void) | null = null;
+
   try {
     const { data: { session: initialSession } } = await supabase.auth.getSession();
     let session = initialSession;
@@ -73,39 +92,166 @@ export async function uploadMediaFile(localUri: string, bucket: string, storageP
       if (!refreshed) throw new Error('Session expired — please log out and back in.');
       session = refreshed;
     }
-    reportProgress(0);
+
+    reportProgress(2);
+
     let normalizedMime = mimeType.toLowerCase();
-    if (normalizedMime === 'video/hevc' || normalizedMime === 'video/x-m4v' || normalizedMime === 'video/mpeg') normalizedMime = 'video/quicktime';
-    const isPhoto = normalizedMime.startsWith('image/'); const isVideo = normalizedMime.startsWith('video/');
-    let uploadUri = localUri; let uploadMime = normalizedMime; let uploadStoragePath = storagePath; let thumbnailPath: string | undefined; let thumbnailLocalUri: string | null = null;
-    if (isPhoto) { const compressed = await compressImage(localUri, normalizedMime); uploadUri = compressed.uri; uploadMime = compressed.mimeType; if (uploadMime !== normalizedMime) uploadStoragePath = storagePath.replace(/\.\w+$/, '.jpg'); }
-    if (isVideo) { const expectedExt = mimeToExtension(uploadMime); uploadStoragePath = /\.\w+$/.test(uploadStoragePath) ? uploadStoragePath.replace(/\.\w+$/, `.${expectedExt}`) : `${uploadStoragePath}.${expectedExt}`; }
-    if (isVideo && bucket === 'vault') {
-      const thumbUri = await extractVideoThumbnail(localUri);
-      if (thumbUri) { thumbnailLocalUri = thumbUri; const thumbStoragePath = uploadStoragePath.replace(/\.\w+$/, '_thumb.jpg'); try { const thumbBlob = await readAsBlob(thumbUri); await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/vault/${thumbStoragePath}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${session.access_token}`, 'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: thumbBlob }); thumbnailPath = thumbStoragePath; } catch {} }
+    if (normalizedMime === 'video/hevc' || normalizedMime === 'video/x-m4v' || normalizedMime === 'video/mpeg') {
+      normalizedMime = 'video/quicktime';
     }
+
+    const isPhoto = normalizedMime.startsWith('image/');
+    const isVideo = normalizedMime.startsWith('video/');
+    let uploadUri = localUri;
+    let uploadMime = normalizedMime;
+    let uploadStoragePath = storagePath;
+    let thumbnailPath: string | undefined;
+    let thumbnailLocalUri: string | null = null;
+
+    if (isPhoto) {
+      reportProgress(5);
+      const compressed = await compressImage(localUri, normalizedMime);
+      uploadUri = compressed.uri;
+      uploadMime = compressed.mimeType;
+      if (uploadMime !== normalizedMime) uploadStoragePath = storagePath.replace(/\.\w+$/, '.jpg');
+    }
+
+    if (isVideo) {
+      const expectedExt = mimeToExtension(uploadMime);
+      uploadStoragePath = /\.\w+$/.test(uploadStoragePath)
+        ? uploadStoragePath.replace(/\.\w+$/, `.${expectedExt}`)
+        : `${uploadStoragePath}.${expectedExt}`;
+    }
+
+    if (isVideo && bucket === 'vault') {
+      reportProgress(5);
+      const thumbUri = await extractVideoThumbnail(localUri);
+      if (thumbUri) {
+        thumbnailLocalUri = thumbUri;
+        const thumbStoragePath = uploadStoragePath.replace(/\.\w+$/, '_thumb.jpg');
+        try {
+          const thumbBlob = await readAsBlob(thumbUri);
+          await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/vault/${thumbStoragePath}`, {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+              apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+              'Content-Type': 'image/jpeg',
+              'x-upsert': 'true',
+            },
+            body: thumbBlob,
+          });
+          thumbnailPath = thumbStoragePath;
+        } catch {}
+      }
+    }
+
     const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL!}/storage/v1/object/${bucket}/${uploadStoragePath}`;
     let blob: Blob;
-    try { blob = await readAsBlob(uploadUri); } catch { throw new Error('Could not read media file — please try again.'); }
-    const blobSize = blob.size;
-    logDebugEvent('VAULT UPLOAD START', { bucket, storagePath: uploadStoragePath, mimeType: uploadMime, blobSize, userId: userId ?? null, coupleId: coupleId ?? null });
-    const result = await uploadBlobWithProgress(uploadUrl, blob, { 'Authorization': `Bearer ${session.access_token}`, 'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!, 'Content-Type': uploadMime, 'x-upsert': 'true' }, reportProgress);
-    if (result.status < 200 || result.status >= 300) {
-      let body: { error?: string; message?: string; statusCode?: string } | null = null; try { body = JSON.parse(result.bodyText); } catch {}
-      throw new Error(mapStorageError(result.status, body));
+    try {
+      blob = await readAsBlob(uploadUri);
+    } catch {
+      throw new Error('Could not read media file — please try again.');
     }
-    reportProgress(100);
-    if (showGlobalProgress) finishUploadProgress();
+
+    const blobSize = blob.size;
+    logDebugEvent('VAULT UPLOAD START', {
+      bucket,
+      storagePath: uploadStoragePath,
+      mimeType: uploadMime,
+      blobSize,
+      userId: userId ?? null,
+      coupleId: coupleId ?? null,
+    });
+
+    stopPulse = startProgressPulse(reportProgress);
+
+    let response: Response;
+    try {
+      response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+          'Content-Type': uploadMime,
+          'x-upsert': 'true',
+        },
+        body: blob,
+      });
+    } catch (networkErr: any) {
+      throw new Error(networkErr?.message ? `Network error — ${networkErr.message}` : 'Network error — check your connection and try again.');
+    } finally {
+      stopPulse?.();
+      stopPulse = null;
+    }
+
+    if (!response.ok) {
+      let body: { error?: string; message?: string; statusCode?: string } | null = null;
+      try {
+        body = await response.json();
+      } catch {}
+      throw new Error(mapStorageError(response.status, body));
+    }
+
+    reportProgress(96);
+    logDebugEvent('VAULT UPLOAD SUCCESS', {
+      bucket,
+      storagePath: uploadStoragePath,
+      mimeType: uploadMime,
+      blobSize,
+      userId: userId ?? null,
+      coupleId: coupleId ?? null,
+    });
+
     if (isPhoto && uploadUri !== localUri) cleanupTempFile(uploadUri).catch(() => {});
     if (isVideo && bucket === 'vault' && thumbnailLocalUri) cleanupTempFile(thumbnailLocalUri).catch(() => {});
+
+    reportProgress(100);
+    if (showGlobalProgress) finishUploadProgress();
     return { storagePath: uploadStoragePath, thumbnailPath };
   } catch (error) {
+    stopPulse?.();
     if (showGlobalProgress) cancelUploadProgress();
     throw error;
   }
 }
 
-export function extensionToMime(ext: string): string { switch (ext) { case 'heic': case 'heif': return 'image/heic'; case 'png': return 'image/png'; case 'webp': return 'image/webp'; case 'gif': return 'image/gif'; case 'mov': case 'm4v': return 'video/quicktime'; case 'mp4': return 'video/mp4'; default: return 'image/jpeg'; } }
-export function mimeToExtension(mimeType: string): string { switch (mimeType.toLowerCase()) { case 'image/heic': case 'image/heif': case 'image/heif-sequence': return 'heic'; case 'image/png': return 'png'; case 'image/webp': return 'webp'; case 'image/gif': return 'gif'; case 'video/quicktime': case 'video/x-m4v': return 'mov'; case 'video/mp4': return 'mp4'; default: return mimeType.startsWith('video/') ? 'mov' : 'jpg'; } }
-export const PICKER_OPTIONS = { mediaTypes: ['images', 'videos'] as any, quality: 1, videoMaxDuration: 60, allowsEditing: false, exportsVideoAsCopy: true, flashMode: 'off' as const };
-export function resolveAssetMimeType(asset: { mimeType?: string | null; type?: string | null }): string { const raw = asset.mimeType?.toLowerCase() ?? ''; if (raw === 'video/hevc' || raw === 'video/x-m4v' || raw === 'video/mpeg') return 'video/quicktime'; if (raw) return raw; return asset.type === 'video' ? 'video/quicktime' : 'image/jpeg'; }
+export function extensionToMime(ext: string): string {
+  switch (ext) {
+    case 'heic': case 'heif': return 'image/heic';
+    case 'png': return 'image/png';
+    case 'webp': return 'image/webp';
+    case 'gif': return 'image/gif';
+    case 'mov': case 'm4v': return 'video/quicktime';
+    case 'mp4': return 'video/mp4';
+    default: return 'image/jpeg';
+  }
+}
+
+export function mimeToExtension(mimeType: string): string {
+  switch (mimeType.toLowerCase()) {
+    case 'image/heic': case 'image/heif': case 'image/heif-sequence': return 'heic';
+    case 'image/png': return 'png';
+    case 'image/webp': return 'webp';
+    case 'image/gif': return 'gif';
+    case 'video/quicktime': case 'video/x-m4v': return 'mov';
+    case 'video/mp4': return 'mp4';
+    default: return mimeType.startsWith('video/') ? 'mov' : 'jpg';
+  }
+}
+
+export const PICKER_OPTIONS = {
+  mediaTypes: ['images', 'videos'] as any,
+  quality: 1,
+  videoMaxDuration: 60,
+  allowsEditing: false,
+  exportsVideoAsCopy: true,
+  flashMode: 'off' as const,
+};
+
+export function resolveAssetMimeType(asset: { mimeType?: string | null; type?: string | null }): string {
+  const raw = asset.mimeType?.toLowerCase() ?? '';
+  if (raw === 'video/hevc' || raw === 'video/x-m4v' || raw === 'video/mpeg') return 'video/quicktime';
+  if (raw) return raw;
+  return asset.type === 'video' ? 'video/quicktime' : 'image/jpeg';
+}
