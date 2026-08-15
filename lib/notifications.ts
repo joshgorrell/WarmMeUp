@@ -29,6 +29,33 @@ export interface NotificationData {
 
 // EAS project ID from app.json — required for getExpoPushTokenAsync in production builds.
 const EAS_PROJECT_ID = 'cfde070c-187f-4d7e-b643-a20446ff95ab';
+const ANDROID_NOTIFICATION_CHANNEL_ID = 'warm-me-up';
+
+/**
+ * Android notification channels control sound/importance at the OS level.
+ * Create ours before requesting a push token so Android 8+ has a stable,
+ * user-manageable channel and Android 13+ can present notification permission
+ * behavior consistently.
+ */
+export async function ensureAndroidNotificationChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  try {
+    await Notifications.setNotificationChannelAsync(ANDROID_NOTIFICATION_CHANNEL_ID, {
+      name: 'Warm Me Up',
+      description: 'Private notifications from your partner',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 250],
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true,
+    });
+  } catch (e: any) {
+    logDebugEvent('ANDROID_NOTIFICATION_CHANNEL_ERROR', {
+      message: e?.message ?? String(e),
+    });
+  }
+}
 
 /**
  * Request push permission and return the Expo push token string,
@@ -41,6 +68,8 @@ const EAS_PROJECT_ID = 'cfde070c-187f-4d7e-b643-a20446ff95ab';
  */
 export async function registerForPushNotifications(): Promise<string | null> {
   if (Platform.OS === 'web') return null;
+
+  await ensureAndroidNotificationChannel();
 
   const { status: existing } = await Notifications.getPermissionsAsync();
   let finalStatus = existing;
