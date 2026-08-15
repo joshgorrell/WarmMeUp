@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ActivityIndicator,
   Platform, Share, AppState, Modal, Animated as RNAnimated,
-  Pressable, FlatList, Image,
+  Pressable, FlatList, Image, Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import AppText from '@/components/AppText';
@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronLeft, Camera, Share2, Play, Pause, Volume2, VolumeX,
-  TriangleAlert as AlertTriangle, Archive, Check,
+  TriangleAlert as AlertTriangle, Archive, Check, Trash2,
 } from 'lucide-react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -22,7 +22,8 @@ import { supabase } from '@/lib/supabase';
 import { awardPoints } from '@/lib/points';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
-import { getGalleryItems, GalleryItem } from '@/lib/mediaGalleryStore';
+import { getGalleryItems, GalleryItem, evictCachedUrl } from '@/lib/mediaGalleryStore';
+import { clearLocalImageCache } from '@/lib/mediaCache';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
@@ -659,7 +660,7 @@ export default function VaultViewerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useLayout();
-  const { user, couple, settings } = useAuth();
+  const { user, couple } = useAuth();
 
   const {
     initialIndex: initialIndexStr,
@@ -695,7 +696,7 @@ export default function VaultViewerScreen() {
 
   // Gallery store is primary; URL params are the fallback if the store was cleared before render.
   const storeItems = getGalleryItems();
-  const items: GalleryItem[] = storeItems.length > 0 ? storeItems : (() => {
+  const initialItems: GalleryItem[] = storeItems.length > 0 ? storeItems : (() => {
     if (!legacyStoragePath) return [];
     const safeSignedUri = (legacySignedUri && legacySignedUri !== 'undefined') ? legacySignedUri : null;
     return [{
@@ -717,11 +718,13 @@ export default function VaultViewerScreen() {
 
   const initialIndex = Math.min(
     Math.max(0, parseInt(initialIndexStr ?? '0', 10) || 0),
-    Math.max(0, items.length - 1),
+    Math.max(0, initialItems.length - 1),
   );
 
+  const [items, setItems] = useState<GalleryItem[]>(initialItems);
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const [isZoomed, setIsZoomed] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   const isZoomedShared = useSharedValue(false);
@@ -733,6 +736,82 @@ export default function VaultViewerScreen() {
     setIsZoomed(zoomed);
     isZoomedShared.value = zoomed;
   }, []);
+
+  const activeItem = items[activeIndex] ?? null;
+  // Chat media uses the same viewer but lives in chat_media. Only genuine Vault
+  // items get the destructive Vault delete control.
+  const canDeleteFromVault = !!activeItem?.id && (activeItem.storageBucket ?? 'vault') === 'vault';
+
+  const performDeleteActive = useCallback(async () => {
+    const item = items[activeIndex];
+    if (!item?.id || deleting) return;
+    setDeleting(true);
+
+    try {
+      // Read the authoritative storage paths before soft-deleting the row. This
+      // also protects against accidentally treating a chat-message ID as a Vault ID.
+      let query = supabase
+        .from('vault_items')
+        .select('id, couple_id, storage_path, file_path, storage_bucket, blurred_thumbnail_path')
+        .eq('id', item.id);
+      if (item.coupleId) query = query.eq('couple_id', item.coupleId);
+      const { data: vaultRow, error: fetchError } = await query.maybeSingle();
+      if (fetchError) throw fetchError;
+      if (!vaultRow) throw new Error('This item is no longer available in the Vault.');
+
+      const deletedAt = new Date().toISOString();
+      let deleteQuery = supabase.from('vault_items').update({ deleted_at: deletedAt }).eq('id', item.id);
+      if (vaultRow.couple_id) deleteQuery = deleteQuery.eq('couple_id', vaultRow.couple_id);
+      const { error: updateError } = await deleteQuery;
+      if (updateError) throw updateError;
+
+      const bucket = vaultRow.storage_bucket ?? 'vault';
+      const fullPath = vaultRow.storage_path ?? vaultRow.file_path ?? item.storagePath;
+      const paths = [fullPath, vaultRow.blurred_thumbnail_path].filter(Boolean) as string[];
+      if (paths.length > 0) {
+        // The database delete is authoritative; storage cleanup is best-effort.
+        await supabase.storage.from(bucket).remove(paths).catch(() => {});
+        paths.forEach(path => evictCachedUrl(path));
+        clearLocalImageCache().catch(() => {});
+      }
+
+      const nextItems = items.filter((_, index) => index !== activeIndex);
+      if (nextItems.length === 0) {
+        setItems([]);
+        router.back();
+        return;
+      }
+
+      const nextIndex = Math.min(activeIndex, nextItems.length - 1);
+      setItems(nextItems);
+      setActiveIndex(nextIndex);
+      setIsZoomed(false);
+      isZoomedShared.value = false;
+      setTimeout(() => {
+        listRef.current?.scrollToIndex({ index: nextIndex, animated: false });
+      }, 0);
+    } catch (e: any) {
+      Alert.alert('Delete Failed', e?.message ?? 'Could not delete this Vault item. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
+  }, [items, activeIndex, deleting, router]);
+
+  const confirmDeleteActive = useCallback(() => {
+    if (!canDeleteFromVault || deleting) return;
+    const noun = activeItem?.mediaType === 'video' ? 'video' : 'photo';
+    const message = `This permanently removes this ${noun} from the Vault for both of you. This cannot be undone.`;
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Delete from Vault?\n\n${message}`)) performDeleteActive();
+      return;
+    }
+
+    Alert.alert('Delete from Vault?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: performDeleteActive },
+    ]);
+  }, [canDeleteFromVault, deleting, activeItem?.mediaType, performDeleteActive]);
 
   const swipeDown = Gesture.Pan()
     .failOffsetX([-15, 15])
@@ -804,13 +883,13 @@ export default function VaultViewerScreen() {
         keyExtractor={keyExtractor}
         horizontal
         pagingEnabled
-        scrollEnabled={!isZoomed}
+        scrollEnabled={!isZoomed && !deleting}
         showsHorizontalScrollIndicator={false}
         getItemLayout={getItemLayout}
         initialScrollIndex={initialIndex > 0 ? initialIndex : undefined}
         onMomentumScrollEnd={(e) => {
           const idx = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
-          setActiveIndex(idx);
+          setActiveIndex(Math.min(idx, items.length - 1));
           if (isZoomed) setIsZoomed(false);
         }}
         removeClippedSubviews
@@ -819,7 +898,7 @@ export default function VaultViewerScreen() {
         style={{ width: screenWidth, height: screenHeight }}
       />
 
-      {/* Top chrome — back button + position counter */}
+      {/* Top chrome — back button + position counter + Vault delete */}
       <LinearGradient
         colors={['rgba(0,0,0,0.70)', 'rgba(0,0,0,0.30)', 'transparent']}
         style={[styles.topGradient, { paddingTop: insets.top + 8, height: insets.top + 64 }]}
@@ -832,8 +911,20 @@ export default function VaultViewerScreen() {
           {items.length > 1 && (
             <AppText style={styles.counterText}>{activeIndex + 1} / {items.length}</AppText>
           )}
-          {/* Spacer keeps back button left-aligned */}
-          <View style={styles.counterSpacer} />
+          {canDeleteFromVault ? (
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={confirmDeleteActive}
+              activeOpacity={0.8}
+              disabled={deleting}
+            >
+              {deleting
+                ? <ActivityIndicator color="#FF6B6B" size="small" />
+                : <Trash2 color="#FF6B6B" size={19} strokeWidth={2.2} />}
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.counterSpacer} />
+          )}
         </View>
       </LinearGradient>
       </Animated.View>
@@ -881,6 +972,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
+  },
+  deleteBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(70,0,0,0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,107,0.28)',
   },
   counterText: {
     fontSize: 13,
