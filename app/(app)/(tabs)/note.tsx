@@ -32,6 +32,7 @@ import { logger } from '@/lib/logger';
 import { ChatHeader } from '@/components/note/ChatHeader';
 import { MediaBubble } from '@/components/note/MediaBubble';
 import { MessageRow } from '@/components/note/MessageRow';
+import { consumeCameraCaptureResult } from '@/lib/cameraCaptureStore';
 import {
   noteStyles as styles,
   AttachedMedia,
@@ -81,6 +82,7 @@ export default function ChatTab() {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const prevMsgCountRef = useRef(0);
   const lastInactiveAtRef = useRef<number | null>(null);
+  const cameraActiveRef = useRef(false);
   // Timestamp of the most recent send; used by onContentSizeChange to re-pin
   // the list to the bottom once large media bubbles finish laying out.
   const justSentAtRef = useRef(0);
@@ -243,7 +245,6 @@ export default function ChatTab() {
         .limit(PAGE_SIZE);
       if (data) {
         const sorted = [...data].reverse();
-        // Lazy cleanup: soft-delete any burned messages whose timer has expired.
         const now = Date.now();
         const expired = sorted.filter(m => m.burns_at && new Date(m.burns_at).getTime() < now);
         if (expired.length > 0) {
@@ -254,7 +255,6 @@ export default function ChatTab() {
               supabase.storage.from(bucket).remove([m.media_storage_path]).catch(() => {});
             }
           }
-          // Purge local image cache so expired/burned photos can't be recovered from the device.
           if (expired.some(m => m.media_storage_path)) {
             clearLocalImageCache().catch(() => {});
           }
@@ -265,7 +265,6 @@ export default function ChatTab() {
               .in('id', expired.map(m => m.id))
               .eq('couple_id', couple.id)
           ).catch(() => {});
-          // Also purge any linked Vault copies so a burn removes them everywhere.
           const expiredVaultIds = expired.map(m => m.vault_item_id).filter((id): id is string => !!id);
           if (expiredVaultIds.length > 0) {
             supabase
@@ -291,9 +290,6 @@ export default function ChatTab() {
           }
         }
         const visible = expired.length > 0 ? sorted.filter(m => !expired.some(e => e.id === m.id)) : sorted;
-        // Build the URL map from embedded media_url and the module-level cache.
-        // For anything still missing, await the Supabase storage signed-URL fetch
-        // so that setMessages + setSignedUrls fire together in one batched render.
         const urlMap: Record<string, string> = {};
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of visible) {
@@ -331,7 +327,6 @@ export default function ChatTab() {
             })
           );
         }
-        // Single batched render: messages and all available URLs arrive together.
         setMessages(visible);
         if (Object.keys(urlMap).length > 0) {
           setSignedUrls(prev => ({ ...prev, ...urlMap }));
@@ -418,9 +413,6 @@ export default function ChatTab() {
 
     const handleInsert = (newMsg: ChatMessage) => {
       setMessages(prev => {
-        // Idempotency: if a matching optimistic temp message exists for this
-        // real row, replace it instead of appending a duplicate. Match on
-        // media_storage_path (unique per upload) or sender+created_at.
         const tempIdx = prev.findIndex(m =>
           m.id.startsWith('temp_') &&
           ((newMsg.media_storage_path && m.media_storage_path === newMsg.media_storage_path) ||
@@ -483,12 +475,9 @@ export default function ChatTab() {
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           channelStatusRef.current = 'error';
           logDebugEvent('chat_realtime_channel_error', { status, error: String(err ?? '') });
-          // Auto-reconnect with backoff — a dropped realtime channel is the
-          // primary cause of "messages stopped arriving" during active chat.
           if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
           reconnectTimerRef.current = setTimeout(() => {
             supabase.removeChannel(ch);
-            // Force a fresh sync + resubscribe by reloading messages on next tick.
             loadMessages();
           }, 1500);
         } else if (status === 'CLOSED') {
@@ -551,29 +540,23 @@ export default function ChatTab() {
 
   const pickMedia = async (source: 'library' | 'camera') => {
     try {
-      const ImagePicker = await import('expo-image-picker');
-      let result;
       if (source === 'camera') {
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('Camera Access Required', 'Allow camera access in Settings to send photos and videos.', [
-            { text: 'Open Settings', onPress: () => Linking.openSettings() },
-            { text: 'Cancel', style: 'cancel' },
-          ]);
-          return;
-        }
-        result = await ImagePicker.launchCameraAsync(PICKER_OPTIONS);
-      } else {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert('Photo Library Access Required', 'Allow access to your photo library in Settings to send media in Chat.', [
-            { text: 'Open Settings', onPress: () => Linking.openSettings() },
-            { text: 'Cancel', style: 'cancel' },
-          ]);
-          return;
-        }
-        result = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
+        if (Platform.OS === 'web') return;
+        cameraActiveRef.current = true;
+        router.push({ pathname: '/(app)/camera-capture', params: { mode: 'photo' } });
+        return;
       }
+
+      const ImagePicker = await import('expo-image-picker');
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Photo Library Access Required', 'Allow access to your photo library in Settings to send media in Chat.', [
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
@@ -584,9 +567,6 @@ export default function ChatTab() {
         mimeType: resolvedMime,
         fileName: `chat_${Date.now()}.${mimeToExtension(resolvedMime)}`,
       };
-      // iMessage-style: if no caption is in progress, send immediately on
-      // picker confirm — no second tap required. If the user is mid-caption,
-      // attach for preview so they can finish typing then tap send.
       if (text.trim().length === 0 && !editingState) {
         await sendMediaMessage(media, '');
       } else {
@@ -626,11 +606,6 @@ export default function ChatTab() {
     }
   };
 
-  // Core send routine. Accepts explicit media/caption overrides so it can be
-  // called directly from the picker (iMessage-style one-tap send) without
-  // relying on the `attachedMedia`/`text` state, which avoids async state-race
-  // issues. When called with no args, falls back to the state values for the
-  // manual compose-then-tap-send flow.
   const sendMediaMessage = async (
     mediaOverride?: AttachedMedia | null,
     captionOverride?: string,
@@ -653,8 +628,6 @@ export default function ChatTab() {
       }
     }
 
-    // Generate a signed URL immediately after upload so the recipient
-    // receives it inside the realtime INSERT event — no extra round-trip needed.
     let preSignedMediaUrl: string | null = null;
     if (chatStoragePath) {
       const { data: signedData, error: signError } = await supabase.storage
@@ -668,12 +641,7 @@ export default function ChatTab() {
       });
     }
 
-    // Capture local URI before any state resets — used as immediate preview fallback.
     const localMediaUri = media?.uri ?? null;
-
-    // Optimistic display — show the message in the sender's own list immediately
-    // using a temporary ID. The local file URI is used as the image source so the
-    // sender sees the image instantly without a separate signed URL fetch.
     const tempId = `temp_${Date.now()}`;
     const optimisticMsg: ChatMessage = {
       id: tempId,
@@ -697,13 +665,8 @@ export default function ChatTab() {
       deleted_at: null,
     };
     setMessages(prev => [...prev, optimisticMsg]);
-    // Mark that a send just happened so onContentSizeChange re-pins to the
-    // bottom once the (possibly large) media bubble finishes laying out.
     justSentAtRef.current = Date.now();
-    // Clear after 3s so partner messages arriving later don't force-scroll
-    // while the user is reading older messages.
     setTimeout(() => { justSentAtRef.current = 0; }, 3000);
-    // Use the local file URI immediately for the sender's own preview.
     if (localMediaUri) {
       setSignedUrls(prev => ({ ...prev, [tempId]: localMediaUri }));
     }
@@ -739,7 +702,6 @@ export default function ChatTab() {
     });
 
     if (insertError || !data) {
-      // Roll back the optimistic message on failure.
       setMessages(prev => prev.filter(m => m.id !== tempId));
       setSignedUrls(prev => { const next = { ...prev }; delete next[tempId]; return next; });
       Alert.alert('Send failed', 'Your message could not be sent. Please try again.');
@@ -747,10 +709,6 @@ export default function ChatTab() {
       return;
     }
 
-    // Replace the temporary optimistic record with the real DB row and carry
-    // the signed URL forward so the image stays visible without a re-fetch.
-    // Priority: pre-signed URL > local file URI (immediate preview).
-    // If neither is available, fall back to fetchSignedUrls so the image loads.
     setMessages(prev => prev.map(m => m.id === tempId ? { ...data as ChatMessage } : m));
     const bestUrl = preSignedMediaUrl ?? localMediaUri;
     if (chatStoragePath) {
@@ -762,7 +720,6 @@ export default function ChatTab() {
         }
         return next;
       });
-      // If we don't have a URL at all, trigger a fresh signed URL fetch.
       if (!bestUrl) {
         fetchSignedUrls([{ ...data as ChatMessage }]);
       }
@@ -774,8 +731,6 @@ export default function ChatTab() {
     }
 
     const capturedMedia = media;
-    // Only clear composer state when this send was driven by the compose bar
-    // (no overrides) — a direct picker send has nothing to clear.
     if (mediaOverride === undefined) {
       setText('');
       setAttachedMedia(null);
@@ -795,8 +750,6 @@ export default function ChatTab() {
           const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${ext}`;
           const { data: srcData } = await supabase.storage.from('chat_media').createSignedUrl(chatStoragePath, 120);
           if (!srcData?.signedUrl) throw new Error('Could not access uploaded media for vault save.');
-          // The chat file is already compressed to JPEG by uploadChatMedia, so pass
-          // image/jpeg for photos to avoid a redundant recompression / MIME mismatch.
           const vaultMime = capturedMedia.type === 'video' ? capturedMedia.mimeType : 'image/jpeg';
           const vaultUploadResult = await uploadMediaFile(srcData.signedUrl, 'vault', vaultPath, vaultMime);
           const actualVaultPath = vaultUploadResult.storagePath;
@@ -828,13 +781,39 @@ export default function ChatTab() {
         await awardPoints(coupleId, userId, pts, reason);
         const field = capturedMedia ? 'media_sent' : 'chat_messages_sent';
         await incrementMonthlyCounter(coupleId, userId, field, pts);
-      } catch {
-        // non-critical
-      }
+      } catch {}
     });
 
     notifyPartner({ event_type: 'new_message', couple_id: coupleId, target_route: '/(app)/(tabs)/note', partnerUserId: partnerProfile?.id, message_text: hasText ? caption : undefined });
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!cameraActiveRef.current) return;
+      const captured = consumeCameraCaptureResult();
+      cameraActiveRef.current = false;
+      if (!captured) return;
+
+      const media: AttachedMedia = {
+        uri: captured.uri,
+        type: captured.mediaType,
+        mimeType: captured.mimeType,
+        fileName: `chat_${Date.now()}.${mimeToExtension(captured.mimeType)}`,
+      };
+      logDebugEvent('CHAT PICK', {
+        source: 'in_app_camera',
+        mediaType: captured.mediaType,
+        mimeType: captured.mimeType,
+        uriPrefix: captured.uri.substring(0, 12),
+      });
+
+      if (text.trim().length === 0 && !editingState) {
+        sendMediaMessage(media, '');
+      } else {
+        setAttachedMedia(media);
+      }
+    }, [text, editingState, couple?.id, user?.id, hasPartner])
+  );
 
   const handleSend = async () => {
     if (editingState) {
@@ -890,7 +869,6 @@ export default function ChatTab() {
     setPillSize(null);
   };
 
-  // Android back button closes the popover instead of navigating away
   useEffect(() => {
     if (!activeMenuId) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -1061,7 +1039,6 @@ export default function ChatTab() {
   const handleOpenMedia = useCallback((msg: ChatMessage) => {
     if (!msg.media_storage_path) return;
 
-    // Build gallery from all chat messages that have media, in chronological order
     const mediaMessages = messages.filter(m => !!m.media_storage_path);
     const gallery = mediaMessages.map(m => ({
       id: m.id,
@@ -1082,8 +1059,6 @@ export default function ChatTab() {
     const initialIndex = gallery.findIndex(g => g.id === msg.id);
     setGalleryItems(gallery);
 
-    // Pass the tapped item's data as URL params too — vault-viewer uses these
-    // as a guaranteed fallback if the module-level store is cleared before render.
     router.push({
       pathname: '/(app)/vault-viewer',
       params: {
@@ -1135,7 +1110,6 @@ export default function ChatTab() {
 
   const handleRevealMedia = useCallback((id: string) => {
     setRevealedMedia(prev => new Set([...prev, id]));
-    // Mark the message as viewed by the recipient (if not already and not our own)
     const msg = messagesRef.current.find(m => m.id === id);
     if (msg && msg.sender_id !== user?.id && !msg.first_viewed_at) {
       const now = new Date().toISOString();
@@ -1154,7 +1128,6 @@ export default function ChatTab() {
   const handleSetBurnTimer = useCallback(async (msg: ChatMessage, seconds: number | null) => {
     const prevBurn = msg.burn_after_seconds;
     const prevBurnsAt = msg.burns_at;
-    // Optimistic update: burns_at only starts if the recipient has already viewed it.
     const optimisticBurnsAt = (seconds && msg.first_viewed_at)
       ? new Date(new Date(msg.first_viewed_at).getTime() + seconds * 1000).toISOString()
       : null;
@@ -1169,7 +1142,6 @@ export default function ChatTab() {
       .eq('id', msg.id)
       .eq('couple_id', couple!.id);
     if (error) {
-      // Revert on failure.
       setMessages(prev => prev.map(m =>
         m.id === msg.id
           ? { ...m, burn_after_seconds: prevBurn, burns_at: prevBurnsAt }
@@ -1179,8 +1151,6 @@ export default function ChatTab() {
     }
   }, [couple]);
 
-  // Mark incoming text messages with burn timers as viewed when the chat loads.
-  // Text is visible immediately, so the timer should start as soon as the recipient sees it.
   useEffect(() => {
     if (!user?.id || !couple?.id) return;
     const toMark = messages.filter(m =>
@@ -1204,9 +1174,7 @@ export default function ChatTab() {
   }, [user?.id, couple?.id, messages]);
 
   const handleBurnMessage = useCallback((msg: ChatMessage) => {
-    // Remove from local state immediately.
     setMessages(prev => prev.filter(m => m.id !== msg.id));
-    // Soft-delete server-side; realtime UPDATE will propagate to the partner.
     const deletedAt = new Date().toISOString();
     supabase
       .from('chat_messages')
@@ -1218,16 +1186,12 @@ export default function ChatTab() {
           logDebugEvent('chat_burn_delete_failed', { messageId: msg.id, error: error.message });
         }
       });
-    // Remove the underlying storage object (fire-and-forget).
     if (msg.media_storage_path) {
       const bucket = msg.media_storage_bucket ?? 'chat_media';
       supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
     }
-    // Evict any cached signed URL so it doesn't linger.
     if (msg.media_storage_path) evictCachedUrl(msg.media_storage_path);
-    // Purge local image cache so the burned photo can't be recovered from the device.
     if (msg.media_storage_path) clearLocalImageCache().catch(() => {});
-    // Also purge the linked Vault copy so a burn removes it everywhere.
     if (msg.vault_item_id) {
       supabase
         .from('vault_items')
@@ -1260,8 +1224,6 @@ export default function ChatTab() {
     [messages]
   );
 
-  // Lookup map so renderItem doesn't depend on the full messages array —
-  // only the specific replied-to message triggers a re-render.
   const messagesById = useMemo(() => {
     const map: Record<string, ChatMessage> = {};
     for (const m of messages) map[m.id] = m;
@@ -1331,7 +1293,6 @@ export default function ChatTab() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <AppShell scrollable={false} noTopPadding>
-          {/* Chat-specific header */}
           <ChatHeader
             partnerName={partnerProfile?.display_name ?? (hasPartner ? 'Partner' : 'Chat')}
             partnerAvatarUri={partnerProfile?.avatar_url ?? null}
@@ -1393,9 +1354,6 @@ export default function ChatTab() {
               scrollEventThrottle={200}
               onScrollBeginDrag={handleDismissMenu}
               onContentSizeChange={(_w, h) => {
-                // Re-pin to bottom after a send once large media bubbles finish
-                // laying out. Guarded by justSentAtRef so it never fights the
-                // user when they scroll up to read older messages.
                 if (justSentAtRef.current > 0 && h > lastContentHeightRef.current) {
                   listRef.current?.scrollToEnd({ animated: false });
                 }
@@ -1414,7 +1372,6 @@ export default function ChatTab() {
             />
           )}
 
-          {/* Edit mode banner */}
           {editingState && (
             <View style={[styles.editBanner, { backgroundColor: 'rgba(255,138,61,0.12)', borderTopColor: 'rgba(255,138,61,0.3)' }]}>
               <Pencil color="#FF8A3D" size={13} strokeWidth={2} />
@@ -1425,7 +1382,6 @@ export default function ChatTab() {
             </View>
           )}
 
-          {/* Reply banner */}
           {replyingTo && (
             <View style={[styles.replyBanner, { backgroundColor: 'rgba(232,25,110,0.10)', borderTopColor: 'rgba(232,25,110,0.25)' }]}>
               <View style={styles.replyBannerAccent} />
@@ -1443,7 +1399,6 @@ export default function ChatTab() {
             </View>
           )}
 
-          {/* Compose bar */}
           <View style={[
             styles.compose,
             { paddingBottom: insets.bottom > 0 ? insets.bottom : 6 },
@@ -1525,7 +1480,6 @@ export default function ChatTab() {
         </AppShell>
       </KeyboardAvoidingView>
 
-      {/* Floating MediaActionRow — backdrop + pill above all content */}
       {activeMenuId && menuAnchor && activeMsg && (() => {
         const hasMedia = !!activeMsg.media_storage_path;
         const isMine = activeMsg.sender_id === user?.id;
@@ -1550,7 +1504,6 @@ export default function ChatTab() {
 
         return (
           <View style={[StyleSheet.absoluteFill, { zIndex: 9998 }]} pointerEvents="box-none">
-            {/* Tappable backdrop — closes popover on outside tap */}
             <Pressable
               style={[StyleSheet.absoluteFill, styles.menuBackdrop]}
               onPress={handleDismissMenu}
@@ -1575,7 +1528,6 @@ export default function ChatTab() {
                 onAlreadyInVault={() => {}}
                 onDelete={() => handleDeleteMessage(activeMsg)}
                 onEdit={!hasMedia ? () => handleStartEdit(activeMsg) : undefined}
-
                 onReply={() => handleStartReply(activeMsg)}
                 onSetTimer={() => setTimerSheetMsg(activeMsg)}
                 burnAfterSeconds={activeMsg.burn_after_seconds}
@@ -1594,7 +1546,6 @@ export default function ChatTab() {
         onDismiss={() => setConfirmSheet(null)}
       />
 
-      {/* Self-destruct timer picker */}
       <BottomSheet
         visible={!!timerSheetMsg}
         onClose={() => setTimerSheetMsg(null)}
