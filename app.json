@@ -105,6 +105,10 @@
     "android": {
       "backgroundColor": "#050507",
       "package": "app.warmmeup",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#050507"
+      },
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
@@ -131,7 +135,8 @@
         "expo-notifications",
         {
           "iosDisplayInForeground": true,
-          "mode": "production"
+          "mode": "production",
+          "defaultChannel": "warm-me-up"
         }
       ],
       [
