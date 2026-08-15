@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ActivityIndicator,
   Platform, Share, AppState, Modal, Animated as RNAnimated,
-  Pressable, FlatList, Image, Alert,
+  Pressable, FlatList, Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import AppText from '@/components/AppText';
@@ -26,31 +26,13 @@ import { getGalleryItems, GalleryItem, evictCachedUrl } from '@/lib/mediaGallery
 import { clearLocalImageCache } from '@/lib/mediaCache';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-
 const BADGE_SHOW_MS = 200;
 const BADGE_HIDE_MS = 400;
 const BADGE_AUTO_HIDE_DELAY = 2500;
 const SPRING = { damping: 22, stiffness: 220 } as const;
 
-// ─── Web zoomable image (pinch / pan / double-tap via pointer events) ────────────
-// On native, MediaPage uses react-native-gesture-handler pinch/pan. On web those
-// gestures don't fire reliably, so we implement zoom with raw pointer events and
-// CSS transforms. Screenshot detection (AppState listener above) and all
-// allow_screenshot / allow_save / allow_share permissions remain in effect.
-function WebZoomableImage({
-  uri,
-  width,
-  height,
-  onLoad,
-  onError,
-  onZoomChange,
-}: {
-  uri: string;
-  width: number;
-  height: number;
-  onLoad: () => void;
-  onError: () => void;
-  onZoomChange: (zoomed: boolean) => void;
+function WebZoomableImage({ uri, width, height, onLoad, onError, onZoomChange }: {
+  uri: string; width: number; height: number; onLoad: () => void; onError: () => void; onZoomChange: (zoomed: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -59,17 +41,13 @@ function WebZoomableImage({
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
   const startDist = useRef(0);
   const startScale = useRef(1);
-  const startCenter = useRef({ x: 0, y: 0 });
   const startTx = useRef(0);
   const startTy = useRef(0);
   const panning = useRef(false);
   const lastPan = useRef({ x: 0, y: 0 });
 
   const reset = useCallback(() => {
-    setScale(1);
-    setTx(0);
-    setTy(0);
-    onZoomChange(false);
+    setScale(1); setTx(0); setTy(0); onZoomChange(false);
   }, [onZoomChange]);
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -79,7 +57,6 @@ function WebZoomableImage({
       const [p1, p2] = [...pointers.current.values()];
       startDist.current = Math.hypot(p2.x - p1.x, p2.y - p1.y);
       startScale.current = scale;
-      startCenter.current = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
       startTx.current = tx;
       startTy.current = ty;
     } else if (pointers.current.size === 1 && scale > 1) {
@@ -87,7 +64,6 @@ function WebZoomableImage({
       lastPan.current = { x: e.clientX, y: e.clientY };
     }
   };
-
   const onPointerMove = (e: React.PointerEvent) => {
     if (!pointers.current.has(e.pointerId)) return;
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -95,102 +71,39 @@ function WebZoomableImage({
       const [p1, p2] = [...pointers.current.values()];
       const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
       const newScale = Math.max(1, Math.min(startScale.current * (dist / (startDist.current || 1)), 6));
-      setScale(newScale);
-      onZoomChange(newScale > 1);
+      setScale(newScale); onZoomChange(newScale > 1);
     } else if (panning.current) {
       setTx(startTx.current + (e.clientX - lastPan.current.x));
       setTy(startTy.current + (e.clientY - lastPan.current.y));
       lastPan.current = { x: e.clientX, y: e.clientY };
     }
   };
-
   const onPointerUp = (e: React.PointerEvent) => {
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) startDist.current = 0;
-    if (pointers.current.size === 0) {
-      panning.current = false;
-      if (scale <= 1.05) reset();
-    }
+    if (pointers.current.size === 0) { panning.current = false; if (scale <= 1.05) reset(); }
   };
-
   const onDoubleClick = () => {
-    if (scale > 1) {
-      reset();
-    } else {
-      setScale(2.5);
-      onZoomChange(true);
-    }
+    if (scale > 1) reset(); else { setScale(2.5); onZoomChange(true); }
   };
 
   return (
-    <div
-      ref={containerRef}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onDoubleClick={onDoubleClick}
-      style={{
-        width,
-        height,
-        touchAction: 'none',
-        overflow: 'hidden',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: scale > 1 ? 'grab' : 'default',
-      }}
-    >
-      <img
-        src={uri}
-        alt=""
-        onLoad={onLoad}
-        onError={onError}
-        draggable={false}
-        style={{
-          maxWidth: '100%',
-          maxHeight: '100%',
-          objectFit: 'contain',
-          transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
-          transformOrigin: 'center center',
-          transition: pointers.current.size === 0 ? 'transform 0.2s ease-out' : 'none',
-          userSelect: 'none',
-          pointerEvents: 'none',
-        }}
-      />
+    <div ref={containerRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onDoubleClick={onDoubleClick}
+      style={{ width, height, touchAction: 'none', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: scale > 1 ? 'grab' : 'default' }}>
+      <img src={uri} alt="" onLoad={onLoad} onError={onError} draggable={false}
+        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', transform: `translate(${tx}px, ${ty}px) scale(${scale})`, transformOrigin: 'center center', transition: pointers.current.size === 0 ? 'transform 0.2s ease-out' : 'none', userSelect: 'none', pointerEvents: 'none' }} />
     </div>
   );
 }
 
-// ─── Single media page ────────────────────────────────────────────────────────
-
-function MediaPage({
-  item,
-  isActive,
-  screenWidth,
-  screenHeight,
-  insetTop,
-  insetBottom,
-  onZoomChange,
-  user,
-  couple,
-}: {
-  item: GalleryItem;
-  isActive: boolean;
-  screenWidth: number;
-  screenHeight: number;
-  insetTop: number;
-  insetBottom: number;
-  onZoomChange: (zoomed: boolean) => void;
-  user: any;
-  couple: any;
+function MediaPage({ item, isActive, screenWidth, screenHeight, insetTop, insetBottom, onZoomChange, user, couple }: {
+  item: GalleryItem; isActive: boolean; screenWidth: number; screenHeight: number; insetTop: number; insetBottom: number; onZoomChange: (zoomed: boolean) => void; user: any; couple: any;
 }) {
   const isVideo = item.mediaType === 'video';
   const canScreenshot = item.allowScreenshot;
   const canShare = item.allowShare;
   const canSave = item.allowSave;
   const showSaveToVault = !!item.interactionId && canSave;
-
   const [mediaUri, setMediaUri] = useState<string | null>(item.signedUri ?? null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imgLoadError, setImgLoadError] = useState(false);
@@ -204,134 +117,71 @@ function MediaPage({
   const [savingToVault, setSavingToVault] = useState(false);
   const [VideoComponent, setVideoComponent] = useState<React.ComponentType<any> | null>(null);
   const [avLoaded, setAvLoaded] = useState(false);
+  const [nativeZoomed, setNativeZoomed] = useState(false);
   const videoRef = useRef<any>(null);
   const appStateRef = useRef(AppState.currentState);
   const lastInactiveAt = useRef<number | null>(null);
   const isMountedRef = useRef(true);
-  useEffect(() => { return () => { isMountedRef.current = false; }; }, []);
+  useEffect(() => () => { isMountedRef.current = false; }, []);
 
-  // Pause video when page becomes inactive
   useEffect(() => {
-    if (!isActive && videoRef.current && videoPlaying) {
-      videoRef.current.pauseAsync?.();
+    if (!isActive) {
+      if (videoRef.current && videoPlaying) videoRef.current.pauseAsync?.();
       setVideoPlaying(false);
+      setNativeZoomed(false);
     }
   }, [isActive]);
 
-  // ─── Badge fade ───────────────────────────────────────────────────────────
   const badgesOpacity = useRef(new RNAnimated.Value(1)).current;
   const [badgesInteractive, setBadgesInteractive] = useState(true);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const startFadeTimer = useCallback(() => {
     if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-    fadeTimerRef.current = setTimeout(() => {
-      RNAnimated.timing(badgesOpacity, { toValue: 0, duration: BADGE_HIDE_MS, useNativeDriver: true })
-        .start(() => { if (isMountedRef.current) setBadgesInteractive(false); });
-    }, BADGE_AUTO_HIDE_DELAY);
+    fadeTimerRef.current = setTimeout(() => RNAnimated.timing(badgesOpacity, { toValue: 0, duration: BADGE_HIDE_MS, useNativeDriver: true }).start(() => { if (isMountedRef.current) setBadgesInteractive(false); }), BADGE_AUTO_HIDE_DELAY);
   }, [badgesOpacity]);
+  const revealBadges = useCallback(() => { setBadgesInteractive(true); RNAnimated.timing(badgesOpacity, { toValue: 1, duration: BADGE_SHOW_MS, useNativeDriver: true }).start(); startFadeTimer(); }, [badgesOpacity, startFadeTimer]);
+  useEffect(() => { startFadeTimer(); return () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); }; }, []);
 
-  const revealBadges = useCallback(() => {
-    setBadgesInteractive(true);
-    RNAnimated.timing(badgesOpacity, { toValue: 1, duration: BADGE_SHOW_MS, useNativeDriver: true }).start();
-    startFadeTimer();
-  }, [badgesOpacity, startFadeTimer]);
-
-  useEffect(() => {
-    startFadeTimer();
-    return () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); };
-  }, []);
-
-  // ─── Zoom / pan ───────────────────────────────────────────────────────────
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
   const savedTx = useSharedValue(0);
   const savedTy = useSharedValue(0);
+  const notifyZoom = useCallback((v: boolean) => { setNativeZoomed(v); onZoomChange(v); }, [onZoomChange]);
 
-  const notifyZoom = useCallback((v: boolean) => { onZoomChange(v); }, [onZoomChange]);
+  const doubleTap = Gesture.Tap().numberOfTaps(2).maxDuration(300).onEnd(() => {
+    'worklet';
+    if (scale.value > 1) {
+      scale.value = withSpring(1, SPRING); tx.value = withSpring(0, SPRING); ty.value = withSpring(0, SPRING);
+      savedScale.value = 1; savedTx.value = 0; savedTy.value = 0; runOnJS(notifyZoom)(false);
+    } else {
+      scale.value = withSpring(2.5, { damping: 18, stiffness: 180 }); savedScale.value = 2.5; runOnJS(notifyZoom)(true);
+    }
+  });
+  const pinch = Gesture.Pinch().onUpdate((e) => { 'worklet'; scale.value = Math.max(1, Math.min(savedScale.value * e.scale, 6)); }).onEnd(() => {
+    'worklet';
+    if (scale.value <= 1.05) {
+      scale.value = withSpring(1, SPRING); tx.value = withSpring(0, SPRING); ty.value = withSpring(0, SPRING);
+      savedScale.value = 1; savedTx.value = 0; savedTy.value = 0; runOnJS(notifyZoom)(false);
+    } else { savedScale.value = scale.value; runOnJS(notifyZoom)(true); }
+  });
+  const pan = Gesture.Pan().enabled(nativeZoomed).minPointers(1).onUpdate((e) => {
+    'worklet'; tx.value = savedTx.value + e.translationX; ty.value = savedTy.value + e.translationY;
+  }).onEnd(() => { 'worklet'; savedTx.value = tx.value; savedTy.value = ty.value; });
+  const imageGesture = nativeZoomed ? Gesture.Exclusive(doubleTap, Gesture.Simultaneous(pinch, pan)) : Gesture.Exclusive(doubleTap, pinch);
+  const imageAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }] }));
 
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .maxDuration(300)
-    .onEnd(() => {
-      'worklet';
-      if (scale.value > 1) {
-        scale.value = withSpring(1, SPRING);
-        tx.value = withSpring(0, SPRING);
-        ty.value = withSpring(0, SPRING);
-        savedScale.value = 1;
-        savedTx.value = 0;
-        savedTy.value = 0;
-        runOnJS(notifyZoom)(false);
-      } else {
-        scale.value = withSpring(2.5, { damping: 18, stiffness: 180 });
-        savedScale.value = 2.5;
-        runOnJS(notifyZoom)(true);
-      }
-    });
-
-  const pinch = Gesture.Pinch()
-    .onUpdate((e) => {
-      'worklet';
-      scale.value = Math.max(1, Math.min(savedScale.value * e.scale, 6));
-    })
-    .onEnd(() => {
-      'worklet';
-      if (scale.value <= 1.05) {
-        scale.value = withSpring(1, SPRING);
-        tx.value = withSpring(0, SPRING);
-        ty.value = withSpring(0, SPRING);
-        savedScale.value = 1;
-        savedTx.value = 0;
-        savedTy.value = 0;
-        runOnJS(notifyZoom)(false);
-      } else {
-        savedScale.value = scale.value;
-        runOnJS(notifyZoom)(true);
-      }
-    });
-
-  const pan = Gesture.Pan()
-    .minPointers(1)
-    .onUpdate((e) => {
-      'worklet';
-      if (scale.value <= 1) return;
-      tx.value = savedTx.value + e.translationX;
-      ty.value = savedTy.value + e.translationY;
-    })
-    .onEnd(() => {
-      'worklet';
-      if (scale.value <= 1) return;
-      savedTx.value = tx.value;
-      savedTy.value = ty.value;
-    });
-
-  const imageGesture = Gesture.Exclusive(doubleTap, Gesture.Simultaneous(pinch, pan));
-
-  const imageAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
-  }));
-
-  // ─── Signed URL — always refresh from storagePath to avoid expired URLs ─────
   useEffect(() => {
-    if (!item.storagePath) return;
+    if (!item.storagePath || !isActive) return;
     supabase.storage.from(item.storageBucket ?? 'vault').createSignedUrl(item.storagePath, 12 * 60 * 60).then(({ data }) => {
       if (isMountedRef.current && data?.signedUrl) setMediaUri(data.signedUrl);
     });
-  }, [item.storagePath, item.storageBucket]);
+  }, [item.storagePath, item.storageBucket, isActive]);
+  useEffect(() => { if (mediaUri) { setImgLoadError(false); setImageLoaded(false); } }, [mediaUri]);
 
-  // Reset error/loaded flags when a new URL arrives so the image retries
   useEffect(() => {
-    if (!mediaUri) return;
-    setImgLoadError(false);
-    setImageLoaded(false);
-  }, [mediaUri]);
-
-  // ─── Video component ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isVideo || !videoTapped) return;
+    if (!isVideo || !videoTapped || !isActive) return;
     let mounted = true;
     (async () => {
       try {
@@ -342,9 +192,8 @@ function MediaPage({
       } catch { if (mounted) setVideoError(true); }
     })();
     return () => { mounted = false; };
-  }, [isVideo, videoTapped]);
+  }, [isVideo, videoTapped, isActive]);
 
-  // ─── Screenshot detection ──────────────────────────────────────────────────
   useEffect(() => {
     if (Platform.OS === 'web' || !isActive) return;
     const sub = AppState.addEventListener('change', nextState => {
@@ -363,780 +212,160 @@ function MediaPage({
   const handleScreenshotDetected = useCallback(async () => {
     if (!item.coupleId || !user?.id) return;
     if (!canScreenshot) setScreenshotWarning(true);
-    if (item.interactionId) {
-      await supabase.from('interactions').update({ screenshot_detected: true }).eq('id', item.interactionId);
-    }
+    if (item.interactionId) await supabase.from('interactions').update({ screenshot_detected: true }).eq('id', item.interactionId);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
-      if (accessToken) {
-        await fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-          body: JSON.stringify({ vault_item_id: item.id, couple_id: item.coupleId, detected_by_user_id: user.id, source_screen: 'vault' }),
-        });
-      }
+      if (accessToken) await fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` }, body: JSON.stringify({ vault_item_id: item.id, couple_id: item.coupleId, detected_by_user_id: user.id, source_screen: 'vault' }) });
     } catch {}
   }, [item, user?.id, canScreenshot]);
 
-  const handleShare = useCallback(async () => {
-    if (!canShare || !mediaUri) return;
-    try { await Share.share({ url: mediaUri, message: mediaUri }); } catch {}
-  }, [canShare, mediaUri]);
-
+  const handleShare = useCallback(async () => { if (canShare && mediaUri) { try { await Share.share({ url: mediaUri, message: mediaUri }); } catch {} } }, [canShare, mediaUri]);
   const handleSaveToVault = useCallback(async () => {
-    if (!couple?.id || !user?.id || !item.storagePath || savingToVault || savedToVault) return;
+    if (!couple?.id || !user?.id || !item.storagePath || savingToVault || savedToVault || !mediaUri) return;
     setSavingToVault(true);
     try {
       const ext = isVideo ? 'mp4' : 'jpg';
       const newPath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
-      if (!mediaUri) return;
-      const response = await fetch(mediaUri);
-      const blob = await response.blob();
-      const { error: uploadError } = await supabase.storage.from('vault').upload(newPath, blob, {
-        contentType: isVideo ? 'video/mp4' : 'image/jpeg',
-        upsert: false,
-      });
+      const response = await fetch(mediaUri); const blob = await response.blob();
+      const { error: uploadError } = await supabase.storage.from('vault').upload(newPath, blob, { contentType: isVideo ? 'video/mp4' : 'image/jpeg', upsert: false });
       if (uploadError) return;
-      const { data } = await supabase.from('vault_items').insert({
-        couple_id: couple.id,
-        uploaded_by_user_id: user.id,
-        media_type: isVideo ? 'video' : 'photo',
-        file_path: newPath,
-        storage_path: newPath,
-        storage_bucket: 'vault',
-        allow_screenshot: canScreenshot,
-        allow_save: canSave,
-        allow_share: canShare,
-        screenshot_detected: false,
-        viewed_by_partner: false,
-      }).select().single();
-      if (data) {
-        await awardPoints(couple.id, user.id, 5, 'Saved chat media to Vault', data.id);
-        if (isMountedRef.current) setSavedToVault(true);
-      }
+      const { data } = await supabase.from('vault_items').insert({ couple_id: couple.id, uploaded_by_user_id: user.id, media_type: isVideo ? 'video' : 'photo', file_path: newPath, storage_path: newPath, storage_bucket: 'vault', allow_screenshot: canScreenshot, allow_save: canSave, allow_share: canShare, screenshot_detected: false, viewed_by_partner: false }).select().single();
+      if (data) { await awardPoints(couple.id, user.id, 5, 'Saved chat media to Vault', data.id); if (isMountedRef.current) setSavedToVault(true); }
     } catch {}
     if (isMountedRef.current) setSavingToVault(false);
   }, [couple?.id, user?.id, item.storagePath, mediaUri, isVideo, canScreenshot, canSave, canShare, savingToVault, savedToVault]);
 
-  const togglePlayPause = () => {
-    if (!videoRef.current) return;
-    if (videoPlaying) { videoRef.current.pauseAsync?.(); } else { videoRef.current.playAsync?.(); }
-    setVideoPlaying(!videoPlaying);
-  };
-
-  // ─── Layout ────────────────────────────────────────────────────────────────
+  const togglePlayPause = () => { if (!videoRef.current) return; if (videoPlaying) videoRef.current.pauseAsync?.(); else videoRef.current.playAsync?.(); setVideoPlaying(!videoPlaying); };
   const headerH = insetTop + 52;
   const availH = screenHeight - headerH - 24;
   const availW = screenWidth;
-  let imgW = availW;
-  let imgH = availH;
+  let imgW = availW; let imgH = availH;
   if (imageNativeSize && imageNativeSize.w > 0 && imageNativeSize.h > 0) {
-    const ratio = imageNativeSize.w / imageNativeSize.h;
-    imgH = availH;
-    imgW = imgH * ratio;
-    if (imgW > availW) { imgW = availW; imgH = imgW / ratio; }
+    const ratio = imageNativeSize.w / imageNativeSize.h; imgH = availH; imgW = imgH * ratio; if (imgW > availW) { imgW = availW; imgH = imgW / ratio; }
   }
-
-  const formattedTimestamp = (() => {
-    const raw = item.createdAt;
-    if (!raw) return null;
-    try {
-      const d = new Date(raw);
-      const datePart = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-      const timePart = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const dateTime = `${datePart} · ${timePart}`;
-      return item.uploaderName ? `${item.uploaderName} · ${dateTime}` : dateTime;
-    } catch { return null; }
-  })();
+  const formattedTimestamp = (() => { const raw = item.createdAt; if (!raw) return null; try { const d = new Date(raw); const datePart = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }); const timePart = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); const dateTime = `${datePart} · ${timePart}`; return item.uploaderName ? `${item.uploaderName} · ${dateTime}` : dateTime; } catch { return null; } })();
 
   return (
     <View style={{ width: screenWidth, height: screenHeight, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
-      {/* Full-screen tap to reveal badges */}
       <Pressable style={StyleSheet.absoluteFill} onPress={revealBadges} />
-
-      {/* Media */}
       <View style={styles.mediaContainer}>
         {!mediaUri ? (
           <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-            {item.thumbUri ? (
-              <ExpoImage
-                source={{ uri: item.thumbUri }}
-                style={{ width: screenWidth, height: screenWidth, opacity: 0.45 }}
-                contentFit="cover"
-                blurRadius={18}
-                cachePolicy="memory-disk"
-              />
-            ) : null}
-            <ActivityIndicator
-              color="rgba(255,255,255,0.5)"
-              size="large"
-              style={item.thumbUri ? StyleSheet.absoluteFillObject : undefined}
-            />
+            {item.thumbUri ? <ExpoImage source={{ uri: item.thumbUri }} style={{ width: screenWidth, height: screenWidth, opacity: 0.45 }} contentFit="cover" blurRadius={18} cachePolicy="memory-disk" /> : null}
+            <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" style={item.thumbUri ? StyleSheet.absoluteFillObject : undefined} />
           </View>
         ) : !isVideo ? (
-          <>
-            {imgLoadError ? (
-              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                <AppText style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>Image could not be loaded</AppText>
-              </View>
-            ) : Platform.OS === 'web' ? (
-              <WebZoomableImage
-                uri={mediaUri ?? ''}
-                width={imgW}
-                height={Math.max(imgH, 1)}
-                onLoad={() => setImageLoaded(true)}
-                onError={() => { setImageLoaded(true); setImgLoadError(true); }}
-                onZoomChange={notifyZoom}
-              />
-            ) : (
-              <>
-                {item.thumbUri && !imageLoaded && (
-                  <ExpoImage
-                    source={{ uri: item.thumbUri }}
-                    style={[StyleSheet.absoluteFillObject, { opacity: 0.4 }]}
-                    contentFit="cover"
-                    blurRadius={12}
-                    cachePolicy="memory-disk"
-                  />
-                )}
-                <GestureDetector gesture={imageGesture}>
-                  <Animated.View style={[{ width: imgW, height: imgH, overflow: 'hidden' }, imageAnimStyle]}>
-                    <ExpoImage
-                      source={{ uri: mediaUri }}
-                      style={{ width: imgW, height: imgH }}
-                      contentFit="contain"
-                      cachePolicy="memory-disk"
-                      onLoad={(e: any) => {
-                        const src = e.source;
-                        if (src?.width && src?.height) setImageNativeSize({ w: src.width, h: src.height });
-                        setImageLoaded(true);
-                      }}
-                      onError={() => { setImageLoaded(true); setImgLoadError(true); }}
-                    />
-                  </Animated.View>
-                </GestureDetector>
-              </>
-            )}
-          </>
+          imgLoadError ? <AppText style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }}>Image could not be loaded</AppText> : Platform.OS === 'web' ? (
+            <WebZoomableImage uri={mediaUri} width={imgW} height={Math.max(imgH, 1)} onLoad={() => setImageLoaded(true)} onError={() => { setImageLoaded(true); setImgLoadError(true); }} onZoomChange={notifyZoom} />
+          ) : (
+            <>
+              {item.thumbUri && !imageLoaded && <ExpoImage source={{ uri: item.thumbUri }} style={[StyleSheet.absoluteFillObject, { opacity: 0.4 }]} contentFit="cover" blurRadius={12} cachePolicy="memory-disk" />}
+              <GestureDetector gesture={imageGesture}>
+                <Animated.View style={[{ width: imgW, height: imgH, overflow: 'hidden' }, imageAnimStyle]}>
+                  <ExpoImage source={{ uri: mediaUri }} style={{ width: imgW, height: imgH }} contentFit="contain" cachePolicy="memory-disk" onLoad={(e: any) => { const src = e.source; if (src?.width && src?.height) setImageNativeSize({ w: src.width, h: src.height }); setImageLoaded(true); }} onError={() => { setImageLoaded(true); setImgLoadError(true); }} />
+                </Animated.View>
+              </GestureDetector>
+            </>
+          )
         ) : (
           <View style={{ width: availW, height: availH, alignItems: 'center', justifyContent: 'center' }}>
-            {/* Always show the thumbnail poster for videos */}
-            {item.thumbUri && !avLoaded && (
-              <ExpoImage
-                source={{ uri: item.thumbUri }}
-                style={[StyleSheet.absoluteFillObject, { opacity: 0.5 }]}
-                contentFit="cover"
-                blurRadius={Platform.OS === 'ios' ? 14 : 5}
-                cachePolicy="memory-disk"
-              />
-            )}
-            {!videoTapped && !videoError && (
-              <TouchableOpacity
-                style={styles.playBtn}
-                activeOpacity={0.8}
-                onPress={() => { setVideoTapped(true); setVideoPlaying(true); }}
-              >
-                <View style={styles.playBtnInner}>
-                  <Play color="#fff" size={26} strokeWidth={2} />
-                </View>
-              </TouchableOpacity>
-            )}
-            {videoTapped && !avLoaded && !videoError && (
-              <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
-            )}
+            {item.thumbUri && !avLoaded && <ExpoImage source={{ uri: item.thumbUri }} style={[StyleSheet.absoluteFillObject, { opacity: 0.5 }]} contentFit="cover" blurRadius={Platform.OS === 'ios' ? 14 : 5} cachePolicy="memory-disk" />}
+            {!videoTapped && !videoError && <TouchableOpacity style={styles.playBtn} activeOpacity={0.8} onPress={() => { setVideoTapped(true); setVideoPlaying(true); }}><View style={styles.playBtnInner}><Play color="#fff" size={26} strokeWidth={2} /></View></TouchableOpacity>}
+            {videoTapped && !avLoaded && !videoError && <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />}
             {videoError && <AppText style={styles.videoErrorText}>Video playback unavailable</AppText>}
-            {avLoaded && VideoComponent && (
-              <>
-                <VideoComponent
-                  ref={videoRef}
-                  source={{ uri: mediaUri ?? undefined }}
-                  style={{ width: availW, height: availH }}
-                  isMuted={muted}
-                  shouldPlay={videoPlaying}
-                  onPlaybackStatusUpdate={(status: any) => { if (status.isLoaded) setVideoPlaying(status.isPlaying); }}
-                  onError={() => setVideoError(true)}
-                  useNativeControls={Platform.OS === 'web'}
-                />
-                {Platform.OS !== 'web' && (
-                  <>
-                    <TouchableOpacity onPress={togglePlayPause} style={styles.playBtn} activeOpacity={0.8}>
-                      <View style={styles.playBtnInner}>
-                        {videoPlaying ? <Pause color="#fff" size={26} strokeWidth={2} /> : <Play color="#fff" size={26} strokeWidth={2} />}
-                      </View>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setMuted(!muted)} style={[styles.muteBtn, { bottom: 20, right: 16 }]} activeOpacity={0.8}>
-                      {muted ? <VolumeX color="rgba(255,255,255,0.8)" size={18} /> : <Volume2 color="rgba(255,255,255,0.8)" size={18} />}
-                    </TouchableOpacity>
-                  </>
-                )}
-              </>
-            )}
+            {avLoaded && VideoComponent && <><VideoComponent ref={videoRef} source={{ uri: mediaUri }} style={{ width: availW, height: availH }} isMuted={muted} shouldPlay={videoPlaying} onPlaybackStatusUpdate={(status: any) => { if (status.isLoaded) setVideoPlaying(status.isPlaying); }} onError={() => setVideoError(true)} useNativeControls={Platform.OS === 'web'} />{Platform.OS !== 'web' && <><TouchableOpacity onPress={togglePlayPause} style={styles.playBtn} activeOpacity={0.8}><View style={styles.playBtnInner}>{videoPlaying ? <Pause color="#fff" size={26} strokeWidth={2} /> : <Play color="#fff" size={26} strokeWidth={2} />}</View></TouchableOpacity><TouchableOpacity onPress={() => setMuted(!muted)} style={[styles.muteBtn, { bottom: 20, right: 16 }]} activeOpacity={0.8}>{muted ? <VolumeX color="rgba(255,255,255,0.8)" size={18} /> : <Volume2 color="rgba(255,255,255,0.8)" size={18} />}</TouchableOpacity></>}</>}
           </View>
         )}
       </View>
-
-      {/* Per-page timestamp — sits top-right below the global top chrome */}
-      {formattedTimestamp && (
-        <RNAnimated.View
-          style={[styles.timestampBadge, { opacity: badgesOpacity, top: insetTop + 14 }]}
-          pointerEvents="none"
-        >
-          <AppText style={styles.timestampBadgeText}>{formattedTimestamp}</AppText>
-        </RNAnimated.View>
-      )}
-
-      {/* Bottom overlay */}
-      <RNAnimated.View
-        style={[styles.bottomOverlay, { paddingBottom: insetBottom + 16, opacity: badgesOpacity }]}
-        pointerEvents={badgesInteractive ? 'box-none' : 'none'}
-      >
+      {formattedTimestamp && <RNAnimated.View style={[styles.timestampBadge, { opacity: badgesOpacity, top: insetTop + 14 }]} pointerEvents="none"><AppText style={styles.timestampBadgeText}>{formattedTimestamp}</AppText></RNAnimated.View>}
+      <RNAnimated.View style={[styles.bottomOverlay, { paddingBottom: insetBottom + 16, opacity: badgesOpacity }]} pointerEvents={badgesInteractive ? 'box-none' : 'none'}>
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.80)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
-
-        {showSaveToVault && (
-          <TouchableOpacity
-            style={[styles.saveVaultBtn, savedToVault && styles.saveVaultBtnSaved]}
-            onPress={handleSaveToVault}
-            activeOpacity={0.8}
-            disabled={savingToVault || savedToVault}
-          >
-            {savingToVault ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : savedToVault ? (
-              <>
-                <Check color="#4CAF50" size={16} />
-                <AppText style={[styles.saveVaultText, { color: '#4CAF50' }]}>Saved to Vault</AppText>
-              </>
-            ) : (
-              <>
-                <Archive color="#FF8A3D" size={16} />
-                <AppText style={styles.saveVaultText}>Save to Vault</AppText>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-
-        <View style={styles.permRow}>
-          <PermBadge
-            icon={<Camera color={canScreenshot ? '#FF2E8A' : 'rgba(255,255,255,0.28)'} size={14} />}
-            label={canScreenshot ? 'Screenshot OK' : 'Partner notified'}
-            allowed={canScreenshot}
-          />
-          <PermBadge icon={<Camera color="rgba(255,255,255,0.28)" size={14} />} label="Never saved" allowed={false} />
-          {canShare ? (
-            <TouchableOpacity onPress={handleShare} activeOpacity={0.8}>
-              <PermBadge icon={<Share2 color="#FF2E8A" size={14} />} label="Share" allowed />
-            </TouchableOpacity>
-          ) : (
-            <PermBadge icon={<Share2 color="rgba(255,255,255,0.28)" size={14} />} label="No sharing" allowed={false} />
-          )}
-        </View>
+        {showSaveToVault && <TouchableOpacity style={[styles.saveVaultBtn, savedToVault && styles.saveVaultBtnSaved]} onPress={handleSaveToVault} activeOpacity={0.8} disabled={savingToVault || savedToVault}>{savingToVault ? <ActivityIndicator color="#fff" size="small" /> : savedToVault ? <><Check color="#4CAF50" size={16} /><AppText style={[styles.saveVaultText, { color: '#4CAF50' }]}>Saved to Vault</AppText></> : <><Archive color="#FF8A3D" size={16} /><AppText style={styles.saveVaultText}>Save to Vault</AppText></>}</TouchableOpacity>}
+        <View style={styles.permRow}><PermBadge icon={<Camera color={canScreenshot ? '#FF2E8A' : 'rgba(255,255,255,0.28)'} size={14} />} label={canScreenshot ? 'Screenshot OK' : 'Partner notified'} allowed={canScreenshot} /><PermBadge icon={<Camera color="rgba(255,255,255,0.28)" size={14} />} label="Never saved" allowed={false} />{canShare ? <TouchableOpacity onPress={handleShare} activeOpacity={0.8}><PermBadge icon={<Share2 color="#FF2E8A" size={14} />} label="Share" allowed /></TouchableOpacity> : <PermBadge icon={<Share2 color="rgba(255,255,255,0.28)" size={14} />} label="No sharing" allowed={false} />}</View>
       </RNAnimated.View>
-
-      {/* Screenshot modal */}
-      <Modal visible={screenshotWarning} transparent animationType="fade" onRequestClose={() => setScreenshotWarning(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalIcon}>
-              <AlertTriangle color="#FFB347" size={32} strokeWidth={1.5} />
-            </View>
-            <AppText style={styles.modalTitle}>Screenshot Detected</AppText>
-            <AppText style={styles.modalBody}>
-              Screenshots of this item are restricted. Your partner has been notified.
-            </AppText>
-            <TouchableOpacity style={styles.modalBtn} onPress={() => setScreenshotWarning(false)} activeOpacity={0.8}>
-              <AppText style={styles.modalBtnText}>Got it</AppText>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <Modal visible={screenshotWarning} transparent animationType="fade" onRequestClose={() => setScreenshotWarning(false)}><View style={styles.modalOverlay}><View style={styles.modalCard}><View style={styles.modalIcon}><AlertTriangle color="#FFB347" size={32} strokeWidth={1.5} /></View><AppText style={styles.modalTitle}>Screenshot Detected</AppText><AppText style={styles.modalBody}>Screenshots of this item are restricted. Your partner has been notified.</AppText><TouchableOpacity style={styles.modalBtn} onPress={() => setScreenshotWarning(false)} activeOpacity={0.8}><AppText style={styles.modalBtnText}>Got it</AppText></TouchableOpacity></View></View></Modal>
     </View>
   );
 }
 
-// ─── Gallery shell ────────────────────────────────────────────────────────────
-
 export default function VaultViewerScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { width: screenWidth, height: screenHeight } = useLayout();
-  const { user, couple } = useAuth();
-
-  const {
-    initialIndex: initialIndexStr,
-    id: legacyId,
-    storagePath: legacyStoragePath,
-    storageBucket: legacyStorageBucket,
-    coupleId: legacyCoupleId,
-    mediaType: legacyMediaType,
-    allowScreenshot: legacyAllowScreenshot,
-    allowSave: legacyAllowSave,
-    allowShare: legacyAllowShare,
-    interactionId: legacyInteractionId,
-    createdAt: legacyCreatedAt,
-    uploaderName: legacyUploaderName,
-    signedUri: legacySignedUri,
-    thumbUri: legacyThumbUri,
-  } = useLocalSearchParams<{
-    initialIndex?: string;
-    id?: string;
-    storagePath?: string;
-    storageBucket?: string;
-    coupleId?: string;
-    mediaType?: string;
-    allowScreenshot?: string;
-    allowSave?: string;
-    allowShare?: string;
-    interactionId?: string;
-    createdAt?: string;
-    uploaderName?: string;
-    signedUri?: string;
-    thumbUri?: string;
-  }>();
-
-  // Gallery store is primary; URL params are the fallback if the store was cleared before render.
+  const router = useRouter(); const insets = useSafeAreaInsets(); const { width: screenWidth, height: screenHeight } = useLayout(); const { user, couple } = useAuth();
+  const { initialIndex: initialIndexStr, id: legacyId, storagePath: legacyStoragePath, storageBucket: legacyStorageBucket, coupleId: legacyCoupleId, mediaType: legacyMediaType, allowScreenshot: legacyAllowScreenshot, allowSave: legacyAllowSave, allowShare: legacyAllowShare, interactionId: legacyInteractionId, createdAt: legacyCreatedAt, uploaderName: legacyUploaderName, signedUri: legacySignedUri, thumbUri: legacyThumbUri } = useLocalSearchParams<any>();
   const storeItems = getGalleryItems();
-  const initialItems: GalleryItem[] = storeItems.length > 0 ? storeItems : (() => {
-    if (!legacyStoragePath) return [];
-    const safeSignedUri = (legacySignedUri && legacySignedUri !== 'undefined') ? legacySignedUri : null;
-    return [{
-      id: legacyId ?? '',
-      storagePath: legacyStoragePath,
-      storageBucket: legacyStorageBucket ?? 'vault',
-      coupleId: legacyCoupleId ?? null,
-      mediaType: legacyMediaType ?? 'photo',
-      allowScreenshot: legacyAllowScreenshot === '1',
-      allowSave: legacyAllowSave === '1',
-      allowShare: legacyAllowShare === '1',
-      interactionId: legacyInteractionId ?? null,
-      createdAt: legacyCreatedAt ?? null,
-      uploaderName: legacyUploaderName ?? null,
-      signedUri: safeSignedUri,
-      thumbUri: legacyThumbUri ?? null,
-    }];
-  })();
-
-  const initialIndex = Math.min(
-    Math.max(0, parseInt(initialIndexStr ?? '0', 10) || 0),
-    Math.max(0, initialItems.length - 1),
-  );
-
-  const [items, setItems] = useState<GalleryItem[]>(initialItems);
-  const [activeIndex, setActiveIndex] = useState(initialIndex);
-  const [isZoomed, setIsZoomed] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const listRef = useRef<FlatList>(null);
-
-  const isZoomedShared = useSharedValue(false);
-  const translateY = useSharedValue(0);
-
-  const handleBack = useCallback(() => { router.back(); }, [router]);
-
-  const handleZoomChange = useCallback((zoomed: boolean) => {
-    setIsZoomed(zoomed);
-    isZoomedShared.value = zoomed;
-  }, []);
-
+  const initialItems: GalleryItem[] = storeItems.length > 0 ? storeItems : (() => { if (!legacyStoragePath) return []; const safeSignedUri = legacySignedUri && legacySignedUri !== 'undefined' ? legacySignedUri : null; return [{ id: legacyId ?? '', storagePath: legacyStoragePath, storageBucket: legacyStorageBucket ?? 'vault', coupleId: legacyCoupleId ?? null, mediaType: legacyMediaType ?? 'photo', allowScreenshot: legacyAllowScreenshot === '1', allowSave: legacyAllowSave === '1', allowShare: legacyAllowShare === '1', interactionId: legacyInteractionId ?? null, createdAt: legacyCreatedAt ?? null, uploaderName: legacyUploaderName ?? null, signedUri: safeSignedUri, thumbUri: legacyThumbUri ?? null }]; })();
+  const initialIndex = Math.min(Math.max(0, parseInt(initialIndexStr ?? '0', 10) || 0), Math.max(0, initialItems.length - 1));
+  const [items, setItems] = useState<GalleryItem[]>(initialItems); const [activeIndex, setActiveIndex] = useState(initialIndex); const [isZoomed, setIsZoomed] = useState(false); const [deleting, setDeleting] = useState(false); const listRef = useRef<FlatList>(null);
+  const isZoomedShared = useSharedValue(false); const translateY = useSharedValue(0);
+  const handleBack = useCallback(() => router.back(), [router]);
+  const handleZoomChange = useCallback((zoomed: boolean) => { setIsZoomed(zoomed); isZoomedShared.value = zoomed; }, []);
   const activeItem = items[activeIndex] ?? null;
-  // Chat media uses the same viewer but lives in chat_media. Only genuine Vault
-  // items get the destructive Vault delete control.
   const canDeleteFromVault = !!activeItem?.id && (activeItem.storageBucket ?? 'vault') === 'vault';
 
   const performDeleteActive = useCallback(async () => {
-    const item = items[activeIndex];
-    if (!item?.id || deleting) return;
-    setDeleting(true);
-
+    const item = items[activeIndex]; if (!item?.id || deleting) return; setDeleting(true);
     try {
-      // Read the authoritative storage paths before soft-deleting the row. This
-      // also protects against accidentally treating a chat-message ID as a Vault ID.
-      let query = supabase
-        .from('vault_items')
-        .select('id, couple_id, storage_path, file_path, storage_bucket, blurred_thumbnail_path')
-        .eq('id', item.id);
-      if (item.coupleId) query = query.eq('couple_id', item.coupleId);
-      const { data: vaultRow, error: fetchError } = await query.maybeSingle();
-      if (fetchError) throw fetchError;
-      if (!vaultRow) throw new Error('This item is no longer available in the Vault.');
-
-      const deletedAt = new Date().toISOString();
-      let deleteQuery = supabase.from('vault_items').update({ deleted_at: deletedAt }).eq('id', item.id);
-      if (vaultRow.couple_id) deleteQuery = deleteQuery.eq('couple_id', vaultRow.couple_id);
-      const { error: updateError } = await deleteQuery;
-      if (updateError) throw updateError;
-
-      const bucket = vaultRow.storage_bucket ?? 'vault';
-      const fullPath = vaultRow.storage_path ?? vaultRow.file_path ?? item.storagePath;
-      const paths = [fullPath, vaultRow.blurred_thumbnail_path].filter(Boolean) as string[];
-      if (paths.length > 0) {
-        // The database delete is authoritative; storage cleanup is best-effort.
-        await supabase.storage.from(bucket).remove(paths).catch(() => {});
-        paths.forEach(path => evictCachedUrl(path));
-        clearLocalImageCache().catch(() => {});
-      }
-
-      const nextItems = items.filter((_, index) => index !== activeIndex);
-      if (nextItems.length === 0) {
-        setItems([]);
-        router.back();
-        return;
-      }
-
-      const nextIndex = Math.min(activeIndex, nextItems.length - 1);
-      setItems(nextItems);
-      setActiveIndex(nextIndex);
-      setIsZoomed(false);
-      isZoomedShared.value = false;
-      setTimeout(() => {
-        listRef.current?.scrollToIndex({ index: nextIndex, animated: false });
-      }, 0);
-    } catch (e: any) {
-      Alert.alert('Delete Failed', e?.message ?? 'Could not delete this Vault item. Please try again.');
-    } finally {
-      setDeleting(false);
-    }
+      let query = supabase.from('vault_items').select('id, couple_id, storage_path, file_path, storage_bucket, blurred_thumbnail_path').eq('id', item.id); if (item.coupleId) query = query.eq('couple_id', item.coupleId);
+      const { data: vaultRow, error: fetchError } = await query.maybeSingle(); if (fetchError) throw fetchError; if (!vaultRow) throw new Error('This item is no longer available in the Vault.');
+      const deletedAt = new Date().toISOString(); let deleteQuery = supabase.from('vault_items').update({ deleted_at: deletedAt }).eq('id', item.id); if (vaultRow.couple_id) deleteQuery = deleteQuery.eq('couple_id', vaultRow.couple_id); const { error: updateError } = await deleteQuery; if (updateError) throw updateError;
+      const bucket = vaultRow.storage_bucket ?? 'vault'; const fullPath = vaultRow.storage_path ?? vaultRow.file_path ?? item.storagePath; const paths = [fullPath, vaultRow.blurred_thumbnail_path].filter(Boolean) as string[]; if (paths.length > 0) { await supabase.storage.from(bucket).remove(paths).catch(() => {}); paths.forEach(path => evictCachedUrl(path)); clearLocalImageCache().catch(() => {}); }
+      const nextItems = items.filter((_, index) => index !== activeIndex); if (nextItems.length === 0) { setItems([]); router.back(); return; }
+      const nextIndex = Math.min(activeIndex, nextItems.length - 1); setItems(nextItems); setActiveIndex(nextIndex); setIsZoomed(false); isZoomedShared.value = false; setTimeout(() => listRef.current?.scrollToIndex({ index: nextIndex, animated: false }), 0);
+    } catch (e: any) { Alert.alert('Delete Failed', e?.message ?? 'Could not delete this Vault item. Please try again.'); } finally { setDeleting(false); }
   }, [items, activeIndex, deleting, router]);
+  const confirmDeleteActive = useCallback(() => { if (!canDeleteFromVault || deleting) return; const noun = activeItem?.mediaType === 'video' ? 'video' : 'photo'; const message = `This permanently removes this ${noun} from the Vault for both of you. This cannot be undone.`; if (Platform.OS === 'web') { if (window.confirm(`Delete from Vault?\n\n${message}`)) performDeleteActive(); return; } Alert.alert('Delete from Vault?', message, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: performDeleteActive }]); }, [canDeleteFromVault, deleting, activeItem?.mediaType, performDeleteActive]);
 
-  const confirmDeleteActive = useCallback(() => {
-    if (!canDeleteFromVault || deleting) return;
-    const noun = activeItem?.mediaType === 'video' ? 'video' : 'photo';
-    const message = `This permanently removes this ${noun} from the Vault for both of you. This cannot be undone.`;
-
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Delete from Vault?\n\n${message}`)) performDeleteActive();
-      return;
-    }
-
-    Alert.alert('Delete from Vault?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: performDeleteActive },
-    ]);
-  }, [canDeleteFromVault, deleting, activeItem?.mediaType, performDeleteActive]);
-
-  const swipeDown = Gesture.Pan()
-    .failOffsetX([-15, 15])
-    .activeOffsetY([10, 500])
-    .onUpdate((e) => {
-      'worklet';
-      if (isZoomedShared.value) return;
-      if (e.translationY > 0) translateY.value = e.translationY;
-    })
-    .onEnd((e) => {
-      'worklet';
-      if (isZoomedShared.value) return;
-      if (e.translationY > 120 || e.velocityY > 800) {
-        translateY.value = withSpring(600, { damping: 20, stiffness: 120 });
-        runOnJS(handleBack)();
-      } else {
-        translateY.value = withSpring(0, SPRING);
-      }
-    });
-
-  const animRootStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-  }));
-
-  const getItemLayout = useCallback((_: any, index: number) => ({
-    length: screenWidth,
-    offset: screenWidth * index,
-    index,
-  }), [screenWidth]);
-
-  const renderItem = useCallback(({ item, index }: { item: GalleryItem; index: number }) => (
-    <MediaPage
-      item={item}
-      isActive={index === activeIndex}
-      screenWidth={screenWidth}
-      screenHeight={screenHeight}
-      insetTop={insets.top}
-      insetBottom={insets.bottom}
-      onZoomChange={handleZoomChange}
-      user={user}
-      couple={couple}
-    />
-  ), [activeIndex, screenWidth, screenHeight, insets.top, insets.bottom, handleZoomChange, user, couple]);
-
+  const swipeDown = Gesture.Pan().failOffsetX([-12, 12]).activeOffsetY([18, 500]).onUpdate((e) => { 'worklet'; if (isZoomedShared.value) return; if (e.translationY > 0) translateY.value = e.translationY; }).onEnd((e) => { 'worklet'; if (isZoomedShared.value) return; if (e.translationY > 120 || e.velocityY > 800) { translateY.value = withSpring(600, { damping: 20, stiffness: 120 }); runOnJS(handleBack)(); } else translateY.value = withSpring(0, SPRING); });
+  const animRootStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
+  const getItemLayout = useCallback((_: any, index: number) => ({ length: screenWidth, offset: screenWidth * index, index }), [screenWidth]);
+  const renderItem = useCallback(({ item, index }: { item: GalleryItem; index: number }) => <MediaPage item={item} isActive={index === activeIndex} screenWidth={screenWidth} screenHeight={screenHeight} insetTop={insets.top} insetBottom={insets.bottom} onZoomChange={handleZoomChange} user={user} couple={couple} />, [activeIndex, screenWidth, screenHeight, insets.top, insets.bottom, handleZoomChange, user, couple]);
   const keyExtractor = useCallback((item: GalleryItem, index: number) => item.id || String(index), []);
 
-  if (items.length === 0) {
-    return (
-      <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
-        <TouchableOpacity
-          style={[styles.backBtn, { position: 'absolute', top: insets.top + 6, left: Spacing.md }]}
-          onPress={() => router.back()}
-          activeOpacity={0.8}
-        >
-          <ChevronLeft color="#fff" size={22} strokeWidth={2.2} />
-        </TouchableOpacity>
-        <AppText style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, fontFamily: 'Inter-Regular' }}>Media unavailable</AppText>
-      </View>
-    );
-  }
+  if (items.length === 0) return <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}><TouchableOpacity style={[styles.backBtn, { position: 'absolute', top: insets.top + 6, left: Spacing.md }]} onPress={() => router.back()} activeOpacity={0.8}><ChevronLeft color="#fff" size={22} strokeWidth={2.2} /></TouchableOpacity><AppText style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, fontFamily: 'Inter-Regular' }}>Media unavailable</AppText></View>;
 
   return (
     <GestureDetector gesture={swipeDown}>
       <Animated.View style={[styles.root, animRootStyle]}>
-      <FlatList
-        ref={listRef}
-        data={items}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        horizontal
-        pagingEnabled
-        scrollEnabled={!isZoomed && !deleting}
-        showsHorizontalScrollIndicator={false}
-        getItemLayout={getItemLayout}
-        initialScrollIndex={initialIndex > 0 ? initialIndex : undefined}
-        onMomentumScrollEnd={(e) => {
-          const idx = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
-          setActiveIndex(Math.min(idx, items.length - 1));
-          if (isZoomed) setIsZoomed(false);
-        }}
-        removeClippedSubviews
-        windowSize={3}
-        maxToRenderPerBatch={3}
-        style={{ width: screenWidth, height: screenHeight }}
-      />
-
-      {/* Top chrome — back button + position counter + Vault delete */}
-      <LinearGradient
-        colors={['rgba(0,0,0,0.70)', 'rgba(0,0,0,0.30)', 'transparent']}
-        style={[styles.topGradient, { paddingTop: insets.top + 8, height: insets.top + 64 }]}
-        pointerEvents="box-none"
-      >
-        <View style={styles.topRow}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.8}>
-            <ChevronLeft color="#fff" size={22} strokeWidth={2.2} />
-          </TouchableOpacity>
-          {items.length > 1 && (
-            <AppText style={styles.counterText}>{activeIndex + 1} / {items.length}</AppText>
-          )}
-          {canDeleteFromVault ? (
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={confirmDeleteActive}
-              activeOpacity={0.8}
-              disabled={deleting}
-            >
-              {deleting
-                ? <ActivityIndicator color="#FF6B6B" size="small" />
-                : <Trash2 color="#FF6B6B" size={19} strokeWidth={2.2} />}
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.counterSpacer} />
-          )}
-        </View>
-      </LinearGradient>
+        <FlatList ref={listRef} data={items} renderItem={renderItem} keyExtractor={keyExtractor} horizontal pagingEnabled directionalLockEnabled scrollEnabled={!isZoomed && !deleting} showsHorizontalScrollIndicator={false} getItemLayout={getItemLayout} initialScrollIndex={initialIndex > 0 ? initialIndex : undefined} initialNumToRender={1} maxToRenderPerBatch={2} windowSize={3} removeClippedSubviews={Platform.OS !== 'android'} onMomentumScrollEnd={(e) => { const idx = Math.round(e.nativeEvent.contentOffset.x / screenWidth); setActiveIndex(Math.min(idx, items.length - 1)); if (isZoomed) { setIsZoomed(false); isZoomedShared.value = false; } }} style={{ width: screenWidth, height: screenHeight }} />
+        <LinearGradient colors={['rgba(0,0,0,0.70)', 'rgba(0,0,0,0.30)', 'transparent']} style={[styles.topGradient, { paddingTop: insets.top + 8, height: insets.top + 64 }]} pointerEvents="box-none">
+          <View style={styles.topRow}><TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.8}><ChevronLeft color="#fff" size={22} strokeWidth={2.2} /></TouchableOpacity>{items.length > 1 && <AppText style={styles.counterText}>{activeIndex + 1} / {items.length}</AppText>}{canDeleteFromVault ? <TouchableOpacity style={styles.deleteBtn} onPress={confirmDeleteActive} activeOpacity={0.8} disabled={deleting}>{deleting ? <ActivityIndicator color="#FF6B6B" size="small" /> : <Trash2 color="#FF6B6B" size={19} strokeWidth={2.2} />}</TouchableOpacity> : <View style={styles.counterSpacer} />}</View>
+        </LinearGradient>
       </Animated.View>
     </GestureDetector>
   );
 }
 
 function PermBadge({ icon, label, allowed }: { icon: React.ReactNode; label: string; allowed: boolean }) {
-  return (
-    <View style={[styles.badge, { borderColor: allowed ? 'rgba(255,46,138,0.35)' : 'rgba(255,255,255,0.10)' }]}>
-      {icon}
-      <AppText style={[styles.badgeLabel, { color: allowed ? '#fff' : 'rgba(255,255,255,0.32)' }]}>{label}</AppText>
-    </View>
-  );
+  return <View style={[styles.badge, { borderColor: allowed ? 'rgba(255,46,138,0.35)' : 'rgba(255,255,255,0.10)' }]}>{icon}<AppText style={[styles.badgeLabel, { color: allowed ? '#fff' : 'rgba(255,255,255,0.32)' }]}>{label}</AppText></View>;
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  mediaContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing.md,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.42)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-  },
-  deleteBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(70,0,0,0.42)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,107,107,0.28)',
-  },
-  counterText: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: 'rgba(255,255,255,0.80)',
-    backgroundColor: 'rgba(0,0,0,0.42)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    overflow: 'hidden',
-  },
-  counterSpacer: {
-    width: 38,
-  },
-  timestampBadge: {
-    position: 'absolute',
-    right: Spacing.md,
-  },
-  timestampBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: 'rgba(255,255,255,0.55)',
-  },
-  bottomOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingTop: 52,
-    paddingHorizontal: Spacing.xl,
-    gap: 10,
-  },
-  saveVaultBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,138,61,0.14)',
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(255,138,61,0.4)',
-    paddingVertical: 12,
-    paddingHorizontal: Spacing.xl,
-    marginBottom: 4,
-  },
-  saveVaultBtnSaved: {
-    backgroundColor: 'rgba(76,175,80,0.12)',
-    borderColor: 'rgba(76,175,80,0.35)',
-  },
-  saveVaultText: {
-    color: '#FF8A3D',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-  },
-  permRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 7,
-    justifyContent: 'center',
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    backgroundColor: 'rgba(0,0,0,0.50)',
-  },
-  badgeLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-  },
-  playBtn: {
-    position: 'absolute',
-  },
-  playBtnInner: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(0,0,0,0.52)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  muteBtn: {
-    position: 'absolute',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderRadius: 18,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-  },
-  videoErrorText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.82)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.xl,
-  },
-  modalCard: {
-    backgroundColor: '#1A1114',
-    borderRadius: Radius.xl,
-    padding: Spacing.xl,
-    alignItems: 'center',
-    gap: Spacing.md,
-    width: '100%',
-    maxWidth: 340,
-    borderWidth: 1,
-    borderColor: 'rgba(255,179,71,0.25)',
-  },
-  modalIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255,179,71,0.10)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  modalTitle: {
-    color: '#fff',
-    fontSize: FontSize.lg,
-    fontFamily: 'Inter-Bold',
-    textAlign: 'center',
-  },
-  modalBody: {
-    color: 'rgba(255,255,255,0.60)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  modalBtn: {
-    marginTop: 4,
-    backgroundColor: 'rgba(255,179,71,0.12)',
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(255,179,71,0.35)',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-  },
-  modalBtnText: {
-    color: '#FFB347',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-  },
+  root: { flex: 1, backgroundColor: '#000' },
+  mediaContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  topGradient: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: Spacing.md },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.42)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  deleteBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(70,0,0,0.42)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,107,107,0.28)' },
+  counterText: { fontSize: 13, fontFamily: 'Inter-SemiBold', color: 'rgba(255,255,255,0.80)', backgroundColor: 'rgba(0,0,0,0.42)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: Radius.pill, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', overflow: 'hidden' },
+  counterSpacer: { width: 38 },
+  timestampBadge: { position: 'absolute', right: Spacing.md },
+  timestampBadgeText: { fontSize: 12, fontFamily: 'Inter-Medium', color: 'rgba(255,255,255,0.55)' },
+  bottomOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingTop: 52, paddingHorizontal: Spacing.xl, gap: 10 },
+  saveVaultBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,138,61,0.14)', borderRadius: Radius.pill, borderWidth: 1, borderColor: 'rgba(255,138,61,0.4)', paddingVertical: 12, paddingHorizontal: Spacing.xl, marginBottom: 4 },
+  saveVaultBtnSaved: { backgroundColor: 'rgba(76,175,80,0.12)', borderColor: 'rgba(76,175,80,0.35)' },
+  saveVaultText: { color: '#FF8A3D', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  permRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, justifyContent: 'center' },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: Radius.pill, borderWidth: 1, backgroundColor: 'rgba(0,0,0,0.50)' },
+  badgeLabel: { fontSize: 12, fontFamily: 'Inter-Medium' },
+  playBtn: { position: 'absolute' },
+  playBtnInner: { width: 68, height: 68, borderRadius: 34, backgroundColor: 'rgba(0,0,0,0.52)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' },
+  muteBtn: { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18, padding: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  videoErrorText: { color: 'rgba(255,255,255,0.5)', fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', alignItems: 'center', justifyContent: 'center', padding: Spacing.xl },
+  modalCard: { backgroundColor: '#1A1114', borderRadius: Radius.xl, padding: Spacing.xl, alignItems: 'center', gap: Spacing.md, width: '100%', maxWidth: 340, borderWidth: 1, borderColor: 'rgba(255,179,71,0.25)' },
+  modalIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,179,71,0.10)', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  modalTitle: { color: '#fff', fontSize: FontSize.lg, fontFamily: 'Inter-Bold', textAlign: 'center' },
+  modalBody: { color: 'rgba(255,255,255,0.60)', fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20 },
+  modalBtn: { marginTop: 4, backgroundColor: 'rgba(255,179,71,0.12)', borderRadius: Radius.pill, borderWidth: 1, borderColor: 'rgba(255,179,71,0.35)', paddingHorizontal: 32, paddingVertical: 12 },
+  modalBtnText: { color: '#FFB347', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
 });
