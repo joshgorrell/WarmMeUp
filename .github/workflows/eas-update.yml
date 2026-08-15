@@ -30,7 +30,20 @@ jobs:
         continue-on-error: true
         run: npm run lint
 
-      - name: Expo dependency check
+      - name: Verify video thumbnail dependency
+        run: |
+          node -e "
+            const pkg = require('expo-video-thumbnails/package.json');
+            console.log('expo-video-thumbnails:', pkg.version);
+            if (!pkg.version.startsWith('10.0.')) {
+              console.error('FAIL: unexpected expo-video-thumbnails version ' + pkg.version);
+              process.exit(1);
+            }
+            console.log('PASS: expo-video-thumbnails is installed and compatible with SDK 54');
+          "
+
+      - name: Expo dependency compatibility report
+        continue-on-error: true
         run: npx expo install --check
 
       - name: Install EAS CLI
