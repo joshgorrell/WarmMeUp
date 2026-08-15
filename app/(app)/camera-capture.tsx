@@ -4,7 +4,7 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo
 import { Image as ExpoImage } from 'expo-image';
 import { ResizeMode, Video } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Flashlight, RefreshCcw, X } from 'lucide-react-native';
+import { Flashlight, Pause, Play, RefreshCcw, X } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import { clearCameraCaptureResult, setCameraCaptureResult } from '@/lib/cameraCaptureStore';
 import { cleanupTempFile } from '@/lib/mediaCache';
@@ -39,6 +39,7 @@ export default function CameraCaptureScreen() {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [cameraGeneration, setCameraGeneration] = useState(0);
   const [pendingCapture, setPendingCapture] = useState<PendingCapture | null>(null);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
 
   useEffect(() => {
     clearCameraCaptureResult();
@@ -110,7 +111,10 @@ export default function CameraCaptureScreen() {
         setRecording(true);
         const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
         setRecording(false);
-        if (result?.uri) setPendingCapture({ uri: result.uri, mediaType: 'video', mimeType: videoMimeFromUri(result.uri) });
+        if (result?.uri) {
+          setPreviewPlaying(false);
+          setPendingCapture({ uri: result.uri, mediaType: 'video', mimeType: videoMimeFromUri(result.uri) });
+        }
       } else {
         setBusy(true);
         const result = await cameraRef.current.takePictureAsync({ quality: 1 });
@@ -129,9 +133,29 @@ export default function CameraCaptureScreen() {
     }
   };
 
+  const togglePreviewPlayback = async () => {
+    if (!previewVideoRef.current) return;
+    try {
+      if (previewPlaying) {
+        await previewVideoRef.current.pauseAsync();
+        setPreviewPlaying(false);
+      } else {
+        const status: any = await previewVideoRef.current.getStatusAsync();
+        if (status?.isLoaded && status.didJustFinish) {
+          await previewVideoRef.current.setPositionAsync(0);
+        }
+        await previewVideoRef.current.playAsync();
+        setPreviewPlaying(true);
+      }
+    } catch {
+      Alert.alert('Preview Error', 'Could not play this recording.');
+    }
+  };
+
   const retake = async () => {
     if (!pendingCapture) return;
     previewVideoRef.current?.pauseAsync().catch(() => {});
+    setPreviewPlaying(false);
     await cleanupTempFile(pendingCapture.uri).catch(() => {});
     setPendingCapture(null);
     setFlashEnabled(false);
@@ -140,6 +164,8 @@ export default function CameraCaptureScreen() {
 
   const useCapture = () => {
     if (!pendingCapture) return;
+    previewVideoRef.current?.pauseAsync().catch(() => {});
+    setPreviewPlaying(false);
     setCameraCaptureResult(pendingCapture);
     setPendingCapture(null);
     router.back();
@@ -156,7 +182,27 @@ export default function CameraCaptureScreen() {
         {pendingCapture.mediaType === 'photo' ? (
           <ExpoImage source={{ uri: pendingCapture.uri }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="none" />
         ) : (
-          <Video ref={previewVideoRef} source={{ uri: pendingCapture.uri }} style={StyleSheet.absoluteFill} resizeMode={ResizeMode.CONTAIN} useNativeControls shouldPlay isLooping />
+          <>
+            <Video
+              ref={previewVideoRef}
+              source={{ uri: pendingCapture.uri }}
+              style={StyleSheet.absoluteFill}
+              resizeMode={ResizeMode.CONTAIN}
+              useNativeControls={false}
+              shouldPlay={false}
+              isLooping={false}
+              onPlaybackStatusUpdate={(status: any) => {
+                if (!status?.isLoaded) return;
+                setPreviewPlaying(!!status.isPlaying);
+                if (status.didJustFinish) setPreviewPlaying(false);
+              }}
+            />
+            <TouchableOpacity style={styles.previewPlayButton} onPress={togglePreviewPlayback} activeOpacity={0.85}>
+              <View style={styles.previewPlayButtonInner}>
+                {previewPlaying ? <Pause color="#fff" size={30} /> : <Play color="#fff" size={32} fill="#fff" />}
+              </View>
+            </TouchableOpacity>
+          </>
         )}
         <TouchableOpacity style={styles.previewClose} onPress={close}><X color="#fff" size={26} /></TouchableOpacity>
         <View style={styles.previewActions}>
@@ -211,6 +257,8 @@ export default function CameraCaptureScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' }, previewRoot: { flex: 1, backgroundColor: '#000' },
   previewClose: { position: 'absolute', top: 54, left: 18, width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(0,0,0,0.48)', alignItems: 'center', justifyContent: 'center' },
+  previewPlayButton: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  previewPlayButtonInner: { width: 76, height: 76, borderRadius: 38, backgroundColor: 'rgba(0,0,0,0.52)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', alignItems: 'center', justifyContent: 'center' },
   previewActions: { position: 'absolute', left: 24, right: 24, bottom: 34, flexDirection: 'row', gap: 12 },
   retakeButton: { flex: 1, minHeight: 52, borderRadius: 26, backgroundColor: 'rgba(32,32,38,0.94)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' },
   useButton: { flex: 1, minHeight: 52, borderRadius: 26, backgroundColor: '#FF2E8A', alignItems: 'center', justifyContent: 'center' },
