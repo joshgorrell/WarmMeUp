@@ -17,6 +17,7 @@ import {
 } from './noteHelpers';
 import { MediaBubble } from './MediaBubble';
 import CountdownRing from '@/components/CountdownRing';
+import { useLayout } from '@/hooks/useLayout';
 
 export function ReplyQuote({
   msg,
@@ -109,6 +110,11 @@ export const MessageRow = React.memo(function MessageRow({
   replySenderName?: string;
   onJumpToMessage?: (id: string) => void;
 }) {
+  const { isTabletOrLarger, isLargeTablet } = useLayout();
+  const tabletRowStyle = isTabletOrLarger
+    ? { width: '100%' as const, maxWidth: isLargeTablet ? 820 : 760, alignSelf: 'center' as const }
+    : undefined;
+
   const highlightAnim = React.useRef(new Animated.Value(0)).current;
   React.useEffect(() => {
     if (!highlighted) return;
@@ -170,11 +176,11 @@ export const MessageRow = React.memo(function MessageRow({
   return (
     <>
       {showDivider && (
-        <View style={styles.dateDivider}>
+        <View style={[styles.dateDivider, tabletRowStyle]}>
           <AppText style={[styles.dateText, { color: colors.textMuted }]}>{getDividerLabel(item.created_at)}</AppText>
         </View>
       )}
-      <View style={styles.msgRowOuter}>
+      <View style={[styles.msgRowOuter, tabletRowStyle]}>
         {/* Timestamp revealed by swiping left — positioned to the right of the row */}
         <ReAnimated.View style={[styles.swipeTimestamp, isMine && styles.swipeTimestampRight, timestampStyle]} pointerEvents="none">
           <AppText style={[styles.bubbleTime, { color: 'rgba(255,255,255,0.40)', fontSize: Math.round(11 * chatFontScale) }]}>
