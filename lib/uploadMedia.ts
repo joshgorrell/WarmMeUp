@@ -35,8 +35,13 @@ async function extractVideoThumbnail(uri: string): Promise<string | null> {
   if (Platform.OS === 'web') return null;
   try {
     const { getThumbnailAsync } = await import('expo-video-thumbnails');
-    const result = await getThumbnailAsync(uri, { time: 0, quality: 0.8 });
-    return result.uri;
+    try {
+      const result = await getThumbnailAsync(uri, { time: 200, quality: 0.85 });
+      return result.uri;
+    } catch {
+      const result = await getThumbnailAsync(uri, { time: 0, quality: 0.85 });
+      return result.uri;
+    }
   } catch {
     return null;
   }
@@ -63,6 +68,12 @@ function startProgressPulse(report: (pct: number) => void): () => void {
     report(pct);
   }, 450);
   return () => clearInterval(timer);
+}
+
+export function videoThumbnailPath(storagePath: string): string {
+  return /\.\w+$/.test(storagePath)
+    ? storagePath.replace(/\.\w+$/, '_thumb.jpg')
+    : `${storagePath}_thumb.jpg`;
 }
 
 export async function uploadMediaFile(
@@ -121,17 +132,17 @@ export async function uploadMediaFile(
       uploadStoragePath = /\.\w+$/.test(uploadStoragePath)
         ? uploadStoragePath.replace(/\.\w+$/, `.${expectedExt}`)
         : `${uploadStoragePath}.${expectedExt}`;
-    }
 
-    if (isVideo && bucket === 'vault') {
+      // Generate a real poster frame for both Chat and Vault videos. The path is
+      // deterministic so viewers can resolve it without another database column.
       reportProgress(5);
       const thumbUri = await extractVideoThumbnail(localUri);
       if (thumbUri) {
         thumbnailLocalUri = thumbUri;
-        const thumbStoragePath = uploadStoragePath.replace(/\.\w+$/, '_thumb.jpg');
+        const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
         try {
           const thumbBlob = await readAsBlob(thumbUri);
-          await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/vault/${thumbStoragePath}`, {
+          const thumbResponse = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`, {
             method: 'PUT',
             headers: {
               Authorization: `Bearer ${session.access_token}`,
@@ -141,7 +152,7 @@ export async function uploadMediaFile(
             },
             body: thumbBlob,
           });
-          thumbnailPath = thumbStoragePath;
+          if (thumbResponse.ok) thumbnailPath = thumbStoragePath;
         } catch {}
       }
     }
@@ -204,7 +215,7 @@ export async function uploadMediaFile(
     });
 
     if (isPhoto && uploadUri !== localUri) cleanupTempFile(uploadUri).catch(() => {});
-    if (isVideo && bucket === 'vault' && thumbnailLocalUri) cleanupTempFile(thumbnailLocalUri).catch(() => {});
+    if (isVideo && thumbnailLocalUri) cleanupTempFile(thumbnailLocalUri).catch(() => {});
 
     reportProgress(100);
     if (showGlobalProgress) finishUploadProgress();
