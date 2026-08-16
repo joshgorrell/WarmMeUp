@@ -21,7 +21,6 @@ export type MenuAnchor = {
   height: number;
 };
 
-// Per-message position in its sender group — controls which corners get the tail radius
 export type GroupPos = 'solo' | 'first' | 'middle' | 'last';
 
 export function formatTime(iso: string) {
@@ -45,11 +44,7 @@ export function getDividerLabel(iso: string): string {
   return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-// Dynamic bottom margin between messages — iMessage-style grouping rhythm
-export function getMessageSpacing(
-  item: ChatMessage,
-  prevItem: ChatMessage | null,
-): number {
+export function getMessageSpacing(item: ChatMessage, prevItem: ChatMessage | null): number {
   if (!prevItem) return 10;
   const sameSender = item.sender_id === prevItem.sender_id;
   const gap = new Date(item.created_at).getTime() - new Date(prevItem.created_at).getTime();
@@ -59,12 +54,8 @@ export function getMessageSpacing(
   return 10;
 }
 
-export function getGroupPos(
-  item: ChatMessage,
-  prev: ChatMessage | null,
-  next: ChatMessage | null,
-): GroupPos {
-  const GAP = 60_000; // 60 seconds — same grouping threshold as iMessage
+export function getGroupPos(item: ChatMessage, prev: ChatMessage | null, next: ChatMessage | null): GroupPos {
+  const GAP = 60_000;
   const samePrev = prev && prev.sender_id === item.sender_id &&
     new Date(item.created_at).getTime() - new Date(prev.created_at).getTime() < GAP;
   const sameNext = next && next.sender_id === item.sender_id &&
@@ -75,7 +66,6 @@ export function getGroupPos(
   return 'solo';
 }
 
-// iMessage-style corner radii: full on 3 corners, small tail on the sender-side corner
 export function getBubbleRadii(isMine: boolean, pos: GroupPos) {
   const FULL = 20;
   const TAIL = 4;
@@ -88,26 +78,21 @@ export function getBubbleRadii(isMine: boolean, pos: GroupPos) {
     };
   }
   if (isMine) {
-    // Tail = bottom-right corner for last/solo in group
     return {
       borderTopLeftRadius: FULL,
       borderTopRightRadius: FULL,
       borderBottomLeftRadius: FULL,
       borderBottomRightRadius: pos === 'last' ? TAIL : FULL,
     };
-  } else {
-    // Tail = bottom-left corner for last/solo in group
-    return {
-      borderTopLeftRadius: FULL,
-      borderTopRightRadius: FULL,
-      borderBottomLeftRadius: pos === 'last' ? TAIL : FULL,
-      borderBottomRightRadius: FULL,
-    };
   }
+  return {
+    borderTopLeftRadius: FULL,
+    borderTopRightRadius: FULL,
+    borderBottomLeftRadius: pos === 'last' ? TAIL : FULL,
+    borderBottomRightRadius: FULL,
+  };
 }
 
-// Shared styles used by MessageRow, MediaBubble, and the compose bar in note.tsx.
-// Keeping them in one place avoids StyleSheet duplication across extracted components.
 export const noteStyles = StyleSheet.create({
   list: {
     paddingHorizontal: 10,
@@ -120,7 +105,6 @@ export const noteStyles = StyleSheet.create({
   emptyTitle: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold', textAlign: 'center' },
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 22 },
 
-  // Date separator — centered text only, no lines
   dateDivider: {
     alignItems: 'center',
     marginTop: 20,
@@ -133,24 +117,18 @@ export const noteStyles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
-  // Message row outer — holds both the swipe-revealed timestamp and the sliding row
   msgRowOuter: {
     position: 'relative',
     overflow: 'visible',
   },
-
-  // Timestamp shown when swiping left
   swipeTimestamp: {
     position: 'absolute',
     right: 0,
     bottom: 8,
     paddingRight: 4,
   },
-  swipeTimestampRight: {
-    right: 0,
-  },
+  swipeTimestampRight: { right: 0 },
 
-  // Message row
   msgRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -159,7 +137,6 @@ export const noteStyles = StyleSheet.create({
   msgRowRight: { justifyContent: 'flex-end' },
   msgRowLeft: { justifyContent: 'flex-start' },
 
-  // Avatar
   msgAvatar: {
     width: 26,
     height: 26,
@@ -168,21 +145,15 @@ export const noteStyles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
-  msgAvatarHidden: {
-    backgroundColor: 'transparent',
-  },
+  msgAvatarHidden: { backgroundColor: 'transparent' },
   msgAvatarText: { fontSize: 11, fontFamily: 'Inter-Bold', color: '#FF8A3D' },
 
-  // Column wrapper so reactions sit under the bubble
   bubbleColumn: {
     flexDirection: 'column',
     alignItems: 'flex-start',
     maxWidth: '75%',
   },
-  bubbleColumnRight: {
-    alignItems: 'flex-end',
-  },
-
+  bubbleColumnRight: { alignItems: 'flex-end' },
   senderName: {
     fontSize: 11,
     fontFamily: 'Inter-SemiBold',
@@ -190,25 +161,16 @@ export const noteStyles = StyleSheet.create({
     marginLeft: 4,
   },
 
-  // Bubble — shared base (radii applied inline)
   bubble: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     gap: 4,
     overflow: 'hidden',
   },
-  bubbleOutbound: {
-    backgroundColor: '#2A2A34',
-  },
-  bubbleInboundPad: {
-    backgroundColor: '#1E1D28',
-  },
-  bubbleOutboundMediaOnly: {
-    backgroundColor: 'transparent',
-  },
-  bubbleMenuOpen: {
-    opacity: 0.80,
-  },
+  bubbleOutbound: { backgroundColor: '#2A2A34' },
+  bubbleInboundPad: { backgroundColor: '#1E1D28' },
+  bubbleOutboundMediaOnly: { backgroundColor: 'transparent' },
+  bubbleMenuOpen: { opacity: 0.80 },
   bubbleMediaOnly: {
     padding: 0,
     paddingHorizontal: 0,
@@ -225,9 +187,7 @@ export const noteStyles = StyleSheet.create({
     paddingBottom: 6,
     marginTop: 0,
   },
-  bubbleText: {
-    fontFamily: 'Inter-Regular',
-  },
+  bubbleText: { fontFamily: 'Inter-Regular' },
   bubbleMeta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -235,15 +195,9 @@ export const noteStyles = StyleSheet.create({
     alignSelf: 'flex-end',
     marginTop: 1,
   },
-  bubbleTime: {
-    fontFamily: 'Inter-Regular',
-  },
-  editedLabel: {
-    fontFamily: 'Inter-Regular',
-    fontStyle: 'italic',
-  },
+  bubbleTime: { fontFamily: 'Inter-Regular' },
+  editedLabel: { fontFamily: 'Inter-Regular', fontStyle: 'italic' },
 
-  // Reaction pills — sit just below the bubble
   reactionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -271,7 +225,6 @@ export const noteStyles = StyleSheet.create({
   reactionPillEmoji: { fontSize: 16, lineHeight: 20 },
   reactionPillCount: { fontFamily: 'Inter-SemiBold' },
 
-  // Edit banner
   editBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -282,7 +235,6 @@ export const noteStyles = StyleSheet.create({
   },
   editBannerText: { flex: 1, fontSize: 12, fontFamily: 'Inter-Medium' },
 
-  // Reply banner
   replyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -314,7 +266,6 @@ export const noteStyles = StyleSheet.create({
     color: 'rgba(255,255,255,0.55)',
   },
 
-  // Reply quote block (inside bubble)
   replyQuoteContainer: {
     flexDirection: 'row',
     alignItems: 'stretch',
@@ -325,21 +276,9 @@ export const noteStyles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.18)',
   },
-  replyQuoteAccent: {
-    width: 2.5,
-    borderRadius: 2,
-    flexShrink: 0,
-  },
-  replyQuoteTextCol: {
-    flex: 1,
-    minWidth: 0,
-    gap: 0,
-  },
-  replyQuoteSender: {
-    fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    lineHeight: 14,
-  },
+  replyQuoteAccent: { width: 2.5, borderRadius: 2, flexShrink: 0 },
+  replyQuoteTextCol: { flex: 1, minWidth: 0, gap: 0 },
+  replyQuoteSender: { fontSize: 11, fontFamily: 'Inter-SemiBold', lineHeight: 14 },
   replyQuotePreview: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
@@ -347,7 +286,6 @@ export const noteStyles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // Media bubble
   mediaTap: {
     overflow: 'hidden',
     backgroundColor: '#1A1520',
@@ -400,8 +338,10 @@ export const noteStyles = StyleSheet.create({
   uploadPctWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   uploadPctText: { color: '#FF5A3D', fontSize: 11, fontFamily: 'Inter-Bold', minWidth: 30 },
 
-  // Compose
   compose: {
+    width: '100%',
+    maxWidth: 820,
+    alignSelf: 'center',
     paddingHorizontal: 10,
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -467,12 +407,8 @@ export const noteStyles = StyleSheet.create({
   },
   inviteBtnText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
 
-  // Menu backdrop
-  menuBackdrop: {
-    backgroundColor: 'rgba(0,0,0,0.28)',
-  },
+  menuBackdrop: { backgroundColor: 'rgba(0,0,0,0.28)' },
 
-  // Burn timer countdown badge on media bubbles
   burnBadge: {
     position: 'absolute',
     bottom: 6,
@@ -487,8 +423,6 @@ export const noteStyles = StyleSheet.create({
     borderRadius: 22,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
-
-  // Burn timer countdown badge on text-only bubbles
   textBurnBadge: {
     position: 'absolute',
     bottom: -2,
@@ -503,8 +437,6 @@ export const noteStyles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
-
-  // Sender-side "seen" eye badge on outgoing media
   seenBadge: {
     position: 'absolute',
     bottom: 6,
@@ -519,10 +451,7 @@ export const noteStyles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  seenBadgeArmed: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  seenBadgeArmed: { alignItems: 'center', justifyContent: 'center' },
   seenBadgeClock: {
     position: 'absolute',
     bottom: -2,
@@ -531,14 +460,6 @@ export const noteStyles = StyleSheet.create({
     borderRadius: 6,
     overflow: 'hidden',
   },
-
-  // Timer picker sheet
-  timerSheetBody: {
-    gap: 10,
-    paddingBottom: 8,
-  },
-  timerSheetBtn: {
-    width: '100%',
-    paddingVertical: 14,
-  },
+  timerSheetBody: { gap: 10, paddingBottom: 8 },
+  timerSheetBtn: { width: '100%', paddingVertical: 14 },
 });
