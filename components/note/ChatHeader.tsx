@@ -7,9 +7,11 @@ import AppText from '@/components/AppText';
 import Avatar from '@/components/Avatar';
 import { useAuth } from '@/context/AuthContext';
 import { useWeather } from '@/hooks/useWeather';
+import { useLayout } from '@/hooks/useLayout';
 
 const chatHeaderStyles = StyleSheet.create({
   container: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -104,14 +106,20 @@ export function ChatHeader({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile, settings } = useAuth();
+  const { isTabletOrLarger, isLargeTablet } = useLayout();
   const privacyMode = settings?.stealth_mode_enabled ?? false;
   const temp = useWeather(
     privacyMode ? settings?.weather_lat : null,
     privacyMode ? settings?.weather_lon : null,
     privacyMode ? profile?.id : undefined,
   );
+
+  const tabletHeaderStyle = isTabletOrLarger
+    ? { maxWidth: isLargeTablet ? 820 : 760, alignSelf: 'center' as const }
+    : undefined;
+
   return (
-    <View style={[chatHeaderStyles.container, { paddingTop: insets.top + 6 }]}>
+    <View style={[chatHeaderStyles.container, { paddingTop: insets.top + 6 }, tabletHeaderStyle]}>
       <TouchableOpacity onPress={onBack} style={chatHeaderStyles.backBtn} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <ChevronLeft color="#fff" size={26} strokeWidth={2} />
       </TouchableOpacity>
