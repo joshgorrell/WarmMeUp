@@ -40,6 +40,7 @@ export default function CameraCaptureScreen() {
   const [cameraGeneration, setCameraGeneration] = useState(0);
   const [pendingCapture, setPendingCapture] = useState<PendingCapture | null>(null);
   const [previewPlaying, setPreviewPlaying] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
 
   useEffect(() => { clearCameraCaptureResult(); setFlashEnabled(false); }, []);
   useEffect(() => { if (!cameraPermission?.granted) requestCameraPermission(); }, [cameraPermission?.granted, requestCameraPermission]);
@@ -103,14 +104,23 @@ export default function CameraCaptureScreen() {
       }
     } catch { Alert.alert('Preview Error', 'Could not play this recording.'); }
   };
-  const retake = async () => {
-    if (!pendingCapture) return;
-    previewVideoRef.current?.pauseAsync().catch(() => {}); setPreviewPlaying(false);
-    await cleanupTempFile(pendingCapture.uri).catch(() => {}); setPendingCapture(null); setFlashEnabled(false); remountCamera();
+  const stopAndReleaseVideo = async () => {
+    const ref = previewVideoRef.current;
+    if (!ref) return;
+    try { await ref.stopAsync(); } catch {}
+    try { await ref.unloadAsync(); } catch {}
+    setPreviewPlaying(false);
   };
-  const useCapture = () => {
-    if (!pendingCapture) return;
-    previewVideoRef.current?.pauseAsync().catch(() => {}); setPreviewPlaying(false);
+  const retake = async () => {
+    if (!pendingCapture || finalizing) return;
+    setFinalizing(true);
+    if (pendingCapture.mediaType === 'video') await stopAndReleaseVideo();
+    await cleanupTempFile(pendingCapture.uri).catch(() => {}); setPendingCapture(null); setFlashEnabled(false); setFinalizing(false); remountCamera();
+  };
+  const useCapture = async () => {
+    if (!pendingCapture || finalizing) return;
+    setFinalizing(true);
+    if (pendingCapture.mediaType === 'video') await stopAndReleaseVideo();
     setCameraCaptureResult(pendingCapture); setPendingCapture(null); router.back();
   };
 
@@ -124,7 +134,7 @@ export default function CameraCaptureScreen() {
         <TouchableOpacity style={styles.previewPlayButton} onPress={togglePreviewPlayback} activeOpacity={0.85}><View style={styles.previewPlayButtonInner}>{previewPlaying ? <Pause color="#fff" size={30} /> : <Play color="#fff" size={32} fill="#fff" />}</View></TouchableOpacity>
       </>}
       <TouchableOpacity style={styles.previewClose} onPress={close}><X color="#fff" size={26} /></TouchableOpacity>
-      <View style={styles.previewActions}><TouchableOpacity style={styles.retakeButton} onPress={retake}><AppText style={styles.retakeText}>Retake</AppText></TouchableOpacity><TouchableOpacity style={styles.useButton} onPress={useCapture}><AppText style={styles.useText}>{pendingCapture.mediaType === 'video' ? 'Use Video' : 'Use Photo'}</AppText></TouchableOpacity></View>
+      <View style={styles.previewActions}><TouchableOpacity style={styles.retakeButton} onPress={retake} disabled={finalizing}><AppText style={styles.retakeText}>Retake</AppText></TouchableOpacity><TouchableOpacity style={styles.useButton} onPress={useCapture} disabled={finalizing}><AppText style={styles.useText}>{finalizing && pendingCapture.mediaType === 'video' ? 'Saving…' : pendingCapture.mediaType === 'video' ? 'Use Video' : 'Use Photo'}</AppText></TouchableOpacity></View>
     </View>
   );
 
