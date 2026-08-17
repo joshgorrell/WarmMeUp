@@ -112,7 +112,17 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
     if (isBlurred) revealMedia();
     else if (blurEnabled) setLocallyRevealed(false);
   };
-  const handleVideoOuterPress = () => { if (isBlurred) revealMedia(); };
+  const handleVideoOuterPress = () => {
+    if (isBlurred) {
+      revealMedia();
+      return;
+    }
+    if (blurEnabled) {
+      videoRef.current?.pauseAsync?.().catch(() => {});
+      setVideoPlaying(false);
+      setLocallyRevealed(false);
+    }
+  };
   const toggleVideoPlayback = async (event?: any) => {
     event?.stopPropagation?.();
     if (isBlurred) { revealMedia(); return; }
@@ -132,13 +142,6 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
     setVideoPlaying(false);
     onOpen(msg);
   };
-  const handleReblurVideo = (event: any) => {
-    event?.stopPropagation?.();
-    if (!blurEnabled || isBlurred) return;
-    videoRef.current?.pauseAsync?.().catch(() => {});
-    setVideoPlaying(false);
-    setLocallyRevealed(false);
-  };
   const cappedHeight = Math.min(bubbleHeight, Math.round(bubbleWidth * 1.35));
 
   return (
@@ -148,13 +151,13 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
         {isVideo ? <>
           {posterUrl && !videoPlaying && <ExpoImage source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />}
           {!posterUrl && !posterChecked && <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View>}
-          {!isBlurred && <Video ref={videoRef} source={{ uri: mediaUrl }} style={[StyleSheet.absoluteFill, !videoPlaying && posterUrl ? { opacity: 0 } : undefined]}
+          <Video ref={videoRef} source={{ uri: mediaUrl }} style={[StyleSheet.absoluteFill, !videoPlaying && posterUrl ? { opacity: 0 } : undefined]}
             resizeMode={ResizeMode.COVER} shouldPlay={false} isLooping={false} useNativeControls={false}
             onPlaybackStatusUpdate={(status: any) => {
               if (status?.isLoaded) { setVideoPlaying(!!status.isPlaying); setVideoError(false); }
               else if (status?.error) { setVideoError(true); logDebugEvent('chat_video_status_error', { messageId: msg.id, error: status.error }); }
             }}
-            onError={(error: string) => { setVideoError(true); logDebugEvent('chat_video_load_error', { messageId: msg.id, error }); }} />}
+            onError={(error: string) => { setVideoError(true); logDebugEvent('chat_video_load_error', { messageId: msg.id, error }); }} />
         </> : <ExpoImage key={mediaUrl} source={{ uri: mediaUrl }} style={[StyleSheet.absoluteFill, isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.1)' } as any : undefined]}
           contentFit="cover" cachePolicy="memory-disk" onError={() => {
             if (retryAttempted.current) { logDebugEvent('chat_message_image_load_error_hard', { messageId: msg.id }); setImgError(true); return; }
@@ -167,14 +170,13 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
         {isBlurred && Platform.OS !== 'web' && <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />}
       </> : <View style={styles.mediaPlaceholder}>{imgError || videoError ? <AppText style={styles.mediaErrorText}>{videoError ? 'Video could not be played' : 'Image failed to load'}</AppText> : <Lock color="rgba(255,255,255,0.5)" size={20} />}</View>}
 
-      {isVideo && loaded && mediaUrl && !imgError && !videoError && (
+      {isVideo && loaded && mediaUrl && !imgError && !videoError && !isBlurred && (
         <Pressable onPress={toggleVideoPlayback} hitSlop={12} style={localStyles.videoPlayButton}>
           <View style={styles.playCircle}>{videoPlaying ? <Pause color="#fff" size={20} strokeWidth={2.2} /> : <Play color="#fff" size={22} strokeWidth={2.2} fill="#fff" />}</View>
         </Pressable>
       )}
       {loaded && mediaUrl && !imgError && <Animated.View style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay, { opacity: overlayOpacity }]} pointerEvents="none"><View style={styles.blurRevealBtn}><EyeOff color="rgba(255,255,255,0.92)" size={20} strokeWidth={2} /></View></Animated.View>}
       {loaded && mediaUrl && !imgError && !isBlurred && <Pressable onPress={handleExpandPress} hitSlop={8} style={localStyles.expandButton}><Maximize2 color="#fff" size={17} strokeWidth={2.4} /></Pressable>}
-      {isVideo && blurEnabled && loaded && mediaUrl && !imgError && !isBlurred && <Pressable onPress={handleReblurVideo} hitSlop={8} style={localStyles.reblurButton}><EyeOff color="#fff" size={16} strokeWidth={2.3} /></Pressable>}
       {msg.burns_at && msg.burn_after_seconds && new Date(msg.burns_at).getTime() > Date.now() && <View style={styles.burnBadge} pointerEvents="none"><View style={styles.burnBadgeBg} /><CountdownRing expiresAt={msg.burns_at} totalSeconds={msg.burn_after_seconds} onExpire={() => onBurn(msg)} size={44} /></View>}
       {isMine && loaded && mediaUrl && !imgError && !msg.burns_at && <View style={styles.seenBadge} pointerEvents="none"><View style={styles.seenBadgeBg} />{msg.first_viewed_at ? <Eye color="rgba(255,255,255,0.92)" size={16} strokeWidth={2.5} /> : msg.burn_after_seconds ? <View style={styles.seenBadgeArmed}><Eye color="rgba(255,255,255,0.92)" size={13} strokeWidth={2.5} /><Clock color="rgba(255,179,71,0.95)" size={10} strokeWidth={2.5} style={styles.seenBadgeClock} /></View> : <Eye color="rgba(255,255,255,0.55)" size={16} strokeWidth={2} />}</View>}
     </Pressable>
@@ -182,9 +184,8 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
 }
 
 const localStyles = StyleSheet.create({
-  videoPlayButton: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 15 },
+  videoPlayButton: { position: 'absolute', left: '50%', top: '50%', width: 64, height: 64, marginLeft: -32, marginTop: -32, alignItems: 'center', justifyContent: 'center', zIndex: 15 },
   expandButton: { position: 'absolute', top: 10, right: 10, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.58)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', zIndex: 20 },
-  reblurButton: { position: 'absolute', top: 10, left: 10, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.58)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', zIndex: 20 },
 });
 
 export default MediaBubble;
