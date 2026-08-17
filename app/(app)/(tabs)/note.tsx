@@ -1286,6 +1286,15 @@ export default function ChatTab() {
     [activeMenuId, messages],
   );
 
+  const handleViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<{ item: ChatMessage }> }) => {
+    const mediaItems = viewableItems.filter(viewable => viewable.item.media_storage_path).map(viewable => viewable.item);
+    lastVisibleMediaMsgRef.current = mediaItems.length > 0
+      ? mediaItems[mediaItems.length - 1]
+      : null;
+  }, []);
+
+  const viewabilityConfig = useMemo(() => ({ viewAreaCoveragePercentThreshold: 50 }), []);
+
   return (
     <View style={{ flex: 1, backgroundColor: '#05040A' }}>
       <KeyboardAvoidingView
@@ -1353,15 +1362,8 @@ export default function ChatTab() {
                 }
               }}
               scrollEventThrottle={200}
-              onViewableItemsChanged={({ viewableItems }) => {
-                const mediaItems = viewableItems
-                  .filter(v => (v.item as ChatMessage).media_storage_path)
-                  .map(v => v.item as ChatMessage);
-                lastVisibleMediaMsgRef.current = mediaItems.length > 0
-                  ? mediaItems[mediaItems.length - 1]
-                  : null;
-              }}
-              viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
+              onViewableItemsChanged={handleViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
               onScrollBeginDrag={handleDismissMenu}
               onContentSizeChange={(_w, h) => {
                 if (justSentAtRef.current > 0 && h > lastContentHeightRef.current) {
