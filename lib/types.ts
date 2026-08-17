@@ -51,6 +51,7 @@ export interface UserSettings {
   notification_copy: string | null;
   vault_allow_save_default: boolean;
   vault_allow_share_default: boolean;
+  vault_allow_screenshot_default: boolean;
   screenshot_notify_partner: boolean;
   theme: 'dark' | 'light' | 'system';
   lock_after_seconds: number | null;
