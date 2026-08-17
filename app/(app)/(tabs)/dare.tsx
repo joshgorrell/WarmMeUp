@@ -6,7 +6,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Flame, CircleCheck as CheckCircle, RotateCcw, Timer } from 'lucide-react-native';
+import { Flame, CircleCheck as CheckCircle, RotateCcw, Timer, Eye, CircleX as XCircle } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -80,6 +80,7 @@ export default function DareTab() {
 
   // Sender dare: track expires_at of the dare I sent so I can show countdown
   const [sentDare, setSentDare] = useState<Interaction | null>(null);
+  const [rejectedDare, setRejectedDare] = useState<Interaction | null>(null);
   const senderCountdown = useSenderCountdown(sentDare?.expires_at);
   const [highlightDare, setHighlightDare] = useState(false);
   const handledDareLinkRef = useRef<string | null>(null);
@@ -165,7 +166,7 @@ export default function DareTab() {
       .eq('couple_id', couple.id)
       .eq('receiver_id', user.id)
       .eq('type', 'dare')
-      .in('status', ['sent', 'accepted', 'pending_verification'])
+      .in('status', ['sent', 'seen', 'accepted', 'pending_verification'])
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -178,6 +179,12 @@ export default function DareTab() {
       setIncomingDare(null);
     } else {
       setIncomingDare(incoming);
+      // Mark as seen the first time the receiver views it
+      if (incoming && incoming.status === 'sent') {
+        supabase.from('interactions').update({ status: 'seen' }).eq('id', incoming.id).eq('status', 'sent').then(() => {
+          setIncomingDare(prev => prev ? { ...prev, status: 'seen' } : prev);
+        });
+      }
     }
 
     // Dare I sent that partner self-reported done — waiting for my confirmation
@@ -195,17 +202,31 @@ export default function DareTab() {
     setPendingVerification(pending);
 
     // Track the dare I sent that is still open (for sender-side countdown)
+    // Include 'seen' so the sender can see the "viewed" indicator
     const { data: mySent } = await supabase.from('interactions')
       .select('*')
       .eq('couple_id', couple.id)
       .eq('sender_id', user.id)
       .eq('type', 'dare')
-      .eq('status', 'sent')
+      .in('status', ['sent', 'seen'])
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     setSentDare(mySent ?? null);
+
+    // Check for a recently rejected dare to show the decline reason
+    const { data: rejected } = await supabase.from('interactions')
+      .select('*')
+      .eq('couple_id', couple.id)
+      .eq('sender_id', user.id)
+      .eq('type', 'dare')
+      .eq('status', 'rejected')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setRejectedDare(rejected ?? null);
   }, [couple?.id, user]);
 
   const handleSend = async () => {
@@ -472,11 +493,18 @@ export default function DareTab() {
             />
           )}
 
-          {sent && (
+          {sent && sentDare && (
             <View style={[styles.sentCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.25)' }]}>
               <Flame color="#FF2E8A" size={48} fill="rgba(255,46,138,0.15)" strokeWidth={1.5} />
               <AppText style={[styles.sentTitle, { color: colors.text }]}>Dare sent!</AppText>
-              <AppText style={[styles.sentSub, { color: colors.textSecondary }]}>Waiting to see if they're up for it.</AppText>
+              {sentDare.status === 'seen' ? (
+                <View style={styles.seenRow}>
+                  <Eye color="#FFB347" size={14} strokeWidth={2} />
+                  <AppText style={[styles.seenText, { color: '#FFB347' }]}>Your partner has seen this dare</AppText>
+                </View>
+              ) : (
+                <AppText style={[styles.sentSub, { color: colors.textSecondary }]}>Waiting to see if they're up for it.</AppText>
+              )}
               {senderCountdown && (
                 <View style={styles.expiryRow}>
                   <Timer color={colors.textMuted} size={13} strokeWidth={2} />
@@ -484,11 +512,20 @@ export default function DareTab() {
                 </View>
               )}
               <SecondaryButton label="Send Another" onPress={() => { setSent(false); setDareText(''); setError(''); }} style={{ marginTop: Spacing.md }} />
-              {sentDare && (
-                <TouchableOpacity onPress={handleCancelDare} style={styles.cancelDareBtn} activeOpacity={0.7}>
-                  <AppText style={[styles.cancelDareBtnText, { color: colors.textMuted }]}>Cancel dare</AppText>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity onPress={handleCancelDare} style={styles.cancelDareBtn} activeOpacity={0.7}>
+                <AppText style={[styles.cancelDareBtnText, { color: colors.textMuted }]}>Cancel dare</AppText>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {sent && !sentDare && rejectedDare && (
+            <View style={[styles.sentCard, { backgroundColor: colors.card, borderColor: 'rgba(255,90,95,0.25)' }]}>
+              <XCircle color="#FF5A5F" size={40} strokeWidth={1.5} />
+              <AppText style={[styles.sentTitle, { color: colors.text }]}>Dare declined</AppText>
+              <AppText style={[styles.sentSub, { color: colors.textSecondary }]}>
+                {rejectedDare.decline_reason ?? 'Your partner declined this dare.'}
+              </AppText>
+              <SecondaryButton label="Send Another" onPress={() => { setSent(false); setDareText(''); setError(''); setRejectedDare(null); }} style={{ marginTop: Spacing.md }} />
             </View>
           )}
         </ScrollView>
@@ -556,4 +593,6 @@ const styles = StyleSheet.create({
   errorBanner: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.md },
   cancelDareBtn: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, marginTop: Spacing.xs },
   cancelDareBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center' },
+  seenRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  seenText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
 });
