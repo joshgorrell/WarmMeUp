@@ -104,6 +104,28 @@ Deno.serve(async (req: Request) => {
         .in("couple_id", [couple_id]);
     }
 
+    // Look up the vault item's media info so the activity feed can show a
+    // live thumbnail. This is a pointer to the existing file only — no copy
+    // is made. If the content is later burned or deleted, the file is gone
+    // and the thumbnail simply stops rendering (falls back to the icon).
+    let mediaMeta: Record<string, unknown> | null = null;
+    if (vault_item_id) {
+      const { data: vaultItem } = await adminClient
+        .from("vault_items")
+        .select("storage_path, storage_bucket, blurred_thumbnail_path, media_type, deleted_at")
+        .eq("id", vault_item_id)
+        .maybeSingle();
+
+      if (vaultItem && !vaultItem.deleted_at) {
+        mediaMeta = {
+          storage_path: vaultItem.storage_path ?? vaultItem.blurred_thumbnail_path ?? null,
+          storage_bucket: vaultItem.storage_bucket ?? "vault",
+          blurred_thumbnail_path: vaultItem.blurred_thumbnail_path ?? null,
+          media_type: vaultItem.media_type ?? null,
+        };
+      }
+    }
+
     // Find the partner's push token + settings
     const partnerId =
       couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
@@ -123,6 +145,7 @@ Deno.serve(async (req: Request) => {
       vault_item_id: vault_item_id ?? null,
       source_screen: source_screen ?? null,
       read: false,
+      metadata: mediaMeta ? { ...mediaMeta } : null,
     });
 
     // Send push notification if the partner has opted in to screenshot alerts

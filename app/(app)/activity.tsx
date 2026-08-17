@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import AppText from '@/components/AppText';
 import { useRouter, usePathname } from 'expo-router';
 import { ArrowLeft, Zap, Lock, MessageCircle, Dice6, Camera, Sparkles, ChevronRight, CheckCheck, Trash2 } from 'lucide-react-native';
@@ -38,6 +39,7 @@ type ActivityItem = {
   _rawTime: string;
   route: string;
   routeParams?: Record<string, string>;
+  thumbUri?: string | null;
 };
 
 function timeAgo(iso: string) {
@@ -211,6 +213,10 @@ export default function ActivityScreen() {
       });
     });
 
+    // Collect screenshot events that need thumbnail resolution so we can
+    // batch the signed-URL calls after the synchronous forEach.
+    const screenshotThumbRefs: { idx: number; bucket: string; path: string }[] = [];
+
     (activityEvts ?? []).forEach((ev: any) => {
       const isMine = ev.actor_user_id === user.id;
 
@@ -218,6 +224,10 @@ export default function ActivityScreen() {
         const screen = ev.source_screen ?? 'vault';
         const routeMap: Record<string, string> = { vault: '/(app)/(tabs)/vault', chat: '/(app)/(tabs)/note', wish: '/(app)/(tabs)/wish' };
         const subMap: Record<string, string> = { vault: 'Vault', chat: 'Chat', wish: 'Wish List' };
+
+        const meta = ev.metadata;
+        const hasThumbMeta = !!(meta?.storage_path && meta?.storage_bucket);
+
         mapped.push({
           id: `privacy_${ev.id}`,
           sourceTable: 'activity_events',
@@ -231,7 +241,16 @@ export default function ActivityScreen() {
           _rawTime: ev.created_at,
           route: routeMap[screen] ?? '/(app)/(tabs)/vault',
           routeParams: ev.vault_item_id ? { vault_item_id: ev.vault_item_id } : undefined,
+          thumbUri: null,
         });
+
+        if (hasThumbMeta) {
+          screenshotThumbRefs.push({
+            idx: mapped.length - 1,
+            bucket: meta.storage_bucket as string,
+            path: meta.storage_path as string,
+          });
+        }
         return;
       }
 
@@ -339,6 +358,24 @@ export default function ActivityScreen() {
         routeParams: wishParams,
       });
     });
+
+    // Resolve live thumbnails for screenshot events in parallel. These are
+    // pointers to the original files — no copies. If content was burned or
+    // deleted, the signed URL fails silently and the row keeps thumbUri null,
+    // so the feed falls back to the camera icon.
+    if (screenshotThumbRefs.length) {
+      const results = await Promise.all(
+        screenshotThumbRefs.map(ref =>
+          supabase.storage.from(ref.bucket).createSignedUrl(ref.path, 60 * 60),
+        ),
+      );
+      results.forEach((res, i) => {
+        const ref = screenshotThumbRefs[i];
+        if (res.data?.signedUrl && mapped[ref.idx]) {
+          mapped[ref.idx].thumbUri = res.data.signedUrl;
+        }
+      });
+    }
 
     mapped.sort((a, b) => b._rawTime.localeCompare(a._rawTime));
     if (isMountedRef.current) setAllItems(mapped);
@@ -509,9 +546,19 @@ export default function ActivityScreen() {
                 <View style={styles.unreadIndicatorWrap}>
                   {isUnread && <View style={styles.unreadDot} />}
                 </View>
-                <View style={[styles.iconWrap, { backgroundColor: `${item.color}18` }]}>
-                  {item.icon}
-                </View>
+                {item.thumbUri ? (
+                  <ExpoImage
+                    source={{ uri: item.thumbUri }}
+                    style={styles.thumbWrap}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={150}
+                  />
+                ) : (
+                  <View style={[styles.iconWrap, { backgroundColor: `${item.color}18` }]}>
+                    {item.icon}
+                  </View>
+                )}
                 <View style={styles.rowText}>
                   <AppText style={[styles.rowLabel, { color: colors.text }]}>{item.label}</AppText>
                   {item.sub ? <AppText style={[styles.rowSub, { color: colors.textSecondary }]}>{item.sub}</AppText> : null}
@@ -585,6 +632,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF2E8A',
   },
   iconWrap: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  thumbWrap: { width: 40, height: 40, borderRadius: 20, overflow: 'hidden' },
   rowText: { flex: 1 },
   rowLabel: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', lineHeight: 20 },
   rowSub: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular', marginTop: 2, lineHeight: 16 },
