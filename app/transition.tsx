@@ -50,7 +50,7 @@ const DEBUG_TAP_WINDOW_MS = 10000;
 
 export default function TransitionScreen() {
   const router = useRouter();
-  const { couple, partnerProfile, settings, user, isAdmin, isSuperAdmin, loading, subscriptionInfo, debugModeEnabled, globalDebugAccessEnabled } = useAuth();
+  const { couple, partnerProfile, profile, settings, user, isAdmin, isSuperAdmin, loading, subscriptionInfo, debugModeEnabled, globalDebugAccessEnabled } = useAuth();
   const { width } = useWindowDimensions();
   const logoW = Math.min(width * 0.5, 200);
   const bgOpacity = useRef(new Animated.Value(0)).current;
@@ -64,10 +64,12 @@ export default function TransitionScreen() {
   const hardDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Kept current so the hard-deadline callback (empty-deps effect) reads latest values.
   const coupleRef = useRef(couple);
+  const profileRef = useRef(profile);
   const isAdminRef = useRef(isAdmin);
   const isSuperAdminRef = useRef(isSuperAdmin);
   const canInviteRef = useRef(subscriptionInfo.canInvite);
   coupleRef.current = couple;
+  profileRef.current = profile;
   isAdminRef.current = isAdmin;
   isSuperAdminRef.current = isSuperAdmin;
   canInviteRef.current = subscriptionInfo.canInvite;
@@ -106,6 +108,22 @@ export default function TransitionScreen() {
 
     // Admins and super-admins bypass subscription checks entirely.
     const isPrivileged = isAdmin || isSuperAdmin;
+
+    // If the profile hasn't loaded yet (e.g. AuthContext safety-net fired
+    // before fetchProfile completed), we can't know if the user is admin.
+    // Defer routing until the profile arrives — a paired non-admin user
+    // would be wrongly sent to the paywall without this check.
+    if (!isPrivileged && !profile && couple?.active && couple?.user_b_id) {
+      if (!subTimeoutRef.current) {
+        logger.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — profile null, deferring routing`, { elapsedMs: elapsed() });
+        subTimeoutRef.current = setTimeout(() => {
+          subTimeoutRef.current = null;
+          logger.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — profile timeout fired, forcing navigate`, { elapsedMs: elapsed() });
+          navigate();
+        }, SUB_WAIT_MS);
+      }
+      return;
+    }
 
     // For non-privileged users, defer if subscription is still loading —
     // UNLESS there is no active couple OR the user is solo (no partner yet),
@@ -253,17 +271,23 @@ export default function TransitionScreen() {
         routed.current = true;
         const hasActiveCouple = coupleRef.current?.active === true;
         const isPrivileged = isAdminRef.current || isSuperAdminRef.current;
+        const profileLoaded = !!profileRef.current;
         // Privileged users always go to the app. Users without a couple go to /pair.
-        // Users WITH an active couple but unknown subscription status go to the
-        // subscription screen — never bypass the paywall check at the deadline.
+        // Users WITH an active couple but profile not loaded yet go to the app
+        // (safe default — we can't confirm they're non-admin, and sending a
+        // potential admin to the paywall is worse than letting a non-admin in).
+        // Users WITH an active couple, profile loaded, and no premium go to paywall.
         let dest: string;
         if (isPrivileged) {
           dest = '/(app)/(tabs)';
         } else if (!hasActiveCouple || !hasPartnerRef.current) {
           // No couple, or solo couple without a partner — go to /pair.
           dest = canInviteRef.current ? '/(app)/(tabs)' : '/(auth)/pair';
+        } else if (!profileLoaded) {
+          // Profile hasn't loaded — can't determine admin status. Safe default to app.
+          dest = '/(app)/(tabs)';
         } else {
-          // Active paired couple but subscription still loading — safe fallback to paywall.
+          // Active paired couple, profile loaded, not admin — safe fallback to paywall.
           dest = '/(auth)/subscription';
         }
         console.warn(`[TRANSITION ROUTED] +${elapsed()}ms HARD DEADLINE — fallback to ${dest}`, { elapsedMs: elapsed() });
@@ -295,7 +319,7 @@ export default function TransitionScreen() {
       authReady.current = true;
       tryNavigate();
     }
-  }, [loading, couple?.id, couple?.active, user?.id, isAdmin, isSuperAdmin, subscriptionInfo.loading, subscriptionInfo.isPremium]);
+  }, [loading, couple?.id, couple?.active, user?.id, isAdmin, isSuperAdmin, profile?.id, subscriptionInfo.loading, subscriptionInfo.isPremium]);
 
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
