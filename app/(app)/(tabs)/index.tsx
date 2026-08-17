@@ -345,6 +345,10 @@ export default function HomeScreen() {
         const screen = ev.source_screen ?? 'vault';
         const routeMap: Record<string, string> = { vault: '/(app)/(tabs)/vault', chat: '/(app)/(tabs)/note', wish: '/(app)/(tabs)/wish' };
         const subMap: Record<string, string> = { vault: 'Vault', chat: 'Chat', wish: 'Wish List' };
+        const meta = ev.metadata;
+        const screenshotParams: Record<string, string> = {};
+        if (ev.vault_item_id) screenshotParams.vault_item_id = ev.vault_item_id;
+        else if (meta?.chat_message_id) screenshotParams.message_id = meta.chat_message_id;
         items.push({
           id: `privacy_${ev.id}`,
           sourceTable: 'activity_events',
@@ -355,6 +359,7 @@ export default function HomeScreen() {
           icon: <Camera color="#FF8A3D" size={16} strokeWidth={2} />,
           color: '#FF8A3D',
           route: routeMap[screen] ?? '/(app)/(tabs)/vault',
+          routeParams: Object.keys(screenshotParams).length ? screenshotParams : undefined,
           _rawTime: ev.created_at,
         });
         return;

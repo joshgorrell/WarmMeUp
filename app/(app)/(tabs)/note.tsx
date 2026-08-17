@@ -83,6 +83,7 @@ export default function ChatTab() {
   const prevMsgCountRef = useRef(0);
   const lastInactiveAtRef = useRef<number | null>(null);
   const cameraActiveRef = useRef(false);
+  const lastVisibleMediaMsgRef = useRef<ChatMessage | null>(null);
   // Timestamp of the most recent send; used by onContentSizeChange to re-pin
   // the list to the bottom once large media bubbles finish laying out.
   const justSentAtRef = useRef(0);
@@ -126,7 +127,7 @@ export default function ChatTab() {
             fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-              body: JSON.stringify({ couple_id: couple.id, detected_by_user_id: user.id, source_screen: 'chat' }),
+              body: JSON.stringify({ couple_id: couple.id, detected_by_user_id: user.id, source_screen: 'chat', chat_message_id: lastVisibleMediaMsgRef.current?.id ?? null }),
             }).catch(() => {});
           });
         }
@@ -1352,6 +1353,15 @@ export default function ChatTab() {
                 }
               }}
               scrollEventThrottle={200}
+              onViewableItemsChanged={({ viewableItems }) => {
+                const mediaItems = viewableItems
+                  .filter(v => (v.item as ChatMessage).media_storage_path)
+                  .map(v => v.item as ChatMessage);
+                lastVisibleMediaMsgRef.current = mediaItems.length > 0
+                  ? mediaItems[mediaItems.length - 1]
+                  : null;
+              }}
+              viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
               onScrollBeginDrag={handleDismissMenu}
               onContentSizeChange={(_w, h) => {
                 if (justSentAtRef.current > 0 && h > lastContentHeightRef.current) {

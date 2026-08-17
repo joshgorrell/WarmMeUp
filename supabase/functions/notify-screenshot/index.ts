@@ -51,7 +51,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { vault_item_id, couple_id, detected_by_user_id, source_screen } = body;
+    const { vault_item_id, chat_message_id, couple_id, detected_by_user_id, source_screen } = body;
 
     if (!couple_id || !detected_by_user_id) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -104,10 +104,10 @@ Deno.serve(async (req: Request) => {
         .in("couple_id", [couple_id]);
     }
 
-    // Look up the vault item's media info so the activity feed can show a
-    // live thumbnail. This is a pointer to the existing file only — no copy
-    // is made. If the content is later burned or deleted, the file is gone
-    // and the thumbnail simply stops rendering (falls back to the icon).
+    // Look up media info for the activity feed thumbnail. This is a pointer
+    // to the existing file only — no copy is made. If the content is later
+    // burned or deleted, the file is gone and the thumbnail simply stops
+    // rendering (falls back to the icon).
     let mediaMeta: Record<string, unknown> | null = null;
     if (vault_item_id) {
       const { data: vaultItem } = await adminClient
@@ -122,6 +122,21 @@ Deno.serve(async (req: Request) => {
           storage_bucket: vaultItem.storage_bucket ?? "vault",
           blurred_thumbnail_path: vaultItem.blurred_thumbnail_path ?? null,
           media_type: vaultItem.media_type ?? null,
+        };
+      }
+    } else if (chat_message_id) {
+      const { data: chatMsg } = await adminClient
+        .from("chat_messages")
+        .select("media_storage_path, media_storage_bucket, media_type, deleted_at")
+        .eq("id", chat_message_id)
+        .maybeSingle();
+
+      if (chatMsg && !chatMsg.deleted_at && chatMsg.media_storage_path) {
+        mediaMeta = {
+          storage_path: chatMsg.media_storage_path,
+          storage_bucket: chatMsg.media_storage_bucket ?? "chat_media",
+          blurred_thumbnail_path: null,
+          media_type: chatMsg.media_type ?? null,
         };
       }
     }
@@ -145,7 +160,7 @@ Deno.serve(async (req: Request) => {
       vault_item_id: vault_item_id ?? null,
       source_screen: source_screen ?? null,
       read: false,
-      metadata: mediaMeta ? { ...mediaMeta } : null,
+      metadata: mediaMeta ? { ...mediaMeta, chat_message_id: chat_message_id ?? null } : (chat_message_id ? { chat_message_id } : null),
     });
 
     // Send push notification if the partner has opted in to screenshot alerts
@@ -174,7 +189,7 @@ Deno.serve(async (req: Request) => {
           to: partnerProfile.push_token,
           title: "Warm Me Up",
           body: bodyText,
-          data: { event_type: "screenshot_detected", couple_id, vault_item_id, source_screen, target_route: targetRoute },
+          data: { event_type: "screenshot_detected", couple_id, vault_item_id, chat_message_id, source_screen, target_route: targetRoute },
           sound: "default",
         }),
       });

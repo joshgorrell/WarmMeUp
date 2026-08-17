@@ -240,7 +240,9 @@ export default function ActivityScreen() {
           color: '#FF8A3D',
           _rawTime: ev.created_at,
           route: routeMap[screen] ?? '/(app)/(tabs)/vault',
-          routeParams: ev.vault_item_id ? { vault_item_id: ev.vault_item_id } : undefined,
+          routeParams: ev.vault_item_id
+            ? { vault_item_id: ev.vault_item_id }
+            : (meta?.chat_message_id ? { message_id: meta.chat_message_id } : undefined),
           thumbUri: null,
         });
 
