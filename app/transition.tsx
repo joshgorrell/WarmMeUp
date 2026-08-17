@@ -38,12 +38,9 @@ function resolveNotificationRoute(data: NotificationData): string | null {
   }
 }
 
-// Maximum time to wait for couple data to arrive after auth is ready.
-const COUPLE_WAIT_MS = 300;
-// Maximum time to wait for subscription info — it's a separate async fetch.
-const SUB_WAIT_MS = 400;
-// Absolute hard deadline — transition MUST resolve within this time no matter what.
-const HARD_DEADLINE_MS = 1000;
+// Absolute hard deadline — if verification hasn't affirmatively resolved by
+// this point, route to the verify-retry screen instead of guessing.
+const HARD_DEADLINE_MS = 5000;
 
 const DEBUG_TAP_TARGET = 5;
 const DEBUG_TAP_WINDOW_MS = 10000;
@@ -59,36 +56,18 @@ export default function TransitionScreen() {
   const routed = useRef(false);
   const animDone = useRef(false);
   const authReady = useRef(false);
-  const coupleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const subTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hardDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Kept current so the hard-deadline callback (empty-deps effect) reads latest values.
-  const coupleRef = useRef(couple);
-  const profileRef = useRef(profile);
-  const isAdminRef = useRef(isAdmin);
-  const isSuperAdminRef = useRef(isSuperAdmin);
-  const canInviteRef = useRef(subscriptionInfo.canInvite);
-  coupleRef.current = couple;
-  profileRef.current = profile;
-  isAdminRef.current = isAdmin;
-  isSuperAdminRef.current = isSuperAdmin;
-  canInviteRef.current = subscriptionInfo.canInvite;
-  // Whether the user has an actual partner (not just a solo placeholder couple).
-  const hasPartnerRef = useRef(!!couple?.user_b_id);
-  hasPartnerRef.current = !!couple?.user_b_id;
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debugModeRef = useRef(debugModeEnabled);
   debugModeRef.current = debugModeEnabled;
   const globalDebugRef = useRef(globalDebugAccessEnabled);
   globalDebugRef.current = globalDebugAccessEnabled;
-  // Timing reference for elapsed-ms logs
   const startMs = useRef(Date.now());
   const elapsed = () => Date.now() - startMs.current;
 
-  // Emergency debug access: 5 rapid taps on splash logo (admin or super-admin).
   const handleDebugTap = () => {
-    const canDebug = __DEV__ || isAdminRef.current || isSuperAdminRef.current || debugModeRef.current || globalDebugRef.current || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
+    const canDebug = __DEV__ || isAdmin || isSuperAdmin || debugModeRef.current || globalDebugRef.current || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
     if (!canDebug) return;
     debugTapCount.current += 1;
     if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
@@ -103,56 +82,42 @@ export default function TransitionScreen() {
     }, DEBUG_TAP_WINDOW_MS);
   };
 
+  // Returns true only when we have enough affirmatively-resolved data to make
+  // a routing decision. Unresolved state never counts as authorization.
+  const canRoute = (): boolean => {
+    // Admins/super-admins bypass subscription checks — but only when the
+    // profile has actually loaded and confirmed the admin flag.
+    if (isAdmin || isSuperAdmin) return true;
+
+    // Solo users (no couple, inactive couple, or no partner) go to /pair.
+    // This destination doesn't depend on subscription verification.
+    const isSolo = !couple || couple.active === false || !couple.user_b_id;
+    if (isSolo) return true;
+
+    // Paired users: both profile and subscription must be resolved.
+    // An unresolved state is never treated as authorized or unauthorized.
+    if (!profile) return false;
+    if (subscriptionInfo.loading) return false;
+
+    return true;
+  };
+
   const navigate = () => {
     if (routed.current) return;
 
-    // Admins and super-admins bypass subscription checks entirely.
-    const isPrivileged = isAdmin || isSuperAdmin;
+    // If we don't have enough resolved data, do NOT route — let the effect
+    // re-trigger when data arrives, or let the hard deadline catch the case
+    // where data never resolves.
+    if (!canRoute()) return;
 
-    // If the profile hasn't loaded yet (e.g. AuthContext safety-net fired
-    // before fetchProfile completed), we can't know if the user is admin.
-    // Defer routing until the profile arrives — a paired non-admin user
-    // would be wrongly sent to the paywall without this check.
-    if (!isPrivileged && !profile && couple?.active && couple?.user_b_id) {
-      if (!subTimeoutRef.current) {
-        logger.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — profile null, deferring routing`, { elapsedMs: elapsed() });
-        subTimeoutRef.current = setTimeout(() => {
-          subTimeoutRef.current = null;
-          logger.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — profile timeout fired, forcing navigate`, { elapsedMs: elapsed() });
-          navigate();
-        }, SUB_WAIT_MS);
-      }
-      return;
-    }
-
-    // For non-privileged users, defer if subscription is still loading —
-    // UNLESS there is no active couple OR the user is solo (no partner yet),
-    // in which case the destination is /pair and subscription status
-    // doesn't matter.
-    if (!isPrivileged && subscriptionInfo.loading) {
-      const isSolo = !couple || couple.active === false || !couple.user_b_id;
-      if (!isSolo) {
-        if (!subTimeoutRef.current) {
-          logger.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — subscriptionInfo.loading=true`, { elapsedMs: elapsed() });
-          subTimeoutRef.current = setTimeout(() => {
-            subTimeoutRef.current = null;
-            logger.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — sub timeout fired, forcing navigate`, { elapsedMs: elapsed() });
-            navigate();
-          }, SUB_WAIT_MS);
-        }
-        return;
-      }
-    }
-
-    if (coupleTimeoutRef.current) {
-      clearTimeout(coupleTimeoutRef.current);
-      coupleTimeoutRef.current = null;
-    }
-    if (subTimeoutRef.current) {
-      clearTimeout(subTimeoutRef.current);
-      subTimeoutRef.current = null;
-    }
     routed.current = true;
+
+    if (hardDeadlineRef.current) {
+      clearTimeout(hardDeadlineRef.current);
+      hardDeadlineRef.current = null;
+    }
+
+    const isPrivileged = isAdmin || isSuperAdmin;
 
     logger.log(`[TRANSITION ROUTE DECISION] +${elapsed()}ms`, {
       elapsedMs: elapsed(),
@@ -169,14 +134,6 @@ export default function TransitionScreen() {
     });
 
     Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
-      // Clear the hard deadline only after we are inside the animation callback
-      // and about to route. This ensures the deadline stays armed as a fallback
-      // if the animation callback is silently dropped by the JS thread.
-      if (hardDeadlineRef.current) {
-        clearTimeout(hardDeadlineRef.current);
-        hardDeadlineRef.current = null;
-      }
-
       // Privileged users bypass all subscription checks
       if (isPrivileged) {
         logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs) [privileged]`, { elapsedMs: elapsed() });
@@ -240,58 +197,28 @@ export default function TransitionScreen() {
     if (routed.current) return;
     if (!animDone.current || !authReady.current) return;
 
-    logger.log(`[TRANSITION TRY NAVIGATE] +${elapsed()}ms`, { elapsedMs: elapsed(), couple: couple ? `id=${couple.id}` : 'null', userId: user?.id ?? 'null' });
+    logger.log(`[TRANSITION TRY NAVIGATE] +${elapsed()}ms`, {
+      elapsedMs: elapsed(),
+      couple: couple ? `id=${couple.id}` : 'null',
+      userId: user?.id ?? 'null',
+      canRoute: canRoute(),
+    });
 
-    // Couple arrives slightly after loading=false due to React batching.
-    // Privileged users skip the couple wait — they go to app regardless.
-    const isPrivileged = isAdmin || isSuperAdmin;
-    if (user && !couple && !isPrivileged) {
-      if (!coupleTimeoutRef.current) {
-        logger.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — couple null after auth ready`, { elapsedMs: elapsed() });
-        coupleTimeoutRef.current = setTimeout(() => {
-          coupleTimeoutRef.current = null;
-          logger.log(`[TRANSITION WAITING FOR] +${elapsed()}ms — couple timeout fired, forcing navigate`, { elapsedMs: elapsed() });
-          navigate();
-        }, COUPLE_WAIT_MS);
-      }
-      return;
-    }
-
-    // navigate() itself will wait for subscriptionInfo to resolve.
     navigate();
   };
 
   useEffect(() => {
     logger.log('[TRANSITION START] +0ms');
 
-    // Hard deadline: if transition hasn't resolved, force safe fallback.
+    // Hard deadline: if verification hasn't affirmatively resolved, route to
+    // the verify-retry screen instead of guessing. Unresolved network/database
+    // state is never treated as authorization.
     hardDeadlineRef.current = setTimeout(() => {
       hardDeadlineRef.current = null;
       if (!routed.current) {
         routed.current = true;
-        const hasActiveCouple = coupleRef.current?.active === true;
-        const isPrivileged = isAdminRef.current || isSuperAdminRef.current;
-        const profileLoaded = !!profileRef.current;
-        // Privileged users always go to the app. Users without a couple go to /pair.
-        // Users WITH an active couple but profile not loaded yet go to the app
-        // (safe default — we can't confirm they're non-admin, and sending a
-        // potential admin to the paywall is worse than letting a non-admin in).
-        // Users WITH an active couple, profile loaded, and no premium go to paywall.
-        let dest: string;
-        if (isPrivileged) {
-          dest = '/(app)/(tabs)';
-        } else if (!hasActiveCouple || !hasPartnerRef.current) {
-          // No couple, or solo couple without a partner — go to /pair.
-          dest = canInviteRef.current ? '/(app)/(tabs)' : '/(auth)/pair';
-        } else if (!profileLoaded) {
-          // Profile hasn't loaded — can't determine admin status. Safe default to app.
-          dest = '/(app)/(tabs)';
-        } else {
-          // Active paired couple, profile loaded, not admin — safe fallback to paywall.
-          dest = '/(auth)/subscription';
-        }
-        console.warn(`[TRANSITION ROUTED] +${elapsed()}ms HARD DEADLINE — fallback to ${dest}`, { elapsedMs: elapsed() });
-        router.replace(dest);
+        logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /verify-retry [HARD DEADLINE — verification unresolved]`, { elapsedMs: elapsed() });
+        router.replace('/verify-retry');
       }
     }, HARD_DEADLINE_MS);
 
@@ -305,8 +232,6 @@ export default function TransitionScreen() {
     });
 
     return () => {
-      if (coupleTimeoutRef.current) clearTimeout(coupleTimeoutRef.current);
-      if (subTimeoutRef.current) clearTimeout(subTimeoutRef.current);
       if (hardDeadlineRef.current) clearTimeout(hardDeadlineRef.current);
     };
   }, []);
@@ -319,7 +244,7 @@ export default function TransitionScreen() {
       authReady.current = true;
       tryNavigate();
     }
-  }, [loading, couple?.id, couple?.active, user?.id, isAdmin, isSuperAdmin, profile?.id, subscriptionInfo.loading, subscriptionInfo.isPremium]);
+  }, [loading, couple?.id, couple?.active, couple?.user_b_id, user?.id, isAdmin, isSuperAdmin, profile?.id, subscriptionInfo.loading, subscriptionInfo.isPremium, subscriptionInfo.canInvite]);
 
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
