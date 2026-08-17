@@ -15,20 +15,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { ResizeMode, Video } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  AlertTriangle,
-  Archive,
-  Camera,
-  Check,
-  ChevronLeft,
-  Download,
-  Pause,
-  Play,
-  Share2,
-  Trash2,
-  Volume2,
-  VolumeX,
-} from 'lucide-react-native';
+import { TriangleAlert as AlertTriangle, Archive, Camera, Check, ChevronLeft, Download, Pause, Play, Share2, Trash2, Volume2, VolumeX } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -79,6 +66,7 @@ function MediaPage({
   const [savedToVault, setSavedToVault] = useState(false);
   const [savingToVault, setSavingToVault] = useState(false);
   const videoRef = useRef<Video>(null);
+  const webVideoRef = useRef<HTMLVideoElement | null>(null);
   const mountedRef = useRef(true);
   const appStateRef = useRef(AppState.currentState);
   const lastInactiveAt = useRef<number | null>(null);
@@ -237,14 +225,16 @@ function MediaPage({
   ]);
 
   const toggleVideo = useCallback(async () => {
-    if (!videoRef.current) return;
     try {
-      if (videoPlaying) {
-        await videoRef.current.pauseAsync();
-        setVideoPlaying(false);
+      if (Platform.OS === 'web') {
+        const v = webVideoRef.current;
+        if (!v) return;
+        if (videoPlaying) { v.pause(); setVideoPlaying(false); }
+        else { await v.play(); setVideoPlaying(true); }
       } else {
-        await videoRef.current.playAsync();
-        setVideoPlaying(true);
+        if (!videoRef.current) return;
+        if (videoPlaying) { await videoRef.current.pauseAsync(); setVideoPlaying(false); }
+        else { await videoRef.current.playAsync(); setVideoPlaying(true); }
       }
     } catch {
       setMediaError(true);
@@ -286,25 +276,41 @@ function MediaPage({
 
         {mediaUri && isVideo && !mediaError && (
           <View style={{ width: screenWidth, height: availableHeight }}>
-            <Video
-              ref={videoRef}
-              source={{ uri: mediaUri }}
-              style={{ width: screenWidth, height: availableHeight }}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={false}
-              isMuted={muted}
-              useNativeControls={false}
-              progressUpdateIntervalMillis={250}
-              onLoad={() => setLoading(false)}
-              onPlaybackStatusUpdate={(status: any) => {
-                if (status?.isLoaded) setVideoPlaying(!!status.isPlaying);
-              }}
-              onError={() => {
-                setLoading(false);
-                setMediaError(true);
-                setVideoPlaying(false);
-              }}
-            />
+            {Platform.OS === 'web' ? (
+              <video
+                ref={webVideoRef as any}
+                src={mediaUri}
+                style={{ width: screenWidth, height: availableHeight, objectFit: 'contain' }}
+                playsInline
+                controls={false}
+                muted={muted}
+                preload="metadata"
+                onLoadedMetadata={() => setLoading(false)}
+                onError={() => { setLoading(false); setMediaError(true); setVideoPlaying(false); }}
+                onPlay={() => setVideoPlaying(true)}
+                onPause={() => setVideoPlaying(false)}
+              />
+            ) : (
+              <Video
+                ref={videoRef}
+                source={{ uri: mediaUri }}
+                style={{ width: screenWidth, height: availableHeight }}
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay={false}
+                isMuted={muted}
+                useNativeControls={false}
+                progressUpdateIntervalMillis={250}
+                onLoad={() => setLoading(false)}
+                onPlaybackStatusUpdate={(status: any) => {
+                  if (status?.isLoaded) setVideoPlaying(!!status.isPlaying);
+                }}
+                onError={() => {
+                  setLoading(false);
+                  setMediaError(true);
+                  setVideoPlaying(false);
+                }}
+              />
+            )}
             {!loading && (
               <TouchableOpacity style={styles.videoPlayButton} onPress={toggleVideo} activeOpacity={0.8}>
                 <View style={styles.videoPlayButtonInner}>

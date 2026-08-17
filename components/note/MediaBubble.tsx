@@ -29,6 +29,102 @@ export function ShimmerPlaceholder() {
   return <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.10)', opacity: anim }]} />;
 }
 
+function WebVideoPlayer({
+  mediaUrl,
+  posterUrl,
+  videoPlaying,
+  setVideoPlaying,
+  setVideoError,
+  messageId,
+}: {
+  mediaUrl: string;
+  posterUrl: string | null;
+  videoPlaying: boolean;
+  setVideoPlaying: (v: boolean) => void;
+  setVideoError: (v: boolean) => void;
+  messageId: string;
+}) {
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const v = videoElRef.current;
+    if (!v) return;
+    if (videoPlaying) {
+      v.play().catch((e: any) => {
+        setVideoError(true);
+        logDebugEvent('chat_video_playback_failed', { messageId, error: e?.message ?? String(e) });
+      });
+    } else {
+      v.pause();
+    }
+  }, [videoPlaying]);
+
+  return (
+    <video
+      ref={videoElRef as any}
+      src={mediaUrl}
+      poster={posterUrl ?? undefined}
+      style={{
+        position: 'absolute',
+        top: 0, left: 0, width: '100%', height: '100%',
+        objectFit: 'cover',
+        opacity: videoPlaying ? 1 : (posterUrl ? 0 : 1),
+      }}
+      playsInline
+      preload="metadata"
+      onError={() => {
+        setVideoError(true);
+        logDebugEvent('chat_video_load_error', { messageId });
+      }}
+      onPlay={() => setVideoPlaying(true)}
+      onPause={() => setVideoPlaying(false)}
+    />
+  );
+}
+
+function NativeVideoPlayer({
+  mediaUrl,
+  posterUrl,
+  videoPlaying,
+  setVideoPlaying,
+  setVideoError,
+  messageId,
+}: {
+  mediaUrl: string;
+  posterUrl: string | null;
+  videoPlaying: boolean;
+  setVideoPlaying: (v: boolean) => void;
+  setVideoError: (v: boolean) => void;
+  messageId: string;
+}) {
+  const videoRef = useRef<Video | null>(null);
+
+  return (
+    <Video
+      ref={videoRef}
+      source={{ uri: mediaUrl }}
+      style={[StyleSheet.absoluteFill, !videoPlaying && posterUrl ? { opacity: 0 } : undefined]}
+      resizeMode={ResizeMode.COVER}
+      shouldPlay={videoPlaying}
+      isLooping={false}
+      useNativeControls={false}
+      onPlaybackStatusUpdate={(status: any) => {
+        if (status?.isLoaded) {
+          setVideoPlaying(!!status.isPlaying);
+          setVideoError(false);
+        } else if (status?.error) {
+          setVideoError(true);
+          logDebugEvent('chat_video_status_error', { messageId, error: status.error });
+        }
+      }}
+      onError={(error: string) => {
+        setVideoError(true);
+        logDebugEvent('chat_video_load_error', { messageId, error });
+      }}
+    />
+  );
+}
+
 export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, onOpen, onLongPress, onBurn, bubbleWidth, bubbleHeight, radii, isMine }: {
   msg: ChatMessage;
   blurEnabled: boolean;
@@ -53,7 +149,6 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   const retryAttempted = useRef(false);
   const overlayOpacity = useRef(new Animated.Value(isBlurred ? 1 : 0)).current;
   const prevEffectiveRevealedRef = useRef(effectiveRevealed);
-  const videoRef = useRef<Video | null>(null);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
@@ -83,10 +178,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   useEffect(() => {
     if (!revealed && blurEnabled) {
       setLocallyRevealed(false);
-      if (isVideo) {
-        videoRef.current?.pauseAsync?.().catch(() => {});
-        setVideoPlaying(false);
-      }
+      if (isVideo) setVideoPlaying(false);
     }
   }, [revealed, blurEnabled, isVideo]);
 
@@ -100,10 +192,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   useEffect(() => {
     if (isBlurred) {
       overlayOpacity.setValue(1);
-      if (isVideo) {
-        videoRef.current?.pauseAsync?.().catch(() => {});
-        setVideoPlaying(false);
-      }
+      if (isVideo) setVideoPlaying(false);
     }
   }, [isBlurred, overlayOpacity, isVideo]);
 
@@ -113,36 +202,30 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
     else if (blurEnabled) setLocallyRevealed(false);
   };
   const handleVideoOuterPress = () => {
-    if (isBlurred) {
-      revealMedia();
-      return;
-    }
-    if (blurEnabled) {
-      videoRef.current?.pauseAsync?.().catch(() => {});
-      setVideoPlaying(false);
-      setLocallyRevealed(false);
-    }
+    if (isBlurred) { revealMedia(); return; }
+    if (blurEnabled) { setVideoPlaying(false); setLocallyRevealed(false); }
   };
   const toggleVideoPlayback = async (event?: any) => {
     event?.stopPropagation?.();
     if (isBlurred) { revealMedia(); return; }
-    if (!videoRef.current) return;
-    try {
-      if (videoPlaying) await videoRef.current.pauseAsync();
-      else await videoRef.current.playAsync();
-    } catch (e: any) {
-      setVideoError(true);
-      logDebugEvent('chat_video_playback_failed', { messageId: msg.id, error: e?.message ?? String(e) });
-    }
+    setVideoPlaying(!videoPlaying);
   };
   const handleExpandPress = (event: any) => {
     event?.stopPropagation?.();
     if (isBlurred) return;
-    videoRef.current?.pauseAsync?.().catch(() => {});
     setVideoPlaying(false);
     onOpen(msg);
   };
   const cappedHeight = Math.min(bubbleHeight, Math.round(bubbleWidth * 1.35));
+
+  const videoProps = {
+    mediaUrl: mediaUrl!,
+    posterUrl,
+    videoPlaying,
+    setVideoPlaying,
+    setVideoError,
+    messageId: msg.id,
+  };
 
   return (
     <Pressable onPress={isVideo ? handleVideoOuterPress : handlePhotoPress} onLongPress={() => onLongPress(msg)} delayLongPress={350} android_ripple={null}
@@ -151,13 +234,9 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
         {isVideo ? <>
           {posterUrl && !videoPlaying && <ExpoImage source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />}
           {!posterUrl && !posterChecked && <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View>}
-          <Video ref={videoRef} source={{ uri: mediaUrl }} style={[StyleSheet.absoluteFill, !videoPlaying && posterUrl ? { opacity: 0 } : undefined]}
-            resizeMode={ResizeMode.COVER} shouldPlay={false} isLooping={false} useNativeControls={false}
-            onPlaybackStatusUpdate={(status: any) => {
-              if (status?.isLoaded) { setVideoPlaying(!!status.isPlaying); setVideoError(false); }
-              else if (status?.error) { setVideoError(true); logDebugEvent('chat_video_status_error', { messageId: msg.id, error: status.error }); }
-            }}
-            onError={(error: string) => { setVideoError(true); logDebugEvent('chat_video_load_error', { messageId: msg.id, error }); }} />
+          {Platform.OS === 'web'
+            ? <WebVideoPlayer {...videoProps} />
+            : <NativeVideoPlayer {...videoProps} />}
         </> : <ExpoImage key={mediaUrl} source={{ uri: mediaUrl }} style={[StyleSheet.absoluteFill, isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.1)' } as any : undefined]}
           contentFit="cover" cachePolicy="memory-disk" onError={() => {
             if (retryAttempted.current) { logDebugEvent('chat_message_image_load_error_hard', { messageId: msg.id }); setImgError(true); return; }
