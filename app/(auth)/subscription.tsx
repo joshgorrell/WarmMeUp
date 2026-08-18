@@ -78,17 +78,20 @@ export default function SubscriptionScreen() {
   const [showSurvey, setShowSurvey] = useState(false);
   const surveyShownRef = React.useRef(false);
 
-  // Show cancellation survey when trial expired — once per screen mount
+  // Show cancellation survey only after the user has had a chance to read
+  // the paywall — 6 seconds instead of 1.2, and only once per screen mount.
   useEffect(() => {
     if (reason === 'expired_trial' && !surveyShownRef.current) {
       surveyShownRef.current = true;
-      const timer = setTimeout(() => setShowSurvey(true), 1200);
+      const timer = setTimeout(() => setShowSurvey(true), 6000);
       return () => clearTimeout(timer);
     }
   }, [reason]);
 
   const logoSize = Math.min(Math.round(width * 0.12), 48);
-  const canDismiss = !reason;
+  // Allow dismissing the paywall for expired trials so users aren't
+  // trapped — they can look around and come back to subscribe later.
+  const canDismiss = !reason || reason === 'expired_trial';
 
   // Auto-dismiss paywall when premium access appears (e.g. partner subscribed
   // while this screen was open). Only dismiss if the user was trapped (no

@@ -32,10 +32,18 @@ interface AccessResult {
   canInvite: boolean;
 }
 
+const TRIAL_GRACE_MS = 24 * 60 * 60 * 1000;
+
 function isSubActive(row: SubscriptionRow | null): boolean {
   if (!row) return false;
   if (row.status !== "active") return false;
-  if (row.expires_at && new Date(row.expires_at) < new Date()) return false;
+  if (row.expires_at && new Date(row.expires_at) < new Date()) {
+    if (isTrialPlan(row.plan)) {
+      const expiredMs = Date.now() - new Date(row.expires_at).getTime();
+      if (expiredMs < TRIAL_GRACE_MS) return true;
+    }
+    return false;
+  }
   return true;
 }
 
