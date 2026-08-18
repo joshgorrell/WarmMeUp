@@ -104,23 +104,22 @@ export default function CameraCaptureScreen() {
       }
     } catch { Alert.alert('Preview Error', 'Could not play this recording.'); }
   };
-  const stopAndReleaseVideo = async () => {
+  const stopPreviewPlayback = async () => {
     const ref = previewVideoRef.current;
     if (!ref) return;
     try { await ref.stopAsync(); } catch {}
-    try { await ref.unloadAsync(); } catch {}
     setPreviewPlaying(false);
   };
   const retake = async () => {
     if (!pendingCapture || finalizing) return;
     setFinalizing(true);
-    if (pendingCapture.mediaType === 'video') await stopAndReleaseVideo();
+    if (pendingCapture.mediaType === 'video') await stopPreviewPlayback();
     await cleanupTempFile(pendingCapture.uri).catch(() => {}); setPendingCapture(null); setFlashEnabled(false); setFinalizing(false); remountCamera();
   };
   const useCapture = async () => {
     if (!pendingCapture || finalizing) return;
     setFinalizing(true);
-    if (pendingCapture.mediaType === 'video') await stopAndReleaseVideo();
+    if (pendingCapture.mediaType === 'video') await stopPreviewPlayback();
     setCameraCaptureResult(pendingCapture); setPendingCapture(null); router.back();
   };
 
