@@ -43,25 +43,24 @@ Deno.serve(async (req: Request) => {
       source_path,
       vault_path,
       couple_id,
-      user_id,
       media_type,
-      allow_screenshot,
-      allow_save,
-      allow_share,
       chat_message_id,
       thumbnail_path,
     } = body;
 
-    if (!source_bucket || !source_path || !vault_path || !couple_id || !user_id) {
+    if (!source_bucket || !source_path || !vault_path || !couple_id || !chat_message_id) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Verify the caller is a member of this couple
+    // The uploader is always the authenticated caller — never trust a client-supplied user_id
+    const user_id = user.id;
+
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
+    // Verify the caller is a member of this couple
     const { data: couple, error: coupleError } = await adminClient
       .from("couples")
       .select("user_a_id, user_b_id")
@@ -85,13 +84,53 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Verify the source file belongs to this couple (path starts with couple_id)
-    if (!source_path.startsWith(`${couple_id}/`)) {
+    // Auto-save only copies Chat media owned by the authenticated caller.
+    if (
+      source_bucket !== "chat_media" ||
+      !source_path.startsWith(`${couple_id}/${user_id}/`) ||
+      !vault_path.startsWith(`${couple_id}/${user_id}/`) ||
+      source_path.includes("..") ||
+      vault_path.includes("..")
+    ) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // The message link must also belong to the caller and point to the same source file.
+    const { data: chatMessage, error: chatMessageError } = await adminClient
+      .from("chat_messages")
+      .select("id, couple_id, sender_id, media_storage_bucket, media_storage_path, media_type, deleted_at")
+      .eq("id", chat_message_id)
+      .maybeSingle();
+
+    if (
+      chatMessageError ||
+      !chatMessage ||
+      chatMessage.couple_id !== couple_id ||
+      chatMessage.sender_id !== user_id ||
+      chatMessage.media_storage_bucket !== "chat_media" ||
+      chatMessage.media_storage_path !== source_path ||
+      chatMessage.deleted_at !== null
+    ) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Read the user's real privacy settings from the database — never trust client-supplied flags
+    const { data: userSettings } = await adminClient
+      .from("user_settings")
+      .select("vault_allow_save_default, vault_allow_share_default")
+      .eq("user_id", user_id)
+      .maybeSingle();
+
+    const allow_save = userSettings?.vault_allow_save_default ?? false;
+    // Sharing is only allowed when saving is also enabled (enforced by DB triggers, but we enforce here too)
+    const allow_share = allow_save ? (userSettings?.vault_allow_share_default ?? false) : false;
+    const verifiedMediaType = chatMessage.media_type ?? media_type;
 
     // Copy the file server-side: source bucket -> vault bucket
     const { error: copyError } = await adminClient.storage
@@ -106,12 +145,10 @@ Deno.serve(async (req: Request) => {
     }
 
     // If there's a thumbnail, copy it too
-    let actualThumbnailPath = thumbnail_path ?? null;
+    let actualThumbnailPath: string | null = null;
     if (thumbnail_path) {
-      const thumbVaultPath = thumbnail_path.replace(
-        /\.(mp4|mov|m4v|quicktime)$/i,
-        "_thumb.jpg"
-      ).replace(/^chat_media\//, "");
+      // Derive the vault thumbnail path from the vault_path, not the chat thumbnail path
+      const thumbVaultPath = vault_path.replace(/\.\w+$/, "_thumb.jpg");
       const { error: thumbCopyError } = await adminClient.storage
         .from(source_bucket)
         .copy(thumbnail_path, thumbVaultPath, { destinationBucket: "vault" });
@@ -120,20 +157,20 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Insert the vault_items row
+    // Insert the vault_items row with server-verified privacy flags
     const { data: vaultItem, error: insertError } = await adminClient
       .from("vault_items")
       .insert({
         couple_id,
         uploaded_by_user_id: user_id,
-        media_type,
+        media_type: verifiedMediaType,
         file_path: vault_path,
         storage_path: vault_path,
         storage_bucket: "vault",
         blurred_thumbnail_path: actualThumbnailPath,
-        allow_screenshot: allow_screenshot ?? false,
-        allow_save: allow_save ?? false,
-        allow_share: allow_share ?? false,
+        allow_screenshot: false,
+        allow_save,
+        allow_share,
         chat_message_id: chat_message_id ?? null,
       })
       .select("id")

@@ -582,7 +582,7 @@ export default function ChatTab() {
     media: AttachedMedia,
     coupleId: string,
     userId: string,
-  ): Promise<string | null> => {
+  ): Promise<{ storagePath: string; thumbnailPath?: string } | null> => {
     try {
       setUploadProgress(true);
       setUploadPct(0);
@@ -594,9 +594,8 @@ export default function ChatTab() {
         uri: media.uri,
       });
       const uploadResult = await uploadMediaFile(media.uri, 'chat_media', path, media.mimeType, (pct) => setUploadPct(pct));
-      const actualPath = uploadResult.storagePath;
-      logDebugEvent('chat_photo_upload_success', { bucket: 'chat_media', path: actualPath, requestedPath: path });
-      return actualPath;
+      logDebugEvent('chat_photo_upload_success', { bucket: 'chat_media', path: uploadResult.storagePath, requestedPath: path });
+      return { storagePath: uploadResult.storagePath, thumbnailPath: uploadResult.thumbnailPath };
     } catch (e: any) {
       logDebugEvent('chat_photo_upload_error', { error: e?.message ?? String(e) });
       Alert.alert('Upload Failed', e?.message ?? 'Could not upload media. Please try again.');
@@ -621,12 +620,15 @@ export default function ChatTab() {
 
     let chatStoragePath: string | null = null;
 
+    let chatThumbnailPath: string | undefined;
     if (hasMedia && media) {
-      chatStoragePath = await uploadChatMedia(media, couple.id, user.id);
-      if (!chatStoragePath) {
+      const uploadResult = await uploadChatMedia(media, couple.id, user.id);
+      if (!uploadResult) {
         setSending(false);
         return;
       }
+      chatStoragePath = uploadResult.storagePath;
+      chatThumbnailPath = uploadResult.thumbnailPath;
     }
 
     let preSignedMediaUrl: string | null = null;
@@ -750,28 +752,34 @@ export default function ChatTab() {
           const ext = capturedMedia.type === 'video' ? videoExt : 'jpg';
           const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${ext}`;
 
-          // Upload the original local file directly to vault instead of
-          // downloading the just-uploaded copy via a signed URL and
-          // re-uploading — that doubles memory pressure for large videos.
-          const vaultMime = capturedMedia.type === 'video' ? capturedMedia.mimeType : 'image/jpeg';
-          const vaultUploadResult = await uploadMediaFile(capturedMedia.uri, 'vault', vaultPath, vaultMime);
-          const actualVaultPath = vaultUploadResult.storagePath;
-
-          const { data: vaultData } = await supabase.from('vault_items').insert({
-            couple_id: coupleId,
-            uploaded_by_user_id: userId,
-            media_type: capturedMedia.type,
-            file_path: actualVaultPath,
-            storage_path: actualVaultPath,
-            storage_bucket: 'vault',
-            allow_screenshot: false,
-            allow_save: settings?.vault_allow_save_default ?? false,
-            allow_share: settings?.vault_allow_share_default ?? false,
-            chat_message_id: messageId,
-          }).select('id').single();
-          if (vaultData?.id) {
-            await supabase.from('chat_messages').update({ vault_item_id: vaultData.id }).eq('id', messageId);
-            setMessages(prev => prev.map(m => m.id === messageId ? { ...m, vault_item_id: vaultData.id } : m));
+          // Server-side copy: no second device upload, vault media appears in seconds
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) throw new Error('No session');
+          const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/copy-to-vault`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+              Apikey: anonKey,
+            },
+            body: JSON.stringify({
+              source_bucket: 'chat_media',
+              source_path: chatStoragePath,
+              vault_path: vaultPath,
+              couple_id: coupleId,
+              media_type: capturedMedia.type,
+              chat_message_id: messageId,
+              thumbnail_path: chatThumbnailPath ?? null,
+            }),
+          });
+          if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody?.error ?? `HTTP ${res.status}`);
+          }
+          const vaultData = await res.json();
+          if (vaultData?.vault_item_id) {
+            setMessages(prev => prev.map(m => m.id === messageId ? { ...m, vault_item_id: vaultData.vault_item_id } : m));
           }
         } catch (e: any) {
           Alert.alert('Vault Save Failed', 'The media was sent but could not be saved to your Vault. You can save it manually from the chat bubble.');
