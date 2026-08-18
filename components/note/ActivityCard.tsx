@@ -16,9 +16,9 @@ export type ChatActivityItem = {
 };
 
 const META = {
-  wish: { label: 'created a Wish', action: 'View Wish', color: '#FF5C9A', Icon: Sparkles },
-  dare: { label: 'sent you a Dare', action: 'View Dare', color: '#FF5A3D', Icon: Flame },
-  dice: { label: 'rolled the Dice', action: 'View Roll', color: '#FFB347', Icon: Dices },
+  wish: { mine: 'created a Wish', partner: 'created a Wish', action: 'View Wish', color: '#FF5C9A', Icon: Sparkles },
+  dare: { mine: 'sent a Dare', partner: 'sent you a Dare', action: 'View Dare', color: '#FF5A3D', Icon: Flame },
+  dice: { mine: 'rolled the Dice', partner: 'rolled the Dice', action: 'View Roll', color: '#FFB347', Icon: Dices },
 } as const;
 
 export default function ActivityCard({
@@ -43,7 +43,7 @@ export default function ActivityCard({
         <View style={styles.copy}>
           <AppText style={styles.eyebrow}>
             <AppText style={[styles.actor, { color: meta.color }]}>{isMine ? 'You' : actorName}</AppText>
-            {' '}{meta.label}
+            {' '}{isMine ? meta.mine : meta.partner}
           </AppText>
           <AppText style={styles.title} numberOfLines={2}>{item.title}</AppText>
           {!!item.preview && item.preview !== item.title && (
