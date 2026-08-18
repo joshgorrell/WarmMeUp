@@ -1,0 +1,61 @@
+=== STORAGE POLICIES ===
+
+--- storage.objects (rls=True) ---
+  GRANT: anon -> ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
+  GRANT: authenticated -> ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
+  POLICY [SELECT] Chat media: couple members can read media TO ['authenticated']
+    USING: ((bucket_id = 'chat_media'::text) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE (((couples.id)::text = (storage.foldername(objects.name))[1]) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))))
+    CHECK: N/A
+  POLICY [INSERT] Chat media: couple members can upload to own path TO ['authenticated']
+    USING: N/A
+    CHECK: ((bucket_id = 'chat_media'::text) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE (((couples.id)::text = (storage.foldername(objects.name))[1]) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))) AND ((storage.foldername(name))[2] = (auth.uid())::text))
+  POLICY [DELETE] Chat media: uploaders can delete own media TO ['authenticated']
+    USING: ((bucket_id = 'chat_media'::text) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE (((couples.id)::text = (storage.foldername(objects.name))[1]) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))) AND ((storage.foldername(name))[2] = (auth.uid())::text))
+    CHECK: N/A
+  POLICY [UPDATE] Chat media: uploaders can update own media TO ['authenticated']
+    USING: ((bucket_id = 'chat_media'::text) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE (((couples.id)::text = (storage.foldername(objects.name))[1]) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))) AND ((storage.foldername(name))[2] = (auth.uid())::text))
+    CHECK: ((bucket_id = 'chat_media'::text) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE (((couples.id)::text = (storage.foldername(objects.name))[1]) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))) AND ((storage.foldername(name))[2] = (auth.uid())::text))
+  POLICY [DELETE] Users can delete their own avatar TO ['authenticated']
+    USING: ((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text))
+    CHECK: N/A
+  POLICY [SELECT] Users can read their own avatars TO ['authenticated']
+    USING: ((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text))
+    CHECK: N/A
+  POLICY [UPDATE] Users can update their own avatar TO ['authenticated']
+    USING: ((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text))
+    CHECK: N/A
+  POLICY [INSERT] Users can upload their own avatar TO ['authenticated']
+    USING: N/A
+    CHECK: ((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text))
+  POLICY [SELECT] Vault: couple members can read media TO ['authenticated']
+    USING: ((bucket_id = 'vault'::text) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE (((couples.id)::text = (storage.foldername(objects.name))[1]) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))))
+    CHECK: N/A
+  POLICY [INSERT] Vault: couple members can upload to own path TO ['authenticated']
+    USING: N/A
+    CHECK: ((bucket_id = 'vault'::text) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE (((couples.id)::text = (storage.foldername(objects.name))[1]) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))) AND ((storage.foldername(name))[2] = (auth.uid())::text))
+  POLICY [DELETE] Vault: uploaders can delete own media TO ['authenticated']
+    USING: ((bucket_id = 'vault'::text) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE (((couples.id)::text = (storage.foldername(objects.name))[1]) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))) AND ((storage.foldername(name))[2] = (auth.uid())::text))
+    CHECK: N/A
+  POLICY [UPDATE] Vault: uploaders can update own media TO ['authenticated']
+    USING: ((bucket_id = 'vault'::text) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE (((couples.id)::text = (storage.foldername(objects.name))[1]) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))) AND ((storage.foldername(name))[2] = (auth.uid())::text))
+    CHECK: ((bucket_id = 'vault'::text) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE (((couples.id)::text = (storage.foldername(objects.name))[1]) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))) AND ((storage.foldername(name))[2] = (auth.uid())::text))

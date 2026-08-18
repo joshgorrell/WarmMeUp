@@ -1,0 +1,116 @@
+=== SECURITY DEFINER FUNCTIONS ===
+
+--- public.accept_partner() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.admin_search_user_by_email(p_email text) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: []
+
+--- public.admin_set_global_debug_access(p_enabled boolean, p_support_code_hash text, p_expires_at timestamp with time zone, p_action text) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: []
+
+--- public.cancel_pending_partner() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.cancel_request() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.debug_database_identity() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: []
+
+--- public.decline_partner() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.generate_invite_code() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.generate_invite_code(force_new boolean) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.get_couple_by_invite_code(code text) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: []
+
+--- public.get_global_debug_status() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: []
+
+--- public.get_my_pending_join() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.get_pending_partner_profile() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.grant_entitlement(p_user_id uuid, p_entitlement_type text, p_expires_at timestamp with time zone, p_notes text, p_can_invite boolean) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['anon', 'authenticated']
+
+--- public.is_current_user_admin() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.is_super_admin() ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.mark_vault_item_viewed(item_id uuid) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.preview_invite(invite_code text) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.record_trial_expired_notification(p_couple_id uuid) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.request_join(invite_code text) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.user_has_premium_access(p_user_id uuid) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
+
+--- public.validate_debug_support_code(p_code text, p_device_info jsonb) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: []
+
+--- public.wipe_couple_data(p_couple_id uuid, p_user_id uuid) ---
+  security_definer: True
+  search_path_set: True
+  execute_roles: ['authenticated']
