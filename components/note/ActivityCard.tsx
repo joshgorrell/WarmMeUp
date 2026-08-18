@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Flame, Sparkles, Dices, ChevronRight } from 'lucide-react-native';
+import { Flame, Sparkles, Dice6, ChevronRight } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 
 export type ChatActivityKind = 'wish' | 'dare' | 'dice';
@@ -18,7 +18,7 @@ export type ChatActivityItem = {
 const META = {
   wish: { mine: 'created a Wish', partner: 'created a Wish', action: 'View Wish', color: '#FF5C9A', Icon: Sparkles },
   dare: { mine: 'sent a Dare', partner: 'sent you a Dare', action: 'View Dare', color: '#FF5A3D', Icon: Flame },
-  dice: { mine: 'rolled the Dice', partner: 'rolled the Dice', action: 'View Roll', color: '#FFB347', Icon: Dices },
+  dice: { mine: 'rolled the Dice', partner: 'rolled the Dice', action: 'View Roll', color: '#FFB347', Icon: Dice6 },
 } as const;
 
 export default function ActivityCard({
