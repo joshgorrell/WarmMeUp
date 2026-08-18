@@ -1093,27 +1093,35 @@ export default function ChatTab() {
     if (msg.vault_item_id) return;
     const srcBucket = msg.media_storage_bucket ?? 'chat_media';
     const srcExt = (msg.media_storage_path?.split('.').pop() ?? '').toLowerCase();
-    const mimeType = extensionToMime(srcExt);
-    const destPath = `${couple.id}/${user.id}/vault_${Date.now()}.${srcExt || mimeToExtension(mimeType)}`;
+    const destPath = `${couple.id}/${user.id}/vault_${Date.now()}.${srcExt || 'jpg'}`;
     try {
-      const { data: srcData } = await supabase.storage.from(srcBucket).createSignedUrl(msg.media_storage_path, 120);
-      if (!srcData?.signedUrl) throw new Error('Could not access source media.');
-      await uploadMediaFile(srcData.signedUrl, 'vault', destPath, mimeType);
-      const { data: vaultData } = await supabase.from('vault_items').insert({
-        couple_id: couple.id,
-        uploaded_by_user_id: user.id,
-        media_type: msg.media_type ?? 'photo',
-        file_path: destPath,
-        storage_path: destPath,
-        storage_bucket: 'vault',
-        allow_screenshot: msg.allow_screenshot,
-        allow_save: msg.allow_save,
-        allow_share: msg.allow_share,
-        chat_message_id: msg.id,
-      }).select('id').single();
-      if (vaultData?.id) {
-        await supabase.from('chat_messages').update({ vault_item_id: vaultData.id }).eq('id', msg.id);
-        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, vault_item_id: vaultData.id } : m));
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No session');
+      const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/copy-to-vault`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+          Apikey: anonKey,
+        },
+        body: JSON.stringify({
+          source_bucket: srcBucket,
+          source_path: msg.media_storage_path,
+          vault_path: destPath,
+          couple_id: couple.id,
+          media_type: msg.media_type ?? 'photo',
+          chat_message_id: msg.id,
+          thumbnail_path: null,
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error ?? `HTTP ${res.status}`);
+      }
+      const vaultData = await res.json();
+      if (vaultData?.vault_item_id) {
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, vault_item_id: vaultData.vault_item_id } : m));
       }
     } catch (e: any) {
       Alert.alert('Save Failed', e?.message ?? 'Could not save to Vault. Please try again.');

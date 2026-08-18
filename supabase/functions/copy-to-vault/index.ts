@@ -84,10 +84,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Auto-save only copies Chat media owned by the authenticated caller.
+    // Source can be any couple member's media (auto-save own, manual save partner's).
+    // Vault path must always be under the caller's own directory.
     if (
       source_bucket !== "chat_media" ||
-      !source_path.startsWith(`${couple_id}/${user_id}/`) ||
+      !source_path.startsWith(`${couple_id}/`) ||
       !vault_path.startsWith(`${couple_id}/${user_id}/`) ||
       source_path.includes("..") ||
       vault_path.includes("..")
@@ -98,7 +99,8 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // The message link must also belong to the caller and point to the same source file.
+    // The message must belong to the couple and point to the same source file.
+    // Either partner's messages can be saved — the saver is always the caller.
     const { data: chatMessage, error: chatMessageError } = await adminClient
       .from("chat_messages")
       .select("id, couple_id, sender_id, media_storage_bucket, media_storage_path, media_type, deleted_at")
@@ -109,7 +111,6 @@ Deno.serve(async (req: Request) => {
       chatMessageError ||
       !chatMessage ||
       chatMessage.couple_id !== couple_id ||
-      chatMessage.sender_id !== user_id ||
       chatMessage.media_storage_bucket !== "chat_media" ||
       chatMessage.media_storage_path !== source_path ||
       chatMessage.deleted_at !== null
