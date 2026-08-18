@@ -3,7 +3,7 @@ import {
   View, StyleSheet, Platform, Pressable, Animated,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { BlurView } from 'expo-blur';
 import { Lock, EyeOff, Eye, Check, Maximize2, Play, Pause } from 'lucide-react-native';
 import AppText from '@/components/AppText';
@@ -84,43 +84,55 @@ function WebVideoPlayer({
 
 function NativeVideoPlayer({
   mediaUrl,
-  posterUrl,
   videoPlaying,
   setVideoPlaying,
   setVideoError,
   messageId,
 }: {
   mediaUrl: string;
-  posterUrl: string | null;
   videoPlaying: boolean;
   setVideoPlaying: (v: boolean) => void;
   setVideoError: (v: boolean) => void;
   messageId: string;
 }) {
-  const videoRef = useRef<Video | null>(null);
+  const player = useVideoPlayer({ uri: mediaUrl }, (p) => {
+    p.loop = false;
+  });
+
+  useEffect(() => {
+    const sub = player.addListener('statusChange', (payload: any) => {
+      if (payload.status === 'error') {
+        setVideoError(true);
+        logDebugEvent('chat_video_status_error', { messageId, error: payload.error?.message ?? 'unknown' });
+      } else if (payload.status === 'readyToPlay') {
+        setVideoError(false);
+      }
+    });
+    return () => sub.remove();
+  }, [player, messageId, setVideoError]);
+
+  useEffect(() => {
+    const sub = player.addListener('playingChange', (payload: any) => {
+      setVideoPlaying(!!payload.isPlaying);
+    });
+    return () => sub.remove();
+  }, [player, setVideoPlaying]);
+
+  useEffect(() => {
+    if (videoPlaying) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [videoPlaying, player]);
 
   return (
-    <Video
-      ref={videoRef}
-      source={{ uri: mediaUrl }}
-      style={[StyleSheet.absoluteFill, !videoPlaying && posterUrl ? { opacity: 0 } : undefined]}
-      resizeMode={ResizeMode.COVER}
-      shouldPlay={videoPlaying}
-      isLooping={false}
-      useNativeControls={false}
-      onPlaybackStatusUpdate={(status: any) => {
-        if (status?.isLoaded) {
-          setVideoPlaying(!!status.isPlaying);
-          setVideoError(false);
-        } else if (status?.error) {
-          setVideoError(true);
-          logDebugEvent('chat_video_status_error', { messageId, error: status.error });
-        }
-      }}
-      onError={(error: string) => {
-        setVideoError(true);
-        logDebugEvent('chat_video_load_error', { messageId, error });
-      }}
+    <VideoView
+      player={player}
+      style={StyleSheet.absoluteFill}
+      contentFit="cover"
+      nativeControls={false}
+      onFirstFrameRender={() => setVideoError(false)}
     />
   );
 }
@@ -218,15 +230,6 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   };
   const cappedHeight = Math.min(bubbleHeight, Math.round(bubbleWidth * 1.35));
 
-  const videoProps = {
-    mediaUrl: mediaUrl!,
-    posterUrl,
-    videoPlaying,
-    setVideoPlaying,
-    setVideoError,
-    messageId: msg.id,
-  };
-
   return (
     <Pressable onPress={isVideo ? handleVideoOuterPress : handlePhotoPress} onLongPress={() => onLongPress(msg)} delayLongPress={350} android_ripple={null}
       style={[styles.mediaTap, { width: bubbleWidth, height: cappedHeight }, radii]}>
@@ -235,8 +238,8 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
           {posterUrl && !videoPlaying && <ExpoImage source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />}
           {!posterUrl && !posterChecked && <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View>}
           {Platform.OS === 'web'
-            ? <WebVideoPlayer {...videoProps} />
-            : <NativeVideoPlayer {...videoProps} />}
+            ? <WebVideoPlayer mediaUrl={mediaUrl!} posterUrl={posterUrl} videoPlaying={videoPlaying} setVideoPlaying={setVideoPlaying} setVideoError={setVideoError} messageId={msg.id} />
+            : <NativeVideoPlayer mediaUrl={mediaUrl!} videoPlaying={videoPlaying} setVideoPlaying={setVideoPlaying} setVideoError={setVideoError} messageId={msg.id} />}
         </> : <ExpoImage key={mediaUrl} source={{ uri: mediaUrl }} style={[StyleSheet.absoluteFill, isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.1)' } as any : undefined]}
           contentFit="cover" cachePolicy="memory-disk" onError={() => {
             if (retryAttempted.current) { logDebugEvent('chat_message_image_load_error_hard', { messageId: msg.id }); setImgError(true); return; }

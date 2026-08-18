@@ -129,7 +129,7 @@
       "expo-font",
       "expo-web-browser",
       "expo-secure-store",
-      "expo-av",
+      "expo-video",
       "expo-location",
       [
         "expo-notifications",

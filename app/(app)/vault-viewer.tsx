@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { ResizeMode, Video } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TriangleAlert as AlertTriangle, Archive, Camera, Check, ChevronLeft, Download, Pause, Play, Share2, Trash2, Volume2, VolumeX } from 'lucide-react-native';
@@ -65,11 +65,13 @@ function MediaPage({
   const [screenshotWarning, setScreenshotWarning] = useState(false);
   const [savedToVault, setSavedToVault] = useState(false);
   const [savingToVault, setSavingToVault] = useState(false);
-  const videoRef = useRef<Video>(null);
   const webVideoRef = useRef<HTMLVideoElement | null>(null);
   const mountedRef = useRef(true);
   const appStateRef = useRef(AppState.currentState);
   const lastInactiveAt = useRef<number | null>(null);
+  const player = useVideoPlayer(mediaUri ? { uri: mediaUri } : null, (p) => {
+    p.loop = false;
+  });
 
   useEffect(() => () => {
     mountedRef.current = false;
@@ -78,9 +80,9 @@ function MediaPage({
   useEffect(() => {
     if (!isActive) {
       setVideoPlaying(false);
-      videoRef.current?.pauseAsync().catch(() => {});
+      player.pause();
     }
-  }, [isActive]);
+  }, [isActive, player]);
 
   useEffect(() => {
     if (!item.storagePath || !isActive) return;
@@ -105,6 +107,30 @@ function MediaPage({
       cancelled = true;
     };
   }, [item.storagePath, item.storageBucket, isActive]);
+
+  useEffect(() => {
+    if (!mediaUri || Platform.OS === 'web') return;
+    player.replaceAsync({ uri: mediaUri });
+  }, [mediaUri, player]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = player.addListener('statusChange', (payload: any) => {
+      if (payload.status === 'readyToPlay') {
+        setLoading(false);
+      } else if (payload.status === 'error') {
+        setLoading(false);
+        setMediaError(true);
+        setVideoPlaying(false);
+      }
+    });
+    return () => sub.remove();
+  }, [player]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    player.muted = muted;
+  }, [muted, player]);
 
   const handleScreenshotDetected = useCallback(async () => {
     if (!item.coupleId || !user?.id) return;
@@ -232,15 +258,14 @@ function MediaPage({
         if (videoPlaying) { v.pause(); setVideoPlaying(false); }
         else { await v.play(); setVideoPlaying(true); }
       } else {
-        if (!videoRef.current) return;
-        if (videoPlaying) { await videoRef.current.pauseAsync(); setVideoPlaying(false); }
-        else { await videoRef.current.playAsync(); setVideoPlaying(true); }
+        if (videoPlaying) { player.pause(); setVideoPlaying(false); }
+        else { player.play(); setVideoPlaying(true); }
       }
     } catch {
       setMediaError(true);
       setVideoPlaying(false);
     }
-  }, [videoPlaying]);
+  }, [videoPlaying, player]);
 
   const availableHeight = screenHeight - insetTop - insetBottom - 92;
   const formattedTimestamp = (() => {
@@ -291,24 +316,12 @@ function MediaPage({
                 onPause={() => setVideoPlaying(false)}
               />
             ) : (
-              <Video
-                ref={videoRef}
-                source={{ uri: mediaUri }}
+              <VideoView
+                player={player}
                 style={{ width: screenWidth, height: availableHeight }}
-                resizeMode={ResizeMode.CONTAIN}
-                shouldPlay={false}
-                isMuted={muted}
-                useNativeControls={false}
-                progressUpdateIntervalMillis={250}
-                onLoad={() => setLoading(false)}
-                onPlaybackStatusUpdate={(status: any) => {
-                  if (status?.isLoaded) setVideoPlaying(!!status.isPlaying);
-                }}
-                onError={() => {
-                  setLoading(false);
-                  setMediaError(true);
-                  setVideoPlaying(false);
-                }}
+                contentFit="contain"
+                nativeControls={false}
+                onFirstFrameRender={() => setLoading(false)}
               />
             )}
             {!loading && (
