@@ -1070,6 +1070,7 @@ export default function ChatTab() {
       signedUri: signedUrls[m.id] ?? null,
       thumbUri: null,
       interactionId: null,
+      chatMessageId: m.id,
     }));
 
     const initialIndex = gallery.findIndex(g => g.id === msg.id);

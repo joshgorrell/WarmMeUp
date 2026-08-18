@@ -490,6 +490,21 @@ export default function VaultViewerScreen() {
         clearLocalImageCache().catch(() => {});
       }
 
+      if (item.chatMessageId) {
+        const { data: chatMsg } = await supabase
+          .from('chat_messages')
+          .select('media_storage_path, media_storage_bucket')
+          .eq('id', item.chatMessageId)
+          .maybeSingle();
+        await supabase
+          .from('chat_messages')
+          .update({ deleted_at: deletedAt })
+          .eq('id', item.chatMessageId);
+        if (chatMsg?.media_storage_path) {
+          supabase.storage.from(chatMsg.media_storage_bucket ?? 'chat_media').remove([chatMsg.media_storage_path]).catch(() => {});
+        }
+      }
+
       const nextItems = items.filter((_, index) => index !== activeIndex);
       if (nextItems.length === 0) {
         router.back();
@@ -511,15 +526,18 @@ export default function VaultViewerScreen() {
   const confirmDeleteActive = useCallback(() => {
     if (!canDeleteFromVault || deleting) return;
     const noun = activeItem?.mediaType === 'video' ? 'video' : 'photo';
+    const linkedChatNote = activeItem?.chatMessageId
+      ? '\n\nThis item was sent from Chat — it will also be hidden from your Chat history.'
+      : '';
     Alert.alert(
       'Delete from Vault?',
-      `This permanently removes this ${noun} from the Vault for both of you. This cannot be undone.`,
+      `This permanently removes this ${noun} from the Vault for both of you. This cannot be undone.${linkedChatNote}`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: performDeleteActive },
       ],
     );
-  }, [canDeleteFromVault, deleting, activeItem?.mediaType, performDeleteActive]);
+  }, [canDeleteFromVault, deleting, activeItem?.mediaType, activeItem?.chatMessageId, performDeleteActive]);
 
   const getItemLayout = useCallback((_: ArrayLike<GalleryItem> | null | undefined, index: number) => ({
     length: screenWidth,

@@ -12,6 +12,7 @@ export type GalleryItem = {
   uploaderName?: string | null;
   interactionId?: string | null;
   coupleId?: string | null;
+  chatMessageId?: string | null;
 };
 
 // Cross-navigation signed URL cache — keyed by storage path.

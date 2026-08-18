@@ -276,6 +276,7 @@ export default function VaultScreen() {
         signedUri: signedUrls[i.id] ?? null,
         thumbUri: thumbUrls[i.id] ?? signedUrls[i.id] ?? null,
         interactionId: null,
+        chatMessageId: i.chat_message_id ?? null,
       };
     });
     const initialIndex = gallery.findIndex(g => g.id === item.id);
