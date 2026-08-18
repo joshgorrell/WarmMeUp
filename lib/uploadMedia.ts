@@ -45,6 +45,21 @@ async function compressImage(uri: string, mimeType: string): Promise<{ uri: stri
   }
 }
 
+async function generatePhotoThumbnail(uri: string): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
+    const result = await manipulateAsync(
+      uri,
+      [{ resize: { width: 200 } }],
+      { compress: 0.7, format: SaveFormat.JPEG },
+    );
+    return result.uri;
+  } catch {
+    return null;
+  }
+}
+
 async function extractVideoThumbnail(uri: string): Promise<string | null> {
   if (Platform.OS === 'web') return null;
   try {
@@ -139,6 +154,27 @@ export async function uploadMediaFile(
       uploadUri = compressed.uri;
       uploadMime = compressed.mimeType;
       if (uploadMime !== normalizedMime) uploadStoragePath = storagePath.replace(/\.\w+$/, '.jpg');
+
+      // Generate a small thumbnail (200px wide, quality 70) for fast grid loading
+      const thumbUri = await generatePhotoThumbnail(uploadUri);
+      if (thumbUri) {
+        thumbnailLocalUri = thumbUri;
+        const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
+        try {
+          const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
+          const thumbResponse = await uploadToStorage(
+            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
+            thumbBody,
+            {
+              Authorization: `Bearer ${session.access_token}`,
+              apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+              'Content-Type': 'image/jpeg',
+              'x-upsert': 'true',
+            },
+          );
+          if (thumbResponse.ok) thumbnailPath = thumbStoragePath;
+        } catch {}
+      }
     }
 
     if (isVideo) {
@@ -221,6 +257,7 @@ export async function uploadMediaFile(
     });
 
     if (isPhoto && uploadUri !== localUri) cleanupTempFile(uploadUri).catch(() => {});
+    if (isPhoto && thumbnailLocalUri) cleanupTempFile(thumbnailLocalUri).catch(() => {});
     if (isVideo && thumbnailLocalUri) cleanupTempFile(thumbnailLocalUri).catch(() => {});
 
     reportProgress(100);

@@ -306,6 +306,7 @@ export interface Wish {
   category: WishCategory | null;
   image_storage_path: string | null;
   image_storage_bucket: string | null;
+  thumbnail_path: string | null;
   link: string | null;
   status: WishStatus;
   fulfilled_at: string | null;

@@ -22,6 +22,7 @@ import { awardPoints, getPointValue, incrementMonthlyCounter } from '@/lib/point
 import { notifyPartner } from '@/lib/notifications';
 import { logDebugEvent } from '@/lib/debugLog';
 import { uploadMediaFile, resolveAssetMimeType } from '@/lib/uploadMedia';
+import { getCachedUrl, setCachedUrl } from '@/lib/mediaGalleryStore';
 import { Wish, WishReaction, WishCategory } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import TabHeader from '@/components/TabHeader';
@@ -108,7 +109,8 @@ function WishCard({
               style={StyleSheet.absoluteFill as any}
               contentFit="cover"
               cachePolicy="memory-disk"
-              transition={150}
+              transition={0}
+              recyclingKey={wish.id}
             />
           </View>
         ) : null}
@@ -383,6 +385,7 @@ function WishForm({
   const [imgPath, setImgPath] = useState<string | null>(null);
   const [imgBucket, setImgBucket] = useState<string>('chat_media');
   const [imgUri, setImgUri] = useState<string | null>(null);
+  const [thumbPath, setThumbPath] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
@@ -395,6 +398,7 @@ function WishForm({
       setImgPath(initial?.image_storage_path ?? null);
       setImgBucket(initial?.image_storage_bucket ?? 'chat_media');
       setImgUri(null);
+      setThumbPath(initial?.thumbnail_path ?? null);
       setError('');
       if (initial?.image_storage_path && initial?.image_storage_bucket) {
         supabase.storage.from(initial.image_storage_bucket).createSignedUrl(initial.image_storage_path, 3600)
@@ -446,16 +450,19 @@ function WishForm({
       setUploading(true);
       setError('');
 
-      // Delete the old image from storage before uploading a new one
+      // Delete the old image and thumbnail from storage before uploading a new one
       if (imgPath) {
-        await supabase.storage.from(imgBucket).remove([imgPath]).catch(() => {});
+        const toRemove = [imgPath];
+        if (thumbPath) toRemove.push(thumbPath);
+        await supabase.storage.from(imgBucket).remove(toRemove).catch(() => {});
       }
 
       const storagePath = `${couple.id}/${user.id}/wish_${Date.now()}.jpg`;
       logDebugEvent('WISH IMAGE UPLOAD START', { storagePath });
       logDebugEvent('WISH LAST UPLOAD PATH', { path: storagePath });
 
-      await uploadMediaFile(asset.uri, 'chat_media', storagePath, mime, undefined, user.id, couple.id);
+      const uploadResult = await uploadMediaFile(asset.uri, 'chat_media', storagePath, mime, undefined, user.id, couple.id);
+      setThumbPath(uploadResult.thumbnailPath ?? null);
 
       // Generate a signed URL immediately so the preview survives a restart
       const { data: signedData, error: signError } = await supabase.storage
@@ -475,6 +482,7 @@ function WishForm({
         setImgBucket('chat_media');
         setImgUri(signedData.signedUrl);
       }
+      if (uploadResult.thumbnailPath) setCachedUrl(uploadResult.thumbnailPath, signedData?.signedUrl ?? '');
     } catch (err: any) {
       const msg = err?.message ?? 'Unknown error';
       logDebugEvent('WISH IMAGE UPLOAD ERROR', { error: msg });
@@ -487,12 +495,15 @@ function WishForm({
 
   const removeImage = async () => {
     if (imgPath) {
-      await supabase.storage.from(imgBucket).remove([imgPath]).catch(() => {});
+      const toRemove = [imgPath];
+      if (thumbPath) toRemove.push(thumbPath);
+      await supabase.storage.from(imgBucket).remove(toRemove).catch(() => {});
       logDebugEvent('WISH IMAGE REMOVE', { path: imgPath, bucket: imgBucket });
     }
     setImgPath(null);
     setImgBucket('chat_media');
     setImgUri(null);
+    setThumbPath(null);
   };
 
   const handleSave = async (shareNow: boolean) => {
@@ -508,6 +519,7 @@ function WishForm({
         category: category ?? null,
         image_storage_path: imgPath ?? null,
         image_storage_bucket: imgPath ? imgBucket : null,
+        thumbnail_path: thumbPath ?? null,
         link: link.trim() || null,
         status: shareNow ? 'shared' : 'draft',
         updated_at: new Date().toISOString(),
@@ -957,9 +969,6 @@ export default function WishTab() {
   const handledWishLinkRef = useRef<string | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const lastInactiveAtRef = useRef<number | null>(null);
-  // Cache signed URLs by storage path to avoid re-signing on every realtime
-  // update (e.g. a reaction change) when the underlying image hasn't changed.
-  const urlCacheRef = useRef<Map<string, { url: string; expiresAt: number }>>(new Map());
 
   const TAB_DEFS: { key: TabKey; label: string }[] = [
     { key: 'shared',  label: 'Ours' },
@@ -992,43 +1001,32 @@ export default function WishTab() {
         reactionMap[r.wish_id].push(r);
       });
 
-      // ── Batch sign all image URLs in a single request per bucket ──────────
-      // Group paths by bucket so we can use createSignedUrls (plural) instead
-      // of N individual createSignedUrl calls.
+      // ── Batch sign all image URLs using pre-generated thumbnails ─────────
+      // Pre-generated thumbnails (thumbnail_path) are stored at upload time,
+      // so we can batch-sign them with createSignedUrls (plural) — no per-image
+      // server-side transforms needed. This cuts N+1 API calls down to 1 per bucket.
       const SIGNED_TTL = 12 * 60 * 60; // 12 hours — matches vault screen
-      const THUMB_WIDTH = 200;
-      const NOW = Date.now();
-      const cache = urlCacheRef.current;
 
-      // Helper to get a cached URL if still valid
-      const getCached = (cacheKey: string): string | null => {
-        const c = cache.get(cacheKey);
-        if (c && c.expiresAt > NOW) return c.url;
-        return null;
-      };
-      // Helper to store a signed URL in the cache
-      const setCached = (cacheKey: string, url: string) => {
-        cache.set(cacheKey, { url, expiresAt: NOW + SIGNED_TTL * 1000 - 60000 });
-      };
-
-      type PathEntry = { wishId: string; path: string; bucket: string; kind: 'image' | 'thumb' | 'memory'; cacheKey: string };
+      type PathEntry = { wishId: string; path: string; bucket: string; kind: 'image' | 'thumb' | 'memory' };
       const entries: PathEntry[] = [];
 
       for (const w of wishData) {
         if (w.image_storage_path && w.image_storage_bucket) {
-          entries.push({ wishId: w.id, path: w.image_storage_path, bucket: w.image_storage_bucket, kind: 'image', cacheKey: `img:${w.image_storage_bucket}:${w.image_storage_path}` });
-          entries.push({ wishId: w.id, path: w.image_storage_path, bucket: w.image_storage_bucket, kind: 'thumb', cacheKey: `thumb:${w.image_storage_bucket}:${w.image_storage_path}` });
+          entries.push({ wishId: w.id, path: w.image_storage_path, bucket: w.image_storage_bucket, kind: 'image' });
+          // Use pre-generated thumbnail if available; fall back to full-size path
+          const thumbPath = w.thumbnail_path ?? w.image_storage_path;
+          entries.push({ wishId: w.id, path: thumbPath, bucket: w.image_storage_bucket, kind: 'thumb' });
         }
         if (w.fulfilled_image_path) {
-          entries.push({ wishId: w.id, path: w.fulfilled_image_path, bucket: 'vault', kind: 'memory', cacheKey: `mem:vault:${w.fulfilled_image_path}` });
+          entries.push({ wishId: w.id, path: w.fulfilled_image_path, bucket: 'vault', kind: 'memory' });
         }
       }
 
-      // Split into cached (reuse) vs. needs-signing
+      // Split into cached (reuse from shared cross-screen cache) vs. needs-signing
       const cachedResults: { wishId: string; kind: string; url: string | null }[] = [];
       const toSign: PathEntry[] = [];
       for (const e of entries) {
-        const cached = getCached(e.cacheKey);
+        const cached = getCachedUrl(e.path);
         if (cached) {
           cachedResults.push({ wishId: e.wishId, kind: e.kind, url: cached });
         } else {
@@ -1036,15 +1034,9 @@ export default function WishTab() {
         }
       }
 
-      // Batch full-size images by bucket (createSignedUrls supports plural).
-      // Thumbnails need transforms (resize), which only createSignedUrl (singular)
-      // supports, so those are individual calls — but still parallelized.
-      const fullSizeToSign = toSign.filter(e => e.kind !== 'thumb');
-      const thumbToSign = toSign.filter(e => e.kind === 'thumb');
-
-      // Group full-size entries by bucket for batch signing
+      // Group all entries (full-size + thumbnails + memories) by bucket for batch signing
       const byBucket = new Map<string, PathEntry[]>();
-      for (const e of fullSizeToSign) {
+      for (const e of toSign) {
         if (!byBucket.has(e.bucket)) byBucket.set(e.bucket, []);
         byBucket.get(e.bucket)!.push(e);
       }
@@ -1059,27 +1051,15 @@ export default function WishTab() {
           const pathToUrl = new Map(urlData.map(d => [d.path, d.signedUrl]));
           return items.map(i => {
             const url = pathToUrl.get(i.path) ?? null;
-            if (url) setCached(i.cacheKey, url);
+            if (url) setCachedUrl(i.path, url);
             return { wishId: i.wishId, kind: i.kind, url };
           });
         })
       );
 
-      // Thumbnail URLs with transform (parallel individual calls)
-      const thumbResults = await Promise.all(
-        thumbToSign.map(async e => {
-          const { data } = await supabase.storage
-            .from(e.bucket)
-            .createSignedUrl(e.path, SIGNED_TTL, { transform: { width: THUMB_WIDTH, resize: 'cover', quality: 70 } });
-          const url = data?.signedUrl ?? null;
-          if (url) setCached(e.cacheKey, url);
-          return { wishId: e.wishId, kind: 'thumb' as const, url };
-        })
-      );
-
       // Map results back to wishes
       const urlByWish: Record<string, { image?: string | null; thumb?: string | null; memory?: string | null }> = {};
-      for (const r of [...cachedResults, ...batchResults.flat(), ...thumbResults]) {
+      for (const r of [...cachedResults, ...batchResults.flat()]) {
         if (!urlByWish[r.wishId]) urlByWish[r.wishId] = {};
         if (r.kind === 'image') urlByWish[r.wishId].image = r.url;
         else if (r.kind === 'thumb') urlByWish[r.wishId].thumb = r.url;
