@@ -311,6 +311,8 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
       grantExpired: data.grantExpired ?? false,
       grantExpiresAt: data.grantExpiresAt ?? null,
       canInvite: data.canInvite ?? false,
+      trialGraceEndsAt: data.trialGraceEndsAt ?? null,
+      expiredGrantExpiresAt: data.expiredGrantExpiresAt ?? null,
       loading: false,
     };
   } catch (err: any) {

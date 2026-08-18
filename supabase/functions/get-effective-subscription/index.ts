@@ -30,6 +30,8 @@ interface AccessResult {
   plan: string | null;
   expiresAt: string | null;
   canInvite: boolean;
+  /** Trial expiry + grace period, or null if not on trial */
+  trialGraceEndsAt: string | null;
 }
 
 const TRIAL_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -107,10 +109,10 @@ async function userHasPremiumAccess(
     .maybeSingle();
 
   if (profile?.is_super_admin === true) {
-    return { hasPremium: true, isOnTrial: false, source: "super_admin", plan: null, expiresAt: null, canInvite: true };
+    return { hasPremium: true, isOnTrial: false, source: "super_admin", plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null };
   }
   if (profile?.is_admin === true) {
-    return { hasPremium: true, isOnTrial: false, source: "admin", plan: null, expiresAt: null, canInvite: true };
+    return { hasPremium: true, isOnTrial: false, source: "admin", plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null };
   }
 
   // 2. Own subscription row — paid plan or active 7-day trial
@@ -121,11 +123,14 @@ async function userHasPremiumAccess(
     .maybeSingle();
 
   if (isSubActive(sub) && isPaidPlan(sub!.plan)) {
-    return { hasPremium: true, isOnTrial: false, source: "self", plan: sub!.plan, expiresAt: sub!.expires_at, canInvite: true };
+    return { hasPremium: true, isOnTrial: false, source: "self", plan: sub!.plan, expiresAt: sub!.expires_at, canInvite: true, trialGraceEndsAt: null };
   }
 
   if (isSubActive(sub) && isTrialPlan(sub!.plan)) {
-    return { hasPremium: true, isOnTrial: true, source: "trial", plan: "trial", expiresAt: sub!.expires_at, canInvite: true };
+    const graceEndsAt = sub!.expires_at
+      ? new Date(new Date(sub!.expires_at).getTime() + TRIAL_GRACE_MS).toISOString()
+      : null;
+    return { hasPremium: true, isOnTrial: true, source: "trial", plan: "trial", expiresAt: sub!.expires_at, canInvite: true, trialGraceEndsAt: graceEndsAt };
   }
 
   // 3. Admin grant
@@ -144,10 +149,11 @@ async function userHasPremiumAccess(
       plan: null,
       expiresAt: grant!.expires_at,
       canInvite: grant!.can_invite,
+      trialGraceEndsAt: null,
     };
   }
 
-  return { hasPremium: false, isOnTrial: false, source: "none", plan: null, expiresAt: null, canInvite: false };
+  return { hasPremium: false, isOnTrial: false, source: "none", plan: null, expiresAt: null, canInvite: false, trialGraceEndsAt: null };
 }
 
 Deno.serve(async (req: Request) => {
@@ -196,6 +202,8 @@ Deno.serve(async (req: Request) => {
           grantExpired: false,
           grantExpiresAt: ownAccess.source === "admin_grant" ? ownAccess.expiresAt : null,
           canInvite: ownAccess.canInvite,
+          trialGraceEndsAt: ownAccess.trialGraceEndsAt,
+          expiredGrantExpiresAt: null,
           _v: "2026-07-01",
           _ts: new Date().toISOString(),
         }),
@@ -233,6 +241,8 @@ Deno.serve(async (req: Request) => {
               trialExpiresAt: null,
               trialExpired: false,
               canInvite: false,
+              trialGraceEndsAt: null,
+              expiredGrantExpiresAt: null,
               _v: "2026-07-01",
               _ts: new Date().toISOString(),
             }),
@@ -272,6 +282,8 @@ Deno.serve(async (req: Request) => {
                   trialExpiresAt: null,
                   trialExpired: false,
                   canInvite: false,
+                  trialGraceEndsAt: null,
+                  expiredGrantExpiresAt: null,
                   _v: "2026-07-01",
                   _ts: new Date().toISOString(),
                 }),
@@ -317,6 +329,8 @@ Deno.serve(async (req: Request) => {
               trialExpiresAt: null,
               trialExpired: false,
               canInvite: true,
+              trialGraceEndsAt: null,
+              expiredGrantExpiresAt: null,
               _v: "2026-07-01",
               _ts: new Date().toISOString(),
             }),
@@ -330,6 +344,15 @@ Deno.serve(async (req: Request) => {
 
     // No active premium from any source. Only flag trialExpired for trial plan rows.
     const trialExpired = ownSub !== null && isTrialPlan(ownSub.plan) && !isSubActive(ownSub);
+
+    // Compute trial grace end time for expired trials so the client can show
+    // grace-period messaging in the paywall.
+    let trialGraceEndsAt: string | null = null;
+    if (trialExpired && ownSub?.expires_at) {
+      trialGraceEndsAt = new Date(
+        new Date(ownSub.expires_at).getTime() + TRIAL_GRACE_MS
+      ).toISOString();
+    }
 
     // Check for an expired admin grant so the app can show the right messaging.
     const { data: expiredGrant } = await adminClient
@@ -354,6 +377,8 @@ Deno.serve(async (req: Request) => {
         grantExpired,
         grantExpiresAt: null,
         canInvite: false,
+        trialGraceEndsAt,
+        expiredGrantExpiresAt: expiredGrant?.expires_at ?? null,
         _v: "2026-07-01",
         _ts: new Date().toISOString(),
       }),

@@ -272,11 +272,31 @@ export default function SubscriptionScreen() {
     reason === 'post_unpairing'
       ? { Icon: Heart, text: "Your partner's subscription no longer covers you. Subscribe to continue." }
       : reason === 'expired_trial'
-      ? { Icon: AlertCircle, text: 'Your 7-day free trial has ended. Subscribe to keep access.' }
+      ? { Icon: AlertCircle, text: (() => {
+          const trialEnd = subscriptionInfo.trialExpiresAt;
+          const graceEnd = subscriptionInfo.trialGraceEndsAt;
+          const inGrace = graceEnd && new Date(graceEnd) > new Date();
+          if (trialEnd) {
+            const dateStr = new Date(trialEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            if (inGrace) {
+              const graceDateStr = new Date(graceEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+              return `Your 7-day free trial ended on ${dateStr}. You have until ${graceDateStr} to subscribe before losing access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
+            }
+            return `Your 7-day free trial ended on ${dateStr}. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
+          }
+          return 'Your 7-day free trial has ended. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.';
+        })() }
       : reason === 'expiring_entitlement'
       ? { Icon: AlertCircle, text: `Your complimentary access expires on ${new Date(subscriptionInfo.grantExpiresAt ?? Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Subscribe now to keep your access uninterrupted.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.` }
       : reason === 'expired_entitlement'
-      ? { Icon: AlertCircle, text: 'Your complimentary access has ended. Subscribe to restore full access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.' }
+      ? { Icon: AlertCircle, text: (() => {
+          const grantEnd = subscriptionInfo.expiredGrantExpiresAt;
+          if (grantEnd) {
+            const dateStr = new Date(grantEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            return `Your complimentary access ended on ${dateStr}. Subscribe to restore full access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
+          }
+          return 'Your complimentary access has ended. Subscribe to restore full access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.';
+        })() }
       : null;
 
   return (
@@ -429,6 +449,8 @@ export default function SubscriptionScreen() {
               <AppText style={styles.continueTrialText}>
                 {subscriptionInfo.isOnTrial && subscriptionInfo.trialExpiresAt
                   ? `Continue with free trial · expires ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+                  : subscriptionInfo.trialGraceEndsAt && new Date(subscriptionInfo.trialGraceEndsAt) > new Date()
+                  ? `Continue · subscribe by ${new Date(subscriptionInfo.trialGraceEndsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} to keep access`
                   : 'Continue — subscribe later'}
               </AppText>
             </TouchableOpacity>

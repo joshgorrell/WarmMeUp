@@ -62,7 +62,7 @@ type ActivityItem = {
 export default function HomeScreen() {
   const router = useRouter();
   const { pendingTab } = useLocalSearchParams<{ pendingTab?: string }>();
-  const { user, profile, partnerProfile, couple, justPairedPartnerName, clearJustPaired, scoreResetAt } = useAuth();
+  const { user, profile, partnerProfile, couple, justPairedPartnerName, clearJustPaired, scoreResetAt, subscriptionInfo } = useAuth();
   const { colors } = useTheme();
   const { isTabletOrLarger, contentPadding } = useLayout();
   const [myScore, setMyScore] = useState(0);
@@ -861,6 +861,12 @@ export default function HomeScreen() {
             </AppText>
             <AppText style={[trialExpiryStyles.body, { color: colors.textSecondary }]}>
               {trialExpiry.partnerName ?? 'Your partner'} is waiting for you to confirm their connection. Subscribe now to accept their request and unlock everything.
+              {subscriptionInfo.trialExpiresAt && (
+                <>\n\nYour free trial ended on {new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}.</>
+              )}
+              {subscriptionInfo.trialGraceEndsAt && new Date(subscriptionInfo.trialGraceEndsAt) > new Date() && (
+                <> You have until {new Date(subscriptionInfo.trialGraceEndsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} to subscribe before losing access.</>
+              )}
             </AppText>
             <TouchableOpacity
               style={trialExpiryStyles.subscribeBtn}

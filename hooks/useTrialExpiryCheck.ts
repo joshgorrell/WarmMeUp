@@ -72,14 +72,17 @@ export function useTrialExpiryCheck(): TrialExpiryAlert {
           sub?.expires_at &&
           new Date(sub.expires_at) > now;
 
+        // Trial is still active OR within the 24h grace period — don't alert.
+        const TRIAL_GRACE_MS = 24 * 60 * 60 * 1000;
         const hasActiveTrial =
           sub?.status === 'active' &&
           sub?.plan === 'trial' &&
           sub?.expires_at &&
-          new Date(sub.expires_at) > now;
+          (new Date(sub.expires_at) > now ||
+            (now.getTime() - new Date(sub.expires_at).getTime()) < TRIAL_GRACE_MS);
 
         if (hasActivePremium || hasActiveTrial) {
-          return; // Still has access, no need to alert
+          return; // Still has access (including grace period), no need to alert
         }
 
         // Trial has expired and partner request is pending — show alert.

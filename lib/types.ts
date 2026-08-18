@@ -272,6 +272,10 @@ export interface SubscriptionInfo {
   grantExpiresAt: string | null;
   /** True when this user can generate an invite code (own active sub or active trial) */
   canInvite: boolean;
+  /** When the trial grace period ends (trial expires_at + 24h). Null if not applicable. */
+  trialGraceEndsAt: string | null;
+  /** Expiry date of the most recently expired admin grant, if one exists */
+  expiredGrantExpiresAt: string | null;
   loading: boolean;
 }
 
@@ -286,6 +290,8 @@ export const DEFAULT_SUBSCRIPTION_INFO: SubscriptionInfo = {
   grantExpired: false,
   grantExpiresAt: null,
   canInvite: false,
+  trialGraceEndsAt: null,
+  expiredGrantExpiresAt: null,
   loading: true,
 };
 
