@@ -2,6 +2,7 @@ import React from 'react';
 import {
   View, TouchableOpacity, Animated,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import AppText from '@/components/AppText';
 import { ChatMessage, MediaReaction } from '@/lib/types';
 import ReAnimated, {
@@ -16,8 +17,30 @@ import {
   GroupPos,
 } from './noteHelpers';
 import { MediaBubble } from './MediaBubble';
+import ActivityCard, { ChatActivityItem, ChatActivityKind } from './ActivityCard';
 import CountdownRing from '@/components/CountdownRing';
 import { useLayout } from '@/hooks/useLayout';
+
+const ACTIVITY_PREFIX = '__WMU_ACTIVITY__:';
+
+function parseActivity(msg: ChatMessage): ChatActivityItem | null {
+  if (!msg.content_text?.startsWith(ACTIVITY_PREFIX)) return null;
+  try {
+    const raw = JSON.parse(msg.content_text.slice(ACTIVITY_PREFIX.length));
+    if (!['wish', 'dare', 'dice'].includes(raw?.kind) || !raw?.sourceId) return null;
+    return {
+      id: msg.id,
+      kind: raw.kind as ChatActivityKind,
+      actorUserId: msg.sender_id,
+      createdAt: msg.created_at,
+      sourceId: String(raw.sourceId),
+      title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : 'Something is waiting for you.',
+      preview: typeof raw.preview === 'string' ? raw.preview : null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function ReplyQuote({
   msg,
@@ -110,6 +133,7 @@ export const MessageRow = React.memo(function MessageRow({
   replySenderName?: string;
   onJumpToMessage?: (id: string) => void;
 }) {
+  const router = useRouter();
   const { isTabletOrLarger, isLargeTablet } = useLayout();
   const tabletRowStyle = isTabletOrLarger
     ? { width: '100%' as const, maxWidth: isLargeTablet ? 820 : 760, alignSelf: 'center' as const }
@@ -158,6 +182,31 @@ export const MessageRow = React.memo(function MessageRow({
 
   const showDivider = !prevCreatedAt ||
     new Date(prevCreatedAt).toDateString() !== new Date(item.created_at).toDateString();
+
+  const activity = parseActivity(item);
+  if (activity) {
+    const openActivity = () => {
+      if (!activity.sourceId) return;
+      if (activity.kind === 'wish') {
+        router.push({ pathname: '/(app)/(tabs)/wish', params: { wish_id: activity.sourceId } });
+      } else if (activity.kind === 'dare') {
+        router.push({ pathname: '/(app)/(tabs)/dare', params: { dare_id: activity.sourceId } });
+      } else {
+        router.push({ pathname: '/(app)/(tabs)/dice', params: { dice_id: activity.sourceId } });
+      }
+    };
+
+    return (
+      <>
+        {showDivider && (
+          <View style={[styles.dateDivider, tabletRowStyle]}>
+            <AppText style={[styles.dateText, { color: colors.textMuted }]}>{getDividerLabel(item.created_at)}</AppText>
+          </View>
+        )}
+        <ActivityCard item={activity} actorName={name} isMine={isMine} onPress={openActivity} />
+      </>
+    );
+  }
 
   const showAvatar = !isMine && (groupPos === 'solo' || groupPos === 'last');
   const showSenderName = !isMine && (groupPos === 'solo' || groupPos === 'first');
