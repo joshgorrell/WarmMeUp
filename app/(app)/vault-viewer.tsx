@@ -134,7 +134,8 @@ function MediaPage({
 
   const handleScreenshotDetected = useCallback(async () => {
     if (!item.coupleId || !user?.id) return;
-    if (!canScreenshot) setScreenshotWarning(true);
+    if (canScreenshot) return;
+    setScreenshotWarning(true);
     if (item.interactionId) {
       await supabase
         .from('interactions')

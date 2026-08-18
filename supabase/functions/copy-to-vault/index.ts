@@ -124,13 +124,14 @@ Deno.serve(async (req: Request) => {
     // Read the user's real privacy settings from the database — never trust client-supplied flags
     const { data: userSettings } = await adminClient
       .from("user_settings")
-      .select("vault_allow_save_default, vault_allow_share_default")
+      .select("vault_allow_save_default, vault_allow_share_default, screenshot_notify_partner")
       .eq("user_id", user_id)
       .maybeSingle();
 
     const allow_save = userSettings?.vault_allow_save_default ?? false;
     // Sharing is only allowed when saving is also enabled (enforced by DB triggers, but we enforce here too)
     const allow_share = allow_save ? (userSettings?.vault_allow_share_default ?? false) : false;
+    const allow_screenshot = !(userSettings?.screenshot_notify_partner ?? true);
     const verifiedMediaType = chatMessage.media_type ?? media_type;
 
     // Copy the file server-side: source bucket -> vault bucket
@@ -169,7 +170,7 @@ Deno.serve(async (req: Request) => {
         storage_path: vault_path,
         storage_bucket: "vault",
         blurred_thumbnail_path: actualThumbnailPath,
-        allow_screenshot: false,
+        allow_screenshot: allow_screenshot,
         allow_save,
         allow_share,
         chat_message_id: chat_message_id ?? null,

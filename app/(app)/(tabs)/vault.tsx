@@ -360,7 +360,7 @@ export default function VaultScreen() {
         try {
           const uploadResult = await uploadMediaFile(localUri, 'vault', storagePath, mimeType, pct => setUploadPct(pct), user.id, rpcResult.couple_id);
           const actualPath = uploadResult.storagePath;
-          const insertPayload = { couple_id: rpcResult.couple_id, uploaded_by_user_id: user.id, media_type: mediaType, file_path: actualPath, storage_path: actualPath, storage_bucket: 'vault', blurred_thumbnail_path: uploadResult.thumbnailPath ?? null, allow_screenshot: false, allow_save: settings?.vault_allow_save_default ?? false, allow_share: settings?.vault_allow_share_default ?? false, chat_message_id: null };
+          const insertPayload = { couple_id: rpcResult.couple_id, uploaded_by_user_id: user.id, media_type: mediaType, file_path: actualPath, storage_path: actualPath, storage_bucket: 'vault', blurred_thumbnail_path: uploadResult.thumbnailPath ?? null, allow_screenshot: !(settings?.screenshot_notify_partner ?? true), allow_save: settings?.vault_allow_save_default ?? false, allow_share: settings?.vault_allow_share_default ?? false, chat_message_id: null };
           const { error: dbError } = await supabase.from('vault_items').insert(insertPayload);
           if (dbError) { supabase.storage.from('vault').remove([actualPath]).catch(() => {}); throw new Error(`Media uploaded but failed to save — ${dbError.message}`); }
           awardPoints(rpcResult.couple_id, user.id, 5, 'Vault media added'); await load(); InteractionManager.runAfterInteractions(() => scrollViewRef.current?.scrollTo({ y: 0, animated: true }));
@@ -375,7 +375,7 @@ export default function VaultScreen() {
       const ext = mimeToExtension(mimeType); const storagePath = `${couple.id}/${user.id}/${Date.now()}.${ext}`;
       const uploadResult = await uploadMediaFile(localUri, 'vault', storagePath, mimeType, pct => setUploadPct(pct), user.id, couple.id);
       const actualPath = uploadResult.storagePath;
-      const insertPayload = { couple_id: couple.id, uploaded_by_user_id: user.id, media_type: mediaType, file_path: actualPath, storage_path: actualPath, storage_bucket: 'vault', blurred_thumbnail_path: uploadResult.thumbnailPath ?? null, allow_screenshot: false, allow_save: settings?.vault_allow_save_default ?? false, allow_share: settings?.vault_allow_share_default ?? false, chat_message_id: null };
+      const insertPayload = { couple_id: couple.id, uploaded_by_user_id: user.id, media_type: mediaType, file_path: actualPath, storage_path: actualPath, storage_bucket: 'vault', blurred_thumbnail_path: uploadResult.thumbnailPath ?? null, allow_screenshot: !(settings?.screenshot_notify_partner ?? true), allow_save: settings?.vault_allow_save_default ?? false, allow_share: settings?.vault_allow_share_default ?? false, chat_message_id: null };
       const { error: dbError } = await supabase.from('vault_items').insert(insertPayload);
       if (dbError) { supabase.storage.from('vault').remove([actualPath]).catch(() => {}); throw new Error(`Media uploaded but failed to save — ${dbError.message}`); }
       awardPoints(couple.id, user.id, 5, 'Vault media added'); notifyPartner({ event_type: 'new_vault_item', couple_id: couple.id, target_route: '/(app)/(tabs)/vault', partnerUserId: partnerProfile?.id }); await load(); InteractionManager.runAfterInteractions(() => scrollViewRef.current?.scrollTo({ y: 0, animated: true }));

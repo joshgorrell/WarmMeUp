@@ -121,15 +121,19 @@ export default function ChatTab() {
         if (couple?.id) loadMessages();
         const elapsed = lastInactiveAtRef.current ? Date.now() - lastInactiveAtRef.current : 999;
         if (elapsed < 400 && couple?.id && user?.id) {
-          supabase.auth.getSession().then(({ data }) => {
-            const token = data?.session?.access_token;
-            if (!token) return;
-            fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-              body: JSON.stringify({ couple_id: couple.id, detected_by_user_id: user.id, source_screen: 'chat', chat_message_id: lastVisibleMediaMsgRef.current?.id ?? null }),
-            }).catch(() => {});
-          });
+          const visibleMsg = lastVisibleMediaMsgRef.current;
+          const screenshotBlocked = visibleMsg ? !(visibleMsg as ChatMessage).allow_screenshot : false;
+          if (!screenshotBlocked) {
+            supabase.auth.getSession().then(({ data }) => {
+              const token = data?.session?.access_token;
+              if (!token) return;
+              fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ couple_id: couple.id, detected_by_user_id: user.id, source_screen: 'chat', chat_message_id: visibleMsg?.id ?? null }),
+              }).catch(() => {});
+            });
+          }
         }
         lastInactiveAtRef.current = null;
       }
@@ -655,7 +659,7 @@ export default function ChatTab() {
       media_storage_path: chatStoragePath,
       media_storage_bucket: hasMedia ? 'chat_media' : null,
       media_type: media?.type === 'video' ? 'video' : hasMedia ? 'photo' : null,
-      allow_screenshot: false,
+      allow_screenshot: !(settings?.screenshot_notify_partner ?? true),
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
@@ -682,7 +686,7 @@ export default function ChatTab() {
       media_storage_path: chatStoragePath,
       media_storage_bucket: hasMedia ? 'chat_media' : null,
       media_type: media?.type ?? null,
-      allow_screenshot: false,
+      allow_screenshot: !(settings?.screenshot_notify_partner ?? true),
       allow_save: settings?.vault_allow_save_default ?? false,
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
@@ -1176,8 +1180,8 @@ export default function ChatTab() {
     const toMark = messages.filter(m =>
       m.sender_id !== user.id &&
       !m.first_viewed_at &&
-      !m.media_storage_path &&
-      m.burn_after_seconds
+      m.burn_after_seconds &&
+      (!m.media_storage_path || !blurEnabled)
     );
     if (toMark.length === 0) return;
     const now = new Date().toISOString();
@@ -1191,7 +1195,7 @@ export default function ChatTab() {
       .then(({ error }) => {
         if (error) logDebugEvent('chat_mark_text_viewed_failed', { error: error.message });
       });
-  }, [user?.id, couple?.id, messages]);
+  }, [user?.id, couple?.id, messages, blurEnabled]);
 
   const handleBurnMessage = useCallback((msg: ChatMessage) => {
     setMessages(prev => prev.filter(m => m.id !== msg.id));

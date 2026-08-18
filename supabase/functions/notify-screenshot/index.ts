@@ -95,6 +95,33 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Check if screenshots are allowed on this item — if so, skip entirely
+    if (vault_item_id) {
+      const { data: vaultItem } = await adminClient
+        .from("vault_items")
+        .select("allow_screenshot")
+        .eq("id", vault_item_id)
+        .maybeSingle();
+      if (vaultItem?.allow_screenshot) {
+        return new Response(JSON.stringify({ ok: true, skipped: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else if (chat_message_id) {
+      const { data: chatMsg } = await adminClient
+        .from("chat_messages")
+        .select("allow_screenshot")
+        .eq("id", chat_message_id)
+        .maybeSingle();
+      if (chatMsg?.allow_screenshot) {
+        return new Response(JSON.stringify({ ok: true, skipped: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Mark screenshot_detected on vault_item if provided
     if (vault_item_id) {
       await adminClient

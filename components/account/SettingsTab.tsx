@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, TouchableOpacity, ActivityIndicator, Linking, Image, StyleSheet, Alert,
 } from 'react-native';
@@ -9,6 +9,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useRouter } from 'expo-router';
 import { shareApp } from '@/lib/shareApp';
 import { Section, SettingsRow, InlineField } from '@/components/account/SharedSections';
+import ConfirmSheet from '@/components/ConfirmSheet';
 import {
   RequireUnlockRow, RequireUnlockAfterRow, VaultProtectionRow, ChatFontSizeRow,
   type UnlockMethod,
@@ -125,6 +126,7 @@ export function SettingsTab({
   const { colors } = useTheme();
   const router = useRouter();
   const didProbingRef = useRef(false);
+  const [confirmSheet, setConfirmSheet] = useState<{ title: string; message: string; actions: { label: string; onPress: () => void; destructive?: boolean }[] } | null>(null);
 
   // Proactively trigger the iOS Face ID permission prompt once when the user
   // visits Settings and the device has biometric hardware but hasn't been
@@ -293,14 +295,24 @@ export function SettingsTab({
             update({ vault_face_id_required: additional });
           }}
         />
-        <SettingsRow label="Notify Me if My Content is Screenshotted" sub="Get a push notification when your partner screenshots your content in Chat, Vault, or Wish. Screenshots are always recorded in your Activity feed." toggle value={s?.screenshot_notify_partner ?? true} onChange={v => update({ screenshot_notify_partner: v })} />
+        <SettingsRow label="Notify Me if My Content is Screenshotted" sub="When on, screenshots of your content are detected and your partner sees a warning. When off, screenshots are allowed with no warning. Applies to all your past and future uploads." toggle value={s?.screenshot_notify_partner ?? true} onChange={v => {
+          if (v) { update({ screenshot_notify_partner: v }); return; }
+          setConfirmSheet({ title: 'Allow Screenshots?', message: 'Your partner will be able to screenshot your photos and videos — including everything you have already uploaded — with no warning or notification. Turn this off?', actions: [{ label: 'Allow Screenshots', onPress: () => { update({ screenshot_notify_partner: false }); setConfirmSheet(null); }, destructive: true }, { label: 'Keep Protection', onPress: () => setConfirmSheet(null) } ] });
+        }} />
       </Section>
 
       <View onLayout={(e) => onVaultSectionLayout(e.nativeEvent.layout.y)}>
         <Section title="VAULT PREFERENCES" note="These are your defaults for items you add. They only apply to content you upload — your partner controls their own uploads separately." onInfo={onShowVaultSecurityInfo}>
           <SettingsRow label="Blur Vault Photos & Videos" sub="Vault items stay blurred until tapped; re-blurs when you leave the app." toggle value={s?.blur_vault_media ?? s?.blur_media ?? true} onChange={v => update({ blur_vault_media: v })} />
-          <SettingsRow label="Allow Saving My Uploads" sub="Your partner can save your uploads to their phone" toggle value={s?.vault_allow_save_default ?? false} onChange={v => update({ vault_allow_save_default: v })} />
-          <SettingsRow label="Allow Sharing My Uploads Outside App" sub="Your partner can share your content externally" toggle value={s?.vault_allow_share_default ?? false} onChange={v => update({ vault_allow_share_default: v })} />
+          <SettingsRow label="Allow Saving My Uploads" sub="Your partner can save your uploads to their phone. Applies to all your past and future uploads." toggle value={s?.vault_allow_save_default ?? false} onChange={v => {
+            if (!v) { update({ vault_allow_save_default: v }); return; }
+            setConfirmSheet({ title: 'Allow Saving?', message: 'Your partner will be able to download all your uploaded photos and videos — including everything you have already uploaded — to their phone. Turn this on?', actions: [{ label: 'Allow Saving', onPress: () => { update({ vault_allow_save_default: true, vault_allow_share_default: false }); setConfirmSheet(null); } }, { label: 'Cancel', onPress: () => setConfirmSheet(null) }] });
+          }} />
+          <SettingsRow label="Allow Sharing My Uploads Outside App" sub="Your partner can share your content externally. Requires saving to be enabled. Applies to all your past and future uploads." toggle value={s?.vault_allow_share_default ?? false} onChange={v => {
+            if (!v) { update({ vault_allow_share_default: v }); return; }
+            if (!(s?.vault_allow_save_default ?? false)) { Alert.alert('Saving Required', 'You must enable Allow Saving before you can allow sharing.'); return; }
+            setConfirmSheet({ title: 'Allow Sharing?', message: 'Your partner will be able to share your uploaded content outside the app — including everything you have already uploaded. Turn this on?', actions: [{ label: 'Allow Sharing', onPress: () => { update({ vault_allow_share_default: true }); setConfirmSheet(null); } }, { label: 'Cancel', onPress: () => setConfirmSheet(null) }] });
+          }} last />
           <SettingsRow label="Auto-Save Chat Media to Vault" sub="Photos and videos you send in Chat are automatically saved to your Vault. Deleting from either place removes both." toggle value={s?.chat_auto_save_to_vault ?? true} onChange={v => update({ chat_auto_save_to_vault: v })} last />
         </Section>
       </View>
@@ -483,6 +495,7 @@ export function SettingsTab({
         <Share2 color={colors.textMuted} size={13} strokeWidth={2} />
         <AppText style={[styles.shareAppLinkText, { color: colors.textMuted }]}>Share Warm Me Up with a friend</AppText>
       </TouchableOpacity>
+      <ConfirmSheet visible={!!confirmSheet} title={confirmSheet?.title ?? ''} message={confirmSheet?.message ?? ''} actions={confirmSheet?.actions ?? []} onDismiss={() => setConfirmSheet(null)} />
     </>
   );
 }
