@@ -749,11 +749,14 @@ export default function ChatTab() {
           const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
           const ext = capturedMedia.type === 'video' ? videoExt : 'jpg';
           const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${ext}`;
-          const { data: srcData } = await supabase.storage.from('chat_media').createSignedUrl(chatStoragePath, 120);
-          if (!srcData?.signedUrl) throw new Error('Could not access uploaded media for vault save.');
+
+          // Upload the original local file directly to vault instead of
+          // downloading the just-uploaded copy via a signed URL and
+          // re-uploading — that doubles memory pressure for large videos.
           const vaultMime = capturedMedia.type === 'video' ? capturedMedia.mimeType : 'image/jpeg';
-          const vaultUploadResult = await uploadMediaFile(srcData.signedUrl, 'vault', vaultPath, vaultMime);
+          const vaultUploadResult = await uploadMediaFile(capturedMedia.uri, 'vault', vaultPath, vaultMime);
           const actualVaultPath = vaultUploadResult.storagePath;
+
           const { data: vaultData } = await supabase.from('vault_items').insert({
             couple_id: coupleId,
             uploaded_by_user_id: userId,

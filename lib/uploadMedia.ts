@@ -4,19 +4,33 @@ import { Platform } from 'react-native';
 import { cleanupTempFile } from './mediaCache';
 import { beginUploadProgress, cancelUploadProgress, finishUploadProgress, setUploadProgressPct } from './uploadProgress';
 
-function readAsBlob(uri: string): Promise<Blob> {
-  if (!uri.startsWith('file://') && !uri.startsWith('ph://') && !uri.startsWith('content://')) return fetch(uri).then(r => r.blob());
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.responseType = 'blob';
-    xhr.onload = () => resolve(xhr.response as Blob);
-    xhr.onerror = () => reject(new Error('Could not read local media file.'));
-    xhr.open('GET', uri);
-    xhr.send();
-  });
+export type UploadResult = { storagePath: string; thumbnailPath?: string };
+
+function isLocalUri(uri: string): boolean {
+  return uri.startsWith('file://') || uri.startsWith('ph://') || uri.startsWith('content://');
 }
 
-export type UploadResult = { storagePath: string; thumbnailPath?: string };
+async function buildUploadBody(uri: string, mimeType: string): Promise<FormData | Blob> {
+  if (Platform.OS === 'web' || !isLocalUri(uri)) {
+    const response = await fetch(uri);
+    return response.blob();
+  }
+  const form = new FormData();
+  form.append('file', {
+    uri,
+    type: mimeType,
+    name: 'upload',
+  } as any);
+  return form;
+}
+
+async function uploadToStorage(
+  url: string,
+  body: FormData | Blob,
+  headers: Record<string, string>,
+): Promise<Response> {
+  return fetch(url, { method: 'PUT', headers, body });
+}
 
 async function compressImage(uri: string, mimeType: string): Promise<{ uri: string; mimeType: string }> {
   if (Platform.OS === 'web') return { uri, mimeType };
@@ -133,61 +147,54 @@ export async function uploadMediaFile(
         ? uploadStoragePath.replace(/\.\w+$/, `.${expectedExt}`)
         : `${uploadStoragePath}.${expectedExt}`;
 
-      // Generate a real poster frame for both Chat and Vault videos. The path is
-      // deterministic so viewers can resolve it without another database column.
       reportProgress(5);
       const thumbUri = await extractVideoThumbnail(localUri);
       if (thumbUri) {
         thumbnailLocalUri = thumbUri;
         const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
         try {
-          const thumbBlob = await readAsBlob(thumbUri);
-          const thumbResponse = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`, {
-            method: 'PUT',
-            headers: {
+          const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
+          const thumbResponse = await uploadToStorage(
+            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
+            thumbBody,
+            {
               Authorization: `Bearer ${session.access_token}`,
               apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
               'Content-Type': 'image/jpeg',
               'x-upsert': 'true',
             },
-            body: thumbBlob,
-          });
+          );
           if (thumbResponse.ok) thumbnailPath = thumbStoragePath;
         } catch {}
       }
     }
 
     const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL!}/storage/v1/object/${bucket}/${uploadStoragePath}`;
-    let blob: Blob;
-    try {
-      blob = await readAsBlob(uploadUri);
-    } catch {
-      throw new Error('Could not read media file — please try again.');
-    }
 
-    const blobSize = blob.size;
     logDebugEvent('VAULT UPLOAD START', {
       bucket,
       storagePath: uploadStoragePath,
       mimeType: uploadMime,
-      blobSize,
       userId: userId ?? null,
       coupleId: coupleId ?? null,
     });
 
     stopPulse = startProgressPulse(reportProgress);
 
+    let body: FormData | Blob;
+    try {
+      body = await buildUploadBody(uploadUri, uploadMime);
+    } catch {
+      throw new Error('Could not read media file — please try again.');
+    }
+
     let response: Response;
     try {
-      response = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-          'Content-Type': uploadMime,
-          'x-upsert': 'true',
-        },
-        body: blob,
+      response = await uploadToStorage(uploadUrl, body, {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+        'Content-Type': uploadMime,
+        'x-upsert': 'true',
       });
     } catch (networkErr: any) {
       throw new Error(networkErr?.message ? `Network error — ${networkErr.message}` : 'Network error — check your connection and try again.');
@@ -197,11 +204,11 @@ export async function uploadMediaFile(
     }
 
     if (!response.ok) {
-      let body: { error?: string; message?: string; statusCode?: string } | null = null;
+      let errBody: { error?: string; message?: string; statusCode?: string } | null = null;
       try {
-        body = await response.json();
+        errBody = await response.json();
       } catch {}
-      throw new Error(mapStorageError(response.status, body));
+      throw new Error(mapStorageError(response.status, errBody));
     }
 
     reportProgress(96);
@@ -209,7 +216,6 @@ export async function uploadMediaFile(
       bucket,
       storagePath: uploadStoragePath,
       mimeType: uploadMime,
-      blobSize,
       userId: userId ?? null,
       coupleId: coupleId ?? null,
     });
