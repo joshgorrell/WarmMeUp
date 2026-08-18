@@ -78,14 +78,12 @@ export default function DareTab() {
   const [acceptPts, setAcceptPts] = useState(5);
   const [completePts, setCompletePts] = useState(25);
 
-  // Sender dare: track expires_at of the dare I sent so I can show countdown
   const [sentDare, setSentDare] = useState<Interaction | null>(null);
   const [rejectedDare, setRejectedDare] = useState<Interaction | null>(null);
   const senderCountdown = useSenderCountdown(sentDare?.expires_at);
   const [highlightDare, setHighlightDare] = useState(false);
   const handledDareLinkRef = useRef<string | null>(null);
 
-  // Flip animation for sender verification card
   const flipAnim = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
 
@@ -132,7 +130,6 @@ export default function DareTab() {
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id, user]);
 
-  // Deep-link: when dare_id param arrives, check if it matches the active dare
   useEffect(() => {
     if (!deepLinkDareId || !couple?.id) return;
     if (handledDareLinkRef.current === deepLinkDareId) return;
@@ -160,7 +157,6 @@ export default function DareTab() {
   const checkStates = useCallback(async () => {
     if (!couple?.id || !user) return;
 
-    // Incoming dare for me — pending, accepted, or self-reported pending_verification
     const { data: incoming } = await supabase.from('interactions')
       .select('*')
       .eq('couple_id', couple.id)
@@ -173,13 +169,11 @@ export default function DareTab() {
       .maybeSingle();
 
     if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {
-      // Auto-reject expired incoming dare silently
       await supabase.from('interactions').update({ status: 'rejected', is_active: false }).eq('id', incoming.id);
       await incrementMonthlyCounter(couple.id, user.id, 'dares_skipped', 0);
       setIncomingDare(null);
     } else {
       setIncomingDare(incoming);
-      // Mark as seen the first time the receiver views it
       if (incoming && incoming.status === 'sent') {
         supabase.from('interactions').update({ status: 'seen' }).eq('id', incoming.id).eq('status', 'sent').then(() => {
           setIncomingDare(prev => prev ? { ...prev, status: 'seen' } : prev);
@@ -187,7 +181,6 @@ export default function DareTab() {
       }
     }
 
-    // Dare I sent that partner self-reported done — waiting for my confirmation
     const { data: pending } = await supabase.from('interactions')
       .select('*')
       .eq('couple_id', couple.id)
@@ -201,8 +194,6 @@ export default function DareTab() {
       .maybeSingle();
     setPendingVerification(pending);
 
-    // Track the dare I sent that is still open (for sender-side countdown)
-    // Include 'seen' so the sender can see the "viewed" indicator
     const { data: mySent } = await supabase.from('interactions')
       .select('*')
       .eq('couple_id', couple.id)
@@ -215,7 +206,6 @@ export default function DareTab() {
       .maybeSingle();
     setSentDare(mySent ?? null);
 
-    // Check for a recently rejected dare to show the decline reason
     const { data: rejected } = await supabase.from('interactions')
       .select('*')
       .eq('couple_id', couple.id)
@@ -354,14 +344,18 @@ export default function DareTab() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <AppShell scrollable={false}>
-        <TabHeader title="Send a Dare" />
+        <TabHeader title="Dare" />
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-          <View style={styles.iconWrap}>
-            <Flame color="#FF2E8A" size={44} strokeWidth={2} fill="rgba(255,46,138,0.12)" />
+          <View style={styles.heroCue}>
+            <View style={styles.iconWrap}>
+              <Flame color="#FF2E8A" size={38} strokeWidth={2} fill="rgba(255,46,138,0.12)" />
+            </View>
+            {!incomingDare && !pendingVerification && !sent && hasPartner && (
+              <AppText style={[styles.heroHint, { color: colors.textMuted }]}>Send something playful to your partner.</AppText>
+            )}
           </View>
 
-          {/* Incoming dare from partner */}
           {incomingDare && (
             <View style={[styles.incomingSection, highlightDare && styles.incomingHighlight]}>
               <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
@@ -383,10 +377,8 @@ export default function DareTab() {
             </View>
           )}
 
-          {/* Flippable sender verification card */}
           {pendingVerification && (
             <View style={styles.flipContainer}>
-              {/* Front face — confirm */}
               <Animated.View
                 style={[
                   styles.verifyCard,
@@ -417,7 +409,6 @@ export default function DareTab() {
                 </TouchableOpacity>
               </Animated.View>
 
-              {/* Back face — dare text */}
               <Animated.View
                 style={[
                   styles.verifyCard,
@@ -454,7 +445,7 @@ export default function DareTab() {
               </TouchableOpacity>
             </View>
           ) : !sent && (
-            <>
+            <View style={styles.composerSection}>
               {error ? (
                 <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
                   <AppText style={{ color: '#FF5A5F', fontSize: 13, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</AppText>
@@ -466,11 +457,11 @@ export default function DareTab() {
                 onChangeText={setDareText}
                 placeholder="Type your dare…"
                 multiline
-                minHeight={100}
+                minHeight={92}
                 charLimit={200}
                 containerStyle={{ marginBottom: Spacing.md }}
               />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickRow}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickRow} contentContainerStyle={styles.quickRowContent}>
                 {quickDares.map(d => (
                   <PromptChip key={d} label={d} active={dareText === d} onPress={() => setDareText(d)} style={{ marginRight: 8 }} />
                 ))}
@@ -481,12 +472,12 @@ export default function DareTab() {
                 onPress={handleSend}
                 loading={sending}
                 disabled={!dareText.trim()}
-                style={{ marginTop: Spacing.lg }}
+                style={styles.primaryAction}
               />
-            </>
+            </View>
           )}
 
-          {hasPartner && promptsLoaded && hasCustomPrompts === 'no' && (
+          {hasPartner && promptsLoaded && hasCustomPrompts === 'no' && !sent && (
             <CustomizePromptsNotice
               onPress={() => router.push('/(app)/customize-prompts?tab=dare')}
               accentColor="#FF2E8A"
@@ -495,7 +486,7 @@ export default function DareTab() {
 
           {sent && sentDare && (
             <View style={[styles.sentCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.25)' }]}>
-              <Flame color="#FF2E8A" size={48} fill="rgba(255,46,138,0.15)" strokeWidth={1.5} />
+              <Flame color="#FF2E8A" size={44} fill="rgba(255,46,138,0.15)" strokeWidth={1.5} />
               <AppText style={[styles.sentTitle, { color: colors.text }]}>Dare sent!</AppText>
               {sentDare.status === 'seen' ? (
                 <View style={styles.seenRow}>
@@ -535,8 +526,12 @@ export default function DareTab() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: Spacing.screen, paddingBottom: 60 },
-  iconWrap: { alignItems: 'center', marginBottom: Spacing.md },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing.screen, paddingBottom: Spacing.xl },
+  heroCue: { alignItems: 'center', marginTop: Spacing.xs, marginBottom: Spacing.lg },
+  iconWrap: { alignItems: 'center', justifyContent: 'center', minHeight: 48 },
+  heroHint: { marginTop: 4, fontSize: FontSize.xs, fontFamily: 'Inter-Regular', letterSpacing: 0.2 },
+  composerSection: { width: '100%' },
+  primaryAction: { marginTop: Spacing.md },
   soloPlaceholder: {
     borderRadius: Radius.lg,
     borderWidth: 1,
@@ -584,7 +579,8 @@ const styles = StyleSheet.create({
   flipToggleText: { fontSize: 12, fontFamily: 'Inter-Regular' },
   backLabel: { fontSize: 10, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2 },
   backDareText: { fontSize: FontSize.lg, fontFamily: 'Inter-SemiBold', lineHeight: 28, fontStyle: 'italic' },
-  quickRow: { marginBottom: Spacing.md },
+  quickRow: { marginBottom: 0 },
+  quickRowContent: { paddingRight: Spacing.screen },
   sentCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.xl, alignItems: 'center', gap: 8 },
   sentTitle: { fontSize: FontSize.xl, fontFamily: 'Inter-Bold' },
   sentSub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center' },
