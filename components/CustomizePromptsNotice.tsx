@@ -1,6 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, StyleSheet } from 'react-native';
-import { Sparkles } from 'lucide-react-native';
+import { TouchableOpacity, StyleSheet, View } from 'react-native';
+import { Sparkles, ChevronRight } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing } from '@/constants/theme';
@@ -19,34 +19,52 @@ export default function CustomizePromptsNotice({ onPress, accentColor = '#FFB347
       onPress={onPress}
       activeOpacity={0.75}
     >
-      <Sparkles color={accentColor} size={15} strokeWidth={2} />
-      <AppText style={[styles.text, { color: colors.textSecondary }]}>
-        Want more prompts?{' '}
-        <AppText style={[styles.link, { color: accentColor }]}>Customize your own</AppText>
-        {' '}for even more fun.
-      </AppText>
+      <View style={[styles.iconWrap, { backgroundColor: `${accentColor}16` }]}>
+        <Sparkles color={accentColor} size={17} strokeWidth={2} />
+      </View>
+      <View style={styles.copy}>
+        <AppText style={[styles.title, { color: colors.text }]}>Make it more yours</AppText>
+        <AppText style={[styles.text, { color: colors.textSecondary }]} numberOfLines={1}>
+          Customize prompts for even more fun.
+        </AppText>
+      </View>
+      <ChevronRight color={accentColor} size={17} strokeWidth={2.2} />
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    minHeight: 62,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    marginTop: Spacing.md,
+    paddingVertical: 10,
+    marginTop: Spacing.lg,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  copy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  title: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+    lineHeight: 18,
   },
   text: {
-    flex: 1,
-    fontSize: FontSize.sm,
+    marginTop: 1,
+    fontSize: FontSize.xs,
     fontFamily: 'Inter-Regular',
-    lineHeight: 19,
-  },
-  link: {
-    fontFamily: 'Inter-SemiBold',
+    lineHeight: 17,
   },
 });
