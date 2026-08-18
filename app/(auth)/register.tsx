@@ -224,7 +224,10 @@ export default function RegisterScreen() {
           completePendingJoin(pendingCode).then(async (result) => {
             await clearPendingCode();
             if (result.ok) {
-              router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: pendingCode } });
+              router.replace({
+                pathname: '/(auth)/paired-celebration',
+                params: { partnerName: result.inviterName || '' },
+              });
               return;
             }
             router.replace('/(auth)/onboarding');

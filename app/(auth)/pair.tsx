@@ -751,13 +751,20 @@ export default function PairScreen() {
     try {
       const result = await previewInvite(normalized);
       if (!result.ok) {
-        setError('Invalid code. Check with your partner.');
+        // If the code format is valid but preview failed (function error,
+        // rate limit, or genuinely not found), still save the code and send
+        // the user to registration. The code will be validated by request_join
+        // after they create an account. This prevents a dead-end where a
+        // valid code can't be used because the preview function errored.
+        await savePendingCode(normalized);
+        router.push({ pathname: '/(auth)/register', params: { pendingCode: normalized } });
         return;
       }
       setPreAuthPreview({ name: result.inviterName });
     } catch (e: any) {
-      logger.warn('[pair] error:', e?.message);
-      setError('Something went wrong. Please try again.');
+      logger.warn('[pair] preview error, falling back to registration:', e?.message);
+      await savePendingCode(normalized);
+      router.push({ pathname: '/(auth)/register', params: { pendingCode: normalized } });
     } finally {
       setLoading(false);
     }
@@ -784,12 +791,12 @@ export default function PairScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <ScrollView
-            contentContainerStyle={[styles.scroll, { paddingTop: scrollPaddingTop }]}
+            contentContainerStyle={[styles.scroll, { paddingTop: scrollPaddingTop, flexGrow: 1, justifyContent: 'center' }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
             <View style={centerStyle}>
-              <View style={[styles.heartsWrap, { height: heartsHeight }]} pointerEvents="none">
+              <View style={[styles.heartsWrap, { height: heartsHeight * 0.7 }]} pointerEvents="none">
                 <View style={styles.heartsGlowWrap}>
                   <LinearGradient
                     colors={['transparent', 'rgba(255,80,30,0.22)', 'rgba(255,46,138,0.28)', 'rgba(255,80,30,0.22)', 'transparent']}
@@ -801,17 +808,13 @@ export default function PairScreen() {
                 <View style={styles.heartsRow}>
                   <View style={[styles.heartContainer, { marginRight: heartOverlap, zIndex: 1 }]}>
                     <View style={styles.heartGlowOrange} />
-                    <HeartOutline size={heartSize} gradientId="heartL2" colorA="#FFB347" colorB="#FF5A3D" />
+                    <HeartOutline size={heartSize * 0.72} gradientId="heartL2" colorA="#FFB347" colorB="#FF5A3D" />
                   </View>
                   <View style={[styles.heartContainer, { marginLeft: heartOverlap, zIndex: 2 }]}>
                     <View style={styles.heartGlowPink} />
-                    <HeartOutline size={heartSize} gradientId="heartR2" colorA="#FF5A3D" colorB="#FF2E8A" />
+                    <HeartOutline size={heartSize * 0.72} gradientId="heartR2" colorA="#FF5A3D" colorB="#FF2E8A" />
                   </View>
                 </View>
-                <AppText style={[styles.sparkle, { top: 8, left: '22%', fontSize: 12 }]}>✦</AppText>
-                <AppText style={[styles.sparkle, { top: 4, right: '20%', fontSize: 7 }]}>✦</AppText>
-                <AppText style={[styles.sparkle, { bottom: 14, left: '14%', fontSize: 8 }]}>✦</AppText>
-                <AppText style={[styles.sparkle, { bottom: 20, right: '15%', fontSize: 6 }]}>✦</AppText>
               </View>
 
               <View style={[styles.headerRow, { justifyContent: 'space-between', marginBottom: Spacing.sm }]}>
@@ -824,14 +827,21 @@ export default function PairScreen() {
                   <HelpCircle color="rgba(255,255,255,0.45)" size={22} strokeWidth={1.8} />
                 </TouchableOpacity>
               </View>
-              <AppText style={styles.sub}>Type in the invite code they sent you.</AppText>
+              <AppText style={[styles.sub, { marginBottom: Spacing.xl }]}>Type the 6-character code they sent you.</AppText>
 
               {preAuthPreview ? (
                 <View style={styles.previewCard}>
-                  <AppText style={styles.previewLabel}>You're connecting with</AppText>
-                  <AppText style={styles.previewName}>{preAuthPreview.name}</AppText>
+                  <View style={styles.previewAvatarRow}>
+                    <View style={styles.previewAvatarCircle}>
+                      <HeartOutline size={28} gradientId="previewHeart" colorA="#FF7B00" colorB="#FF2E8A" />
+                    </View>
+                    <View style={styles.previewTextWrap}>
+                      <AppText style={styles.previewLabel}>You're connecting with</AppText>
+                      <AppText style={styles.previewName} numberOfLines={1} ellipsizeMode="tail">{preAuthPreview.name}</AppText>
+                    </View>
+                  </View>
                   <AppText style={styles.previewNote}>
-                    Tap Continue to create your account. Your partner will confirm the connection after you join.
+                    Tap Continue to create your account. You'll be connected instantly.
                   </AppText>
                 </View>
               ) : null}
@@ -841,13 +851,14 @@ export default function PairScreen() {
                   style={[styles.codeInput, { fontSize: codeFontSize, letterSpacing: codeLetterSpacing }]}
                   value={joinCode}
                   onChangeText={(t) => { setJoinCode(sanitizeInviteCode(t)); setError(''); }}
-                  placeholder="e.g. AB12CD"
+                  placeholder="AB12CD"
                   placeholderTextColor="rgba(255,255,255,0.20)"
                   autoCapitalize="characters"
                   autoCorrect={false}
                   autoComplete="off"
                   textContentType="none"
                   maxLength={6}
+                  autoFocus
                 />
 
                 {error ? <AppText style={styles.joinError}>{error}</AppText> : null}
@@ -870,7 +881,7 @@ export default function PairScreen() {
 
                 <AppText style={styles.preAuthNote}>
                   {preAuthPreview
-                    ? 'You\'ll be connected as soon as you create your account.'
+                    ? "You'll be connected as soon as you create your account."
                     : "You'll see who's inviting you, then create your account."}
                 </AppText>
               </View>
@@ -1787,6 +1798,26 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     padding: Spacing.md,
     gap: 6,
+  },
+  previewAvatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  previewAvatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,122,69,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,122,69,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  previewTextWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   previewLabel: {
     color: 'rgba(255,255,255,0.45)',

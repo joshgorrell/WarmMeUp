@@ -56,8 +56,8 @@ export default function VerifyEmailScreen() {
         if (result.ok) {
           await clearPendingCode();
           router.replace({
-            pathname: '/(auth)/pair',
-            params: { prefilledCode: code },
+            pathname: '/(auth)/paired-celebration',
+            params: { partnerName: result.inviterName || '' },
           });
           return;
         }
