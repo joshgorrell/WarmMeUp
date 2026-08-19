@@ -100,13 +100,30 @@ export default function DareTab() {
 
   const hasPartner = !!couple?.user_b_id;
   const partnerName = partnerProfile?.display_name?.trim().split(/\s+/)[0] || 'your partner';
-  const expiryHours = settings?.challenge_expiry_hours ?? 24;
-  const expirySeconds = expiryHours * 3600;
+
+  const TIMER_PRESETS = [
+    { label: '15m', seconds: 15 * 60 },
+    { label: '30m', seconds: 30 * 60 },
+    { label: '1h', seconds: 60 * 60 },
+    { label: '3h', seconds: 3 * 60 * 60 },
+    { label: '6h', seconds: 6 * 60 * 60 },
+    { label: '12h', seconds: 12 * 60 * 60 },
+    { label: '24h', seconds: 24 * 60 * 60 },
+  ];
+  const MIN_TIMER = 15 * 60;
+  const MAX_TIMER = 24 * 60 * 60;
 
   const [dareText, setDareText] = useState('');
+  const [selectedTimerSeconds, setSelectedTimerSeconds] = useState(60 * 60);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [incomingDare, setIncomingDare] = useState<Interaction | null>(null);
+
+  const incomingTotalExpirySeconds = (() => {
+    if (!incomingDare?.expires_at || !incomingDare?.created_at) return 86400;
+    const diff = Math.round((new Date(incomingDare.expires_at).getTime() - new Date(incomingDare.created_at).getTime()) / 1000);
+    return diff > 0 ? diff : 86400;
+  })();
   const [pendingVerification, setPendingVerification] = useState<Interaction | null>(null);
   const [sentDare, setSentDare] = useState<Interaction | null>(null);
   const [recentDares, setRecentDares] = useState<Interaction[]>([]);
@@ -257,7 +274,8 @@ export default function DareTab() {
       const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
       const receiverId = partnerId ?? user.id;
       await deactivatePreviousEphemeral(couple.id, user.id);
-      const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
+      const clampedSeconds = Math.min(MAX_TIMER, Math.max(MIN_TIMER, selectedTimerSeconds));
+      const expiresAt = new Date(Date.now() + clampedSeconds * 1000).toISOString();
 
       const { error: insertError } = await supabase.from('interactions').insert({
         couple_id: couple.id,
@@ -501,7 +519,7 @@ export default function DareTab() {
                 text={incomingDare.content_text}
                 status={incomingDare.status}
                 expiresAt={incomingDare.expires_at}
-                totalExpirySeconds={expirySeconds}
+                totalExpirySeconds={incomingTotalExpirySeconds}
                 coupleId={couple?.id}
                 onAccept={() => handleRespond(true)}
                 onReject={reason => handleRespond(false, reason)}
@@ -619,6 +637,43 @@ export default function DareTab() {
                     charLimit={200}
                     containerStyle={styles.dareInput}
                   />
+
+                  <View style={styles.timerRow}>
+                    <View style={styles.timerLabelRow}>
+                      <Timer color={colors.textSecondary} size={14} strokeWidth={2} />
+                      <AppText style={[styles.timerLabelText, { color: colors.textSecondary }]}>
+                        Timer
+                      </AppText>
+                    </View>
+                    <View style={styles.timerChips}>
+                      {TIMER_PRESETS.map(preset => {
+                        const active = selectedTimerSeconds === preset.seconds;
+                        return (
+                          <TouchableOpacity
+                            key={preset.seconds}
+                            onPress={() => setSelectedTimerSeconds(preset.seconds)}
+                            activeOpacity={0.7}
+                            style={[
+                              styles.timerChip,
+                              {
+                                backgroundColor: active ? 'rgba(255,46,138,0.15)' : colors.card,
+                                borderColor: active ? 'rgba(255,46,138,0.45)' : colors.borderSubtle,
+                              },
+                            ]}
+                          >
+                            <AppText
+                              style={[
+                                styles.timerChipText,
+                                { color: active ? '#FF2E8A' : colors.textSecondary },
+                              ]}
+                            >
+                              {preset.label}
+                            </AppText>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
 
                   <TouchableOpacity
                     onPress={handleSend}
@@ -953,6 +1008,35 @@ const styles = StyleSheet.create({
   },
   dareInput: {
     marginBottom: 14,
+  },
+  timerRow: {
+    marginBottom: 14,
+  },
+  timerLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 8,
+  },
+  timerLabelText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    letterSpacing: 0.4,
+  },
+  timerChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  timerChip: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  timerChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
   },
   sendButtonWrap: {
     borderRadius: 28,

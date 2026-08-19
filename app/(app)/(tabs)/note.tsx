@@ -88,6 +88,7 @@ export default function ChatTab() {
   // the list to the bottom once large media bubbles finish laying out.
   const justSentAtRef = useRef(0);
   const lastContentHeightRef = useRef(0);
+  const initialScrollDoneRef = useRef(false);
 
   const blurEnabled = settings?.blur_chat_media ?? settings?.blur_media ?? true;
   const chatFontScale = settings?.chat_font_scale ?? 1.0;
@@ -1390,6 +1391,10 @@ export default function ChatTab() {
               viewabilityConfig={viewabilityConfig}
               onScrollBeginDrag={handleDismissMenu}
               onContentSizeChange={(_w, h) => {
+                if (!initialScrollDoneRef.current && messages.length > 0) {
+                  initialScrollDoneRef.current = true;
+                  listRef.current?.scrollToEnd({ animated: false });
+                }
                 if (justSentAtRef.current > 0 && h > lastContentHeightRef.current) {
                   listRef.current?.scrollToEnd({ animated: false });
                 }
