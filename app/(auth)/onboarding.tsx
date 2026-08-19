@@ -18,11 +18,15 @@ export default function OnboardingScreen() {
 
   const [completing, setCompleting] = useState(false);
 
-  const finish = useCallback(() => {
-    router.replace('/(app)/(tabs)');
+  const finish = useCallback((action?: OnboardingFinishAction) => {
+    if (action === 'invite-partner') {
+      router.replace('/(auth)/pair');
+    } else {
+      router.replace('/(app)/(tabs)');
+    }
   }, [router]);
 
-  const handleComplete = useCallback(async (_action?: OnboardingFinishAction) => {
+  const handleComplete = useCallback(async (action?: OnboardingFinishAction) => {
     if (completing) return;
     setCompleting(true);
 
@@ -36,13 +40,13 @@ export default function OnboardingScreen() {
 
     // If subscription info is still loading, give it a brief moment before launching
     if (!subscriptionInfo.loading) {
-      finish();
+      finish(action);
       return;
     }
     refreshSubscription().catch(() => {});
     setTimeout(() => {
       setCompleting(prev => {
-        if (prev) finish();
+        if (prev) finish(action);
         return false;
       });
     }, 600);

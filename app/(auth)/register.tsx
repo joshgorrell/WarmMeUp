@@ -76,11 +76,12 @@ export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const { refreshSubscription, refreshProfile } = useAuth();
 
-  const vXs = Math.round(height * 0.01);
-  const vSm = Math.round(height * 0.016);
-  const vMd = Math.round(height * 0.024);
-  const inputPad = Math.max(Math.round(height * 0.014), 10);
+  const vXs = Math.round(height * 0.012);
+  const vSm = Math.round(height * 0.02);
+  const vMd = Math.round(height * 0.03);
+  const inputPad = Math.max(Math.round(height * 0.016), 12);
   const headingSize = Math.min(Math.round(width * 0.076), 30);
+  const formGap = Math.max(Math.round(height * 0.018), 14);
 
   // Form values
   const [firstName, setFirstName] = useState('');
@@ -582,10 +583,10 @@ export default function RegisterScreen() {
 
             {/* Title */}
             <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>What's your name?</AppText>
-            <AppText style={[styles.sub, { marginBottom: vSm }]}>Your partner will see it in chat and throughout the app.</AppText>
+            <AppText style={[styles.sub, { marginBottom: vMd }]}>Your partner will see it in chat and throughout the app.</AppText>
 
             {/* Name inputs */}
-            <View style={[styles.form, { gap: vXs }]}>
+            <View style={[styles.form, { gap: formGap }]}>
               <View>
                 <View style={styles.nameRow}>
                   <View style={[styles.inputWrap, { flex: 1 }, showFirstNameError && styles.inputWrapError]}>
@@ -662,11 +663,11 @@ export default function RegisterScreen() {
 
             {/* Title */}
             <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your account</AppText>
-            <AppText style={[styles.sub, { marginBottom: vSm }]}>Private. Playful. Just for you and your partner.</AppText>
+            <AppText style={[styles.sub, { marginBottom: vMd }]}>Private. Playful. Just for you and your partner.</AppText>
 
             {/* OAuth buttons — always enabled */}
             {(showGoogle || showApple) && (
-              <View style={[styles.oauthBlock, { gap: vXs, marginBottom: vSm }]}>
+              <View style={[styles.oauthBlock, { gap: vSm, marginBottom: vMd }]}>
                 {showApple && (
                   Platform.OS === 'ios' ? (
                     <AppleAuthentication.AppleAuthenticationButton
@@ -714,7 +715,7 @@ export default function RegisterScreen() {
             )}
 
             {/* Form fields */}
-            <View style={[styles.form, { gap: vXs }]}>
+            <View style={[styles.form, { gap: formGap }]}>
               {/* Name row */}
               <View>
                 <View style={styles.nameRow}>
@@ -872,11 +873,11 @@ export default function RegisterScreen() {
               </View>
 
               {/* API / server errors */}
-              {apiError ? <AppText style={styles.error}>{apiError}</AppText> : null}
+              {apiError ? <AppText style={[styles.error, { marginBottom: formGap }]}>{apiError}</AppText> : null}
 
               {/* ToS checkbox — immediately above Create Account */}
               <TouchableOpacity
-                style={styles.tosRow}
+                style={[styles.tosRow, { marginTop: formGap }]}
                 onPress={() => setTosAccepted(!tosAccepted)}
                 activeOpacity={0.75}
               >
@@ -912,7 +913,7 @@ export default function RegisterScreen() {
 
               {/* Create Account */}
               <TouchableOpacity
-                style={[styles.createBtn, !formReady && styles.createBtnDisabled]}
+                style={[styles.createBtn, { marginTop: formGap }, !formReady && styles.createBtnDisabled]}
                 onPress={handleRegister}
                 activeOpacity={0.85}
                 disabled={loading || oauthLoading !== null || !formReady}
@@ -934,7 +935,7 @@ export default function RegisterScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.loginRow}
+                style={[styles.loginRow, { marginTop: formGap }]}
                 onPress={() => router.replace('/(auth)/login')}
                 activeOpacity={0.7}
               >

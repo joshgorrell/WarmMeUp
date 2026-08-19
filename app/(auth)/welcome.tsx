@@ -66,7 +66,7 @@ export default function WelcomeScreen() {
 
         {/* Bottom: subtitle + CTAs */}
         <View style={styles.actions}>
-          <AppText style={styles.subtitle}>A private space for a playful connection.</AppText>
+          <AppText style={styles.subtitle}>A private app for playful couples.</AppText>
 
           <TouchableOpacity
             style={styles.primaryBtn}

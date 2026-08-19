@@ -62,7 +62,7 @@ const PLANS: {
 ];
 
 type ActiveModal = 'invite' | 'join' | null;
-type WaitingState = 'idle' | 'waiting' | 'accepted' | 'declined' | 'trial_expired';
+type WaitingState = 'idle' | 'waiting' | 'accepted' | 'declined';
 type HelpVariant = 'inviter' | 'joiner' | null;
 
 function HeartOutline({
@@ -508,10 +508,8 @@ export default function PairScreen() {
       // Server enforces subscription — if no subscription, retry once after a brief
       // delay to handle the race where the trial trigger hasn't committed yet.
       // For older accounts, refresh subscription (which now includes the entitlement
-      // grant fallback) and retry once more before showing a visible error.
+      // grant fallback) and retry up to 3 more times before showing a visible error.
       if ((result as any)?.success === false && (result as any)?.reason === 'no_subscription') {
-        // Retry up to 3 times with escalating delays to handle the race where
-        // the trial subscription trigger hasn't committed yet.
         let lastRetryResult: any = result;
         for (let attempt = 1; attempt <= 3; attempt++) {
           const delay = attempt === 1 ? 1000 : attempt === 2 ? 1500 : 2000;
@@ -668,7 +666,7 @@ export default function PairScreen() {
       if (!joinResult.ok) {
         switch (joinResult.reason) {
           case 'already_connected':
-            setError("You're already connected to a partner.");
+            setError("You're already connected to a partner. Disconnect your current partner before connecting with someone else.");
             break;
           case 'not_found':
             setError('Invalid code. Check with your partner.');
@@ -678,9 +676,6 @@ export default function PairScreen() {
             break;
           case 'rate_limited':
             setError('Too many attempts. Wait a moment and try again.');
-            break;
-          case 'no_subscription':
-            setError("Your partner's free trial has ended. Ask them to subscribe and try again.");
             break;
           default:
             setError('Something went wrong. Please try again.');
@@ -1321,35 +1316,6 @@ export default function PairScreen() {
         variant={helpVariant ?? 'joiner'}
       />
 
-      {/* User B: Inviter's trial expired */}
-      <Modal
-        visible={waitingState === 'trial_expired'}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelRequest}
-      >
-        <View style={styles.waitingOverlay}>
-          <View style={styles.waitingCard}>
-            <View style={styles.waitingIconWrap}>
-              <Hourglass color="#FFB84D" size={32} strokeWidth={1.8} />
-            </View>
-            <AppText style={styles.waitingOverlayTitle}>Partner's trial ended</AppText>
-            <AppText style={styles.waitingOverlayDesc}>
-              {inviterName
-                ? `${inviterName}'s free trial has ended. They've been notified to subscribe and confirm your connection.`
-                : "Your partner's free trial has ended. They've been notified to subscribe and confirm your connection."}
-            </AppText>
-            <TouchableOpacity
-              style={styles.cancelWaitingBtn}
-              onPress={handleCancelRequest}
-              activeOpacity={0.7}
-            >
-              <AppText style={styles.cancelWaitingText}>Cancel request</AppText>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* User B: Declined */}
       <Modal
         visible={waitingState === 'declined'}
@@ -1364,7 +1330,7 @@ export default function PairScreen() {
             </View>
             <AppText style={styles.waitingOverlayTitle}>Request declined</AppText>
             <AppText style={styles.waitingOverlayDesc}>
-              Your partner declined the connection, or their trial may have ended.{'\n'}Ask them to subscribe and try again.
+              Your partner declined the connection.
             </AppText>
             <TouchableOpacity
               style={styles.cancelWaitingBtn}
