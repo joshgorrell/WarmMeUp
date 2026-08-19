@@ -403,6 +403,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           loadedUserIdRef.current !== session.user.id;
         if (shouldLoad) {
           loadedUserIdRef.current = session.user.id;
+          setLoading(true);
           (async () => {
             await loadUserData(session.user.id);
           })();
@@ -552,8 +553,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .from('couples')
       .select('*')
       .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
-      .order('user_b_id', { ascending: true, nullsFirst: true })
       .order('active', { ascending: false })
+      .order('user_b_id', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();

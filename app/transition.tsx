@@ -89,14 +89,17 @@ export default function TransitionScreen() {
     // profile has actually loaded and confirmed the admin flag.
     if (isAdmin || isSuperAdmin) return true;
 
+    // Profile must be loaded before deciding solo vs paired.
+    // A null profile means data is still loading — don't route yet.
+    if (!profile) return false;
+
     // Solo users (no couple, inactive couple, or no partner) go to /pair.
     // This destination doesn't depend on subscription verification.
     const isSolo = !couple || couple.active === false || !couple.user_b_id;
     if (isSolo) return true;
 
-    // Paired users: both profile and subscription must be resolved.
+    // Paired users: subscription must be resolved.
     // An unresolved state is never treated as authorized or unauthorized.
-    if (!profile) return false;
     if (subscriptionInfo.loading) return false;
 
     return true;
