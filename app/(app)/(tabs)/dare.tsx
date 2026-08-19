@@ -107,14 +107,12 @@ export default function DareTab() {
     { label: '1h', seconds: 60 * 60 },
     { label: '3h', seconds: 3 * 60 * 60 },
     { label: '6h', seconds: 6 * 60 * 60 },
-    { label: '12h', seconds: 12 * 60 * 60 },
-    { label: '24h', seconds: 24 * 60 * 60 },
   ];
   const MIN_TIMER = 15 * 60;
-  const MAX_TIMER = 24 * 60 * 60;
+  const MAX_TIMER = 6 * 60 * 60;
 
   const [dareText, setDareText] = useState('');
-  const [selectedTimerSeconds, setSelectedTimerSeconds] = useState(60 * 60);
+  const [selectedTimerSeconds, setSelectedTimerSeconds] = useState(30 * 60);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [incomingDare, setIncomingDare] = useState<Interaction | null>(null);
