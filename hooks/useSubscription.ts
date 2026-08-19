@@ -126,7 +126,11 @@ export function useSubscription(): SubscriptionState {
       // Secondary: RevenueCat local entitlement check (native only, own subscription)
       if (Platform.OS !== 'web') {
         try {
-          const Purchases = await ensureConfigured();
+          const { data: { session: fallbackSession } } = await supabase.auth.getSession();
+          const fallbackUserId = fallbackSession?.user?.id;
+          const Purchases = fallbackUserId
+            ? await ensureRevenueCatUser(fallbackUserId)
+            : await ensureConfigured();
           if (Purchases) {
             const info = await Purchases.getCustomerInfo();
             const entitlement = info.entitlements.active['premium'];
@@ -192,7 +196,11 @@ export function useSubscription(): SubscriptionState {
     let active = true;
     (async () => {
       try {
-        const Purchases = await ensureConfigured();
+        const { data: { session: listenerSession } } = await supabase.auth.getSession();
+        const listenerUserId = listenerSession?.user?.id;
+        const Purchases = listenerUserId
+          ? await ensureRevenueCatUser(listenerUserId)
+          : await ensureConfigured();
         if (!Purchases || !active) return;
         listener = Purchases.addCustomerInfoUpdateListener((info: any) => {
           const entitlement = info?.entitlements?.active?.['premium'];
