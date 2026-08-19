@@ -239,7 +239,6 @@ export default function DareTab() {
   useEffect(() => {
     if (!deepLinkDareId || !couple?.id) return;
     if (handledDareLinkRef.current === deepLinkDareId) return;
-    handledDareLinkRef.current = deepLinkDareId;
 
     (async () => {
       const { data: dare } = await supabase
@@ -249,17 +248,21 @@ export default function DareTab() {
         .maybeSingle();
 
       if (!dare) {
+        handledDareLinkRef.current = deepLinkDareId;
         Alert.alert('Dare not found', 'This dare could not be found.');
         return;
       }
 
-      if (
-        ['sent', 'seen', 'accepted', 'pending_verification'].includes(dare.status) &&
-        (incomingDare?.id === deepLinkDareId || pendingVerification?.id === deepLinkDareId)
-      ) {
+      const activeStatuses = ['sent', 'seen', 'accepted', 'pending_verification'];
+      const isActive = activeStatuses.includes(dare.status);
+      const isLoaded = incomingDare?.id === deepLinkDareId || pendingVerification?.id === deepLinkDareId;
+
+      if (isActive && isLoaded) {
+        handledDareLinkRef.current = deepLinkDareId;
         setHighlightDare(true);
         setTimeout(() => setHighlightDare(false), 2000);
-      } else if (!['sent', 'seen', 'accepted', 'pending_verification'].includes(dare.status)) {
+      } else if (!isActive) {
+        handledDareLinkRef.current = deepLinkDareId;
         Alert.alert('Dare no longer active', 'This dare has already been completed or has expired.');
       }
     })();

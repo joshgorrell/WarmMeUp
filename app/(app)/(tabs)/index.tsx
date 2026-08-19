@@ -69,6 +69,7 @@ export default function HomeScreen() {
   const [partnerScore, setPartnerScore] = useState(0);
   const [activeInteraction, setActiveInteraction] = useState<Interaction | null>(null);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+  const interactionsRef = useRef<Interaction[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [streak, setStreak] = useState(0);
   const [sendingLove, setSendingLove] = useState(false);
@@ -135,7 +136,6 @@ export default function HomeScreen() {
           .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
-          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_views', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
           .subscribe();
         channelRef.current = channel;
       } catch {
@@ -250,14 +250,24 @@ export default function HomeScreen() {
         .eq('user_id', user.id),
     ]);
 
+    interactionsRef.current = (interactions ?? []) as Interaction[];
+
     const viewedSet = new Set<string>(
       (viewedRows ?? []).map((v: any) => `${v.source_table}:${v.source_id}`)
     );
 
+    const ACTIVE_STATUSES = ['sent', 'seen', 'accepted', 'pending_verification'];
+    const isActiveInteraction = (i: Interaction) =>
+      (i.type === 'dice' || i.type === 'dare') &&
+      ACTIVE_STATUSES.includes(i.status) &&
+      i.expires_at &&
+      new Date(i.expires_at) > new Date();
+
     const items: Array<ActivityItem & { _rawTime: string }> = [];
 
     (interactions ?? []).forEach((i: Interaction) => {
-      if (viewedSet.has(`interactions:${i.id}`)) return;
+      const isActionable = isActiveInteraction(i);
+      if (!isActionable && viewedSet.has(`interactions:${i.id}`)) return;
 
       let label = '';
       let icon: React.ReactNode;
@@ -468,8 +478,22 @@ export default function HomeScreen() {
 
   const handleMarkAllViewed = useCallback(async () => {
     if (!couple?.id || !user?.id || recentActivity.length === 0) return;
-    setRecentActivity([]);
-    await markAllViewedUtil(recentActivity, couple.id, user.id);
+    const ACTIVE_STATUSES = ['sent', 'seen', 'accepted', 'pending_verification'];
+    const itemsToMark = recentActivity.filter(i => {
+      if (i.sourceTable !== 'interactions') return true;
+      const raw = (interactionsRef.current ?? []).find(r => r.id === i.sourceId);
+      if (!raw) return true;
+      const isActive = (raw.type === 'dice' || raw.type === 'dare') &&
+        ACTIVE_STATUSES.includes(raw.status) &&
+        raw.expires_at &&
+        new Date(raw.expires_at) > new Date();
+      return !isActive;
+    });
+    const surviving = recentActivity.filter(i => !itemsToMark.includes(i));
+    setRecentActivity(surviving);
+    if (itemsToMark.length > 0) {
+      await markAllViewedUtil(itemsToMark, couple.id, user.id);
+    }
   }, [couple?.id, user?.id, recentActivity]);
 
   const handleDismissInteraction = useCallback(() => {
