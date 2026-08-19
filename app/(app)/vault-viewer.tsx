@@ -60,6 +60,7 @@ function MediaPage({
   const [mediaUri, setMediaUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mediaError, setMediaError] = useState(false);
+  const retryAttemptedRef = useRef(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [screenshotWarning, setScreenshotWarning] = useState(false);
@@ -89,6 +90,7 @@ function MediaPage({
     let cancelled = false;
     setMediaError(false);
     setLoading(true);
+    retryAttemptedRef.current = false;
 
     supabase.storage
       .from(item.storageBucket ?? 'vault')
@@ -289,14 +291,27 @@ function MediaPage({
 
         {mediaUri && !isVideo && !mediaError && (
           <ExpoImage
+            key={mediaUri}
             source={{ uri: mediaUri }}
             style={{ width: screenWidth, height: availableHeight }}
             contentFit="contain"
             cachePolicy="memory-disk"
             onLoad={() => setLoading(false)}
             onError={() => {
-              setLoading(false);
-              setMediaError(true);
+              if (retryAttemptedRef.current || !item.storagePath) {
+                setLoading(false);
+                setMediaError(true);
+                return;
+              }
+              retryAttemptedRef.current = true;
+              supabase.storage
+                .from(item.storageBucket ?? 'vault')
+                .createSignedUrl(item.storagePath, 12 * 60 * 60)
+                .then(({ data }) => {
+                  if (mountedRef.current && data?.signedUrl) setMediaUri(data.signedUrl);
+                  else if (mountedRef.current) { setLoading(false); setMediaError(true); }
+                })
+                .catch(() => { if (mountedRef.current) { setLoading(false); setMediaError(true); } });
             }}
           />
         )}
