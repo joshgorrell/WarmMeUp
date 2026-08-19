@@ -75,6 +75,8 @@ interface AuthContextType {
   partnerProfile: Profile | null;
   settings: UserSettings | null;
   loading: boolean;
+  /** True until the first couple lookup completes. Screens use this to avoid flashing invite controls before the pairing status is known. */
+  coupleLoading: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
   subscriptionInfo: SubscriptionInfo;
@@ -133,6 +135,7 @@ const AuthContext = createContext<AuthContextType>({
   partnerProfile: null,
   settings: null,
   loading: true,
+  coupleLoading: true,
   isAdmin: false,
   isSuperAdmin: false,
   subscriptionInfo: DEFAULT_SUBSCRIPTION_INFO,
@@ -326,6 +329,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [couple, setCouple] = useState<Couple | null>(null);
+  const [coupleLoading, setCoupleLoading] = useState(true);
   const [partnerProfile, setPartnerProfile] = useState<Profile | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -414,6 +418,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loadedUserIdRef.current = null;
         setProfile(null);
         setCouple(null);
+        setCoupleLoading(true);
         setPartnerProfile(null);
         setSettings(null);
         setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
@@ -539,36 +544,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function fetchCouple(userId: string) {
-    // Single query that covers all three cases the previous sequential
-    // fallbacks handled:
-    //   1. Solo/invite-pending row owned by this user (user_b_id IS NULL)
-    //   2. Active paired couple where this user is user_a or user_b
-    //   3. Any active couple involving this user (edge-case catch-all)
-    // We OR the conditions and order so the best row comes first:
-    //   - user_b_id IS NULL (solo/pending) before paired rows
-    //   - active=true before active=false
-    //   - most recently created first
-    // .maybeSingle() returns the top row or null in one round-trip.
-    const { data, error } = await supabase
-      .from('couples')
-      .select('*')
-      .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
-      .order('active', { ascending: false })
-      .order('user_b_id', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    setCoupleLoading(true);
+    // Two direct queries instead of a single .or() — .or() with .maybeSingle()
+    // can silently return null on certain PostgREST edge cases, causing paired
+    // users to see the "invite your partner" screen. Querying each column
+    // directly is simpler and more reliable.
+    // We prefer an active paired couple over a solo/pending row.
+    const [{ data: asA, error: errA }, { data: asB, error: errB }] = await Promise.all([
+      supabase
+        .from('couples')
+        .select('*')
+        .eq('user_a_id', userId)
+        .order('active', { ascending: false })
+        .order('user_b_id', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('couples')
+        .select('*')
+        .eq('user_b_id', userId)
+        .order('active', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
-    // Only update state if the query succeeded. A network error or unexpected
-    // PostgREST error returns error!=null and data=null — in that case keep
-    // whatever is already in state rather than blanking the couple and
-    // sending the user to the /pair screen.
-    if (!error) {
-      setCouple(data);
+    const error = errA && errB;
+    if (error) {
+      // Both queries failed — keep whatever is already in state.
+      setCoupleLoading(false);
       coupleInitialLoadDoneRef.current = true;
+      return null;
     }
 
-    if (error) return null;
+    // Prefer a paired (user_b_id != null) active row; otherwise fall back to
+    // whichever query returned a row.
+    const aPaired = asA?.user_b_id != null;
+    const bPaired = asB != null;
+    const data = aPaired ? asA : (asB ?? asA ?? null);
+
+    setCouple(data);
+    setCoupleLoading(false);
+    coupleInitialLoadDoneRef.current = true;
 
     if (data) {
       const partnerId = data.user_a_id === userId ? data.user_b_id : data.user_a_id;
@@ -747,6 +765,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setProfile(null);
     setCouple(null);
+    setCoupleLoading(true);
     setPartnerProfile(null);
     setSettings(null);
     setAppLocked(false);
@@ -811,7 +830,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled, globalDebugAccessEnabled, justPairedPartnerName, clearJustPaired, scoreResetAt, notifyScoreReset: () => setScoreResetAt(n => n + 1) }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, coupleLoading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled, globalDebugAccessEnabled, justPairedPartnerName, clearJustPaired, scoreResetAt, notifyScoreReset: () => setScoreResetAt(n => n + 1) }}
     >
       {children}
     </AuthContext.Provider>

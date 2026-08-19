@@ -40,7 +40,7 @@ type AccountTab = 'profile' | 'settings';
 // ─── Main screen ──────────────────────────────────────────────────
 export default function AccountScreen() {
   const router = useRouter();
-  const { profile, partnerProfile, couple, signOut, isAdmin, isSuperAdmin, user, settings, loading, refreshSettings, refreshProfile, refreshCouple, patchCouple, subscriptionInfo, refreshSubscription, notifyScoreReset, scoreResetAt } = useAuth();
+  const { profile, partnerProfile, couple, signOut, isAdmin, isSuperAdmin, user, settings, loading, coupleLoading, refreshSettings, refreshProfile, refreshCouple, patchCouple, subscriptionInfo, refreshSubscription, notifyScoreReset, scoreResetAt } = useAuth();
   const { colors } = useTheme();
   const { available: bioAvailable, hasHardware: bioHasHardware, biometricLabel, authenticate: bioAuthenticate } = useBiometricAuth();
   const { contentPadding } = useLayout();
@@ -188,12 +188,13 @@ export default function AccountScreen() {
     refreshCoupleRef.current();
   }, []));
 
-  // Direct DB read on every focus — bypasses AuthContext fetch path entirely.
-  // Fixes a case where fetchCouple's .or() query returns a stale/error result
-  // while the direct user_a_id query always succeeds, ensuring the invite code
-  // displayed is always the live DB value.
+  // Direct DB read on every focus — only for solo (unpaired) users.
+  // Ensures the invite code displayed is always the live DB value.
+  // Skipped entirely when the user already has a confirmed partner, so a
+  // stale solo row can never overwrite a paired couple in state.
   useFocusEffect(useCallback(() => {
     if (!user?.id) return;
+    if (couple?.user_b_id) return; // already paired — nothing to correct
     (async () => {
       const { data, error } = await supabase
         .from('couples')
@@ -210,7 +211,7 @@ export default function AccountScreen() {
         refreshCoupleRef.current();
       }
     })();
-  }, [user?.id, couple?.invite_code]));
+  }, [user?.id, couple?.invite_code, couple?.user_b_id]));
 
   // Refresh subscription state every time this screen comes into focus so that
   // returning from the entitlements or subscription screen immediately reflects
@@ -925,6 +926,7 @@ export default function AccountScreen() {
               isAdmin={isAdmin}
               isSuperAdmin={isSuperAdmin}
               subscriptionInfo={subscriptionInfo}
+              coupleLoading={coupleLoading}
               streak={streak}
               momentsToday={momentsToday}
               totalPoints={totalPoints}

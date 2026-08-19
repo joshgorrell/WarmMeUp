@@ -24,6 +24,7 @@ export function ProfileTab({
   isAdmin,
   isSuperAdmin,
   subscriptionInfo,
+  coupleLoading,
   // Stats
   streak,
   momentsToday,
@@ -70,6 +71,7 @@ export function ProfileTab({
   isAdmin: boolean;
   isSuperAdmin: boolean;
   subscriptionInfo: any;
+  coupleLoading: boolean;
   streak: number;
   momentsToday: number;
   totalPoints: number | string;
@@ -110,7 +112,7 @@ export function ProfileTab({
   return (
     <>
       {/* Stats row — only shown when no partner; replaced by ConnectedPartnerCard metrics when paired */}
-      {!couple?.user_b_id && (
+      {!couple?.user_b_id && !coupleLoading && (
         <View style={styles.statsWrap}>
           <QuickStatsRow
             streak={(optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)) ? streak : '—'}
@@ -131,6 +133,18 @@ export function ProfileTab({
           streaksEnabled={optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)}
           onManagePairing={onManagePairing}
         />
+      ) : coupleLoading ? (
+        <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+          <View style={styles.inviteHeader}>
+            <View style={[styles.heartWrap, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
+              <UserPlus color={colors.textMuted} size={18} strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1, gap: 6 }}>
+              <View style={{ height: 10, width: 120, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.08)' }} />
+              <View style={{ height: 8, width: 180, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.05)' }} />
+            </View>
+          </View>
+        </View>
       ) : !couple?.user_b_id && subscriptionInfo.loading ? (
         <View style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
           <View style={styles.inviteHeader}>
@@ -264,7 +278,7 @@ export function ProfileTab({
       )}
 
       {/* Enter a partner's code — always visible for solo users */}
-      {!couple?.user_b_id && (
+      {!couple?.user_b_id && !coupleLoading && (
         <TouchableOpacity
           style={[styles.enterCodeRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
           onPress={onEnterCode}
