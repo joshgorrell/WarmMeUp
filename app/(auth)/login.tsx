@@ -9,7 +9,7 @@ import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase, getSupabaseDiagnostics } from '@/lib/supabase';
-import { signInWithProvider, isOAuthSupported } from '@/lib/oauth';
+import { signInWithProvider, isOAuthSupported, assertNoEmailCollision, EmailCollisionError } from '@/lib/oauth';
 import { savePendingCode, loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
 import { completePendingJoin } from '@/lib/coupleJoin';
@@ -378,6 +378,16 @@ export default function LoginScreen() {
 
       const userId = session.user?.id;
       if (userId) {
+        try {
+          await assertNoEmailCollision();
+        } catch (e) {
+          if (e instanceof EmailCollisionError) {
+            setError(e.message);
+            return;
+          }
+          throw e;
+        }
+
         const { data: existing } = await supabase
           .from('profiles')
           .select('id')

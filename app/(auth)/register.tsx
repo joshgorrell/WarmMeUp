@@ -17,7 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Lock, Eye, EyeOff, Mail, Check, Calendar, User, Sparkles } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { signInWithProvider, isOAuthSupported } from '@/lib/oauth';
+import { signInWithProvider, isOAuthSupported, assertNoEmailCollision, EmailCollisionError } from '@/lib/oauth';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
@@ -255,6 +255,16 @@ export default function RegisterScreen() {
 
       const userId = session.user?.id;
       if (userId) {
+        try {
+          await assertNoEmailCollision();
+        } catch (e) {
+          if (e instanceof EmailCollisionError) {
+            setApiError(e.message);
+            return;
+          }
+          throw e;
+        }
+
         // Prefer name from OAuth provider (Apple provides it on first sign-in);
         // fall back to whatever the user typed in the form.
         const meta = session.user?.user_metadata ?? {};

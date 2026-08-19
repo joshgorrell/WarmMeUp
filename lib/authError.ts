@@ -47,6 +47,9 @@ export function friendlyAuthError(e: unknown): string {
   if (lower.includes('already registered') || lower.includes('user already exists')) {
     return 'An account with this email already exists. Try signing in instead.';
   }
+  if (lowerName.includes('emailcollision') || lower.includes('already exists with this email')) {
+    return 'An account already exists with this email. Sign in using your original method.';
+  }
   if (lower.includes('weak password') || lower.includes('password should')) {
     return 'Password is too weak. Use at least 8 characters.';
   }

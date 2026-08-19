@@ -3,8 +3,16 @@ import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from './supabase';
+import { logger } from './logger';
 
-try { WebBrowser.maybeCompleteAuthSession(); } catch {}
+try { WebBrowser.maybeCompleteAuthSession(); } catch {};
+
+export class EmailCollisionError extends Error {
+  constructor() {
+    super('An account already exists with this email. Sign in using your original method.');
+    this.name = 'EmailCollisionError';
+  }
+}
 
 export async function signInWithProvider(provider: 'google' | 'apple') {
   if (provider === 'apple' && Platform.OS === 'ios') {
@@ -116,4 +124,45 @@ async function signInWithAppleNative() {
 export function isOAuthSupported(provider?: 'google' | 'apple'): boolean {
   if (provider === 'apple') return Platform.OS === 'ios';
   return true;
+}
+
+/**
+ * Checks whether the just-signed-in OAuth user's email matches a different
+ * existing account. If so, signs out the duplicate session and throws
+ * EmailCollisionError so the caller can surface a friendly message.
+ *
+ * Only checks when the session has an email — Apple relay addresses and
+ * Google emails both work. If the edge function is unreachable, we fail
+ * open (no collision) to avoid blocking legitimate sign-ins.
+ */
+export async function assertNoEmailCollision(): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user?.email) return;
+
+  const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+  if (!baseUrl.startsWith('https://')) return;
+
+  try {
+    const res = await fetch(`${baseUrl}/functions/v1/check-email-collision`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        Apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!res.ok) {
+      logger.warn('[oauth] check-email-collision returned non-OK status:', res.status);
+      return;
+    }
+    const data = await res.json();
+    if (data?.collision) {
+      logger.log('[oauth] email collision detected — signing out duplicate session');
+      await supabase.auth.signOut();
+      throw new EmailCollisionError();
+    }
+  } catch (err) {
+    if (err instanceof EmailCollisionError) throw err;
+    logger.warn('[oauth] check-email-collision fetch failed (fail-open):', err);
+  }
 }
