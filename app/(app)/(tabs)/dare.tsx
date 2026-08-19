@@ -312,6 +312,27 @@ export default function DareTab() {
       setIncomingDare({ ...incomingDare, status: 'accepted' });
     } else {
       await incrementMonthlyCounter(couple.id, user.id, 'dares_skipped', 0);
+
+      if (declineReason) {
+        const { data: activityMsg } = await supabase
+          .from('chat_messages')
+          .select('id')
+          .eq('couple_id', couple.id)
+          .eq('sender_id', incomingDare.sender_id)
+          .is('deleted_at', null)
+          .like('content_text', `__WMU_ACTIVITY__:%${incomingDare.id}%`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        await supabase.from('chat_messages').insert({
+          couple_id: couple.id,
+          sender_id: user.id,
+          content_text: declineReason,
+          reply_to: activityMsg?.id ?? null,
+        });
+      }
+
       setIncomingDare(null);
     }
 

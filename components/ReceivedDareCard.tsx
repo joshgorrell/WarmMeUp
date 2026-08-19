@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CircleCheck as CheckCircle, Circle as XCircle, Flame, Clock, ChevronLeft } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, Circle as XCircle, Flame, Clock, ChevronLeft, Send } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { Gradient, FontSize, Radius, Spacing } from '@/constants/theme';
 import CountdownRing from '@/components/CountdownRing';
@@ -49,6 +49,8 @@ export default function ReceivedDareCard({
   const [busy, setBusy] = useState(false);
   const [declinePrompts, setDeclinePrompts] = useState<DeclinePrompt[]>([]);
   const [loadingPrompts, setLoadingPrompts] = useState(false);
+  const [customReply, setCustomReply] = useState('');
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
   const loadDeclinePrompts = async () => {
     setLoadingPrompts(true);
@@ -105,6 +107,12 @@ export default function ReceivedDareCard({
 
   const handleDeclineSelect = async (reason: string) => {
     await handle(() => onReject(reason));
+  };
+
+  const handleSendCustom = async () => {
+    const trimmed = customReply.trim();
+    if (!trimmed) return;
+    await handle(() => onReject(trimmed));
   };
 
   const handleComplete = async () => {
@@ -165,7 +173,7 @@ export default function ReceivedDareCard({
               ) : (
                 <>
                   <CheckCircle color="#fff" size={18} />
-                  <AppText style={styles.actionText}>Challenge Accepted</AppText>
+                  <AppText style={styles.actionText}>Accept Dare</AppText>
                 </>
               )}
             </LinearGradient>
@@ -178,7 +186,7 @@ export default function ReceivedDareCard({
             style={[styles.rejectBtn, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}
           >
             <XCircle color={colors.textSecondary} size={18} />
-            <AppText style={[styles.rejectText, { color: colors.textSecondary }]}>No Way!</AppText>
+            <AppText style={[styles.rejectText, { color: colors.textSecondary }]}>Decline / Reply</AppText>
           </TouchableOpacity>
         </View>
       )}
@@ -212,8 +220,70 @@ export default function ReceivedDareCard({
             </View>
           )}
 
+          {!showCustomInput ? (
+            <TouchableOpacity
+              onPress={() => setShowCustomInput(true)}
+              style={styles.writeOwnBtn}
+              activeOpacity={0.7}
+            >
+              <AppText style={[styles.writeOwnText, { color: '#FF2E8A' }]}>
+                Write your own reply...
+              </AppText>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.customInputContainer}>
+              <TextInput
+                value={customReply}
+                onChangeText={setCustomReply}
+                placeholder="Type your reply..."
+                placeholderTextColor={colors.textMuted}
+                multiline
+                maxLength={200}
+                style={[
+                  styles.customInput,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.borderSubtle,
+                    color: colors.text,
+                  },
+                ]}
+              />
+              <View style={styles.customActionRow}>
+                <TouchableOpacity
+                  onPress={() => { setShowCustomInput(false); setCustomReply(''); }}
+                  style={styles.cancelCustomBtn}
+                  activeOpacity={0.7}
+                >
+                  <AppText style={[styles.cancelCustomText, { color: colors.textMuted }]}>Cancel</AppText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSendCustom}
+                  disabled={busy || !customReply.trim()}
+                  activeOpacity={0.85}
+                  style={styles.sendCustomBtn}
+                >
+                  <LinearGradient
+                    colors={customReply.trim() ? ['#FF8A28', '#FF2E8A'] : ['#5A3A2A', '#5B303D']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.sendCustomGrad}
+                  >
+                    {busy ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <Send color="#fff" size={14} strokeWidth={2} />
+                        <AppText style={styles.sendCustomText}>Send Reply</AppText>
+                      </>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           <TouchableOpacity
-            onPress={() => setStage('pending')}
+            onPress={() => { setStage('pending'); setShowCustomInput(false); setCustomReply(''); }}
             style={styles.backLink}
             activeOpacity={0.7}
           >
@@ -317,6 +387,39 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   promptChipText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
+  writeOwnBtn: {
+    paddingVertical: Spacing.sm,
+  },
+  writeOwnText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
+  customInputContainer: { gap: Spacing.sm },
+  customInput: {
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    minHeight: 80,
+    maxHeight: 120,
+  },
+  customActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  cancelCustomBtn: { paddingVertical: 8, paddingHorizontal: 4 },
+  cancelCustomText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
+  sendCustomBtn: { borderRadius: Radius.pill, overflow: 'hidden' },
+  sendCustomGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    paddingHorizontal: 20,
+  },
+  sendCustomText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-Bold' },
   backLink: {
     flexDirection: 'row',
     alignItems: 'center',
