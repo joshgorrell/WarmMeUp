@@ -1373,7 +1373,8 @@ export default function ChatTab() {
               data={messagesWithPrev}
               keyExtractor={m => m.id}
               renderItem={renderItem}
-              contentContainerStyle={styles.list}
+              style={{ flex: 1 }}
+              contentContainerStyle={[styles.list, { paddingBottom: 160 + insets.bottom }]}
               showsVerticalScrollIndicator={false}
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
@@ -1442,7 +1443,7 @@ export default function ChatTab() {
 
           <View style={[
             styles.compose,
-            { paddingBottom: insets.bottom > 0 ? insets.bottom : 6 },
+            { paddingBottom: Math.max(insets.bottom, 6), flexShrink: 0 },
             !hasPartner && styles.composeHidden,
           ]}>
             {attachedMedia && !editingState && (

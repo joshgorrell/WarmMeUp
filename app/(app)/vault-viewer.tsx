@@ -57,8 +57,8 @@ function MediaPage({
   // Internal saves must preserve the original sender permissions rather than reinterpret them.
   const showSaveToVault = !!item.interactionId;
 
-  const [mediaUri, setMediaUri] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [mediaUri, setMediaUri] = useState<string | null>(item.signedUri ?? null);
+  const [loading, setLoading] = useState(!item.signedUri);
   const [mediaError, setMediaError] = useState(false);
   const retryAttemptedRef = useRef(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
@@ -89,8 +89,16 @@ function MediaPage({
     if (!item.storagePath || !isActive) return;
     let cancelled = false;
     setMediaError(false);
-    setLoading(true);
     retryAttemptedRef.current = false;
+
+    // If we already have a valid signed URL from the chat, use it immediately
+    // and refresh in the background. Only show a loading state if we have no URL.
+    if (item.signedUri) {
+      setMediaUri(item.signedUri);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
 
     supabase.storage
       .from(item.storageBucket ?? 'vault')
@@ -98,8 +106,11 @@ function MediaPage({
       .then(({ data, error }) => {
         if (cancelled || !mountedRef.current) return;
         if (error || !data?.signedUrl) {
-          setMediaError(true);
-          setLoading(false);
+          // Only show error if we don't already have a working URL
+          if (!item.signedUri) {
+            setMediaError(true);
+            setLoading(false);
+          }
           return;
         }
         setMediaUri(data.signedUrl);
@@ -109,7 +120,7 @@ function MediaPage({
     return () => {
       cancelled = true;
     };
-  }, [item.storagePath, item.storageBucket, isActive]);
+  }, [item.storagePath, item.storageBucket, item.signedUri, isActive]);
 
   useEffect(() => {
     if (!mediaUri || Platform.OS === 'web') return;
