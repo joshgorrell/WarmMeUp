@@ -413,76 +413,127 @@ function WishForm({
     }
   }, [visible, initial]);
 
+  const processPickedAsset = async (asset: any) => {
+    if (!user || !couple?.id) return;
+    const mime = resolveAssetMimeType(asset);
+    logDebugEvent('WISH IMAGE PICK', {
+      localUri: asset.uri,
+      mimeType: mime,
+      fileSize: asset.fileSize ?? null,
+    });
+    logDebugEvent('WISH LAST IMAGE PICK', { at: new Date().toISOString(), mime });
+
+    setUploading(true);
+    setError('');
+
+    // Delete the old image and thumbnail from storage before uploading a new one
+    if (imgPath) {
+      const toRemove = [imgPath];
+      if (thumbPath) toRemove.push(thumbPath);
+      await supabase.storage.from(imgBucket).remove(toRemove).catch(() => {});
+    }
+
+    const storagePath = `${couple.id}/${user.id}/wish_${Date.now()}.jpg`;
+    logDebugEvent('WISH IMAGE UPLOAD START', { storagePath });
+    logDebugEvent('WISH LAST UPLOAD PATH', { path: storagePath });
+
+    const uploadResult = await uploadMediaFile(asset.uri, 'chat_media', storagePath, mime, undefined, user.id, couple.id);
+    setThumbPath(uploadResult.thumbnailPath ?? null);
+
+    // Generate a signed URL immediately so the preview survives a restart
+    const { data: signedData, error: signError } = await supabase.storage
+      .from('chat_media')
+      .createSignedUrl(storagePath, 3600);
+
+    if (signError || !signedData?.signedUrl) {
+      logDebugEvent('WISH IMAGE SIGN ERROR', { storagePath, error: signError?.message ?? 'no signedUrl' });
+      setImgPath(storagePath);
+      setImgBucket('chat_media');
+      setImgUri(null);
+    } else {
+      logDebugEvent('WISH IMAGE UPLOAD SUCCESS', { storagePath, signedUrl: signedData.signedUrl.slice(0, 60) });
+      logDebugEvent('WISH LAST UPLOAD ERROR', { error: null });
+      setImgPath(storagePath);
+      setImgBucket('chat_media');
+      setImgUri(signedData.signedUrl);
+    }
+    if (uploadResult.thumbnailPath) setCachedUrl(uploadResult.thumbnailPath, signedData?.signedUrl ?? '');
+  };
+
   const pickImage = async () => {
     if (!user) { setError('You must be logged in to add a photo.'); return; }
     if (!couple?.id) { setError('Account not ready — please try again.'); return; }
     try {
       const ImagePicker = await import('expo-image-picker');
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert(
-          'Photo Access Required',
-          'Allow access to your photo library in Settings to add a photo to your wish.',
-          [
-            { text: 'Open Settings', onPress: () => Linking.openSettings() },
-            { text: 'Cancel', style: 'cancel' },
-          ]
-        );
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'] as any,
-        quality: 0.8,
-        allowsEditing: true,
-        aspect: [4, 3],
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0];
-
-      const mime = resolveAssetMimeType(asset);
-      logDebugEvent('WISH IMAGE PICK', {
-        localUri: asset.uri,
-        mimeType: mime,
-        fileSize: asset.fileSize ?? null,
-      });
-      logDebugEvent('WISH LAST IMAGE PICK', { at: new Date().toISOString(), mime });
-
-      setUploading(true);
-      setError('');
-
-      // Delete the old image and thumbnail from storage before uploading a new one
-      if (imgPath) {
-        const toRemove = [imgPath];
-        if (thumbPath) toRemove.push(thumbPath);
-        await supabase.storage.from(imgBucket).remove(toRemove).catch(() => {});
-      }
-
-      const storagePath = `${couple.id}/${user.id}/wish_${Date.now()}.jpg`;
-      logDebugEvent('WISH IMAGE UPLOAD START', { storagePath });
-      logDebugEvent('WISH LAST UPLOAD PATH', { path: storagePath });
-
-      const uploadResult = await uploadMediaFile(asset.uri, 'chat_media', storagePath, mime, undefined, user.id, couple.id);
-      setThumbPath(uploadResult.thumbnailPath ?? null);
-
-      // Generate a signed URL immediately so the preview survives a restart
-      const { data: signedData, error: signError } = await supabase.storage
-        .from('chat_media')
-        .createSignedUrl(storagePath, 3600);
-
-      if (signError || !signedData?.signedUrl) {
-        logDebugEvent('WISH IMAGE SIGN ERROR', { storagePath, error: signError?.message ?? 'no signedUrl' });
-        // Still persist the path — the card will re-sign on load
-        setImgPath(storagePath);
-        setImgBucket('chat_media');
-        setImgUri(null);
-      } else {
-        logDebugEvent('WISH IMAGE UPLOAD SUCCESS', { storagePath, signedUrl: signedData.signedUrl.slice(0, 60) });
-        logDebugEvent('WISH LAST UPLOAD ERROR', { error: null });
-        setImgPath(storagePath);
-        setImgBucket('chat_media');
-        setImgUri(signedData.signedUrl);
-      }
-      if (uploadResult.thumbnailPath) setCachedUrl(uploadResult.thumbnailPath, signedData?.signedUrl ?? '');
+      Alert.alert(
+        'Add a Photo',
+        undefined,
+        [
+          {
+            text: 'Take Photo',
+            onPress: async () => {
+              try {
+                const camPerm = await ImagePicker.requestCameraPermissionsAsync();
+                if (!camPerm.granted) {
+                  Alert.alert(
+                    'Camera Access Required',
+                    'Allow access to your camera in Settings to take a photo for your wish.',
+                    [
+                      { text: 'Open Settings', onPress: () => Linking.openSettings() },
+                      { text: 'Cancel', style: 'cancel' },
+                    ]
+                  );
+                  return;
+                }
+                const camResult = await ImagePicker.launchCameraAsync({
+                  mediaTypes: ['images'] as any,
+                  quality: 0.8,
+                  allowsEditing: true,
+                  aspect: [4, 3],
+                });
+                if (camResult.canceled || !camResult.assets?.length) return;
+                await processPickedAsset(camResult.assets[0]);
+              } catch (err: any) {
+                const msg = err?.message ?? 'Unknown error';
+                logDebugEvent('WISH IMAGE CAMERA ERROR', { error: msg });
+                setError(msg.length < 120 ? msg : 'Camera capture failed. Please try again.');
+              }
+            },
+          },
+          {
+            text: 'Choose from Library',
+            onPress: async () => {
+              try {
+                const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (!perm.granted) {
+                  Alert.alert(
+                    'Photo Access Required',
+                    'Allow access to your photo library in Settings to add a photo to your wish.',
+                    [
+                      { text: 'Open Settings', onPress: () => Linking.openSettings() },
+                      { text: 'Cancel', style: 'cancel' },
+                    ]
+                  );
+                  return;
+                }
+                const result = await ImagePicker.launchImageLibraryAsync({
+                  mediaTypes: ['images'] as any,
+                  quality: 0.8,
+                  allowsEditing: true,
+                  aspect: [4, 3],
+                });
+                if (result.canceled || !result.assets?.length) return;
+                await processPickedAsset(result.assets[0]);
+              } catch (err: any) {
+                const msg = err?.message ?? 'Unknown error';
+                logDebugEvent('WISH IMAGE PICK ERROR', { error: msg });
+                setError(msg.length < 120 ? msg : 'Image upload failed. Please try again.');
+              }
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
     } catch (err: any) {
       const msg = err?.message ?? 'Unknown error';
       logDebugEvent('WISH IMAGE UPLOAD ERROR', { error: msg });
@@ -1130,8 +1181,7 @@ export default function WishTab() {
     const target = wishes.find(w => w.id === deepLinkWishId);
     if (!target) return;
     handledWishLinkRef.current = deepLinkWishId;
-    setEditingWish(target);
-    setShowForm(true);
+    setDetailWish(target);
   }, [deepLinkWishId, wishes]);
 
   const handleTabPress = useCallback((key: TabKey, idx: number) => {

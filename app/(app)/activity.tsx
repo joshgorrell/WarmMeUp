@@ -97,7 +97,7 @@ export default function ActivityScreen() {
     if (!couple?.id || !user) return;
     const [{ data: interactions }, { data: chats }, { data: activityEvts }, { data: viewedRows }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(50),
-      supabase.from('chat_messages').select('*').eq('couple_id', couple.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(50),
+      supabase.from('chat_messages').select('*').eq('couple_id', couple.id).is('deleted_at', null).not('content_text', 'like', '__WMU_ACTIVITY__:%').order('created_at', { ascending: false }).limit(50),
       supabase.from('activity_events').select('*').eq('couple_id', couple.id).eq('target_user_id', user.id).order('created_at', { ascending: false }).limit(50),
       supabase.from('activity_views').select('source_table, source_id').eq('couple_id', couple.id).eq('user_id', user.id),
     ]);
