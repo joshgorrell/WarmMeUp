@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { ensureConfigured } from '@/lib/purchases';
+import { ensureConfigured, ensureRevenueCatUser } from '@/lib/purchases';
 import { planFromProductId } from '@/lib/productIds';
 import { logger } from '../lib/logger';
 
@@ -43,9 +43,11 @@ function serverPlanToDisplayPlan(serverPlan: string | null): SubscriptionPlan {
 
 async function fetchEffectiveSubscription(): Promise<{
   isPremium: boolean;
+  isOnTrial: boolean;
   source: SubscriptionSource;
   plan: string | null;
   expiresAt: string | null;
+  trialExpiresAt: string | null;
 } | null> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -105,17 +107,19 @@ export function useSubscription(): SubscriptionState {
       const effective = await fetchEffectiveSubscription();
       logger.log('[useSubscription] effective subscription:', JSON.stringify({
         isPremium: effective?.isPremium,
+        isOnTrial: effective?.isOnTrial,
         source: effective?.source,
         plan: effective?.plan,
       }));
 
       if (effective?.isPremium) {
+        const onTrial = effective.isOnTrial === true;
         setIsPremium(true);
+        setIsOnTrial(onTrial);
         setPremiumSource(effective.source);
-        setRenewalDate(formatDate(effective.expiresAt));
+        setRenewalDate(formatDate(onTrial ? effective.trialExpiresAt ?? effective.expiresAt : effective.expiresAt));
         setPlan(serverPlanToDisplayPlan(effective.plan ?? ''));
-        setStatus('Active');
-        setIsOnTrial(false);
+        setStatus(onTrial ? 'Trial' : 'Active');
         return;
       }
 
@@ -223,7 +227,11 @@ export function useSubscription(): SubscriptionState {
       return;
     }
     try {
-      const Purchases = await ensureConfigured();
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      const Purchases = userId
+        ? await ensureRevenueCatUser(userId)
+        : await ensureConfigured();
       if (!Purchases) {
         Alert.alert('Unavailable', 'Purchases are not available on this device.');
         return;

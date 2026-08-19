@@ -22,7 +22,7 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { ensureConfigured } from '@/lib/purchases';
+import { ensureConfigured, ensureRevenueCatUser } from '@/lib/purchases';
 import { MONTHLY_PRODUCT_ID, ANNUAL_PRODUCT_ID } from '@/lib/productIds';
 import { logger } from '@/lib/logger';
 
@@ -167,7 +167,11 @@ export default function SubscriptionScreen() {
 
     setLoading(true);
     try {
-      const Purchases = await ensureConfigured();
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      const Purchases = userId
+        ? await ensureRevenueCatUser(userId)
+        : await ensureConfigured();
       const pkg = Purchases ? packages[selected] : null;
       if (!pkg) {
         Alert.alert('Unavailable', 'This plan is currently unavailable. Please try again later.');
@@ -211,7 +215,11 @@ export default function SubscriptionScreen() {
     }
     setLoading(true);
     try {
-      const Purchases = await ensureConfigured();
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      const Purchases = userId
+        ? await ensureRevenueCatUser(userId)
+        : await ensureConfigured();
       if (!Purchases) {
         Alert.alert('Unavailable', 'Purchases are not available on this device.');
         setLoading(false);

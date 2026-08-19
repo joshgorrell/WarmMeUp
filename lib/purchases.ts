@@ -54,6 +54,34 @@ async function logInRevenueCat(userId: string): Promise<void> {
   }
 }
 
+/**
+ * Guarantees the RevenueCat App User ID matches the authenticated Supabase UUID
+ * before any purchase or restore. If the current RC user is anonymous or mismatched,
+ * calls logIn() to switch to the correct identity. Safe to call when already logged
+ * in — returns immediately if the identity is already correct.
+ */
+async function ensureRevenueCatUser(userId: string): Promise<typeof import('react-native-purchases').default | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    const Purchases = await ensureConfigured();
+    if (!Purchases) return null;
+
+    const currentId = await Purchases.getAppUserID();
+    const isAnonymous = await Purchases.isAnonymous();
+    if (!isAnonymous && currentId === userId) {
+      return Purchases;
+    }
+
+    logger.log(`[RevenueCat] identity mismatch — current=${currentId} anonymous=${isAnonymous} → logging in ${userId}`);
+    await Purchases.logIn(userId);
+    logger.log(`[RevenueCat] ensureRevenueCatUser resolved to ${userId}`);
+    return Purchases;
+  } catch (err: any) {
+    logger.warn('[RevenueCat] ensureRevenueCatUser failed:', err?.message);
+    return null;
+  }
+}
+
 async function logOutRevenueCat(): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
@@ -66,4 +94,4 @@ async function logOutRevenueCat(): Promise<void> {
   }
 }
 
-export { ensureConfigured, logInRevenueCat, logOutRevenueCat };
+export { ensureConfigured, ensureRevenueCatUser, logInRevenueCat, logOutRevenueCat };

@@ -17,7 +17,7 @@ import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw, Check, Circle as XCircle, Hourglass, Circle as HelpCircle, Sparkles } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw, Check, Circle as XCircle, Circle as HelpCircle, Sparkles } from 'lucide-react-native';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -31,7 +31,7 @@ import {
 import { previewInvite, getPendingPartnerProfile, getMyPendingJoin, recordTrialExpired, type PendingJoinStatus } from '@/lib/coupleJoin';
 import { logDebugEvent } from '@/lib/debugLog';
 import { logger } from '@/lib/logger';
-import { ensureConfigured } from '@/lib/purchases';
+import { ensureConfigured, ensureRevenueCatUser } from '@/lib/purchases';
 import { MONTHLY_PRODUCT_ID, ANNUAL_PRODUCT_ID } from '@/lib/productIds';
 import PairHelpModal from '@/components/PairHelpModal';
 
@@ -62,7 +62,6 @@ const PLANS: {
 ];
 
 type ActiveModal = 'invite' | 'join' | null;
-type WaitingState = 'idle' | 'waiting' | 'accepted' | 'declined';
 type HelpVariant = 'inviter' | 'joiner' | null;
 
 function HeartOutline({
@@ -126,8 +125,6 @@ export default function PairScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [codeLoading, setCodeLoading] = useState(false);
   const [activeModal, setActiveModal] = useState<ActiveModal>(prefilledCode ? 'join' : null);
-  const [waitingState, setWaitingState] = useState<WaitingState>('idle');
-  const [waitingCoupleId, setWaitingCoupleId] = useState<string | null>(null);
   const [acceptLoading, setAcceptLoading] = useState(false);
   const lastJoinAttemptRef = useRef(0);
   const [inviterName, setInviterName] = useState<string | null>(null);
@@ -142,8 +139,6 @@ export default function PairScreen() {
   const [subscribing, setSubscribing] = useState(false);
   const [subscribeError, setSubscribeError] = useState('');
   const [packages, setPackages] = useState<Record<string, any>>({});
-  const trialExpiredNotifiedRef = useRef(false);
-  const trialReminderSentRef = useRef(false);
 
   useEffect(() => {
     if (!user) return;
@@ -155,10 +150,10 @@ export default function PairScreen() {
       // from a previous session. If so, resume straight into the waiting state.
       const pending = await getMyPendingJoin();
       if (pending.ok && (pending.status === 'accepted' || pending.status === 'b_accepted' || pending.status === 'pending')) {
-        // With auto-finalize, a pending status of 'accepted' means the connection
-        // is already complete — navigate immediately.
-        // A stale 'b_accepted' or 'pending' (from before the migration) should
-        // also be treated as accepted since request_join now finalizes immediately.
+        // request_join auto-finalizes pairing immediately. Any of these statuses
+        // means the connection is already complete — navigate to the app.
+        // Stale 'b_accepted' or 'pending' (from before the auto-finalize migration)
+        // are also treated as complete.
         await refreshCouple();
         refreshSubscription().catch(() => {});
         if (!settings?.celebration_seen) {
@@ -169,12 +164,6 @@ export default function PairScreen() {
         } else {
           router.replace('/(app)/(tabs)');
         }
-        setResumeChecked(true);
-        return;
-      }
-      if (pending.ok && pending.status === 'accepted') {
-        // Already accepted — refresh and let the couple redirect handle navigation.
-        await refreshCouple();
         setResumeChecked(true);
         return;
       }
@@ -208,36 +197,6 @@ export default function PairScreen() {
     }
   }, [couple?.user_b_id]);
 
-  // Resolve the waiting state: navigate to celebration or mark declined.
-  const resolveWaiting = async (status: 'accepted' | 'declined') => {
-    if (status === 'accepted') {
-      setWaitingState('accepted');
-      await refreshCouple();
-      // Refresh subscription so User B immediately picks up partner-shared premium
-      // without needing a full app restart.
-      refreshSubscription().catch(() => {});
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      if (token && waitingCoupleId) {
-        fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notify-partner`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ event_type: 'partner_joined', couple_id: waitingCoupleId }),
-        }).catch(() => {});
-      }
-      if (!settings?.celebration_seen) {
-        router.replace({
-          pathname: '/(auth)/paired-celebration',
-          params: { partnerName: inviterName || '' },
-        });
-      } else {
-        router.replace('/(app)/(tabs)');
-      }
-    } else {
-      setWaitingState('declined');
-    }
-  };
-
   // User A: subscribe to the couple row so pending partner requests appear
   // immediately without needing to close and reopen the screen.
   useEffect(() => {
@@ -265,70 +224,6 @@ export default function PairScreen() {
     return () => { if (channel) supabase.removeChannel(channel); };
   }, [user, couple?.id]);
 
-  // User B: subscribe to the couple row for accept/decline transitions while waiting.
-  useEffect(() => {
-    if (waitingState !== 'waiting' || !waitingCoupleId) return;
-    const channelName = `waiting:${waitingCoupleId}`;
-    // Clean up any stale channel with the same name to avoid "already subscribed" crashes.
-    supabase.getChannels().forEach((ch) => {
-      if (ch.topic === channelName) supabase.removeChannel(ch);
-    });
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      channel = supabase
-        .channel(channelName)
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'couples', filter: `id=eq.${waitingCoupleId}` },
-          async (payload: any) => {
-            const newStatus = payload?.new?.pending_partner_status;
-            const newUserB = payload?.new?.user_b_id;
-            if (newUserB && user) {
-              await resolveWaiting('accepted');
-            } else if (newStatus === 'declined') {
-              await resolveWaiting('declined');
-            }
-          },
-        )
-        .subscribe();
-    } catch {
-      // Polling fallback (below) will still catch status changes if realtime setup fails.
-    }
-    return () => { if (channel) supabase.removeChannel(channel); };
-  }, [waitingState, waitingCoupleId, user, settings?.celebration_seen, inviterName]);
-
-  // User B: polling fallback — if realtime drops, poll every 4s for status changes.
-  // Uses a two-strike rule for decline detection: the first `getMyPendingJoin`
-  // failure is treated as a transient blip and re-checked immediately. Only a
-  // second consecutive failure is treated as a real decline. This prevents
-  // false "declined" resolutions from momentary network errors.
-  useEffect(() => {
-    if (waitingState !== 'waiting' || !user) return;
-    let cancelled = false;
-    let consecutiveFailures = 0;
-    const poll = async () => {
-      const result = await getMyPendingJoin();
-      if (cancelled) return;
-      if (result.ok && result.status === 'accepted') {
-        await resolveWaiting('accepted');
-      } else if (result.ok && (result.status === 'b_accepted' || result.status === 'pending')) {
-        // Still waiting — reset failure counter and keep polling.
-        consecutiveFailures = 0;
-        return;
-      } else if (!result.ok) {
-        consecutiveFailures += 1;
-        // Two-strike rule: only resolve as declined after two consecutive
-        // failures. A single failure could be a transient network blip.
-        if (consecutiveFailures >= 2) {
-          await resolveWaiting('declined');
-        }
-      }
-    };
-    const interval = setInterval(poll, 4000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [waitingState, waitingCoupleId, user, inviterName]);
-
-  // User A: accept a pending request
   // User A: cancel a pending invite they sent
   const handleCancelInvite = async () => {
     if (!couple?.id || acceptLoading) return;
@@ -362,7 +257,11 @@ export default function PairScreen() {
     setSubscribing(true);
     setSubscribeError('');
     try {
-      const Purchases = await ensureConfigured();
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      const Purchases = userId
+        ? await ensureRevenueCatUser(userId)
+        : await ensureConfigured();
       if (!Purchases) {
         setSubscribeError('Purchases are not available on this device.');
         return;
@@ -398,7 +297,6 @@ export default function PairScreen() {
       }
 
       // Confirm with server so the subscriptions table updates
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
         await fetch(`${baseUrl}/functions/v1/confirm-subscription`, {
@@ -435,18 +333,6 @@ export default function PairScreen() {
     } finally {
       setSubscribing(false);
     }
-  };
-
-  // User B: cancel their own pending request
-  const handleCancelRequest = async () => {
-    try {
-      await supabase.rpc('cancel_request');
-      setWaitingState('idle');
-      setWaitingCoupleId(null);
-      setJoinCode('');
-      setActiveModal(null);
-      await refreshCouple();
-    } catch {}
   };
 
   // Auto-submit when a full 6-character code is entered
@@ -1018,8 +904,8 @@ export default function PairScreen() {
               </View>
               <AppText style={styles.pendingRequestDesc}>
                 {pendingPartnerName
-                  ? `${pendingPartnerName} entered your invite code. Ask them to enter it again to finalize the connection.`
-                  : 'Someone entered your invite code. Ask them to enter it again to finalize the connection.'}
+                  ? `${pendingPartnerName} entered your invite code. The connection should complete automatically — if it hasn't, ask them to enter it again.`
+                  : `Someone entered your invite code. The connection should complete automatically — if it hasn't, ask them to enter it again.`}
               </AppText>
               {error ? <AppText style={styles.joinError}>{error}</AppText> : null}
               <View style={styles.pendingRequestActions}>
@@ -1280,68 +1166,12 @@ export default function PairScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* User B: Waiting for User A to accept */}
-      <Modal
-        visible={waitingState === 'waiting'}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelRequest}
-      >
-        <View style={styles.waitingOverlay}>
-          <View style={styles.waitingCard}>
-            <View style={styles.waitingIconWrap}>
-              <Hourglass color="#FF6B3D" size={32} strokeWidth={1.8} />
-            </View>
-            <AppText style={styles.waitingOverlayTitle}>Waiting for confirmation</AppText>
-            <AppText style={styles.waitingOverlayDesc}>
-              {inviterName
-                ? `${inviterName} needs to confirm the connection.\nAsk them to open the app and accept.`
-                : 'Your partner needs to confirm the connection.\nAsk them to open the app and accept.'}
-            </AppText>
-            <ActivityIndicator color="#FF6B3D" size="small" style={{ marginTop: Spacing.md }} />
-            <TouchableOpacity
-              style={styles.cancelWaitingBtn}
-              onPress={handleCancelRequest}
-              activeOpacity={0.7}
-            >
-              <AppText style={styles.cancelWaitingText}>Cancel request</AppText>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       <PairHelpModal
         visible={helpVisible}
         onClose={() => setHelpVisible(false)}
         variant={helpVariant ?? 'joiner'}
       />
 
-      {/* User B: Declined */}
-      <Modal
-        visible={waitingState === 'declined'}
-        transparent
-        animationType="fade"
-        onRequestClose={() => { setWaitingState('idle'); setWaitingCoupleId(null); }}
-      >
-        <View style={styles.waitingOverlay}>
-          <View style={styles.waitingCard}>
-            <View style={styles.waitingIconWrap}>
-              <XCircle color="#FF5A5F" size={32} strokeWidth={1.8} />
-            </View>
-            <AppText style={styles.waitingOverlayTitle}>Request declined</AppText>
-            <AppText style={styles.waitingOverlayDesc}>
-              Your partner declined the connection.
-            </AppText>
-            <TouchableOpacity
-              style={styles.cancelWaitingBtn}
-              onPress={() => { setWaitingState('idle'); setWaitingCoupleId(null); setJoinCode(''); }}
-              activeOpacity={0.7}
-            >
-              <AppText style={styles.cancelWaitingText}>OK</AppText>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -1884,45 +1714,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-SemiBold',
-  },
-  waitingOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.88)',
-    padding: Spacing.xl,
-  },
-  waitingCard: {
-    width: '100%',
-    maxWidth: 340,
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  waitingIconWrap: {
-    marginBottom: Spacing.xs,
-  },
-  waitingOverlayTitle: {
-    color: '#fff',
-    fontSize: FontSize.xl,
-    fontFamily: 'Inter-Bold',
-    textAlign: 'center',
-  },
-  waitingOverlayDesc: {
-    color: 'rgba(255,255,255,0.42)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  cancelWaitingBtn: {
-    marginTop: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-  },
-  cancelWaitingText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Medium',
   },
   acceptSubscribeBtn: {
     borderRadius: Radius.pill,
