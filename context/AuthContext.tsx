@@ -489,9 +489,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // look up this subscriber by their Supabase UUID.
       logInRevenueCat(userId);
 
-      // Load subscription info — fire after other data so we don't block the UI gate
+      // Load subscription info — awaited so the transition screen has the
+      // result before loading=false. Previously this was a non-blocking .then(),
+      // which meant loading=false fired first and the transition screen's 5s
+      // hard deadline could expire before the subscription fetch completed,
+      // sending paired users to /verify-retry or /subscription instead of the app.
       if (accessToken) {
-        fetchEffectiveSubscription(accessToken).then(async info => {
+        try {
+          const info = await fetchEffectiveSubscription(accessToken);
           let result = info;
           const adminOverride = await applyAdminOverrideAsync(result, userId);
           if (adminOverride !== result) {
@@ -504,7 +509,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             result = grantFallback;
           }
           setSubscriptionInfo(result);
-        });
+        } catch (err: any) {
+          logger.log('[Auth] subscription fetch failed:', err?.message ?? String(err));
+          setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
+        }
       } else {
         logger.log('[Auth] no accessToken — subscription set to default (not loading)');
         setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
