@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -11,7 +12,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Trash2, TriangleAlert as AlertTriangle } from 'lucide-react-native';
 import AppText from '@/components/AppText';
+import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 type TabKey = 'users' | 'couples' | 'subscribers' | 'trials';
@@ -75,6 +78,11 @@ export default function UsersDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
+  const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const { isSuperAdmin } = useAuth();
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -164,6 +172,32 @@ export default function UsersDashboard() {
     });
   };
 
+  const handleDeleteUser = async (targetUserId: string) => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Not authenticated. Please sign in again.');
+
+      const { error } = await supabase.functions.invoke('delete-account', {
+        headers: { Authorization: `Bearer ${token}` },
+        body: { targetUserId },
+      });
+
+      if (error) throw new Error(error.message ?? 'Could not delete user. Please try again.');
+
+      setDeleteModalOpen(false);
+      setDeleteStep(1);
+      setSelectedUser(null);
+      await loadData(true);
+    } catch (err: any) {
+      setDeleteError(err?.message ?? 'Something went wrong. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const q = search.trim().toLowerCase();
 
   const filteredProfiles = useMemo(
@@ -248,10 +282,103 @@ export default function UsersDashboard() {
           <DetailCard label="SUBSCRIPTION START" value={fmtDate(subscription?.started_at)} />
           <DetailCard label="EXPIRES" value={fmtDate(subscription?.expires_at)} />
 
-          <AppText style={styles.note}>
-            This rebuilt dashboard is intentionally read-only while we confirm stability. Admin actions can be added back safely after this version is verified.
-          </AppText>
+          {isSuperAdmin ? (
+            <>
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => { setDeleteStep(1); setDeleteError(null); setDeleteModalOpen(true); }}
+                activeOpacity={0.8}
+              >
+                <Trash2 color="#FF3B30" size={18} strokeWidth={2} />
+                <AppText style={styles.deleteButtonText}>Delete User</AppText>
+              </TouchableOpacity>
+              <AppText style={styles.note}>
+                Deleting a user permanently removes their account, messages, vault content, and subscription. This cannot be undone.
+              </AppText>
+            </>
+          ) : (
+            <AppText style={styles.note}>
+              Only super admins can delete users. Contact a super admin if you need this action.
+            </AppText>
+          )}
         </ScrollView>
+
+        <Modal
+          visible={deleteModalOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => { if (!deleting) { setDeleteModalOpen(false); setDeleteStep(1); } }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.deleteModalCard}>
+              {deleteStep === 1 ? (
+                <>
+                  <View style={styles.deleteModalIcon}>
+                    <AlertTriangle color="#FF3B30" size={28} strokeWidth={1.5} />
+                  </View>
+                  <AppText style={styles.deleteModalTitle}>Delete {safeName(profile)}?</AppText>
+                  <AppText style={styles.deleteModalBody}>
+                    This will permanently delete the user's account, all messages, vault content, subscription, and couple connection. This action cannot be undone.
+                  </AppText>
+                  {deleteError && (
+                    <AppText style={styles.deleteModalError}>{deleteError}</AppText>
+                  )}
+                  <View style={styles.deleteModalBtns}>
+                    <TouchableOpacity
+                      style={styles.deleteModalCancelBtn}
+                      onPress={() => { setDeleteModalOpen(false); setDeleteStep(1); }}
+                      activeOpacity={0.7}
+                      disabled={deleting}
+                    >
+                      <AppText style={styles.deleteModalCancelText}>Cancel</AppText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteModalConfirmBtn}
+                      onPress={() => setDeleteStep(2)}
+                      activeOpacity={0.8}
+                      disabled={deleting}
+                    >
+                      <AppText style={styles.deleteModalConfirmText}>Continue</AppText>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.deleteModalIcon}>
+                    <AlertTriangle color="#FF3B30" size={28} strokeWidth={1.5} />
+                  </View>
+                  <AppText style={styles.deleteModalTitle}>Are you absolutely sure?</AppText>
+                  <AppText style={styles.deleteModalBody}>
+                    Tap "Delete Permanently" to remove {safeName(profile)} and all their data. There is no undo.
+                  </AppText>
+                  {deleteError && (
+                    <AppText style={styles.deleteModalError}>{deleteError}</AppText>
+                  )}
+                  <View style={styles.deleteModalBtns}>
+                    <TouchableOpacity
+                      style={styles.deleteModalCancelBtn}
+                      onPress={() => { setDeleteModalOpen(false); setDeleteStep(1); }}
+                      activeOpacity={0.7}
+                      disabled={deleting}
+                    >
+                      <AppText style={styles.deleteModalCancelText}>Cancel</AppText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteModalFinalBtn}
+                      onPress={() => handleDeleteUser(profile.id)}
+                      activeOpacity={0.8}
+                      disabled={deleting}
+                    >
+                      {deleting
+                        ? <ActivityIndicator color="#fff" size="small" />
+                        : <AppText style={styles.deleteModalFinalText}>Delete Permanently</AppText>}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   }
@@ -440,4 +567,19 @@ const styles = StyleSheet.create({
   detailValue: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Inter-Regular' },
   mono: { fontFamily: 'monospace', fontSize: 12 },
   note: { color: 'rgba(255,255,255,0.45)', fontSize: 12, lineHeight: 18, marginTop: 18, textAlign: 'center' },
+  deleteButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 24, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 16, backgroundColor: 'rgba(255,59,48,0.08)', borderWidth: 1, borderColor: 'rgba(255,59,48,0.25)' },
+  deleteButtonText: { color: '#FF3B30', fontSize: 15, fontFamily: 'Inter-SemiBold' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.70)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  deleteModalCard: { width: '100%', maxWidth: 380, backgroundColor: '#15151E', borderRadius: 20, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,59,48,0.18)' },
+  deleteModalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(255,59,48,0.10)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  deleteModalTitle: { color: '#FFFFFF', fontSize: 18, fontFamily: 'Inter-Bold', textAlign: 'center', marginBottom: 10 },
+  deleteModalBody: { color: 'rgba(255,255,255,0.60)', fontSize: 13, lineHeight: 19, textAlign: 'center', marginBottom: 20 },
+  deleteModalError: { color: '#FF7777', fontSize: 12, lineHeight: 17, textAlign: 'center', marginBottom: 14 },
+  deleteModalBtns: { flexDirection: 'row', gap: 10, width: '100%' },
+  deleteModalCancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: '#1E1E28', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+  deleteModalCancelText: { color: 'rgba(255,255,255,0.70)', fontSize: 14, fontFamily: 'Inter-SemiBold' },
+  deleteModalConfirmBtn: { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: 'rgba(255,59,48,0.12)', borderWidth: 1, borderColor: 'rgba(255,59,48,0.30)', alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+  deleteModalConfirmText: { color: '#FF3B30', fontSize: 14, fontFamily: 'Inter-SemiBold' },
+  deleteModalFinalBtn: { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: '#FF3B30', alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+  deleteModalFinalText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Inter-SemiBold' },
 });
