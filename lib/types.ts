@@ -313,6 +313,7 @@ export interface Wish {
   fulfilled_note: string | null;
   fulfilled_image_path: string | null;
   is_active: boolean;
+  last_bumped_at: string | null;
   created_at: string;
   updated_at: string;
 }

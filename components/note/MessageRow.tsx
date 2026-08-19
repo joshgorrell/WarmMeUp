@@ -27,7 +27,7 @@ function parseActivity(msg: ChatMessage): ChatActivityItem | null {
   if (!msg.content_text?.startsWith(ACTIVITY_PREFIX)) return null;
   try {
     const raw = JSON.parse(msg.content_text.slice(ACTIVITY_PREFIX.length));
-    if (!['wish', 'dare', 'dice'].includes(raw?.kind) || !raw?.sourceId) return null;
+    if (!['wish', 'wish_bump', 'dare', 'dice'].includes(raw?.kind) || !raw?.sourceId) return null;
     return {
       id: msg.id,
       kind: raw.kind as ChatActivityKind,
@@ -187,7 +187,7 @@ export const MessageRow = React.memo(function MessageRow({
   if (activity) {
     const openActivity = () => {
       if (!activity.sourceId) return;
-      if (activity.kind === 'wish') {
+      if (activity.kind === 'wish' || activity.kind === 'wish_bump') {
         router.push({ pathname: '/(app)/(tabs)/wish', params: { wish_id: activity.sourceId } });
       } else if (activity.kind === 'dare') {
         router.push({ pathname: '/(app)/(tabs)/dare', params: { dare_id: activity.sourceId } });

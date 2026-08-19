@@ -1,9 +1,9 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Flame, Sparkles, Dice6, ChevronRight } from 'lucide-react-native';
+import { Flame, Sparkles, Dice6, ChevronRight, Eye } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 
-export type ChatActivityKind = 'wish' | 'dare' | 'dice';
+export type ChatActivityKind = 'wish' | 'wish_bump' | 'dare' | 'dice';
 
 export type ChatActivityItem = {
   id: string;
@@ -17,6 +17,7 @@ export type ChatActivityItem = {
 
 const META = {
   wish: { mine: 'created a Wish', partner: 'created a Wish', action: 'View Wish', color: '#FF5C9A', Icon: Sparkles },
+  wish_bump: { mine: 'bumped a Wish', partner: 'bumped a Wish', action: 'View Wish', color: '#F0A96A', Icon: Eye },
   dare: { mine: 'sent a Dare', partner: 'sent you a Dare', action: 'View Dare', color: '#FF5A3D', Icon: Flame },
   dice: { mine: 'rolled the Dice', partner: 'rolled the Dice', action: 'View Roll', color: '#FFB347', Icon: Dice6 },
 } as const;

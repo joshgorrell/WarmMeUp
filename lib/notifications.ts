@@ -13,6 +13,7 @@ export type NotifyEventType =
   | 'new_ask'
   | 'ask_answered'
   | 'new_wish'
+  | 'wish_bumped'
   | 'wish_fulfilled'
   | 'dice_roll'
   | 'dice_accepted'

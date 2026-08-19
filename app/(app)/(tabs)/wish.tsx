@@ -11,7 +11,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Sparkles, Plus, Heart, X, Check, ChevronRight,
-  ExternalLink, Image as ImageIcon, Trash2, Pencil,
+  ExternalLink, Image as ImageIcon, Trash2, Pencil, Zap,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -208,7 +208,7 @@ function GrantedCard({
 
 function WishDetailSheet({
   visible, wish, isMine, userId, isGranted, onClose,
-  onReact, onFulfill, onEdit, onArchive, onDelete,
+  onReact, onFulfill, onEdit, onArchive, onDelete, onBump,
 }: {
   visible: boolean;
   wish: WishWithReactions | null;
@@ -221,9 +221,13 @@ function WishDetailSheet({
   onEdit: (wish: WishWithReactions) => void;
   onArchive: (wish: WishWithReactions) => void;
   onDelete: (wish: WishWithReactions) => void;
+  onBump: (wish: WishWithReactions) => void;
 }) {
   const { colors } = useTheme();
   if (!wish) return null;
+
+  const bumpedRecently = !!wish.last_bumped_at
+    && (Date.now() - new Date(wish.last_bumped_at).getTime()) < 24 * 60 * 60 * 1000;
 
   const imgUri = wish.resolvedImageUri ?? null;
   const memImgUri = wish.resolvedMemoryUri ?? null;
@@ -315,6 +319,18 @@ function WishDetailSheet({
 
       {!isGranted && (
         <View style={styles.detailActionRow}>
+          {wish.status === 'shared' && isMine && (
+            <TouchableOpacity
+              onPress={() => closeAnd(() => onBump(wish))}
+              disabled={bumpedRecently}
+              style={[styles.detailActionBtn, { backgroundColor: bumpedRecently ? 'rgba(255,255,255,0.04)' : 'rgba(240,169,106,0.15)', borderColor: bumpedRecently ? 'rgba(255,255,255,0.10)' : 'rgba(240,169,106,0.35)' }]}
+              activeOpacity={0.8}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Zap color={bumpedRecently ? 'rgba(255,255,255,0.30)' : WISH_GOLD} size={14} strokeWidth={2} />
+              <AppText style={[styles.detailActionLabel, { color: bumpedRecently ? 'rgba(255,255,255,0.30)' : WISH_GOLD }]}>{bumpedRecently ? 'Bumped' : 'Bump'}</AppText>
+            </TouchableOpacity>
+          )}
           {wish.status === 'shared' && (
             <TouchableOpacity
               onPress={() => closeAnd(() => onFulfill(wish))}
@@ -1213,6 +1229,42 @@ export default function WishTab() {
     setWishes(prev => prev.filter(w => w.id !== wish.id));
   }, []);
 
+  const handleBump = useCallback(async (wish: WishWithReactions) => {
+    if (!couple?.id || !user) return;
+    const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
+    Alert.alert(
+      'Bump this Wish',
+      'Send a playful nudge to your partner.',
+      [
+        { text: 'Still want this', onPress: () => doBump(wish, 'Still want this', partnerId ?? null) },
+        { text: 'Hint hint', onPress: () => doBump(wish, 'Hint hint', partnerId ?? null) },
+        { text: 'Don’t forget about this one', onPress: () => doBump(wish, 'Don’t forget about this one', partnerId ?? null) },
+        { text: 'Pay attention to this', onPress: () => doBump(wish, 'Pay attention to this', partnerId ?? null) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }, [couple, user]);
+
+  const doBump = useCallback(async (wish: WishWithReactions, message: string, partnerId: string | null) => {
+    const { data, error } = await supabase.rpc('bump_wish', { p_wish_id: wish.id, p_message: message });
+    if (error) {
+      Alert.alert('Could not bump', 'Please try again later.');
+      return;
+    }
+    if (data?.error === 'cooldown') {
+      Alert.alert('Already bumped', 'You can bump this wish again in 24 hours.');
+      return;
+    }
+    if (data?.ok) {
+      const now = new Date().toISOString();
+      setWishes(prev => prev.map(w => w.id === wish.id ? { ...w, last_bumped_at: now } : w));
+      if (partnerId) {
+        notifyPartner({ event_type: 'wish_bumped', couple_id: wish.couple_id, target_route: '/(app)/(tabs)/wish', item_id: wish.id, partnerUserId: partnerId });
+      }
+      Alert.alert('Bumped!', 'Your wish is back in the chat.');
+    }
+  }, []);
+
   const handleFormSave = useCallback((saved: WishWithReactions) => {
     setWishes(prev => {
       const idx = prev.findIndex(w => w.id === saved.id);
@@ -1379,6 +1431,7 @@ export default function WishTab() {
         onEdit={w => { setEditingWish(w); setShowForm(true); }}
         onArchive={handleArchive}
         onDelete={handleDelete}
+        onBump={handleBump}
       />
     </AppShell>
   );

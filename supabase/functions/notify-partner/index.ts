@@ -22,6 +22,7 @@ const EVENT_LABELS: Record<string, string> = {
   new_ask: "asked you something",
   ask_answered: "answered your question",
   new_wish: "added a new wish",
+  wish_bumped: "bumped a wish",
   wish_fulfilled: "fulfilled your wish",
   dice_roll: "sent you a dice challenge",
   dice_accepted: "accepted your dice challenge",
