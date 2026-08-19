@@ -7,8 +7,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppText from '@/components/AppText';
 import { supabase } from '@/lib/supabase';
 
@@ -61,6 +63,9 @@ const fmtDate = (value?: string | null) => {
 
 export default function UsersDashboard() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWideScreen = width >= 720;
   const [activeTab, setActiveTab] = useState<TabKey>('users');
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [couples, setCouples] = useState<CoupleRow[]>([]);
@@ -222,7 +227,7 @@ export default function UsersDashboard() {
     const { profile, couple, partnerName, subscription } = selectedUser;
     return (
       <View style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={[styles.content, isWideScreen && styles.contentWide, { paddingTop: Math.max(insets.top + 20, 32) }]}>
           <TouchableOpacity onPress={() => setSelectedUser(null)} style={styles.backLink}>
             <AppText style={styles.backLinkText}>‹ Users Dashboard</AppText>
           </TouchableOpacity>
@@ -254,7 +259,7 @@ export default function UsersDashboard() {
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, isWideScreen && styles.contentWide, { paddingTop: Math.max(insets.top + 20, 32) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor="#FF2E8A" />}
       >
         <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
@@ -262,9 +267,9 @@ export default function UsersDashboard() {
         </TouchableOpacity>
 
         <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <AppText style={styles.title}>Users Dashboard</AppText>
-            <AppText style={styles.subtitle}>Users, couples and subscriptions</AppText>
+          <View style={styles.headerCopy}>
+            <AppText style={styles.title} numberOfLines={1} ellipsizeMode="tail">Users Dashboard</AppText>
+            <AppText style={styles.subtitle} numberOfLines={1} ellipsizeMode="tail">Users, couples and subscriptions</AppText>
           </View>
           <TouchableOpacity style={styles.refreshButton} onPress={() => loadData(true)} activeOpacity={0.8}>
             <AppText style={styles.refreshText}>Refresh</AppText>
@@ -394,16 +399,18 @@ function DetailCard({ label, value, mono = false }: { label: string; value: stri
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#07070A' },
-  content: { paddingTop: 62, paddingHorizontal: 18, paddingBottom: 44 },
-  backLink: { alignSelf: 'flex-start', paddingVertical: 8, paddingRight: 14, marginBottom: 6 },
+  content: { width: '100%', paddingHorizontal: 18, paddingBottom: 88 },
+  contentWide: { alignSelf: 'center', maxWidth: 920, paddingHorizontal: 28 },
+  backLink: { alignSelf: 'flex-start', paddingVertical: 8, paddingRight: 14, marginBottom: 8 },
   backLinkText: { color: 'rgba(255,255,255,0.65)', fontSize: 14, fontFamily: 'Inter-SemiBold' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
+  headerCopy: { flex: 1, minWidth: 0 },
   title: { color: '#FFFFFF', fontSize: 24, fontFamily: 'Inter-Bold' },
   subtitle: { color: 'rgba(255,255,255,0.52)', fontSize: 13, fontFamily: 'Inter-Regular', marginTop: 4 },
-  refreshButton: { backgroundColor: '#171720', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
+  refreshButton: { flexShrink: 0, minHeight: 44, justifyContent: 'center', backgroundColor: '#171720', borderRadius: 22, paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
   refreshText: { color: '#FFFFFF', fontSize: 12, fontFamily: 'Inter-SemiBold' },
-  tabBar: { flexDirection: 'row', gap: 6, marginBottom: 14 },
-  tab: { flex: 1, minHeight: 54, borderRadius: 14, backgroundColor: '#111119', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', gap: 3 },
+  tabBar: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  tab: { flex: 1, minWidth: 64, minHeight: 58, borderRadius: 14, backgroundColor: '#111119', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', gap: 3 },
   tabActive: { borderColor: 'rgba(255,46,138,0.50)', backgroundColor: 'rgba(255,46,138,0.10)' },
   tabText: { color: 'rgba(255,255,255,0.50)', fontSize: 11, fontFamily: 'Inter-SemiBold' },
   tabTextActive: { color: '#FF2E8A' },
@@ -411,11 +418,12 @@ const styles = StyleSheet.create({
   countBadgeActive: { backgroundColor: 'rgba(255,46,138,0.18)' },
   countText: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontFamily: 'Inter-Bold' },
   countTextActive: { color: '#FF2E8A' },
-  search: { color: '#FFFFFF', backgroundColor: '#111119', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, marginBottom: 14 },
+  search: { color: '#FFFFFF', minHeight: 48, backgroundColor: '#111119', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, marginBottom: 14 },
   listWrap: { gap: 10 },
-  rowCard: { backgroundColor: '#111119', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', borderRadius: 16, padding: 15, gap: 9 },
+  rowCard: { width: '100%', backgroundColor: '#111119', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', borderRadius: 16, padding: 15, gap: 9 },
+
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  rowTitle: { flex: 1, color: '#FFFFFF', fontSize: 15, fontFamily: 'Inter-SemiBold' },
+  rowTitle: { flex: 1, minWidth: 0, color: '#FFFFFF', fontSize: 15, fontFamily: 'Inter-SemiBold' },
   chevron: { color: 'rgba(255,255,255,0.35)', fontSize: 24, lineHeight: 24 },
   metaWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   badge: { borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.065)', paddingHorizontal: 8, paddingVertical: 4 },
