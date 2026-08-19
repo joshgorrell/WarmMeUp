@@ -6,55 +6,104 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Flame, CircleCheck as CheckCircle, RotateCcw, Timer, Eye, CircleX as XCircle } from 'lucide-react-native';
+import {
+  Flame, CircleCheck as CheckCircle, RotateCcw, Timer, Eye,
+  CircleX as XCircle, Heart, Laugh, Sparkles, Lightbulb, ChevronRight,
+} from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { awardPoints, deactivatePreviousEphemeral, getPointValue, verifyCompletion, incrementMonthlyCounter } from '@/lib/points';
+import {
+  awardPoints,
+  deactivatePreviousEphemeral,
+  getPointValue,
+  verifyCompletion,
+  incrementMonthlyCounter,
+} from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { Interaction } from '@/lib/types';
-import PrimaryButton from '@/components/PrimaryButton';
 import SecondaryButton from '@/components/SecondaryButton';
 import WarmTextInput from '@/components/WarmTextInput';
-import PromptChip from '@/components/PromptChip';
 import AppShell from '@/components/AppShell';
 import ReceivedDareCard from '@/components/ReceivedDareCard';
-import CustomizePromptsNotice from '@/components/CustomizePromptsNotice';
 import TabHeader from '@/components/TabHeader';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 
 function useSenderCountdown(expiresAt: string | null | undefined): string | null {
   const [text, setText] = useState<string | null>(null);
+
   useEffect(() => {
-    if (!expiresAt) { setText(null); return; }
+    if (!expiresAt) {
+      setText(null);
+      return;
+    }
+
     const compute = () => {
       const secs = Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 1000));
-      if (secs <= 0) { setText('Expired'); return; }
-      if (secs < 60) { setText(`${secs}s`); return; }
+      if (secs <= 0) {
+        setText('Expired');
+        return;
+      }
+      if (secs < 60) {
+        setText(`${secs}s`);
+        return;
+      }
       const mins = Math.floor(secs / 60);
-      if (mins < 60) { setText(`${mins}m`); return; }
+      if (mins < 60) {
+        setText(`${mins}m`);
+        return;
+      }
       const hrs = Math.floor(mins / 60);
       const m = mins % 60;
       setText(m === 0 ? `${hrs}h` : `${hrs}h ${m}m`);
     };
+
     compute();
     const id = setInterval(compute, 30000);
     return () => clearInterval(id);
   }, [expiresAt]);
+
   return text;
 }
 
-const FALLBACK_DARES = [
-  'Say what you want without explaining it',
-  'Send me a look',
-  "Tell me exactly what you're thinking",
-  'Make me laugh right now',
-  "Give me a compliment I'll remember",
-  'Ask me anything',
-  'Pick the next move',
-  'Tell me what happens next',
-  'Surprise me',
-  'Your choice',
+type InspirationKey = 'flirty' | 'funny' | 'spicy' | 'sweet' | 'bold';
+
+const INSPIRATION: Array<{
+  key: InspirationKey;
+  label: string;
+  emoji: string;
+  prompt: string;
+}> = [
+  {
+    key: 'flirty',
+    label: 'Flirty',
+    emoji: '😉',
+    prompt: 'What would you love to see your partner do right now?',
+  },
+  {
+    key: 'funny',
+    label: 'Funny',
+    emoji: '😂',
+    prompt: 'What could you dare them to do that would make you both laugh?',
+  },
+  {
+    key: 'spicy',
+    label: 'Spicy',
+    emoji: '🔥',
+    prompt: 'What would turn up the heat right now?',
+  },
+  {
+    key: 'sweet',
+    label: 'Sweet',
+    emoji: '❤️',
+    prompt: 'What small thing would make you feel close to each other?',
+  },
+  {
+    key: 'bold',
+    label: 'Bold',
+    emoji: '👀',
+    prompt: 'What would make them say, “You seriously dare me to do that?”',
+  },
 ];
 
 export default function DareTab() {
@@ -62,12 +111,12 @@ export default function DareTab() {
   const { dare_id: deepLinkDareId } = useLocalSearchParams<{ dare_id?: string }>();
   const { user, couple, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
+
   const hasPartner = !!couple?.user_b_id;
+  const partnerName = partnerProfile?.display_name?.trim().split(/\s+/)[0] || 'your partner';
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
-  const [quickDares, setQuickDares] = useState<string[]>(FALLBACK_DARES);
-  const [hasCustomPrompts, setHasCustomPrompts] = useState<'unknown' | 'yes' | 'no'>('unknown');
-  const [promptsLoaded, setPromptsLoaded] = useState(false);
+
   const [dareText, setDareText] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -77,13 +126,13 @@ export default function DareTab() {
   const [verifying, setVerifying] = useState(false);
   const [acceptPts, setAcceptPts] = useState(5);
   const [completePts, setCompletePts] = useState(25);
-
   const [sentDare, setSentDare] = useState<Interaction | null>(null);
   const [rejectedDare, setRejectedDare] = useState<Interaction | null>(null);
-  const senderCountdown = useSenderCountdown(sentDare?.expires_at);
   const [highlightDare, setHighlightDare] = useState(false);
-  const handledDareLinkRef = useRef<string | null>(null);
+  const [inspiration, setInspiration] = useState<InspirationKey>('flirty');
 
+  const senderCountdown = useSenderCountdown(sentDare?.expires_at);
+  const handledDareLinkRef = useRef<string | null>(null);
   const flipAnim = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
 
@@ -95,57 +144,42 @@ export default function DareTab() {
   }, []);
 
   useEffect(() => {
-    const coupleId = couple?.id;
-    const query = supabase.from('dare_prompts').select('id, text, is_default, couple_id').eq('is_active', true);
-    const baseQuery = coupleId
-      ? query.or(`is_default.eq.true,couple_id.eq.${coupleId}`)
-      : query.eq('is_default', true);
-
-    (async () => {
-      try {
-        const [promptsResult, hiddenResult] = await Promise.all([
-          baseQuery,
-          coupleId
-            ? supabase.from('couple_hidden_prompts').select('prompt_id').eq('couple_id', coupleId).eq('prompt_table', 'dare_prompts')
-            : Promise.resolve({ data: [] }),
-        ]);
-        if (!promptsResult.data?.length) return;
-        const hiddenIds = new Set((hiddenResult.data ?? []).map((r: { prompt_id: string }) => r.prompt_id));
-        const visible = promptsResult.data.filter((d: { id: string; is_default: boolean }) => !d.is_default || !hiddenIds.has(d.id));
-        if (visible.length > 0) setQuickDares(visible.map((d: { text: string }) => d.text));
-        const hasCustom = promptsResult.data.some((d: { is_default: boolean; couple_id?: string }) => !d.is_default && d.couple_id === coupleId);
-        setHasCustomPrompts(hasCustom ? 'yes' : 'no');
-      } finally {
-        setPromptsLoaded(true);
-      }
-    })();
-  }, [couple?.id]);
-
-  useEffect(() => {
     if (!couple?.id || !user) return;
     checkStates();
-    const ch = supabase.channel(`dare_tab_${couple.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, checkStates)
+    const ch = supabase
+      .channel(`dare_tab_${couple.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` },
+        checkStates,
+      )
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [couple?.id, user]);
 
   useEffect(() => {
     if (!deepLinkDareId || !couple?.id) return;
     if (handledDareLinkRef.current === deepLinkDareId) return;
     handledDareLinkRef.current = deepLinkDareId;
+
     (async () => {
       const { data: dare } = await supabase
         .from('interactions')
         .select('id, status')
         .eq('id', deepLinkDareId)
         .maybeSingle();
+
       if (!dare) {
         Alert.alert('Dare not found', 'This dare could not be found.');
         return;
       }
-      if (dare.status === 'sent' &&
-        (incomingDare?.id === deepLinkDareId || pendingVerification?.id === deepLinkDareId)) {
+
+      if (
+        dare.status === 'sent' &&
+        (incomingDare?.id === deepLinkDareId || pendingVerification?.id === deepLinkDareId)
+      ) {
         setHighlightDare(true);
         setTimeout(() => setHighlightDare(false), 2000);
       } else if (!['sent', 'accepted', 'pending_verification'].includes(dare.status)) {
@@ -157,7 +191,8 @@ export default function DareTab() {
   const checkStates = useCallback(async () => {
     if (!couple?.id || !user) return;
 
-    const { data: incoming } = await supabase.from('interactions')
+    const { data: incoming } = await supabase
+      .from('interactions')
       .select('*')
       .eq('couple_id', couple.id)
       .eq('receiver_id', user.id)
@@ -169,19 +204,28 @@ export default function DareTab() {
       .maybeSingle();
 
     if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {
-      await supabase.from('interactions').update({ status: 'rejected', is_active: false }).eq('id', incoming.id);
+      await supabase
+        .from('interactions')
+        .update({ status: 'rejected', is_active: false })
+        .eq('id', incoming.id);
       await incrementMonthlyCounter(couple.id, user.id, 'dares_skipped', 0);
       setIncomingDare(null);
     } else {
       setIncomingDare(incoming);
       if (incoming && incoming.status === 'sent') {
-        supabase.from('interactions').update({ status: 'seen' }).eq('id', incoming.id).eq('status', 'sent').then(() => {
-          setIncomingDare(prev => prev ? { ...prev, status: 'seen' } : prev);
-        });
+        supabase
+          .from('interactions')
+          .update({ status: 'seen' })
+          .eq('id', incoming.id)
+          .eq('status', 'sent')
+          .then(() => {
+            setIncomingDare(prev => (prev ? { ...prev, status: 'seen' } : prev));
+          });
       }
     }
 
-    const { data: pending } = await supabase.from('interactions')
+    const { data: pending } = await supabase
+      .from('interactions')
       .select('*')
       .eq('couple_id', couple.id)
       .eq('sender_id', user.id)
@@ -194,7 +238,8 @@ export default function DareTab() {
       .maybeSingle();
     setPendingVerification(pending);
 
-    const { data: mySent } = await supabase.from('interactions')
+    const { data: mySent } = await supabase
+      .from('interactions')
       .select('*')
       .eq('couple_id', couple.id)
       .eq('sender_id', user.id)
@@ -206,7 +251,8 @@ export default function DareTab() {
       .maybeSingle();
     setSentDare(mySent ?? null);
 
-    const { data: rejected } = await supabase.from('interactions')
+    const { data: rejected } = await supabase
+      .from('interactions')
       .select('*')
       .eq('couple_id', couple.id)
       .eq('sender_id', user.id)
@@ -223,11 +269,14 @@ export default function DareTab() {
     if (!couple?.id || !user || !dareText.trim()) return;
     setSending(true);
     setError('');
+
     try {
       const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
       const receiverId = partnerId ?? user.id;
+
       await deactivatePreviousEphemeral(couple.id, user.id);
       const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
+
       const { error: insertError } = await supabase.from('interactions').insert({
         couple_id: couple.id,
         type: 'dare',
@@ -238,8 +287,18 @@ export default function DareTab() {
         is_active: true,
         expires_at: expiresAt,
       });
+
       if (insertError) throw insertError;
-      if (partnerId) notifyPartner({ event_type: 'new_dare', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
+
+      if (partnerId) {
+        notifyPartner({
+          event_type: 'new_dare',
+          couple_id: couple.id,
+          target_route: '/(app)/(tabs)/dare',
+          partnerUserId: partnerProfile?.id,
+        });
+      }
+
       setSent(true);
       await checkStates();
     } catch {
@@ -251,12 +310,20 @@ export default function DareTab() {
 
   const handleRespond = async (accepted: boolean, declineReason?: string) => {
     if (!incomingDare || !couple?.id || !user) return;
+
     const status = accepted ? 'accepted' : 'rejected';
     const update: Record<string, unknown> = { status, is_active: false };
     if (!accepted && declineReason) update.decline_reason = declineReason;
+
     await supabase.from('interactions').update(update).eq('id', incomingDare.id);
-    const eventType = accepted ? 'dare_accepted' : 'dare_rejected';
-    notifyPartner({ event_type: eventType, couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
+
+    notifyPartner({
+      event_type: accepted ? 'dare_accepted' : 'dare_rejected',
+      couple_id: couple.id,
+      target_route: '/(app)/(tabs)/dare',
+      partnerUserId: partnerProfile?.id,
+    });
+
     if (accepted) {
       const pts = await getPointValue('dare_accept');
       await awardPoints(couple.id, user.id, pts, 'Dare accepted', incomingDare.id);
@@ -270,26 +337,40 @@ export default function DareTab() {
 
   const handleMarkComplete = async () => {
     if (!incomingDare || !couple?.id || !user) return;
-    await supabase.from('interactions').update({
-      status: 'pending_verification',
-      completion_requested_at: new Date().toISOString(),
-      is_active: false,
-    }).eq('id', incomingDare.id);
+    await supabase
+      .from('interactions')
+      .update({
+        status: 'pending_verification',
+        completion_requested_at: new Date().toISOString(),
+        is_active: false,
+      })
+      .eq('id', incomingDare.id);
   };
 
   const handleVerifyComplete = async () => {
     if (!pendingVerification || !couple?.id || !user) return;
     setVerifying(true);
+
     try {
       await verifyCompletion(
         pendingVerification.id,
         couple.id,
         user.id,
         pendingVerification.receiver_id,
-        'dare_complete'
+        'dare_complete',
       );
-      await incrementMonthlyCounter(couple.id, pendingVerification.receiver_id, 'dares_completed', completePts);
-      notifyPartner({ event_type: 'dare_completed', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
+      await incrementMonthlyCounter(
+        couple.id,
+        pendingVerification.receiver_id,
+        'dares_completed',
+        completePts,
+      );
+      notifyPartner({
+        event_type: 'dare_completed',
+        couple_id: couple.id,
+        target_route: '/(app)/(tabs)/dare',
+        partnerUserId: partnerProfile?.id,
+      });
       setPendingVerification(null);
     } catch {
       setError('Could not verify. Please try again.');
@@ -299,17 +380,20 @@ export default function DareTab() {
   };
 
   const handleCancelDare = () => {
-    if (!sentDare) return;
+    if (!sentDare || !user) return;
+
     const doCancel = async () => {
       const { error: updateError } = await supabase
         .from('interactions')
         .update({ status: 'cancelled', is_active: false })
         .eq('id', sentDare.id)
-        .eq('sender_id', user!.id);
+        .eq('sender_id', user.id);
+
       if (updateError) {
         setError('Could not cancel the dare. Please try again.');
         return;
       }
+
       setSent(false);
       setSentDare(null);
       setDareText('');
@@ -319,48 +403,78 @@ export default function DareTab() {
     if (Platform.OS === 'web') {
       if (window.confirm("Cancel this dare? Your partner won't see it anymore.")) doCancel();
     } else {
-      Alert.alert(
-        'Cancel dare?',
-        "Your partner won't see it anymore.",
-        [
-          { text: 'Keep it', style: 'cancel' },
-          { text: 'Yes, cancel', style: 'destructive', onPress: doCancel },
-        ]
-      );
+      Alert.alert('Cancel dare?', "Your partner won't see it anymore.", [
+        { text: 'Keep it', style: 'cancel' },
+        { text: 'Yes, cancel', style: 'destructive', onPress: doCancel },
+      ]);
     }
   };
 
   const handleFlip = () => {
     const toValue = flipped ? 0 : 1;
-    Animated.spring(flipAnim, { toValue, useNativeDriver: true, friction: 8, tension: 60 }).start();
+    Animated.spring(flipAnim, {
+      toValue,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 60,
+    }).start();
     setFlipped(!flipped);
   };
 
-  const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
-  const backRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
-  const frontOpacity = flipAnim.interpolate({ inputRange: [0, 0.49, 0.5, 1], outputRange: [1, 1, 0, 0] });
-  const backOpacity = flipAnim.interpolate({ inputRange: [0, 0.49, 0.5, 1], outputRange: [0, 0, 1, 1] });
+  const frontRotate = flipAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+  const backRotate = flipAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['180deg', '360deg'],
+  });
+  const frontOpacity = flipAnim.interpolate({
+    inputRange: [0, 0.49, 0.5, 1],
+    outputRange: [1, 1, 0, 0],
+  });
+  const backOpacity = flipAnim.interpolate({
+    inputRange: [0, 0.49, 0.5, 1],
+    outputRange: [0, 0, 1, 1],
+  });
+
+  const activeInspiration = INSPIRATION.find(item => item.key === inspiration) ?? INSPIRATION[0];
+
+  const showHowItWorks = () => {
+    Alert.alert(
+      'How Dare works',
+      `Tell ${partnerName} exactly what you dare them to do. They can accept or decline it. Accepting and completing a dare earns the fixed Dare points configured for Warm Me Up.`,
+      [{ text: 'Got it' }],
+    );
+  };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <AppShell scrollable={false}>
         <TabHeader title="Dare" />
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-
-          <View style={styles.heroCue}>
-            <View style={styles.iconWrap}>
-              <Flame color="#FF2E8A" size={38} strokeWidth={2} fill="rgba(255,46,138,0.12)" />
-            </View>
-            {!incomingDare && !pendingVerification && !sent && hasPartner && (
-              <AppText style={[styles.heroHint, { color: colors.textMuted }]}>Send something playful to your partner.</AppText>
-            )}
-          </View>
-
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {incomingDare && (
             <View style={[styles.incomingSection, highlightDare && styles.incomingHighlight]}>
-              <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
+              <View
+                style={[
+                  styles.pointsHint,
+                  {
+                    backgroundColor: 'rgba(255,46,138,0.08)',
+                    borderColor: 'rgba(255,46,138,0.25)',
+                  },
+                ]}
+              >
                 <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>
-                  Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText> — Complete it = <AppText style={styles.pts}>+{completePts} ⚡</AppText>
+                  Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText>
+                  {'  '}•{'  '}
+                  Complete = <AppText style={styles.pts}>+{completePts} ⚡</AppText>
                 </AppText>
               </View>
               <ReceivedDareCard
@@ -370,7 +484,7 @@ export default function DareTab() {
                 totalExpirySeconds={expirySeconds}
                 coupleId={couple?.id}
                 onAccept={() => handleRespond(true)}
-                onReject={(reason) => handleRespond(false, reason)}
+                onReject={reason => handleRespond(false, reason)}
                 onComplete={handleMarkComplete}
                 onTimeout={() => handleRespond(false)}
               />
@@ -382,16 +496,22 @@ export default function DareTab() {
               <Animated.View
                 style={[
                   styles.verifyCard,
-                  { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.35)', opacity: frontOpacity },
-                  { transform: [{ rotateY: frontRotate }] },
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: 'rgba(51,209,122,0.35)',
+                    opacity: frontOpacity,
+                    transform: [{ rotateY: frontRotate }],
+                  },
                 ]}
               >
                 <View style={styles.verifyHeader}>
                   <CheckCircle color="#33D17A" size={20} strokeWidth={2} />
-                  <AppText style={[styles.verifyTitle, { color: colors.text }]}>Partner completed the dare!</AppText>
+                  <AppText style={[styles.verifyTitle, { color: colors.text }]}>
+                    {partnerName} completed the dare!
+                  </AppText>
                 </View>
                 <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>
-                  Confirm to award them <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText>
+                  Confirm it to award <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText>
                 </AppText>
                 <TouchableOpacity
                   style={styles.verifyBtn}
@@ -399,8 +519,15 @@ export default function DareTab() {
                   disabled={verifying}
                   activeOpacity={0.85}
                 >
-                  <LinearGradient colors={['#33D17A', '#1A9E57']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.verifyGrad}>
-                    <AppText style={styles.verifyBtnText}>{verifying ? 'Confirming…' : 'They Did It!'}</AppText>
+                  <LinearGradient
+                    colors={['#33D17A', '#1A9E57']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.verifyGrad}
+                  >
+                    <AppText style={styles.verifyBtnText}>
+                      {verifying ? 'Confirming…' : 'They Did It!'}
+                    </AppText>
                   </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}>
@@ -413,13 +540,17 @@ export default function DareTab() {
                 style={[
                   styles.verifyCard,
                   styles.verifyCardBack,
-                  { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)', opacity: backOpacity },
-                  { transform: [{ rotateY: backRotate }] },
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: 'rgba(255,46,138,0.30)',
+                    opacity: backOpacity,
+                    transform: [{ rotateY: backRotate }],
+                  },
                 ]}
               >
                 <AppText style={[styles.backLabel, { color: colors.textMuted }]}>THE DARE YOU SENT</AppText>
                 <AppText style={[styles.backDareText, { color: colors.text }]}>
-                  "{pendingVerification.content_text ?? 'No text recorded'}"
+                  “{pendingVerification.content_text ?? 'No text recorded'}”
                 </AppText>
                 <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}>
                   <RotateCcw color={colors.textMuted} size={13} strokeWidth={2} />
@@ -430,11 +561,16 @@ export default function DareTab() {
           )}
 
           {!hasPartner ? (
-            <View style={[styles.soloPlaceholder, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-              <Flame color="#FF2E8A" size={36} fill="rgba(255,46,138,0.12)" strokeWidth={1.5} />
+            <View
+              style={[
+                styles.soloPlaceholder,
+                { backgroundColor: colors.card, borderColor: colors.borderSubtle },
+              ]}
+            >
+              <Flame color="#FF2E8A" size={42} fill="rgba(255,46,138,0.12)" strokeWidth={1.5} />
               <AppText style={[styles.soloTitle, { color: colors.text }]}>Dares are more fun with two</AppText>
               <AppText style={[styles.soloSub, { color: colors.textSecondary }]}>
-                Invite your partner and start sending dares back and forth.
+                Invite your partner and start challenging each other.
               </AppText>
               <TouchableOpacity
                 onPress={() => router.push('/(app)/account')}
@@ -444,65 +580,219 @@ export default function DareTab() {
                 <AppText style={styles.soloBtnText}>Invite Partner</AppText>
               </TouchableOpacity>
             </View>
-          ) : !sent && (
-            <View style={styles.composerSection}>
+          ) : !sent ? (
+            <>
+              <View style={styles.dareHero}>
+                <View style={styles.heroTitleRow}>
+                  <View style={styles.heroFlameBadge}>
+                    <Flame color="#FF2E8A" size={27} strokeWidth={2.4} fill="rgba(255,46,138,0.15)" />
+                  </View>
+                  <AppText style={styles.heroTitle}>
+                    <AppText style={styles.heroTitleWarm}>I DARE </AppText>
+                    <AppText style={styles.heroTitleHot}>YOU...</AppText>
+                  </AppText>
+                  <TouchableOpacity onPress={showHowItWorks} style={styles.howBtn} activeOpacity={0.75}>
+                    <Heart color="#FF2E8A" size={14} strokeWidth={2} />
+                    <AppText style={styles.howBtnText}>How it works</AppText>
+                  </TouchableOpacity>
+                </View>
+                <AppText style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
+                  Tell <AppText style={styles.partnerAccent}>{partnerName}</AppText> exactly what you want them to do.
+                </AppText>
+              </View>
+
               {error ? (
-                <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
-                  <AppText style={{ color: '#FF5A5F', fontSize: 13, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</AppText>
+                <View
+                  style={[
+                    styles.errorBanner,
+                    {
+                      backgroundColor: 'rgba(255,90,95,0.08)',
+                      borderColor: 'rgba(255,90,95,0.25)',
+                    },
+                  ]}
+                >
+                  <AppText style={styles.errorText}>{error}</AppText>
                 </View>
               ) : null}
 
-              <WarmTextInput
-                value={dareText}
-                onChangeText={setDareText}
-                placeholder="Type your dare…"
-                multiline
-                minHeight={92}
-                charLimit={200}
-                containerStyle={{ marginBottom: Spacing.md }}
-              />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickRow} contentContainerStyle={styles.quickRowContent}>
-                {quickDares.map(d => (
-                  <PromptChip key={d} label={d} active={dareText === d} onPress={() => setDareText(d)} style={{ marginRight: 8 }} />
-                ))}
-              </ScrollView>
+              <View
+                style={[
+                  styles.composerCard,
+                  { borderColor: colors.borderSubtle, backgroundColor: colors.card },
+                ]}
+              >
+                <View style={styles.composerGlow} />
+                <AppText style={[styles.composerQuestion, { color: colors.text }]}>
+                  What are you daring <AppText style={styles.partnerAccent}>{partnerName}</AppText> to do?
+                </AppText>
 
-              <PrimaryButton
-                label="Send Dare"
-                onPress={handleSend}
-                loading={sending}
-                disabled={!dareText.trim()}
-                style={styles.primaryAction}
-              />
-            </View>
-          )}
+                <WarmTextInput
+                  value={dareText}
+                  onChangeText={setDareText}
+                  placeholder="Type your dare…"
+                  multiline
+                  minHeight={118}
+                  charLimit={200}
+                  containerStyle={styles.dareInput}
+                />
 
-          {hasPartner && promptsLoaded && hasCustomPrompts === 'no' && !sent && (
-            <CustomizePromptsNotice
-              onPress={() => router.push('/(app)/customize-prompts?tab=dare')}
-              accentColor="#FF2E8A"
-            />
-          )}
+                <TouchableOpacity
+                  onPress={handleSend}
+                  disabled={!dareText.trim() || sending}
+                  activeOpacity={0.85}
+                  style={styles.sendButtonWrap}
+                >
+                  <LinearGradient
+                    colors={dareText.trim() ? ['#FF8A28', '#FF395C', '#F41477'] : ['#5A3A2A', '#5B303D', '#552039']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.sendButton}
+                  >
+                    <Flame color={dareText.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.38)'} size={21} fill={dareText.trim() ? 'rgba(255,255,255,0.18)' : 'transparent'} strokeWidth={2.2} />
+                    <AppText style={[styles.sendButtonText, !dareText.trim() && styles.sendButtonTextDisabled]}>
+                      {sending ? 'SENDING…' : `DARE ${partnerName.toUpperCase()}`}
+                    </AppText>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inspirationSection}>
+                <View style={styles.inspirationHeadingRow}>
+                  <AppText style={[styles.inspirationHeading, { color: colors.text }]}>Need a little inspiration?</AppText>
+                  <Sparkles color="#FF2E8A" size={17} strokeWidth={2} />
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.inspirationRow}
+                >
+                  {INSPIRATION.map(item => {
+                    const selected = inspiration === item.key;
+                    return (
+                      <TouchableOpacity
+                        key={item.key}
+                        onPress={() => setInspiration(item.key)}
+                        activeOpacity={0.78}
+                        style={[
+                          styles.inspirationChip,
+                          {
+                            backgroundColor: selected ? 'rgba(255,46,138,0.12)' : colors.card,
+                            borderColor: selected ? 'rgba(255,46,138,0.45)' : colors.borderSubtle,
+                          },
+                        ]}
+                      >
+                        <AppText style={styles.inspirationEmoji}>{item.emoji}</AppText>
+                        <AppText style={[styles.inspirationLabel, selected && styles.inspirationLabelActive]}>
+                          {item.label}
+                        </AppText>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                <View
+                  style={[
+                    styles.inspirationPrompt,
+                    { backgroundColor: colors.card, borderColor: colors.borderSubtle },
+                  ]}
+                >
+                  <Lightbulb color="#FF2E8A" size={22} strokeWidth={2} />
+                  <AppText style={[styles.inspirationPromptText, { color: colors.textSecondary }]}>
+                    <AppText style={styles.inspirationPromptLabel}>{activeInspiration.label}: </AppText>
+                    {activeInspiration.prompt}
+                  </AppText>
+                </View>
+              </View>
+
+              {(sentDare || incomingDare) && (
+                <View style={styles.yourDaresSection}>
+                  <AppText style={[styles.yourDaresTitle, { color: colors.text }]}>Your Dares</AppText>
+
+                  {sentDare && (
+                    <View
+                      style={[
+                        styles.dareStatusRow,
+                        { backgroundColor: colors.card, borderColor: colors.borderSubtle },
+                      ]}
+                    >
+                      <View style={[styles.statusIcon, { backgroundColor: 'rgba(255,46,138,0.14)' }]}>
+                        <Flame color="#FF2E8A" size={20} strokeWidth={2} />
+                      </View>
+                      <View style={styles.statusTextWrap}>
+                        <AppText style={[styles.statusTitle, { color: colors.text }]}>Waiting on {partnerName}</AppText>
+                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>
+                          {sentDare.status === 'seen' ? `${partnerName} has seen your dare` : sentDare.content_text}
+                        </AppText>
+                      </View>
+                      <ChevronRight color={colors.textMuted} size={19} strokeWidth={2} />
+                    </View>
+                  )}
+
+                  {incomingDare && (
+                    <View
+                      style={[
+                        styles.dareStatusRow,
+                        { backgroundColor: colors.card, borderColor: colors.borderSubtle },
+                      ]}
+                    >
+                      <View style={[styles.statusIcon, { backgroundColor: 'rgba(255,138,40,0.14)' }]}>
+                        <Flame color="#FF8A28" size={20} strokeWidth={2} />
+                      </View>
+                      <View style={styles.statusTextWrap}>
+                        <AppText style={[styles.statusTitle, { color: colors.text }]}>{partnerName} dared you</AppText>
+                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>
+                          Tap the dare above to respond
+                        </AppText>
+                      </View>
+                      <ChevronRight color={colors.textMuted} size={19} strokeWidth={2} />
+                    </View>
+                  )}
+                </View>
+              )}
+            </>
+          ) : null}
 
           {sent && sentDare && (
-            <View style={[styles.sentCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.25)' }]}>
-              <Flame color="#FF2E8A" size={44} fill="rgba(255,46,138,0.15)" strokeWidth={1.5} />
-              <AppText style={[styles.sentTitle, { color: colors.text }]}>Dare sent!</AppText>
+            <View
+              style={[
+                styles.sentCard,
+                { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.28)' },
+              ]}
+            >
+              <View style={styles.sentFlameWrap}>
+                <Flame color="#FF2E8A" size={40} fill="rgba(255,46,138,0.14)" strokeWidth={1.8} />
+              </View>
+              <AppText style={[styles.sentTitle, { color: colors.text }]}>Dare sent to {partnerName}!</AppText>
+              <AppText style={[styles.sentDareText, { color: colors.textSecondary }]}>
+                “{sentDare.content_text}”
+              </AppText>
+
               {sentDare.status === 'seen' ? (
                 <View style={styles.seenRow}>
                   <Eye color="#FFB347" size={14} strokeWidth={2} />
-                  <AppText style={[styles.seenText, { color: '#FFB347' }]}>Your partner has seen this dare</AppText>
+                  <AppText style={[styles.seenText, { color: '#FFB347' }]}>{partnerName} has seen it</AppText>
                 </View>
               ) : (
                 <AppText style={[styles.sentSub, { color: colors.textSecondary }]}>Waiting to see if they're up for it.</AppText>
               )}
+
               {senderCountdown && (
                 <View style={styles.expiryRow}>
                   <Timer color={colors.textMuted} size={13} strokeWidth={2} />
                   <AppText style={[styles.expiryText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText>
                 </View>
               )}
-              <SecondaryButton label="Send Another" onPress={() => { setSent(false); setDareText(''); setError(''); }} style={{ marginTop: Spacing.md }} />
+
+              <SecondaryButton
+                label={`Dare ${partnerName} Again`}
+                onPress={() => {
+                  setSent(false);
+                  setDareText('');
+                  setError('');
+                }}
+                style={{ marginTop: Spacing.md }}
+              />
               <TouchableOpacity onPress={handleCancelDare} style={styles.cancelDareBtn} activeOpacity={0.7}>
                 <AppText style={[styles.cancelDareBtnText, { color: colors.textMuted }]}>Cancel dare</AppText>
               </TouchableOpacity>
@@ -510,13 +800,27 @@ export default function DareTab() {
           )}
 
           {sent && !sentDare && rejectedDare && (
-            <View style={[styles.sentCard, { backgroundColor: colors.card, borderColor: 'rgba(255,90,95,0.25)' }]}>
+            <View
+              style={[
+                styles.sentCard,
+                { backgroundColor: colors.card, borderColor: 'rgba(255,90,95,0.25)' },
+              ]}
+            >
               <XCircle color="#FF5A5F" size={40} strokeWidth={1.5} />
               <AppText style={[styles.sentTitle, { color: colors.text }]}>Dare declined</AppText>
               <AppText style={[styles.sentSub, { color: colors.textSecondary }]}>
-                {rejectedDare.decline_reason ?? 'Your partner declined this dare.'}
+                {rejectedDare.decline_reason ?? `${partnerName} declined this dare.`}
               </AppText>
-              <SecondaryButton label="Send Another" onPress={() => { setSent(false); setDareText(''); setError(''); setRejectedDare(null); }} style={{ marginTop: Spacing.md }} />
+              <SecondaryButton
+                label={`Dare ${partnerName} Again`}
+                onPress={() => {
+                  setSent(false);
+                  setDareText('');
+                  setError('');
+                  setRejectedDare(null);
+                }}
+                style={{ marginTop: Spacing.md }}
+              />
             </View>
           )}
         </ScrollView>
@@ -526,36 +830,40 @@ export default function DareTab() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { flexGrow: 1, paddingHorizontal: Spacing.screen, paddingBottom: Spacing.xl },
-  heroCue: { alignItems: 'center', marginTop: Spacing.xs, marginBottom: Spacing.lg },
-  iconWrap: { alignItems: 'center', justifyContent: 'center', minHeight: 48 },
-  heroHint: { marginTop: 4, fontSize: FontSize.xs, fontFamily: 'Inter-Regular', letterSpacing: 0.2 },
-  composerSection: { width: '100%' },
-  primaryAction: { marginTop: Spacing.md },
-  soloPlaceholder: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.xl,
-    alignItems: 'center',
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: Spacing.screen,
+    paddingBottom: Spacing.xl,
+  },
+  incomingSection: {
     gap: Spacing.sm,
-    marginTop: Spacing.md,
+    marginBottom: Spacing.lg,
   },
-  soloTitle: { fontSize: FontSize.md, fontFamily: 'Inter-SemiBold', textAlign: 'center' },
-  soloSub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20 },
-  soloBtn: {
-    marginTop: Spacing.sm,
-    backgroundColor: '#FF2E8A',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
+  incomingHighlight: {
+    borderRadius: Radius.lg,
+    borderWidth: 2,
+    borderColor: 'rgba(255,179,71,0.50)',
+    padding: Spacing.sm,
+    backgroundColor: 'rgba(255,179,71,0.07)',
   },
-  soloBtnText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
-  incomingSection: { gap: Spacing.sm, marginBottom: Spacing.md },
-  incomingHighlight: { borderRadius: Radius.lg, borderWidth: 2, borderColor: 'rgba(255,179,71,0.50)', padding: Spacing.sm, backgroundColor: 'rgba(255,179,71,0.07)' },
-  pointsHint: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.sm, alignItems: 'center' },
-  pointsHintText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
-  pts: { fontFamily: 'Inter-Bold', color: '#33D17A' },
-  flipContainer: { marginBottom: Spacing.lg, position: 'relative' },
+  pointsHint: {
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    padding: Spacing.sm,
+    alignItems: 'center',
+  },
+  pointsHintText: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+  },
+  pts: {
+    fontFamily: 'Inter-Bold',
+    color: '#33D17A',
+  },
+  flipContainer: {
+    marginBottom: Spacing.lg,
+    position: 'relative',
+  },
   verifyCard: {
     borderRadius: Radius.lg,
     borderWidth: 1,
@@ -569,26 +877,368 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  verifyHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  verifyTitle: { fontSize: FontSize.body, fontFamily: 'Inter-Bold', flex: 1 },
-  verifySubtitle: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20 },
-  verifyBtn: { borderRadius: Radius.pill, overflow: 'hidden', marginTop: Spacing.xs },
-  verifyGrad: { height: 50, alignItems: 'center', justifyContent: 'center' },
-  verifyBtnText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-Bold' },
-  flipToggle: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'center', paddingTop: 4 },
-  flipToggleText: { fontSize: 12, fontFamily: 'Inter-Regular' },
-  backLabel: { fontSize: 10, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2 },
-  backDareText: { fontSize: FontSize.lg, fontFamily: 'Inter-SemiBold', lineHeight: 28, fontStyle: 'italic' },
-  quickRow: { marginBottom: 0 },
-  quickRowContent: { paddingRight: Spacing.screen },
-  sentCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.xl, alignItems: 'center', gap: 8 },
-  sentTitle: { fontSize: FontSize.xl, fontFamily: 'Inter-Bold' },
-  sentSub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center' },
-  expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  expiryText: { fontSize: 12, fontFamily: 'Inter-Regular' },
-  errorBanner: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.md },
-  cancelDareBtn: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, marginTop: Spacing.xs },
-  cancelDareBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center' },
-  seenRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  seenText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
+  verifyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  verifyTitle: {
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Bold',
+    flex: 1,
+  },
+  verifySubtitle: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 20,
+  },
+  verifyBtn: {
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+    marginTop: Spacing.xs,
+  },
+  verifyGrad: {
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifyBtnText: {
+    color: '#fff',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Bold',
+  },
+  flipToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'center',
+    paddingTop: 4,
+  },
+  flipToggleText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+  },
+  backLabel: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    letterSpacing: 1.2,
+  },
+  backDareText: {
+    fontSize: FontSize.lg,
+    fontFamily: 'Inter-SemiBold',
+    lineHeight: 28,
+    fontStyle: 'italic',
+  },
+  soloPlaceholder: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  soloTitle: {
+    fontSize: FontSize.md,
+    fontFamily: 'Inter-SemiBold',
+    textAlign: 'center',
+  },
+  soloSub: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  soloBtn: {
+    marginTop: Spacing.sm,
+    backgroundColor: '#FF2E8A',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  soloBtnText: {
+    color: '#fff',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+  },
+  dareHero: {
+    marginTop: 4,
+    marginBottom: 22,
+  },
+  heroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  heroFlameBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,46,138,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,46,138,0.18)',
+  },
+  heroTitle: {
+    flexShrink: 1,
+    fontSize: 30,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: -1,
+  },
+  heroTitleWarm: {
+    color: '#FF8A28',
+  },
+  heroTitleHot: {
+    color: '#FF2E8A',
+  },
+  heroSubtitle: {
+    marginTop: 12,
+    fontSize: FontSize.body,
+    lineHeight: 24,
+    fontFamily: 'Inter-Regular',
+  },
+  partnerAccent: {
+    color: '#FF2E8A',
+    fontFamily: 'Inter-SemiBold',
+  },
+  howBtn: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255,46,138,0.32)',
+    backgroundColor: 'rgba(255,46,138,0.06)',
+  },
+  howBtnText: {
+    color: '#FF5B9F',
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+  },
+  composerCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 18,
+    shadowColor: '#FF2E8A',
+    shadowOpacity: 0.13,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
+  },
+  composerGlow: {
+    position: 'absolute',
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    right: -75,
+    top: -100,
+    backgroundColor: 'rgba(255,46,138,0.07)',
+  },
+  composerQuestion: {
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Bold',
+    marginBottom: Spacing.md,
+    lineHeight: 23,
+  },
+  dareInput: {
+    marginBottom: 16,
+  },
+  sendButtonWrap: {
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  sendButton: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  sendButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: 0.4,
+  },
+  sendButtonTextDisabled: {
+    color: 'rgba(255,255,255,0.38)',
+  },
+  inspirationSection: {
+    marginTop: 24,
+  },
+  inspirationHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 12,
+  },
+  inspirationHeading: {
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-SemiBold',
+  },
+  inspirationRow: {
+    gap: 9,
+    paddingRight: Spacing.screen,
+    paddingBottom: 12,
+  },
+  inspirationChip: {
+    minWidth: 76,
+    minHeight: 78,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    gap: 5,
+  },
+  inspirationEmoji: {
+    fontSize: 22,
+  },
+  inspirationLabel: {
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  inspirationLabelActive: {
+    color: '#FF5B9F',
+  },
+  inspirationPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 15,
+  },
+  inspirationPromptText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 20,
+  },
+  inspirationPromptLabel: {
+    color: '#FF5B9F',
+    fontFamily: 'Inter-SemiBold',
+  },
+  yourDaresSection: {
+    marginTop: 26,
+    gap: 9,
+  },
+  yourDaresTitle: {
+    fontSize: FontSize.lg,
+    fontFamily: 'Inter-Bold',
+    marginBottom: 2,
+  },
+  dareStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 17,
+    padding: 14,
+  },
+  statusIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  statusTitle: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+  },
+  statusSub: {
+    marginTop: 2,
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+  },
+  sentCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    gap: 8,
+    marginTop: Spacing.sm,
+  },
+  sentFlameWrap: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,46,138,0.08)',
+    marginBottom: 2,
+  },
+  sentTitle: {
+    fontSize: FontSize.xl,
+    fontFamily: 'Inter-Bold',
+    textAlign: 'center',
+  },
+  sentDareText: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    lineHeight: 21,
+    fontStyle: 'italic',
+    marginVertical: 3,
+  },
+  sentSub: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+  },
+  expiryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2,
+  },
+  expiryText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+  },
+  errorBanner: {
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  errorText: {
+    color: '#FF5A5F',
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    textAlign: 'center',
+  },
+  cancelDareBtn: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    marginTop: Spacing.xs,
+  },
+  cancelDareBtnText: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+  },
+  seenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2,
+  },
+  seenText: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Medium',
+  },
 });
