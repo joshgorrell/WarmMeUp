@@ -57,7 +57,7 @@ function MediaPage({
   // Internal saves must preserve the original sender permissions rather than reinterpret them.
   const showSaveToVault = !!item.interactionId;
 
-  const [mediaUri, setMediaUri] = useState<string | null>(item.signedUri ?? null);
+  const [mediaUri, setMediaUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mediaError, setMediaError] = useState(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
@@ -101,6 +101,7 @@ function MediaPage({
           return;
         }
         setMediaUri(data.signedUrl);
+        setMediaError(false);
       });
 
     return () => {
