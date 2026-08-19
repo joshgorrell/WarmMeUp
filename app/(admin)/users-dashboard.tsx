@@ -45,11 +45,28 @@ type SubscriptionRow = {
   trial_started_at: string | null;
 };
 
+type AdminGrantRow = {
+  id: string;
+  user_id: string;
+  entitlement_type: string;
+  expires_at: string | null;
+  active: boolean;
+  can_invite: boolean;
+};
+
+type EffectiveEntitlement = {
+  label: string;
+  source: 'super_admin' | 'admin' | 'self' | 'trial' | 'admin_grant' | 'partner' | 'none';
+  isActive: boolean;
+};
+
 type SelectedUser = {
   profile: ProfileRow;
   couple: CoupleRow | null;
   partnerName: string | null;
   subscription: SubscriptionRow | null;
+  grant: AdminGrantRow | null;
+  entitlement: EffectiveEntitlement;
 };
 
 const safeName = (profile?: ProfileRow | null) => {
@@ -73,6 +90,7 @@ export default function UsersDashboard() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [couples, setCouples] = useState<CoupleRow[]>([]);
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
+  const [grants, setGrants] = useState<AdminGrantRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +108,7 @@ export default function UsersDashboard() {
     setError(null);
 
     try {
-      const [profilesResult, couplesResult, subscriptionsResult] = await Promise.all([
+      const [profilesResult, couplesResult, subscriptionsResult, grantsResult] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, display_name, is_admin, is_super_admin, created_at')
@@ -103,15 +121,22 @@ export default function UsersDashboard() {
           .from('subscriptions')
           .select('user_id, plan, status, started_at, expires_at, trial_started_at')
           .order('started_at', { ascending: false }),
+        supabase
+          .from('admin_grants')
+          .select('id, user_id, entitlement_type, expires_at, active, can_invite')
+          .eq('active', true)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (profilesResult.error) throw profilesResult.error;
       if (couplesResult.error) throw couplesResult.error;
       if (subscriptionsResult.error) throw subscriptionsResult.error;
+      if (grantsResult.error) throw grantsResult.error;
 
       setProfiles((profilesResult.data ?? []) as ProfileRow[]);
       setCouples((couplesResult.data ?? []) as CoupleRow[]);
       setSubscriptions((subscriptionsResult.data ?? []) as SubscriptionRow[]);
+      setGrants((grantsResult.data ?? []) as AdminGrantRow[]);
     } catch (e: any) {
       setError(e?.message ?? 'Could not load users dashboard.');
     } finally {
@@ -147,6 +172,73 @@ export default function UsersDashboard() {
     return map;
   }, [couples]);
 
+  const grantByUser = useMemo(() => {
+    const map: Record<string, AdminGrantRow> = {};
+    grants.forEach(g => {
+      if (!map[g.user_id]) map[g.user_id] = g;
+    });
+    return map;
+  }, [grants]);
+
+  const isGrantActive = (grant: AdminGrantRow | null): boolean => {
+    if (!grant || !grant.active) return false;
+    if (grant.expires_at && new Date(grant.expires_at) < new Date()) return false;
+    return true;
+  };
+
+  const isSubActive = (sub: SubscriptionRow | null): boolean => {
+    if (!sub || sub.status !== 'active') return false;
+    if (sub.expires_at && new Date(sub.expires_at) < new Date()) return false;
+    return true;
+  };
+
+  const computeEntitlement = (profile: ProfileRow): EffectiveEntitlement => {
+    if (profile.is_super_admin) return { label: 'Super Admin', source: 'super_admin', isActive: true };
+    if (profile.is_admin) return { label: 'Admin', source: 'admin', isActive: true };
+
+    const sub = subscriptionByUser[profile.id];
+    if (isSubActive(sub) && (sub.plan === 'monthly' || sub.plan === 'yearly')) {
+      return { label: `${sub.plan} subscription`, source: 'self', isActive: true };
+    }
+    if (isSubActive(sub) && sub.plan === 'trial') {
+      return { label: 'Trial (active)', source: 'trial', isActive: true };
+    }
+
+    const grant = grantByUser[profile.id] ?? null;
+    if (isGrantActive(grant)) {
+      const typeLabel = grant.entitlement_type === 'free_access' ? 'Free Access'
+        : grant.entitlement_type === 'extended_trial' ? 'Extended Trial'
+        : grant.entitlement_type === 'comped_subscription' ? 'Comped Subscription'
+        : grant.entitlement_type;
+      return { label: `${typeLabel} (grant)`, source: 'admin_grant', isActive: true };
+    }
+
+    const couple = coupleByUser[profile.id];
+    if (couple && couple.active !== false) {
+      const partnerId = couple.user_a_id === profile.id ? couple.user_b_id : couple.user_a_id;
+      if (partnerId) {
+        const partnerProfile = profileById[partnerId];
+        if (partnerProfile?.is_super_admin || partnerProfile?.is_admin) {
+          return { label: 'Covered by partner (admin)', source: 'partner', isActive: true };
+        }
+        const partnerSub = subscriptionByUser[partnerId];
+        if (isSubActive(partnerSub) && (partnerSub.plan === 'monthly' || partnerSub.plan === 'yearly')) {
+          return { label: 'Covered by partner', source: 'partner', isActive: true };
+        }
+        const partnerGrant = grantByUser[partnerId] ?? null;
+        if (isGrantActive(partnerGrant)) {
+          return { label: 'Covered by partner (grant)', source: 'partner', isActive: true };
+        }
+      }
+    }
+
+    if (sub && sub.plan === 'trial' && !isSubActive(sub)) {
+      return { label: 'Trial expired', source: 'none', isActive: false };
+    }
+
+    return { label: 'No access', source: 'none', isActive: false };
+  };
+
   const pairedCouples = useMemo(() => couples.filter(c => !!c.user_b_id), [couples]);
   const paidSubscriptions = useMemo(
     () => subscriptions.filter(s => s.plan !== 'trial' && s.status === 'active'),
@@ -169,6 +261,8 @@ export default function UsersDashboard() {
       couple,
       partnerName,
       subscription: subscriptionByUser[profile.id] ?? null,
+      grant: grantByUser[profile.id] ?? null,
+      entitlement: computeEntitlement(profile),
     });
   };
 
@@ -236,11 +330,11 @@ export default function UsersDashboard() {
 
   const renderUserRow = (profile: ProfileRow) => {
     const couple = coupleByUser[profile.id];
-    const sub = subscriptionByUser[profile.id];
     const partnerId = couple
       ? (couple.user_a_id === profile.id ? couple.user_b_id : couple.user_a_id)
       : null;
     const partner = partnerId ? safeName(profileById[partnerId]) : null;
+    const entitlement = computeEntitlement(profile);
 
     return (
       <TouchableOpacity key={profile.id} style={styles.rowCard} onPress={() => openUser(profile)} activeOpacity={0.8}>
@@ -251,14 +345,14 @@ export default function UsersDashboard() {
         <View style={styles.metaWrap}>
           <Badge text={roleLabel(profile)} />
           <Badge text={partner ? `w/ ${partner}` : 'Solo'} />
-          {sub ? <Badge text={`${sub.plan ?? 'Plan'} · ${sub.status ?? 'unknown'}`} /> : <Badge text="No subscription" />}
+          <Badge text={entitlement.label} />
         </View>
       </TouchableOpacity>
     );
   };
 
   if (selectedUser) {
-    const { profile, couple, partnerName, subscription } = selectedUser;
+    const { profile, couple, partnerName, subscription, grant, entitlement } = selectedUser;
     return (
       <View style={styles.root}>
         <ScrollView contentContainerStyle={[styles.content, isWideScreen && styles.contentWide, { paddingTop: Math.max(insets.top + 20, 32) }]}>
@@ -270,6 +364,7 @@ export default function UsersDashboard() {
           <AppText style={styles.subtitle}>Account details</AppText>
 
           <DetailCard label="ROLE" value={roleLabel(profile)} />
+          <DetailCard label="EFFECTIVE ENTITLEMENT" value={entitlement.label} />
           <DetailCard label="USER ID" value={profile.id} mono />
           <DetailCard label="CREATED" value={fmtDate(profile.created_at)} />
           <DetailCard label="PARTNER" value={partnerName ?? 'Not paired'} />
@@ -281,6 +376,13 @@ export default function UsersDashboard() {
           />
           <DetailCard label="SUBSCRIPTION START" value={fmtDate(subscription?.started_at)} />
           <DetailCard label="EXPIRES" value={fmtDate(subscription?.expires_at)} />
+          {grant && (
+            <>
+              <DetailCard label="ADMIN GRANT" value={grant.entitlement_type} />
+              <DetailCard label="GRANT EXPIRES" value={fmtDate(grant.expires_at)} />
+              <DetailCard label="GRANT CAN INVITE" value={grant.can_invite ? 'Yes' : 'No'} />
+            </>
+          )}
 
           {isSuperAdmin ? (
             <>
