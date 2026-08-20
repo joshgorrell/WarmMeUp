@@ -307,10 +307,7 @@ export default function ChatTab() {
         const urlMap: Record<string, string> = {};
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of visible) {
-          if (m.media_url) {
-            urlMap[m.id] = m.media_url;
-            if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url);
-          } else if (m.media_storage_path) {
+          if (m.media_storage_path) {
             const cached = getCachedUrl(m.media_storage_path);
             if (cached) {
               urlMap[m.id] = cached;
@@ -370,10 +367,7 @@ export default function ChatTab() {
         const urlMap: Record<string, string> = {};
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of sorted) {
-          if (m.media_url) {
-            urlMap[m.id] = m.media_url;
-            if (m.media_storage_path) setCachedUrl(m.media_storage_path, m.media_url);
-          } else if (m.media_storage_path) {
+          if (m.media_storage_path) {
             const cached = getCachedUrl(m.media_storage_path);
             if (cached) {
               urlMap[m.id] = cached;
@@ -440,10 +434,7 @@ export default function ChatTab() {
         if (prev.some(m => m.id === newMsg.id)) return prev;
         return [...prev, newMsg];
       });
-      if (newMsg.media_url) {
-        setSignedUrls(prev => ({ ...prev, [newMsg.id]: newMsg.media_url! }));
-        if (newMsg.media_storage_path) setCachedUrl(newMsg.media_storage_path, newMsg.media_url);
-      } else if (newMsg.media_storage_path) {
+      if (newMsg.media_storage_path) {
         fetchSignedUrlsBatched(newMsg);
       }
     };
