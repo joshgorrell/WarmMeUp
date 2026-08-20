@@ -84,8 +84,11 @@ export default function ActivityScreen() {
     load();
     const ch = supabase.channel(`activity_screen_${couple.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
       .subscribe();
     return () => {
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
@@ -95,12 +98,15 @@ export default function ActivityScreen() {
 
   const load = async () => {
     if (!couple?.id || !user) return;
-    const [{ data: interactions }, { data: chats }, { data: activityEvts }, { data: viewedRows }] = await Promise.all([
+    const [{ data: interactions }, { data: chats }, { data: activityEvts }, { data: viewedRows }, { data: wishRows }] = await Promise.all([
       supabase.from('interactions').select('*').eq('couple_id', couple.id).order('created_at', { ascending: false }).limit(50),
       supabase.from('chat_messages').select('*').eq('couple_id', couple.id).is('deleted_at', null).not('content_text', 'like', '__WMU_ACTIVITY__:%').order('created_at', { ascending: false }).limit(50),
       supabase.from('activity_events').select('*').eq('couple_id', couple.id).eq('target_user_id', user.id).order('created_at', { ascending: false }).limit(50),
       supabase.from('activity_views').select('source_table, source_id').eq('couple_id', couple.id).eq('user_id', user.id),
+      supabase.from('wishes').select('id').eq('couple_id', couple.id),
     ]);
+
+    const validWishIds = new Set((wishRows ?? []).map((w: any) => w.id as string));
 
     const viewed = new Set<string>(
       (viewedRows ?? []).map((v: any) => `${v.source_table}:${v.source_id}`)
@@ -343,7 +349,10 @@ export default function ActivityScreen() {
         default:
           return;
       }
-      if (ev.wish_id) wishParams = { wish_id: ev.wish_id };
+      if (ev.wish_id) {
+        if (!validWishIds.has(ev.wish_id)) return;
+        wishParams = { wish_id: ev.wish_id };
+      }
 
       mapped.push({
         id: `activity_${ev.id}`,

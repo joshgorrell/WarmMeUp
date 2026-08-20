@@ -1225,6 +1225,7 @@ export default function WishTab() {
   }, []);
 
   const handleDelete = useCallback(async (wish: WishWithReactions) => {
+    await supabase.from('activity_events').delete().eq('wish_id', wish.id);
     await supabase.from('wishes').delete().eq('id', wish.id);
     setWishes(prev => prev.filter(w => w.id !== wish.id));
   }, []);
