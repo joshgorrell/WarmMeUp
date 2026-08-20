@@ -1,46 +1,399 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Delete Your Warm Me Up Account</title>
-  <meta name="description" content="Instructions for permanently deleting your Warm Me Up account and associated data." />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Delete Account — Warm Me Up</title>
   <style>
-    :root { color-scheme: dark; font-family: Arial, Helvetica, sans-serif; }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: #070509; color: #fff; display: grid; place-items: center; padding: 32px 18px; }
-    main { width: 100%; max-width: 720px; background: #100d12; border: 1px solid #2b232e; border-radius: 20px; padding: 32px; }
-    .eyebrow { color: #ff5a8a; font-size: 12px; font-weight: 700; letter-spacing: 2px; }
-    h1 { font-size: clamp(30px, 6vw, 42px); margin: 10px 0 18px; }
-    h2 { font-size: 19px; margin: 28px 0 8px; }
-    p, li { color: #cfc7d2; line-height: 1.65; font-size: 16px; }
-    a.button { display: inline-block; margin-top: 14px; padding: 14px 20px; border-radius: 999px; background: linear-gradient(90deg,#ff7b00,#ff5a3d,#ff2e8a); color: #fff; text-decoration: none; font-weight: 700; }
-    .note { color: #918793; font-size: 14px; margin-top: 24px; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #05040A;
+      color: #fff;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 22px;
+      padding: 36px 28px;
+    }
+    .logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #FFB347, #FF5A3D, #FF2E8A);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 28px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      text-align: center;
+      margin: 0 0 8px;
+      letter-spacing: -0.3px;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: rgba(255,255,255,0.50);
+      text-align: center;
+      line-height: 1.5;
+      margin: 0 0 28px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.60);
+      margin-bottom: 6px;
+      letter-spacing: 0.3px;
+    }
+    input[type="email"], input[type="password"] {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 15px;
+      color: #fff;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    input[type="email"]:focus, input[type="password"]:focus {
+      border-color: #FF2E8A;
+    }
+    .field { margin-bottom: 16px; }
+    .btn {
+      width: 100%;
+      padding: 15px;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      font-family: inherit;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary {
+      background: #FF2E8A;
+      color: #fff;
+      margin-top: 4px;
+    }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-primary:disabled {
+      opacity: 0.40;
+      cursor: not-allowed;
+    }
+    .btn-google {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .btn-google:hover { background: rgba(255,255,255,0.12); }
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(255,255,255,0.10);
+    }
+    .divider span {
+      font-size: 11px;
+      color: rgba(255,255,255,0.30);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .alert {
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .alert-error {
+      background: rgba(255,90,95,0.12);
+      border: 1px solid rgba(255,90,95,0.30);
+      color: #FF8A8A;
+    }
+    .alert-success {
+      background: rgba(51,209,122,0.12);
+      border: 1px solid rgba(51,209,122,0.30);
+      color: #5BE0A0;
+    }
+    .alert-info {
+      background: rgba(105,167,255,0.10);
+      border: 1px solid rgba(105,167,255,0.25);
+      color: #8FC2FF;
+    }
+    .spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .warning-box {
+      background: rgba(255,179,71,0.08);
+      border: 1px solid rgba(255,179,71,0.20);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    .warning-box p {
+      margin: 0;
+      font-size: 13px;
+      color: rgba(255,179,71,0.85);
+      line-height: 1.5;
+    }
+    .warning-box p + p { margin-top: 8px; }
+    .hidden { display: none !important; }
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.25);
+    }
+    .footer a {
+      color: rgba(255,255,255,0.40);
+      text-decoration: none;
+    }
+    .footer a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <main>
-    <div class="eyebrow">WARM ME UP</div>
-    <h1>Delete your account</h1>
-    <p>You can permanently delete your Warm Me Up account at any time. Account deletion removes your profile and associated app data in accordance with our Privacy Policy and Terms.</p>
+  <div class="card">
+    <div class="logo">🔥</div>
+    <h1>Delete Your Account</h1>
+    <p class="subtitle">Sign in to permanently delete your Warm Me Up account and all associated data.</p>
 
-    <h2>Delete from the app</h2>
-    <p>Open Warm Me Up, then go to <strong>Profile → Settings → Delete My Account</strong> and confirm deletion.</p>
+    <div id="confirmStep">
+      <div class="warning-box">
+        <p><strong>What happens when you delete your account:</strong></p>
+        <p>• Your profile, chat messages, vault items, and interactions are permanently erased.</p>
+        <p>• Your partner connection is dissolved and your couple data is wiped.</p>
+        <p>• If you subscribed via Apple, you must cancel your subscription in your Apple Account settings — it cannot be cancelled from this page.</p>
+        <p>• Google Play and other subscriptions will be cancelled automatically.</p>
+        <p>• This action cannot be undone.</p>
+      </div>
 
-    <h2>No longer have the app?</h2>
-    <p>You can still request permanent account deletion without reinstalling Warm Me Up. Email our support team from the email address associated with your Warm Me Up account, or identify that account email in your request. We may contact the account email to verify ownership before completing deletion.</p>
-    <a class="button" href="mailto:support@warmmeup.app?subject=Warm%20Me%20Up%20account%20deletion%20request&body=Please%20delete%20my%20Warm%20Me%20Up%20account%20and%20associated%20data.%0A%0AAccount%20email%3A%20%0A%0AI%20understand%20you%20may%20contact%20me%20at%20my%20account%20email%20to%20verify%20this%20request.">Request Account Deletion</a>
+      <div id="alert" class="alert"></div>
 
-    <h2>What is deleted</h2>
-    <ul>
-      <li>Your Warm Me Up profile and account settings.</li>
-      <li>Your messages, interactions, dares, wishes, notes, and related activity.</li>
-      <li>Vault media and other content associated with your account, subject to any limited retention required by law or for security/fraud-prevention purposes.</li>
-      <li>Your active partner connection.</li>
-    </ul>
+      <button class="btn btn-google" id="googleBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1Z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23Z" fill="#34A853"/><path d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84Z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38Z" fill="#EA4335"/></svg>
+        Continue with Google
+      </button>
 
-    <p class="note">Important: deleting your Warm Me Up account does not cancel an Apple App Store subscription. Apple subscriptions must be managed or cancelled through your Apple subscription settings. For subscriptions purchased through Google Play or another platform, review your subscription status in that store after account deletion.</p>
-    <p class="note">Support: <a href="mailto:support@warmmeup.app" style="color:#ff7aa8">support@warmmeup.app</a></p>
-  </main>
+      <div class="divider"><span>or</span></div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Your password" autocomplete="current-password" />
+      </div>
+
+      <button class="btn btn-primary" id="deleteBtn">Delete My Account</button>
+    </div>
+
+    <div id="successStep" class="hidden">
+      <div class="alert alert-success" style="display:block; margin-bottom: 0;">
+        Your account has been successfully deleted. All your data has been permanently removed.
+      </div>
+    </div>
+
+    <div class="footer">
+      <a href="/">← Back to Warm Me Up</a>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var SUPABASE_URL = 'https://vdhrcbaggplcktjamwcj.supabase.co';
+      var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkaHJjYmFnZ3BsY2t0amFtd2NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMzQ2MjAsImV4cCI6MjA5NDcxMDYyMH0.HvsAb_LANZcGO1fIPVhkeAlGhftbPtgzaEJ7DjsTY8E';
+
+      var alertEl = document.getElementById('alert');
+      var deleteBtn = document.getElementById('deleteBtn');
+      var googleBtn = document.getElementById('googleBtn');
+      var emailInput = document.getElementById('email');
+      var passwordInput = document.getElementById('password');
+      var confirmStep = document.getElementById('confirmStep');
+      var successStep = document.getElementById('successStep');
+
+      function showAlert(type, message) {
+        alertEl.className = 'alert alert-' + type;
+        alertEl.textContent = message;
+        alertEl.style.display = 'block';
+      }
+
+      function hideAlert() {
+        alertEl.style.display = 'none';
+      }
+
+      function setBusy(busy) {
+        deleteBtn.disabled = busy;
+        googleBtn.disabled = busy;
+        if (busy) {
+          deleteBtn.innerHTML = '<span class="spinner"></span>Deleting...';
+        } else {
+          deleteBtn.textContent = 'Delete My Account';
+        }
+      }
+
+      function showSuccess() {
+        confirmStep.classList.add('hidden');
+        successStep.classList.remove('hidden');
+      }
+
+      async function callDeleteEdge(accessToken) {
+        var res = await fetch(SUPABASE_URL + '/functions/v1/delete-account', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + accessToken,
+            'Apikey': SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({}),
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          throw new Error(data.error || 'Deletion failed (HTTP ' + res.status + ')');
+        }
+        return data;
+      }
+
+      async function signInWithEmail(email, password) {
+        var res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Apikey': SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ email: email, password: password }),
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          var msg = data.error_description || data.error || data.msg || 'Invalid email or password';
+          throw new Error(msg);
+        }
+        if (!data.access_token) {
+          throw new Error('Sign-in failed — no access token returned');
+        }
+        return data.access_token;
+      }
+
+      async function handleEmailDelete() {
+        hideAlert();
+        var email = emailInput.value.trim();
+        var password = passwordInput.value;
+        if (!email || !password) {
+          showAlert('error', 'Please enter your email and password.');
+          return;
+        }
+        setBusy(true);
+        try {
+          var token = await signInWithEmail(email, password);
+          await callDeleteEdge(token);
+          showSuccess();
+        } catch (err) {
+          showAlert('error', err.message || 'Something went wrong. Please try again.');
+          setBusy(false);
+        }
+      }
+
+      async function handleGoogleDelete() {
+        hideAlert();
+        setBusy(true);
+        try {
+          var redirectUrl = window.location.origin + '/delete-account/';
+          var res = await fetch(SUPABASE_URL + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(redirectUrl), {
+            method: 'GET',
+            headers: { 'Apikey': SUPABASE_ANON_KEY },
+          });
+          var data = await res.json().catch(function () { return {}; });
+          if (data.url) {
+            window.location.href = data.url;
+          } else {
+            throw new Error('Could not start Google sign-in');
+          }
+        } catch (err) {
+          showAlert('error', err.message || 'Google sign-in failed');
+          setBusy(false);
+        }
+      }
+
+      deleteBtn.addEventListener('click', handleEmailDelete);
+      googleBtn.addEventListener('click', handleGoogleDelete);
+
+      passwordInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') handleEmailDelete();
+      });
+
+      // Handle OAuth callback: if we have an access_token in the URL hash or query,
+      // the user signed in via Google and was redirected back.
+      function getParam(name) {
+        var hash = window.location.hash.substring(1);
+        var params = new URLSearchParams(hash);
+        var val = params.get(name);
+        if (val) return val;
+        var search = new URLSearchParams(window.location.search);
+        return search.get(name);
+      }
+
+      (async function handleOAuthCallback() {
+        var accessToken = getParam('access_token');
+        var error = getParam('error');
+        var errorCode = getParam('error_code');
+
+        if (error) {
+          showAlert('error', 'Google sign-in error: ' + (errorCode || error));
+          return;
+        }
+
+        if (accessToken) {
+          setBusy(true);
+          try {
+            await callDeleteEdge(accessToken);
+            // Clean the URL so a refresh doesn't re-trigger deletion
+            window.history.replaceState({}, '', '/delete-account/');
+            showSuccess();
+          } catch (err) {
+            showAlert('error', err.message || 'Deletion failed after Google sign-in');
+            setBusy(false);
+          }
+        }
+      })();
+    })();
+  </script>
 </body>
 </html>
