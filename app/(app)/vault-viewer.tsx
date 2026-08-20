@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +24,7 @@ import { useLayout } from '@/hooks/useLayout';
 import { evictCachedUrl, GalleryItem, getGalleryItems } from '@/lib/mediaGalleryStore';
 import { clearLocalImageCache } from '@/lib/mediaCache';
 import { extensionToMime, mimeToExtension, uploadMediaFile } from '@/lib/uploadMedia';
+import { ZoomablePhoto } from '@/components/note/ZoomablePhoto';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
@@ -301,12 +301,11 @@ function MediaPage({
         {!mediaUri && !mediaError && <ActivityIndicator color="#fff" size="large" />}
 
         {mediaUri && !isVideo && !mediaError && (
-          <ExpoImage
+          <ZoomablePhoto
             key={mediaUri}
-            source={{ uri: mediaUri }}
-            style={{ width: screenWidth, height: availableHeight }}
-            contentFit="contain"
-            cachePolicy="memory-disk"
+            uri={mediaUri}
+            width={screenWidth}
+            height={availableHeight}
             onLoad={() => setLoading(false)}
             onError={() => {
               if (retryAttemptedRef.current || !item.storagePath) {
