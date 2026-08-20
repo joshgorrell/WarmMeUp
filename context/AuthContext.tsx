@@ -80,7 +80,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isSuperAdmin: boolean;
   subscriptionInfo: SubscriptionInfo;
-  refreshSubscription: () => Promise<void>;
+  refreshSubscription: () => Promise<SubscriptionInfo>;
   /** True when the app requires the user to pass the unlock gate before continuing. */
   appLocked: boolean;
   /** Call after a successful PIN/biometric unlock to clear the lock flag. */
@@ -139,7 +139,7 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   isSuperAdmin: false,
   subscriptionInfo: DEFAULT_SUBSCRIPTION_INFO,
-  refreshSubscription: async () => {},
+  refreshSubscription: async () => DEFAULT_SUBSCRIPTION_INFO,
   appLocked: false,
   unlockApp: () => {},
   lockApp: () => {},
@@ -810,10 +810,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return shouldLock;
   }, [settings]);
 
-  const refreshSubscription = useCallback(async () => {
+  const refreshSubscription = useCallback(async (): Promise<SubscriptionInfo> => {
     const { data: { session: currentSession } } = await supabase.auth.getSession();
     const accessToken = currentSession?.access_token ?? '';
-    if (!accessToken) return;
+    if (!accessToken) return DEFAULT_SUBSCRIPTION_INFO;
     const userId = currentSession?.user?.id ?? '';
     setSubscriptionInfo(prev => ({ ...prev, loading: true }));
     const info = await fetchEffectiveSubscription(accessToken);
@@ -823,6 +823,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const grantFallback = await applyEntitlementGrantFallbackAsync(result, userId);
     if (grantFallback !== result) result = grantFallback;
     setSubscriptionInfo(result);
+    return result;
   }, []);
 
   const isAdmin = profile?.is_admin === true;

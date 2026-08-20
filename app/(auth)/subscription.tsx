@@ -168,9 +168,10 @@ export default function SubscriptionScreen() {
     setLoading(true);
     try {
       // Pre-purchase check: if partner premium appeared since this screen
-      // mounted, abort the purchase to avoid a double-charge.
-      await refreshSubscription();
-      if (subscriptionInfo.isPremium) {
+      // mounted, abort the purchase to avoid a double-charge. Read the fresh
+      // result directly instead of subscriptionInfo (stale render closure).
+      const freshSubscription = await refreshSubscription();
+      if (freshSubscription?.isPremium) {
         logger.log('[Subscription] pre-purchase check: already premium — skipping purchase');
         router.replace('/(app)/(tabs)');
         return;
