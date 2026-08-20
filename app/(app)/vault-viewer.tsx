@@ -71,7 +71,7 @@ function MediaPage({
   const mountedRef = useRef(true);
   const appStateRef = useRef(AppState.currentState);
   const lastInactiveAt = useRef<number | null>(null);
-  const player = useVideoPlayer(mediaUri ? { uri: mediaUri } : null, (p) => {
+  const player = useVideoPlayer(isVideo && mediaUri ? { uri: mediaUri } : null, (p) => {
     p.loop = false;
   });
 
@@ -125,12 +125,12 @@ function MediaPage({
   }, [item.storagePath, item.storageBucket, isActive]);
 
   useEffect(() => {
-    if (!mediaUri || Platform.OS === 'web') return;
+    if (!isVideo || !mediaUri || Platform.OS === 'web') return;
     player.replaceAsync({ uri: mediaUri });
-  }, [mediaUri, player]);
+  }, [isVideo, mediaUri, player]);
 
   useEffect(() => {
-    if (Platform.OS === 'web') return;
+    if (!isVideo || Platform.OS === 'web') return;
     const sub = player.addListener('statusChange', (payload: any) => {
       if (payload.status === 'readyToPlay') {
         setLoading(false);
@@ -141,7 +141,7 @@ function MediaPage({
       }
     });
     return () => sub.remove();
-  }, [player]);
+  }, [isVideo, player]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
