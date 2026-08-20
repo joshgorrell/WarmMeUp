@@ -68,7 +68,7 @@ export default function VerifyAgeScreen() {
         age_verified_at: new Date().toISOString(),
       }).eq('id', user.id);
       if (updateError) throw updateError;
-      router.back();
+      router.replace('/transition');
     } catch (e: any) {
       setError(e?.message ?? 'Unable to verify your age. Please try again.');
     } finally {
