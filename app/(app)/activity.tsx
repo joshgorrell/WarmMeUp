@@ -122,7 +122,7 @@ export default function ActivityScreen() {
       switch (i.type) {
         case 'dice':
           type = 'dice';
-          label = isMine ? 'You rolled the dice' : `${partnerName} rolled the dice`;
+          label = isMine ? `You rolled a challenge for ${partnerName}` : `${partnerName} rolled a challenge for you`;
           icon = <Dice6 color="#FFB347" size={18} strokeWidth={2} />;
           color = '#FFB347';
           route = '/(app)/(tabs)/dice';

@@ -9,6 +9,8 @@ import { Interaction } from '@/lib/types';
 
 interface CurrentMomentCardProps {
   interaction: Interaction;
+  currentUserId: string;
+  partnerName?: string;
   onSeeAll?: () => void;
   onDismiss?: () => void;
 }
@@ -19,15 +21,17 @@ function typeIcon(type: string) {
   return <MessageCircle color="#FF8A3D" size={18} strokeWidth={2} />;
 }
 
-function typeLabel(type: string): string {
-  if (type === 'dice') return 'Dice rolled';
-  if (type === 'dare') return 'Dare sent';
+function typeLabel(type: string, isMine: boolean, partnerName: string): string {
+  if (type === 'dice') return isMine ? `You rolled for ${partnerName}` : `${partnerName} rolled for you`;
+  if (type === 'dare') return isMine ? 'You sent a dare' : `${partnerName} sent you a dare`;
   if (type === 'tell_me') return 'Wish';
   return type;
 }
 
-export default function CurrentMomentCard({ interaction, onSeeAll, onDismiss }: CurrentMomentCardProps) {
+export default function CurrentMomentCard({ interaction, currentUserId, partnerName, onSeeAll, onDismiss }: CurrentMomentCardProps) {
   const { colors } = useTheme();
+  const isMine = interaction.sender_id === currentUserId;
+  const partner = partnerName || 'Your partner';
 
   return (
     <LinearGradient
@@ -43,7 +47,7 @@ export default function CurrentMomentCard({ interaction, onSeeAll, onDismiss }: 
           </View>
           <View style={styles.info}>
             <AppText style={[styles.meta, { color: colors.textMuted }]}>
-              {typeLabel(interaction.type)}
+              {typeLabel(interaction.type, isMine, partner)}
             </AppText>
             {interaction.content_text && (
               <AppText style={[styles.result, { color: colors.text }]} numberOfLines={1}>
@@ -51,7 +55,7 @@ export default function CurrentMomentCard({ interaction, onSeeAll, onDismiss }: 
               </AppText>
             )}
             <AppText style={[styles.statusText, { color: colors.accentPink }]}>
-              {statusCopy(interaction.status)}
+              {statusCopy(interaction.status, isMine, partner)}
             </AppText>
             {interaction.status === 'rejected' && interaction.decline_reason && (
               <AppText style={[styles.declineReason, { color: colors.textSecondary }]}>
@@ -78,11 +82,13 @@ export default function CurrentMomentCard({ interaction, onSeeAll, onDismiss }: 
   );
 }
 
-function statusCopy(status: string): string {
-  if (status === 'sent') return "Waiting for their move…";
-  if (status === 'accepted') return "Challenge accepted!";
-  if (status === 'answered') return "Answered";
-  if (status === 'rejected') return "Dare declined";
+function statusCopy(status: string, isMine: boolean, partnerName: string): string {
+  if (status === 'sent') return isMine ? `Waiting for ${partnerName} to respond…` : 'Your move — accept or decline';
+  if (status === 'accepted') return 'Challenge accepted!';
+  if (status === 'answered') return 'Answered';
+  if (status === 'rejected') return 'Dare declined';
+  if (status === 'completed') return isMine ? `${partnerName} completed it!` : 'Challenge complete!';
+  if (status === 'pending_verification') return isMine ? `${partnerName} is verifying…` : 'Waiting for partner to confirm';
   return status;
 }
 

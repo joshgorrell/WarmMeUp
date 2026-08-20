@@ -14,6 +14,7 @@ interface ReceivedDiceChallengeCardProps {
   status?: string | null;
   expiresAt?: string | null;
   totalExpirySeconds?: number;
+  partnerName?: string;
   onAccept: () => Promise<void> | void;
   onReject: () => Promise<void> | void;
   onComplete: () => Promise<void> | void;
@@ -31,6 +32,7 @@ export default function ReceivedDiceChallengeCard({
   status,
   expiresAt,
   totalExpirySeconds = 86400,
+  partnerName,
   onAccept,
   onReject,
   onComplete,
@@ -39,6 +41,7 @@ export default function ReceivedDiceChallengeCard({
   const { colors } = useTheme();
   const [stage, setStage] = useState<Stage>(resolveStage(status));
   const [busy, setBusy] = useState(false);
+  const partner = partnerName || 'Your partner';
 
   const handle = async (fn: () => Promise<void> | void) => {
     setBusy(true);
@@ -71,7 +74,7 @@ export default function ReceivedDiceChallengeCard({
       ]}
     >
       <AppText style={[styles.label, { color: colors.textMuted }]}>
-        {stage === 'pending' && 'YOUR PARTNER ROLLED FOR YOU'}
+        {stage === 'pending' && `${partner.toUpperCase()} ROLLED FOR YOU`}
         {stage === 'accepted' && 'CHALLENGE ACCEPTED — COMPLETE IT!'}
         {stage === 'waiting' && 'WAITING FOR PARTNER TO CONFIRM'}
       </AppText>
@@ -85,7 +88,7 @@ export default function ReceivedDiceChallengeCard({
       )}
 
       <AppText style={[styles.text, { color: colors.text }]}>
-        {text ?? 'They chose your next move.'}
+        {text ?? `${partner} chose your next move.`}
       </AppText>
 
       {stage === 'pending' && (

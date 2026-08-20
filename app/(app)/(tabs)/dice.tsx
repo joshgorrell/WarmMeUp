@@ -496,6 +496,7 @@ export default function DiceTab() {
               status={incomingChallenge.status}
               expiresAt={incomingChallenge.expires_at}
               totalExpirySeconds={expirySeconds}
+              partnerName={partnerProfile?.display_name ?? partnerProfile?.first_name ?? undefined}
               onAccept={() => handleRespond(true)}
               onReject={() => handleRespond(false)}
               onComplete={handleDiceComplete}

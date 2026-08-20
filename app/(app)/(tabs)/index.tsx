@@ -756,9 +756,11 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </View>
-      {activeInteraction && (
+      {activeInteraction && user && (
         <CurrentMomentCard
           interaction={activeInteraction}
+          currentUserId={user.id}
+          partnerName={partnerProfile?.display_name ?? partnerProfile?.first_name ?? undefined}
           onSeeAll={() => router.push('/(app)/activity')}
           onDismiss={handleDismissInteraction}
         />
