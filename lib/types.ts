@@ -107,6 +107,7 @@ export interface ChatMessage {
   media_url: string | null;
   media_storage_path: string | null;
   media_storage_bucket: string | null;
+  thumbnail_path: string | null;
   media_type: 'photo' | 'video' | null;
   allow_screenshot: boolean;
   allow_save: boolean;

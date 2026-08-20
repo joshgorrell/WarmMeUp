@@ -182,15 +182,17 @@ export default function ChatTab() {
     }, [couple?.id, user?.id, hasPartner, partnerProfile?.id])
   );
 
+  // Fetch thumbnail signed URLs for bubble display. Falls back to full-res
+  // path only if no thumbnail_path exists (legacy messages).
   const fetchSignedUrls = useCallback(async (msgs: ChatMessage[]) => {
     const mediaMessages = msgs.filter(m => m.media_storage_path);
     if (mediaMessages.length === 0) return;
 
-    // Seed from cross-navigation module-level cache first
     const seeded: Record<string, string> = {};
     const needsFetch: ChatMessage[] = [];
     for (const m of mediaMessages) {
-      const cached = getCachedUrl(m.media_storage_path!);
+      const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+      const cached = getCachedUrl(thumbPath);
       if (cached) {
         seeded[m.id] = cached;
       } else {
@@ -212,13 +214,14 @@ export default function ChatTab() {
     const results: Record<string, string | null> = {};
     await Promise.all(
       Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
-        const paths = bucketMsgs.map(m => m.media_storage_path!);
+        const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
         const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
         const pathToUrl = new Map(data?.map(d => [d.path, d.signedUrl]) ?? []);
         for (const m of bucketMsgs) {
-          const signed = pathToUrl.get(m.media_storage_path!) ?? null;
+          const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+          const signed = pathToUrl.get(thumbPath) ?? null;
           results[m.id] = signed;
-          if (signed) setCachedUrl(m.media_storage_path!, signed);
+          if (signed) setCachedUrl(thumbPath, signed);
         }
       })
     );
@@ -308,7 +311,8 @@ export default function ChatTab() {
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of visible) {
           if (m.media_storage_path) {
-            const cached = getCachedUrl(m.media_storage_path);
+            const thumbPath = m.thumbnail_path ?? m.media_storage_path;
+            const cached = getCachedUrl(thumbPath);
             if (cached) {
               urlMap[m.id] = cached;
             } else {
@@ -325,14 +329,15 @@ export default function ChatTab() {
           }
           await Promise.all(
             Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
-              const paths = bucketMsgs.map(m => m.media_storage_path!);
+              const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
               const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
               const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
               for (const m of bucketMsgs) {
-                const signed = pathToUrl.get(m.media_storage_path!) ?? null;
+                const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+                const signed = pathToUrl.get(thumbPath) ?? null;
                 if (signed) {
                   urlMap[m.id] = signed;
-                  setCachedUrl(m.media_storage_path!, signed);
+                  setCachedUrl(thumbPath, signed);
                 }
               }
             })
@@ -368,7 +373,8 @@ export default function ChatTab() {
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of sorted) {
           if (m.media_storage_path) {
-            const cached = getCachedUrl(m.media_storage_path);
+            const thumbPath = m.thumbnail_path ?? m.media_storage_path;
+            const cached = getCachedUrl(thumbPath);
             if (cached) {
               urlMap[m.id] = cached;
             } else {
@@ -385,14 +391,15 @@ export default function ChatTab() {
           }
           await Promise.all(
             Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
-              const paths = bucketMsgs.map(m => m.media_storage_path!);
+              const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
               const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
               const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
               for (const m of bucketMsgs) {
-                const signed = pathToUrl.get(m.media_storage_path!) ?? null;
+                const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+                const signed = pathToUrl.get(thumbPath) ?? null;
                 if (signed) {
                   urlMap[m.id] = signed;
-                  setCachedUrl(m.media_storage_path!, signed);
+                  setCachedUrl(thumbPath, signed);
                 }
               }
             })
@@ -658,6 +665,7 @@ export default function ChatTab() {
       media_url: preSignedMediaUrl,
       media_storage_path: chatStoragePath,
       media_storage_bucket: hasMedia ? 'chat_media' : null,
+      thumbnail_path: chatThumbnailPath ?? null,
       media_type: media?.type === 'video' ? 'video' : hasMedia ? 'photo' : null,
       allow_screenshot: !(settings?.screenshot_notify_partner ?? true),
       allow_save: settings?.vault_allow_save_default ?? false,
@@ -685,6 +693,7 @@ export default function ChatTab() {
       media_url: preSignedMediaUrl,
       media_storage_path: chatStoragePath,
       media_storage_bucket: hasMedia ? 'chat_media' : null,
+      thumbnail_path: chatThumbnailPath ?? null,
       media_type: media?.type ?? null,
       allow_screenshot: !(settings?.screenshot_notify_partner ?? true),
       allow_save: settings?.vault_allow_save_default ?? false,
@@ -1067,8 +1076,8 @@ export default function ChatTab() {
       allowShare: m.allow_share,
       createdAt: m.created_at,
       uploaderName: null,
-      signedUri: signedUrls[m.id] ?? null,
-      thumbUri: null,
+      signedUri: null,
+      thumbUri: signedUrls[m.id] ?? null,
       interactionId: null,
       chatMessageId: m.id,
     }));
@@ -1088,7 +1097,7 @@ export default function ChatTab() {
         allowScreenshot: msg.allow_screenshot ? '1' : '0',
         allowSave: msg.allow_save ? '1' : '0',
         allowShare: msg.allow_share ? '1' : '0',
-        signedUri: signedUrls[msg.id] ?? '',
+        signedUri: '',
       },
     });
   }, [router, messages, signedUrls]);
@@ -1117,7 +1126,7 @@ export default function ChatTab() {
           couple_id: couple.id,
           media_type: msg.media_type ?? 'photo',
           chat_message_id: msg.id,
-          thumbnail_path: null,
+          thumbnail_path: msg.thumbnail_path ?? null,
         }),
       });
       if (!res.ok) {
