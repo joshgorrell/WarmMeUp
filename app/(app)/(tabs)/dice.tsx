@@ -296,7 +296,7 @@ export default function DiceTab() {
         try {
           if (couple?.id && user) {
             const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-            const receiverId = partnerId ?? user.id;
+            const receiverId = forPartner ? (partnerId ?? user.id) : user.id;
             await deactivatePreviousEphemeral(couple.id, user.id);
             const diceExpiresAt = forPartner
               ? new Date(Date.now() + expirySeconds * 1000).toISOString()

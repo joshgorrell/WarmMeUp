@@ -210,6 +210,7 @@ export default function HomeScreen() {
       .eq('is_active', true)
       .is('deleted_at', null)
       .in('type', ['dice', 'dare', 'wish', 'tell_me'])
+      .neq('rolled_for', 'self')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -259,6 +260,7 @@ export default function HomeScreen() {
     const ACTIVE_STATUSES = ['sent', 'seen', 'accepted', 'pending_verification'];
     const isActiveInteraction = (i: Interaction) =>
       (i.type === 'dice' || i.type === 'dare') &&
+      i.rolled_for !== 'self' &&
       ACTIVE_STATUSES.includes(i.status) &&
       i.expires_at &&
       new Date(i.expires_at) > new Date();
@@ -277,6 +279,7 @@ export default function HomeScreen() {
 
       switch (i.type as string) {
         case 'dice':
+          if (i.rolled_for === 'self') return;
           label = `${partnerName} rolled the dice`;
           icon = <Dice6 color="#FFB347" size={16} strokeWidth={2} />;
           color = '#FFB347';
@@ -484,6 +487,7 @@ export default function HomeScreen() {
       const raw = (interactionsRef.current ?? []).find(r => r.id === i.sourceId);
       if (!raw) return true;
       const isActive = (raw.type === 'dice' || raw.type === 'dare') &&
+        raw.rolled_for !== 'self' &&
         ACTIVE_STATUSES.includes(raw.status) &&
         raw.expires_at &&
         new Date(raw.expires_at) > new Date();
