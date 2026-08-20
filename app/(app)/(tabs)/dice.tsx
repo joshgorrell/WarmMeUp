@@ -319,7 +319,6 @@ export default function DiceTab() {
             if (insertError) throw insertError;
             if (interaction && !forPartner) {
               lastSelfRollId.current = interaction.id;
-              await awardPoints(couple.id, user.id, 1, 'Dice self-roll sent', interaction.id);
             } else {
               lastSelfRollId.current = null;
             }
@@ -410,7 +409,6 @@ export default function DiceTab() {
         .from('interactions')
         .update({ deleted_at: new Date().toISOString(), is_active: false })
         .eq('id', id);
-      await reversePoints(id, couple.id, user.id);
       lastSelfRollId.current = null;
       setResult(null);
       setFace(5);

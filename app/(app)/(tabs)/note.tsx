@@ -89,6 +89,14 @@ export default function ChatTab() {
   const justSentAtRef = useRef(0);
   const lastContentHeightRef = useRef(0);
   const initialScrollDoneRef = useRef(false);
+  const initialScrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    return () => {
+      initialScrollTimersRef.current.forEach(t => clearTimeout(t));
+      initialScrollTimersRef.current = [];
+    };
+  }, []);
 
   const blurEnabled = settings?.blur_chat_media ?? settings?.blur_media ?? true;
   const chatFontScale = settings?.chat_font_scale ?? 1.0;
@@ -1374,7 +1382,7 @@ export default function ChatTab() {
               keyExtractor={m => m.id}
               renderItem={renderItem}
               style={{ flex: 1 }}
-              contentContainerStyle={[styles.list, { paddingBottom: 160 + insets.bottom }]}
+              contentContainerStyle={[styles.list, { paddingBottom: 96 + insets.bottom }]}
               showsVerticalScrollIndicator={false}
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
@@ -1394,7 +1402,15 @@ export default function ChatTab() {
               onContentSizeChange={(_w, h) => {
                 if (!initialScrollDoneRef.current && messages.length > 0) {
                   initialScrollDoneRef.current = true;
-                  listRef.current?.scrollToEnd({ animated: false });
+                  initialScrollTimersRef.current.forEach(t => clearTimeout(t));
+                  initialScrollTimersRef.current = [];
+                  [50, 150, 350, 600].forEach(delay => {
+                    initialScrollTimersRef.current.push(
+                      setTimeout(() => {
+                        listRef.current?.scrollToEnd({ animated: false });
+                      }, delay)
+                    );
+                  });
                 }
                 if (justSentAtRef.current > 0 && h > lastContentHeightRef.current) {
                   listRef.current?.scrollToEnd({ animated: false });
