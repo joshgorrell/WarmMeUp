@@ -1226,6 +1226,12 @@ export default function WishTab() {
 
   const handleDelete = useCallback(async (wish: WishWithReactions) => {
     await supabase.from('activity_events').delete().eq('wish_id', wish.id);
+    await supabase.from('chat_messages')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('couple_id', wish.couple_id)
+      .is('deleted_at', null)
+      .like('content_text', '__WMU_ACTIVITY__:%')
+      .like('content_text', `%${wish.id}%`);
     await supabase.from('wishes').delete().eq('id', wish.id);
     setWishes(prev => prev.filter(w => w.id !== wish.id));
   }, []);
