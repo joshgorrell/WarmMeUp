@@ -94,14 +94,14 @@ export default function SubscriptionScreen() {
   const canDismiss = !reason || reason === 'expired_trial';
 
   // Auto-dismiss paywall when premium access appears (e.g. partner subscribed
-  // while this screen was open). Only dismiss if the user was trapped (no
-  // canDismiss) — otherwise let them leave manually.
+  // while this screen was open). Fires for all users so neither partner in a
+  // pair can double-purchase.
   useEffect(() => {
-    if (subscriptionInfo.isPremium && !canDismiss) {
+    if (subscriptionInfo.isPremium) {
       logger.log('[Subscription] premium detected while on paywall — auto-dismissing');
       router.replace('/(app)/(tabs)');
     }
-  }, [subscriptionInfo.isPremium, canDismiss, router]);
+  }, [subscriptionInfo.isPremium, router]);
 
   // Load RevenueCat offerings on mount (native only)
   useEffect(() => {
@@ -167,6 +167,15 @@ export default function SubscriptionScreen() {
 
     setLoading(true);
     try {
+      // Pre-purchase check: if partner premium appeared since this screen
+      // mounted, abort the purchase to avoid a double-charge.
+      await refreshSubscription();
+      if (subscriptionInfo.isPremium) {
+        logger.log('[Subscription] pre-purchase check: already premium — skipping purchase');
+        router.replace('/(app)/(tabs)');
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;
       const Purchases = userId

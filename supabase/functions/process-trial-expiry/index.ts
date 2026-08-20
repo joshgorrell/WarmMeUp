@@ -185,10 +185,67 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    console.log(`[process-trial-expiry] processed ${processedFirst} first-notifications, ${processedReminders} reminders`);
+    // ── 3. Paired-couple trial expiry detection ──────────────────────────
+    // Find couples where both partners are connected (user_b_id IS NOT NULL)
+    // and the subscription owner's trial has expired, but neither partner has
+    // been notified yet (trial_expired_notified_at IS NULL on a paired couple).
+    let processedPaired = 0;
+
+    const { data: pairedCouples, error: pairedError } = await adminClient
+      .from("couples")
+      .select("id, user_a_id, user_b_id, subscription_owner_id")
+      .not("user_b_id", "is", null)
+      .eq("active", true)
+      .is("trial_expired_notified_at", null);
+
+    if (pairedError) {
+      console.error("[process-trial-expiry] paired query error:", pairedError.message);
+    }
+
+    if (pairedCouples && pairedCouples.length > 0) {
+      for (const couple of pairedCouples) {
+        const ownerId = couple.subscription_owner_id ?? couple.user_a_id;
+        if (!ownerId) continue;
+
+        const { data: ownerSub } = await adminClient
+          .from("subscriptions")
+          .select("status, plan, expires_at")
+          .eq("user_id", ownerId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const hasActivePremium =
+          ownerSub?.status === "active" &&
+          ownerSub?.plan !== "trial" &&
+          ownerSub?.expires_at &&
+          new Date(ownerSub.expires_at) > new Date();
+
+        const hasActiveTrial =
+          ownerSub?.status === "active" &&
+          ownerSub?.plan === "trial" &&
+          ownerSub?.expires_at &&
+          new Date(ownerSub.expires_at) > new Date();
+
+        if (!hasActivePremium && !hasActiveTrial) {
+          await adminClient
+            .from("couples")
+            .update({ trial_expired_notified_at: new Date().toISOString() })
+            .eq("id", couple.id);
+
+          await sendPushToUser(adminClient, couple.user_a_id, "paired_trial_expired", couple.id);
+          if (couple.user_b_id) {
+            await sendPushToUser(adminClient, couple.user_b_id, "paired_trial_expired", couple.id);
+          }
+          processedPaired++;
+        }
+      }
+    }
+
+    console.log(`[process-trial-expiry] processed ${processedFirst} first-notifications, ${processedReminders} reminders, ${processedPaired} paired-expirations`);
 
     return new Response(
-      JSON.stringify({ ok: true, processedFirst, processedReminders }),
+      JSON.stringify({ ok: true, processedFirst, processedReminders, processedPaired }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
@@ -221,6 +278,7 @@ async function sendPushToUser(
     const labels: Record<string, string> = {
       invite_trial_expired: "Your trial has ended! Subscribe now to confirm your partner's connection request.",
       invite_trial_reminder: "Your partner is still waiting! Subscribe now to confirm your connection.",
+      paired_trial_expired: "Your free trial has ended. Subscribe to keep your access to all features.",
     };
 
     const bodyText = labels[eventType] ?? "You have a pending connection request.";

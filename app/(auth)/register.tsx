@@ -52,6 +52,10 @@ function formatDate(date: Date): string {
   return `${m}/${d}/${y}`;
 }
 
+function isoDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function getMaxDate(): Date {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 18);
@@ -274,12 +278,14 @@ export default function RegisterScreen() {
         const ln = providerLn || lastName.trim();
         const fullName = [fn, ln].filter(Boolean).join(' ');
 
+        const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
         const { data: updatedProfile } = await supabase
           .from('profiles')
           .update({
             ...(fn ? { first_name: fn } : {}),
             ...(ln ? { last_name: ln } : {}),
             ...(fullName ? { display_name: fullName } : {}),
+            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: new Date().toISOString() } : {}),
           })
           .eq('id', userId)
           .is('tos_accepted_at', null)
@@ -366,9 +372,15 @@ export default function RegisterScreen() {
       });
       if (signUpError) throw signUpError;
       if (data.user) {
+        const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
         await supabase
           .from('profiles')
-          .update({ first_name: fn, last_name: ln, display_name: fullName })
+          .update({
+            first_name: fn,
+            last_name: ln,
+            display_name: fullName,
+            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: new Date().toISOString() } : {}),
+          })
           .eq('id', data.user.id);
         await refreshProfile();
 
