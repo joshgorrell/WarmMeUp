@@ -57,10 +57,11 @@ function MediaPage({
   // Internal saves must preserve the original sender permissions rather than reinterpret them.
   const showSaveToVault = !!item.interactionId;
 
-  const [mediaUri, setMediaUri] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [mediaUri, setMediaUri] = useState<string | null>(item.signedUri ?? null);
+  const [loading, setLoading] = useState(!item.signedUri);
   const [mediaError, setMediaError] = useState(false);
   const retryAttemptedRef = useRef(false);
+  const signedUrlRetryRef = useRef(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [screenshotWarning, setScreenshotWarning] = useState(false);
@@ -90,10 +91,19 @@ function MediaPage({
     let cancelled = false;
     setMediaError(false);
     retryAttemptedRef.current = false;
+    signedUrlRetryRef.current = false;
 
-    // Always fetch a fresh signed URL from the permanent storage path.
-    // Stored/cached signedUri values may be expired, so ignore them.
-    setLoading(true);
+    // If we already have a working signed URI from the chat bubble, use it
+    // immediately so the photo renders without waiting for a fresh fetch.
+    // We still fetch a fresh signed URL in the background to replace any
+    // potentially-expired cached URL.
+    if (item.signedUri) {
+      setMediaUri(item.signedUri);
+      setLoading(false);
+    } else {
+      setLoading(true);
+      setMediaUri(null);
+    }
 
     supabase.storage
       .from(item.storageBucket ?? 'vault')
@@ -101,23 +111,30 @@ function MediaPage({
       .then(({ data, error }) => {
         if (cancelled || !mountedRef.current) return;
         if (error || !data?.signedUrl) {
-          setMediaError(true);
-          setLoading(false);
+          // If the fresh fetch failed but we already have a working signedUri,
+          // keep showing it instead of erroring out.
+          if (!item.signedUri) {
+            setMediaError(true);
+            setLoading(false);
+          }
           return;
         }
         setMediaUri(data.signedUrl);
         setMediaError(false);
+        setLoading(false);
       })
       .catch(() => {
         if (cancelled || !mountedRef.current) return;
-        setMediaError(true);
-        setLoading(false);
+        if (!item.signedUri) {
+          setMediaError(true);
+          setLoading(false);
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [item.storagePath, item.storageBucket, isActive]);
+  }, [item.storagePath, item.storageBucket, item.signedUri, isActive]);
 
   useEffect(() => {
     if (!mediaUri || Platform.OS === 'web') return;
@@ -312,14 +329,28 @@ function MediaPage({
               }
               retryAttemptedRef.current = true;
               if (item.storagePath) evictCachedUrl(item.storagePath);
+              // Try fetching a fresh signed URL — the current one may be
+              // expired or corrupted. Give it one retry, then give up.
               supabase.storage
                 .from(item.storageBucket ?? 'vault')
                 .createSignedUrl(item.storagePath, 12 * 60 * 60)
                 .then(({ data }) => {
-                  if (mountedRef.current && data?.signedUrl) setMediaUri(data.signedUrl);
-                  else if (mountedRef.current) { setLoading(false); setMediaError(true); }
+                  if (!mountedRef.current) return;
+                  if (data?.signedUrl) {
+                    setMediaUri(data.signedUrl);
+                    setLoading(true);
+                    setMediaError(false);
+                  } else {
+                    setLoading(false);
+                    setMediaError(true);
+                  }
                 })
-                .catch(() => { if (mountedRef.current) { setLoading(false); setMediaError(true); } });
+                .catch(() => {
+                  if (mountedRef.current) {
+                    setLoading(false);
+                    setMediaError(true);
+                  }
+                });
             }}
           />
         )}
