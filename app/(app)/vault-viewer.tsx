@@ -57,8 +57,8 @@ function MediaPage({
   // Internal saves must preserve the original sender permissions rather than reinterpret them.
   const showSaveToVault = !!item.interactionId;
 
-  const [mediaUri, setMediaUri] = useState<string | null>(item.signedUri ?? null);
-  const [loading, setLoading] = useState(!item.signedUri);
+  const [mediaUri, setMediaUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [mediaError, setMediaError] = useState(false);
   const retryAttemptedRef = useRef(false);
   const signedUrlRetryRef = useRef(false);
@@ -93,17 +93,11 @@ function MediaPage({
     retryAttemptedRef.current = false;
     signedUrlRetryRef.current = false;
 
-    // If we already have a working signed URI from the chat bubble, use it
-    // immediately so the photo renders without waiting for a fresh fetch.
-    // We still fetch a fresh signed URL in the background to replace any
-    // potentially-expired cached URL.
-    if (item.signedUri) {
-      setMediaUri(item.signedUri);
-      setLoading(false);
-    } else {
-      setLoading(true);
-      setMediaUri(null);
-    }
+    // Always fetch a fresh signed URL — the passed-in signedUri may be
+    // expired by the time the viewer opens.  Show a loading spinner until
+    // the fresh URL arrives instead of risking a permanent error state.
+    setLoading(true);
+    setMediaUri(null);
 
     supabase.storage
       .from(item.storageBucket ?? 'vault')
@@ -111,12 +105,8 @@ function MediaPage({
       .then(({ data, error }) => {
         if (cancelled || !mountedRef.current) return;
         if (error || !data?.signedUrl) {
-          // If the fresh fetch failed but we already have a working signedUri,
-          // keep showing it instead of erroring out.
-          if (!item.signedUri) {
-            setMediaError(true);
-            setLoading(false);
-          }
+          setMediaError(true);
+          setLoading(false);
           return;
         }
         setMediaUri(data.signedUrl);
@@ -125,16 +115,14 @@ function MediaPage({
       })
       .catch(() => {
         if (cancelled || !mountedRef.current) return;
-        if (!item.signedUri) {
-          setMediaError(true);
-          setLoading(false);
-        }
+        setMediaError(true);
+        setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [item.storagePath, item.storageBucket, item.signedUri, isActive]);
+  }, [item.storagePath, item.storageBucket, isActive]);
 
   useEffect(() => {
     if (!mediaUri || Platform.OS === 'web') return;
