@@ -69,9 +69,12 @@ Deno.serve(async (req: Request) => {
       userId = body.targetUserId;
     }
 
-    // ── 1. Cancel RevenueCat subscription ───────────────────────────
+    // ── 1. Cancel non-Apple subscriptions via RevenueCat ───────────
     // Must happen before the auth user is deleted — RevenueCat needs the
     // user's app_user_id to find and cancel their subscription.
+    // NOTE: Apple auto-renewable subscriptions cannot be cancelled
+    // server-side; the user must cancel those through Apple's settings.
+    // This call handles Google Play and other supported platforms.
     const rcSecret = Deno.env.get("REVENUECAT_SECRET_KEY");
     if (rcSecret) {
       try {
