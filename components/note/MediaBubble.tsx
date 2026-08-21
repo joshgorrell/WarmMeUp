@@ -151,7 +151,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   radii: ReturnType<typeof getBubbleRadii>;
   isMine: boolean;
 }) {
-  const loaded = signedUrl !== undefined;
+  const loaded = typeof signedUrl === 'string';
   const isVideo = msg.media_type === 'video';
   const [locallyRevealed, setLocallyRevealed] = useState(revealed);
   const effectiveRevealed = blurEnabled ? locallyRevealed : true;
@@ -170,26 +170,33 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   const effectiveSignedUrl = signedUrl ?? selfFetchedUrl;
   const mediaUrl = retryUrl ?? effectiveSignedUrl ?? null;
 
-  // If the parent never resolves a signed URL (batch fetch failed silently),
+  // If the parent never resolves a signed URL (batch fetch failed or returned null),
   // attempt a direct fetch after a short delay so the bubble doesn't shimmer forever.
+  // Tries the thumbnail first, then falls back to the full-res path.
   useEffect(() => {
     if (loaded) return;
+    let cancelled = false;
     const timer = setTimeout(async () => {
       if (!msg.media_storage_path) return;
       const bucket = msg.media_storage_bucket ?? 'chat_media';
       const thumbPath = msg.thumbnail_path ?? msg.media_storage_path;
-      try {
-        const { data, error } = await supabase.storage.from(bucket).createSignedUrl(thumbPath, 12 * 3600);
-        if (error || !data?.signedUrl) {
-          setSelfFetchFailed(true);
-          return;
-        }
-        setSelfFetchedUrl(data.signedUrl);
-      } catch {
-        setSelfFetchFailed(true);
+      const tryPaths = thumbPath !== msg.media_storage_path
+        ? [thumbPath, msg.media_storage_path]
+        : [thumbPath];
+      for (const path of tryPaths) {
+        if (cancelled) return;
+        try {
+          const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 12 * 3600);
+          if (cancelled) return;
+          if (!error && data?.signedUrl) {
+            setSelfFetchedUrl(data.signedUrl);
+            return;
+          }
+        } catch {}
       }
+      if (!cancelled) setSelfFetchFailed(true);
     }, 4000);
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [loaded, msg.media_storage_path, msg.media_storage_bucket, msg.thumbnail_path]);
 
   const effectiveLoaded = loaded || selfFetchedUrl !== null || selfFetchFailed;
