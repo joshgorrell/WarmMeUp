@@ -186,6 +186,11 @@ export const MessageRow = React.memo(function MessageRow({
 
   const activity = parseActivity(item);
   if (activity) {
+    // Hide expired dare activity cards entirely — they should not linger in the feed
+    if (activity.kind === 'dare' && activity.expiresAt && new Date(activity.expiresAt).getTime() <= Date.now()) {
+      return null;
+    }
+
     const openActivity = () => {
       if (!activity.sourceId) return;
       if (activity.kind === 'wish' || activity.kind === 'wish_bump') {
