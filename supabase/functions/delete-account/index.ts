@@ -1,11 +1,82 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { importPKCS8, SignJWT } from "npm:jose@5.9.6";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
+
+async function revokeAppleAuthorizationCode(authorizationCode: string) {
+  const teamId = Deno.env.get("APPLE_TEAM_ID") ?? "";
+  const keyId = Deno.env.get("APPLE_KEY_ID") ?? "";
+  const privateKeyRaw = Deno.env.get("APPLE_PRIVATE_KEY") ?? "";
+  const clientId = Deno.env.get("APPLE_CLIENT_ID") ?? "app.warmmeup";
+
+  if (!teamId || !keyId || !privateKeyRaw || !clientId) {
+    throw new Error("Sign in with Apple revocation is not configured on the server");
+  }
+
+  const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
+  const signingKey = await importPKCS8(privateKey, "ES256");
+  const now = Math.floor(Date.now() / 1000);
+  const clientSecret = await new SignJWT({})
+    .setProtectedHeader({ alg: "ES256", kid: keyId })
+    .setIssuer(teamId)
+    .setAudience("https://appleid.apple.com")
+    .setSubject(clientId)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 300)
+    .sign(signingKey);
+
+  const tokenBody = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    code: authorizationCode,
+    grant_type: "authorization_code",
+  });
+
+  const tokenResponse = await fetch("https://appleid.apple.com/auth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: tokenBody.toString(),
+  });
+
+  if (!tokenResponse.ok) {
+    const detail = await tokenResponse.text().catch(() => "");
+    throw new Error(`Apple token exchange failed (${tokenResponse.status}): ${detail}`);
+  }
+
+  const tokens = await tokenResponse.json() as {
+    access_token?: string;
+    refresh_token?: string;
+  };
+  const token = tokens.refresh_token ?? tokens.access_token;
+  const tokenTypeHint = tokens.refresh_token ? "refresh_token" : "access_token";
+
+  if (!token) {
+    throw new Error("Apple token exchange returned no revocable token");
+  }
+
+  const revokeBody = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    token,
+    token_type_hint: tokenTypeHint,
+  });
+
+  const revokeResponse = await fetch("https://appleid.apple.com/auth/revoke", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: revokeBody.toString(),
+  });
+
+  if (!revokeResponse.ok) {
+    const detail = await revokeResponse.text().catch(() => "");
+    throw new Error(`Apple token revocation failed (${revokeResponse.status}): ${detail}`);
+  }
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -48,12 +119,13 @@ Deno.serve(async (req: Request) => {
     // super admin. Otherwise we fall back to deleting the caller's own
     // account (the standard self-serve flow).
     let userId = user.id;
-    let body: { targetUserId?: string } | null = null;
+    let body: { targetUserId?: string; appleAuthorizationCode?: string } | null = null;
     try {
       body = await req.json();
     } catch (_) { /* body is optional */ }
 
-    if (body?.targetUserId && body.targetUserId !== user.id) {
+    const isAdminDeletion = !!body?.targetUserId && body.targetUserId !== user.id;
+    if (isAdminDeletion) {
       const { data: callerProfile } = await admin
         .from("profiles")
         .select("is_super_admin")
@@ -66,10 +138,41 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      userId = body.targetUserId;
+      userId = body!.targetUserId!;
     }
 
-    // ── 1. Cancel non-Apple subscriptions via RevenueCat ───────────
+    // ── 1. Revoke Sign in with Apple authorization ────────────────
+    // Apple requires apps using Sign in with Apple to revoke the user's
+    // authorization when the user self-deletes. The iOS client obtains a fresh
+    // authorization code immediately before calling this function; we exchange
+    // it server-side and revoke the resulting refresh/access token before
+    // removing the Warm Me Up auth record.
+    const provider = user.app_metadata?.provider;
+    const providers = Array.isArray(user.app_metadata?.providers) ? user.app_metadata.providers : [];
+    const hasAppleIdentity = provider === "apple" || providers.includes("apple") ||
+      user.identities?.some((identity) => identity.provider === "apple");
+
+    if (!isAdminDeletion && hasAppleIdentity) {
+      const authorizationCode = body?.appleAuthorizationCode;
+      if (!authorizationCode) {
+        return new Response(JSON.stringify({ error: "Apple authorization is required to delete this account" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      try {
+        await revokeAppleAuthorizationCode(authorizationCode);
+      } catch (appleErr) {
+        console.error("Sign in with Apple revocation failed:", appleErr);
+        return new Response(JSON.stringify({ error: "Could not revoke Sign in with Apple. Please try account deletion again." }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // ── 2. Cancel non-Apple subscriptions via RevenueCat ──────────
     // Must happen before the auth user is deleted — RevenueCat needs the
     // user's app_user_id to find and cancel their subscription.
     // NOTE: Apple auto-renewable subscriptions cannot be cancelled
@@ -94,7 +197,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── 2. Hard-delete the auth user ────────────────────────────────
+    // ── 3. Hard-delete the auth user ───────────────────────────────
     // Doing this before DB cleanup ensures we never leave an orphaned auth
     // record if the DB deletions below fail. The service role cascade in
     // Supabase handles auth.users → profiles FK automatically.
@@ -107,7 +210,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // ── 2. Clean up storage files ──────────────────────────────────
+    // ── 4. Clean up storage files ──────────────────────────────────
 
     // Avatar
     try {
@@ -164,7 +267,7 @@ Deno.serve(async (req: Request) => {
       }
     } catch (_) { /* non-fatal */ }
 
-    // ── 2. Delete rows in FK-safe order ───────────────────────────
+    // ── 5. Delete rows in FK-safe order ───────────────────────────
 
     // subscription_events (FK → profiles)
     await admin.from("subscription_events").delete().eq("user_id", userId);
@@ -200,7 +303,7 @@ Deno.serve(async (req: Request) => {
     await admin.from("dare_prompts").delete().eq("created_by_user_id", userId);
     await admin.from("dice_prompts").delete().eq("created_by_user_id", userId);
 
-    // ── 3. Disconnect from couple ─────────────────────────────────
+    // ── 6. Disconnect from couple ─────────────────────────────────
     // Identify the partner before dissolving the couple so we can reset their
     // celebration_seen flag — ensuring they see the celebration if they re-pair.
     const { data: coupleRow } = await admin
@@ -246,7 +349,7 @@ Deno.serve(async (req: Request) => {
       await admin.from("couple_hidden_prompts").delete().in("couple_id", coupleIds);
     }
 
-    // ── 4. Delete the profile row ─────────────────────────────────
+    // ── 7. Delete the profile row ─────────────────────────────────
     await admin.from("profiles").delete().eq("id", userId);
 
     return new Response(JSON.stringify({ deleted: true }), {
