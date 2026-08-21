@@ -15,6 +15,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TriangleAlert as AlertTriangle, Archive, Camera, Check, ChevronLeft, Download, Pause, Play, Share2, Trash2, Volume2, VolumeX } from 'lucide-react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import AppText from '@/components/AppText';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -33,10 +34,10 @@ type MediaPageProps = {
   isActive: boolean;
   screenWidth: number;
   screenHeight: number;
-  insetTop: number;
-  insetBottom: number;
   user: any;
   couple: any;
+  controlsVisible: boolean;
+  onTap: () => void;
 };
 
 function MediaPage({
@@ -44,24 +45,21 @@ function MediaPage({
   isActive,
   screenWidth,
   screenHeight,
-  insetTop,
-  insetBottom,
   user,
   couple,
+  controlsVisible,
+  onTap,
 }: MediaPageProps) {
   const isVideo = item.mediaType === 'video';
   const canScreenshot = item.allowScreenshot;
   const canShare = item.allowShare;
   const canSave = item.allowSave;
-  // Saving inside Warm Me Up is not the same as exporting/downloading to the device.
-  // Internal saves must preserve the original sender permissions rather than reinterpret them.
   const showSaveToVault = !!item.interactionId;
 
   const [mediaUri, setMediaUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mediaError, setMediaError] = useState(false);
   const retryAttemptedRef = useRef(false);
-  const signedUrlRetryRef = useRef(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [screenshotWarning, setScreenshotWarning] = useState(false);
@@ -91,11 +89,7 @@ function MediaPage({
     let cancelled = false;
     setMediaError(false);
     retryAttemptedRef.current = false;
-    signedUrlRetryRef.current = false;
 
-    // Always fetch a fresh signed URL — the passed-in signedUri may be
-    // expired by the time the viewer opens.  Show a loading spinner until
-    // the fresh URL arrives instead of risking a permanent error state.
     setLoading(true);
     setMediaUri(null);
 
@@ -231,7 +225,6 @@ function MediaPage({
           storage_path: uploadResult.storagePath,
           storage_bucket: 'vault',
           blurred_thumbnail_path: uploadResult.thumbnailPath ?? null,
-          // Preserve the original sender's permissions exactly.
           allow_screenshot: canScreenshot,
           allow_save: canSave,
           allow_share: canShare,
@@ -284,7 +277,6 @@ function MediaPage({
     }
   }, [videoPlaying, player]);
 
-  const availableHeight = screenHeight - insetTop - insetBottom - 92;
   const formattedTimestamp = (() => {
     if (!item.createdAt) return null;
     try {
@@ -297,9 +289,23 @@ function MediaPage({
     }
   })();
 
+  // Animated opacity for overlay controls
+  const overlayOpacity = useSharedValue(controlsVisible ? 1 : 0);
+  useEffect(() => {
+    overlayOpacity.value = withTiming(controlsVisible ? 1 : 0, {
+      duration: 200,
+      easing: Easing.out(Easing.ease),
+    });
+  }, [controlsVisible, overlayOpacity]);
+
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value,
+  }));
+
   return (
     <View style={[styles.page, { width: screenWidth, height: screenHeight }]}>
-      <View style={[styles.mediaStage, { width: screenWidth, height: availableHeight, marginTop: insetTop + 46 }]}>
+      {/* Full-screen media stage — fills the entire screen */}
+      <View style={[styles.mediaStage, { width: screenWidth, height: screenHeight }]}>
         {!mediaUri && !mediaError && <ActivityIndicator color="#fff" size="large" />}
 
         {mediaUri && !isVideo && !mediaError && (
@@ -307,7 +313,7 @@ function MediaPage({
             key={mediaUri}
             uri={mediaUri}
             width={screenWidth}
-            height={availableHeight}
+            height={screenHeight}
             onLoad={() => setLoading(false)}
             onError={() => {
               if (retryAttemptedRef.current || !item.storagePath) {
@@ -317,8 +323,6 @@ function MediaPage({
               }
               retryAttemptedRef.current = true;
               if (item.storagePath) evictCachedUrl(item.storagePath);
-              // Try fetching a fresh signed URL — the current one may be
-              // expired or corrupted. Give it one retry, then give up.
               supabase.storage
                 .from(item.storageBucket ?? 'vault')
                 .createSignedUrl(item.storagePath, 12 * 60 * 60)
@@ -340,16 +344,17 @@ function MediaPage({
                   }
                 });
             }}
+            onTap={onTap}
           />
         )}
 
         {mediaUri && isVideo && !mediaError && (
-          <View style={{ width: screenWidth, height: availableHeight }}>
+          <View style={{ width: screenWidth, height: screenHeight }}>
             {Platform.OS === 'web' ? (
               <video
                 ref={webVideoRef as any}
                 src={mediaUri}
-                style={{ width: screenWidth, height: availableHeight, objectFit: 'contain' }}
+                style={{ width: screenWidth, height: screenHeight, objectFit: 'contain' }}
                 playsInline
                 controls={false}
                 muted={muted}
@@ -362,7 +367,7 @@ function MediaPage({
             ) : (
               <VideoView
                 player={player}
-                style={{ width: screenWidth, height: availableHeight }}
+                style={{ width: screenWidth, height: screenHeight }}
                 contentFit="contain"
                 nativeControls={false}
                 onFirstFrameRender={() => setLoading(false)}
@@ -379,6 +384,14 @@ function MediaPage({
               <TouchableOpacity style={styles.muteButton} onPress={() => setMuted(v => !v)} activeOpacity={0.8}>
                 {muted ? <VolumeX color="#fff" size={20} /> : <Volume2 color="#fff" size={20} />}
               </TouchableOpacity>
+            )}
+            {/* Tap overlay for video to toggle controls */}
+            {!loading && (
+              <TouchableOpacity
+                style={styles.videoTapArea}
+                onPress={onTap}
+                activeOpacity={1}
+              />
             )}
           </View>
         )}
@@ -399,56 +412,59 @@ function MediaPage({
         )}
       </View>
 
-      {formattedTimestamp ? (
-        <View style={[styles.timestampWrap, { top: insetTop + 14 }]} pointerEvents="none">
-          <AppText style={styles.timestamp}>{formattedTimestamp}</AppText>
-        </View>
-      ) : null}
+      {/* Floating overlay: timestamp + bottom permission bar */}
+      <Animated.View style={[styles.overlayContainer, overlayStyle]} pointerEvents={controlsVisible ? 'box-none' : 'none'}>
+        {formattedTimestamp ? (
+          <View style={styles.timestampWrap} pointerEvents="none">
+            <AppText style={styles.timestamp}>{formattedTimestamp}</AppText>
+          </View>
+        ) : null}
 
-      <View style={[styles.bottomBar, { paddingBottom: insetBottom + 10 }]} pointerEvents="box-none">
-        {showSaveToVault && (
-          <TouchableOpacity
-            style={[styles.saveButton, savedToVault && styles.saveButtonDone]}
-            onPress={handleSaveToVault}
-            disabled={savingToVault || savedToVault}
-            activeOpacity={0.8}
-          >
-            {savingToVault ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : savedToVault ? (
-              <>
-                <Check color="#4CAF50" size={16} />
-                <AppText style={[styles.saveText, { color: '#4CAF50' }]}>Saved to Vault</AppText>
-              </>
-            ) : (
-              <>
-                <Archive color="#FF8A3D" size={16} />
-                <AppText style={styles.saveText}>Save to Vault</AppText>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-
-        <View style={styles.permissionRow}>
-          <PermissionBadge
-            icon={<Camera color={canScreenshot ? '#FF2E8A' : 'rgba(255,255,255,0.35)'} size={14} />}
-            label={canScreenshot ? 'Screenshot OK' : 'Screenshot restricted'}
-            allowed={canScreenshot}
-          />
-          <PermissionBadge
-            icon={<Download color={canSave ? '#FF2E8A' : 'rgba(255,255,255,0.35)'} size={14} />}
-            label={canSave ? 'Device save OK' : 'No downloads'}
-            allowed={canSave}
-          />
-          {canShare ? (
-            <TouchableOpacity onPress={handleShare} activeOpacity={0.8}>
-              <PermissionBadge icon={<Share2 color="#FF2E8A" size={14} />} label="Share" allowed />
+        <View style={styles.bottomBar} pointerEvents="box-none">
+          {showSaveToVault && (
+            <TouchableOpacity
+              style={[styles.saveButton, savedToVault && styles.saveButtonDone]}
+              onPress={handleSaveToVault}
+              disabled={savingToVault || savedToVault}
+              activeOpacity={0.8}
+            >
+              {savingToVault ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : savedToVault ? (
+                <>
+                  <Check color="#4CAF50" size={16} />
+                  <AppText style={[styles.saveText, { color: '#4CAF50' }]}>Saved to Vault</AppText>
+                </>
+              ) : (
+                <>
+                  <Archive color="#FF8A3D" size={16} />
+                  <AppText style={styles.saveText}>Save to Vault</AppText>
+                </>
+              )}
             </TouchableOpacity>
-          ) : (
-            <PermissionBadge icon={<Share2 color="rgba(255,255,255,0.35)" size={14} />} label="No sharing" allowed={false} />
           )}
+
+          <View style={styles.permissionRow}>
+            <PermissionBadge
+              icon={<Camera color={canScreenshot ? '#FF2E8A' : 'rgba(255,255,255,0.35)'} size={14} />}
+              label={canScreenshot ? 'Screenshot OK' : 'Screenshot restricted'}
+              allowed={canScreenshot}
+            />
+            <PermissionBadge
+              icon={<Download color={canSave ? '#FF2E8A' : 'rgba(255,255,255,0.35)'} size={14} />}
+              label={canSave ? 'Device save OK' : 'No downloads'}
+              allowed={canSave}
+            />
+            {canShare ? (
+              <TouchableOpacity onPress={handleShare} activeOpacity={0.8}>
+                <PermissionBadge icon={<Share2 color="#FF2E8A" size={14} />} label="Share" allowed />
+              </TouchableOpacity>
+            ) : (
+              <PermissionBadge icon={<Share2 color="rgba(255,255,255,0.35)" size={14} />} label="No sharing" allowed={false} />
+            )}
+          </View>
         </View>
-      </View>
+      </Animated.View>
 
       <Modal visible={screenshotWarning} transparent animationType="fade" onRequestClose={() => setScreenshotWarning(false)}>
         <View style={styles.modalOverlay}>
@@ -499,10 +515,15 @@ export default function VaultViewerScreen() {
   const [items, setItems] = useState<GalleryItem[]>(initialItems);
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const [deleting, setDeleting] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
   const listRef = useRef<FlatList<GalleryItem>>(null);
 
   const activeItem = items[activeIndex] ?? null;
   const canDeleteFromVault = !!activeItem?.id && (activeItem.storageBucket ?? 'vault') === 'vault';
+
+  const toggleControls = useCallback(() => {
+    setControlsVisible(prev => !prev);
+  }, []);
 
   const performDeleteActive = useCallback(async () => {
     const item = items[activeIndex];
@@ -588,6 +609,19 @@ export default function VaultViewerScreen() {
     index,
   }), [screenWidth]);
 
+  // Animated opacity for top controls
+  const topOpacity = useSharedValue(1);
+  useEffect(() => {
+    topOpacity.value = withTiming(controlsVisible ? 1 : 0, {
+      duration: 200,
+      easing: Easing.out(Easing.ease),
+    });
+  }, [controlsVisible, topOpacity]);
+
+  const topControlsStyle = useAnimatedStyle(() => ({
+    opacity: topOpacity.value,
+  }));
+
   if (items.length === 0) {
     return (
       <View style={styles.emptyViewer}>
@@ -621,10 +655,10 @@ export default function VaultViewerScreen() {
             isActive={index === activeIndex}
             screenWidth={screenWidth}
             screenHeight={screenHeight}
-            insetTop={insets.top}
-            insetBottom={insets.bottom}
             user={user}
             couple={couple}
+            controlsVisible={controlsVisible}
+            onTap={toggleControls}
           />
         )}
         onMomentumScrollEnd={event => {
@@ -634,7 +668,8 @@ export default function VaultViewerScreen() {
         style={{ width: screenWidth, height: screenHeight }}
       />
 
-      <View style={[styles.topControls, { top: insets.top + 8 }]} pointerEvents="box-none">
+      {/* Floating top controls (back, counter, delete) */}
+      <Animated.View style={[styles.topControls, { top: insets.top + 8 }, topControlsStyle]} pointerEvents={controlsVisible ? 'box-none' : 'none'}>
         <TouchableOpacity style={styles.topButton} onPress={() => router.back()} activeOpacity={0.8}>
           <ChevronLeft color="#fff" size={24} />
         </TouchableOpacity>
@@ -650,7 +685,7 @@ export default function VaultViewerScreen() {
             {deleting ? <ActivityIndicator color="#FF6B6B" size="small" /> : <Trash2 color="#FF6B6B" size={20} />}
           </TouchableOpacity>
         ) : <View style={{ width: 40 }} />}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -687,6 +722,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  videoTapArea: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: -1,
+  },
   muteButton: {
     position: 'absolute',
     right: 18,
@@ -698,7 +737,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  timestampWrap: { position: 'absolute', left: 58, right: 58, alignItems: 'center' },
+  overlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+  },
+  timestampWrap: {
+    position: 'absolute',
+    top: 60,
+    left: 58,
+    right: 58,
+    alignItems: 'center',
+  },
   timestamp: { color: 'rgba(255,255,255,0.55)', fontSize: 11, textAlign: 'center' },
   bottomBar: {
     position: 'absolute',
@@ -706,8 +755,8 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     paddingHorizontal: Spacing.lg,
-    paddingTop: 8,
-    backgroundColor: 'rgba(0,0,0,0.72)',
+    paddingTop: 12,
+    paddingBottom: 24,
     gap: 8,
   },
   saveButton: {
@@ -743,6 +792,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    zIndex: 20,
   },
   topButton: {
     width: 40,
