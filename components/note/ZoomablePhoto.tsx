@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import {
@@ -12,6 +12,7 @@ import Animated, {
   withTiming,
   clamp,
   Easing,
+  runOnJS,
 } from 'react-native-reanimated';
 
 const MIN_SCALE = 1;
@@ -24,6 +25,7 @@ type ZoomablePhotoProps = {
   height: number;
   onLoad: () => void;
   onError: () => void;
+  onZoomChange?: (zoomed: boolean) => void;
 };
 
 export function ZoomablePhoto({
@@ -32,6 +34,7 @@ export function ZoomablePhoto({
   height,
   onLoad,
   onError,
+  onZoomChange,
 }: ZoomablePhotoProps) {
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -39,16 +42,22 @@ export function ZoomablePhoto({
   const translateY = useSharedValue(0);
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
+  const [panEnabled, setPanEnabled] = useState(false);
+
+  const reportZoomState = useCallback((zoomed: boolean) => {
+    setPanEnabled(zoomed);
+    onZoomChange?.(zoomed);
+  }, [onZoomChange]);
 
   const resetZoom = useCallback(() => {
-    'worklet';
     scale.value = withSpring(1, { damping: 18, stiffness: 220 });
     savedScale.value = 1;
     translateX.value = withSpring(0, { damping: 18, stiffness: 220 });
     translateY.value = withSpring(0, { damping: 18, stiffness: 220 });
     savedTranslateX.value = 0;
     savedTranslateY.value = 0;
-  }, [scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY]);
+    reportZoomState(false);
+  }, [scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY, reportZoomState]);
 
   // Reset zoom when the URI changes (swiping to a different photo)
   useEffect(() => {
@@ -66,26 +75,29 @@ export function ZoomablePhoto({
         scale.value = withSpring(1, { damping: 18, stiffness: 220 });
         translateX.value = withSpring(0, { damping: 18, stiffness: 220 });
         translateY.value = withSpring(0, { damping: 18, stiffness: 220 });
+        savedScale.value = 1;
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
+        runOnJS(reportZoomState)(false);
       } else {
         // Clamp the saved scale so next pinch starts from current
         savedScale.value = clamp(scale.value, MIN_SCALE, MAX_SCALE);
+        runOnJS(reportZoomState)(true);
       }
     });
 
+  // Only register a one-finger pan while zoomed in. At the default 1x scale,
+  // the parent full-screen gallery owns horizontal swipes so users can page
+  // naturally between photos and videos.
   const panGesture = Gesture.Pan()
-    .enabled(true)
+    .enabled(panEnabled)
     .minPointers(1)
     .maxPointers(2)
     .onUpdate((e) => {
-      // Only allow panning when zoomed in
-      if (scale.value <= 1.01) return;
       translateX.value = savedTranslateX.value + e.translationX;
       translateY.value = savedTranslateY.value + e.translationY;
     })
-    .onEnd((e) => {
-      if (scale.value <= 1.01) return;
+    .onEnd(() => {
       // Calculate bounds for clamping
       const scaledW = width * scale.value;
       const scaledH = height * scale.value;
@@ -117,6 +129,7 @@ export function ZoomablePhoto({
         savedScale.value = 1;
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
+        runOnJS(reportZoomState)(false);
       } else {
         // Zoom in to 2x, centered on tap location
         const tapX = e.x - width / 2;
@@ -141,11 +154,10 @@ export function ZoomablePhoto({
         savedScale.value = DOUBLE_TAP_SCALE;
         savedTranslateX.value = targetX;
         savedTranslateY.value = targetY;
+        runOnJS(reportZoomState)(true);
       }
     });
 
-  // Single tap should not be captured here — let it pass through to the parent
-  // (for dismissing controls, etc). We compose pinch + pan + doubleTap.
   const composedGesture = Gesture.Simultaneous(
     pinchGesture,
     panGesture,
