@@ -23,7 +23,13 @@ async function uploadToStorage(
   body: Blob | ArrayBuffer,
   headers: Record<string, string>,
 ): Promise<Response> {
-  return fetch(url, { method: 'PUT', headers, body });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    return await fetch(url, { method: 'PUT', headers, body, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function compressImage(uri: string, mimeType: string): Promise<{ uri: string; mimeType: string }> {
@@ -149,29 +155,6 @@ export async function uploadMediaFile(
       uploadUri = compressed.uri;
       uploadMime = compressed.mimeType;
       if (uploadMime !== normalizedMime) uploadStoragePath = storagePath.replace(/\.\w+$/, '.jpg');
-
-      // Generate thumbnail and upload it in parallel with the main photo
-      const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
-      pendingThumbPromise = (async () => {
-        const thumbUri = await generatePhotoThumbnail(uploadUri);
-        if (!thumbUri) return null;
-        thumbnailLocalUri = thumbUri;
-        try {
-          const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
-          const thumbResponse = await uploadToStorage(
-            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
-            thumbBody,
-            {
-              Authorization: `Bearer ${session.access_token}`,
-              apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-              'Content-Type': 'image/jpeg',
-              'x-upsert': 'true',
-            },
-          );
-          if (thumbResponse.ok) return thumbStoragePath;
-        } catch {}
-        return null;
-      })();
     }
 
     if (isVideo) {
@@ -212,14 +195,42 @@ export async function uploadMediaFile(
       coupleId: coupleId ?? null,
     });
 
-    stopPulse = startProgressPulse(reportProgress);
-
+    // Read the main photo into memory BEFORE generating the thumbnail.
+    // This avoids two concurrent reads of the same compressed file which can deadlock on native.
     let body: Blob | ArrayBuffer;
     try {
       body = await buildUploadBody(uploadUri, uploadMime);
     } catch {
       throw new Error('Could not read media file — please try again.');
     }
+
+    // Now that the main body is fully loaded, generate + upload the thumbnail in parallel
+    // with the main network upload.
+    if (isPhoto) {
+      const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
+      pendingThumbPromise = (async () => {
+        const thumbUri = await generatePhotoThumbnail(uploadUri);
+        if (!thumbUri) return null;
+        thumbnailLocalUri = thumbUri;
+        try {
+          const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
+          const thumbResponse = await uploadToStorage(
+            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
+            thumbBody,
+            {
+              Authorization: `Bearer ${session.access_token}`,
+              apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+              'Content-Type': 'image/jpeg',
+              'x-upsert': 'true',
+            },
+          );
+          if (thumbResponse.ok) return thumbStoragePath;
+        } catch {}
+        return null;
+      })();
+    }
+
+    stopPulse = startProgressPulse(reportProgress);
 
     let response: Response;
     try {
