@@ -788,42 +788,48 @@ export default function ChatTab() {
 
     Promise.resolve().then(async () => {
       if (capturedMedia && chatStoragePath && (settings?.chat_auto_save_to_vault ?? true)) {
-        try {
-          const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
-          const ext = capturedMedia.type === 'video' ? videoExt : 'jpg';
-          const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${ext}`;
+        const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
+        const ext = capturedMedia.type === 'video' ? videoExt : 'jpg';
+        const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${ext}`;
+        const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
 
-          // Server-side copy: no second device upload, vault media appears in seconds
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session) throw new Error('No session');
-          const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
-          const res = await fetch(`${SUPABASE_URL}/functions/v1/copy-to-vault`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session.access_token}`,
-              Apikey: anonKey,
-            },
-            body: JSON.stringify({
-              source_bucket: 'chat_media',
-              source_path: chatStoragePath,
-              vault_path: vaultPath,
-              couple_id: coupleId,
-              media_type: capturedMedia.type,
-              chat_message_id: messageId,
-              thumbnail_path: chatThumbnailPath ?? null,
-            }),
-          });
-          if (!res.ok) {
-            const errBody = await res.json().catch(() => ({}));
-            throw new Error(errBody?.error ?? `HTTP ${res.status}`);
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error('No session');
+            const res = await fetch(`${SUPABASE_URL}/functions/v1/copy-to-vault`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+                Apikey: anonKey,
+              },
+              body: JSON.stringify({
+                source_bucket: 'chat_media',
+                source_path: chatStoragePath,
+                vault_path: vaultPath,
+                couple_id: coupleId,
+                media_type: capturedMedia.type,
+                chat_message_id: messageId,
+                thumbnail_path: chatThumbnailPath ?? null,
+              }),
+            });
+            if (!res.ok) {
+              const errBody = await res.json().catch(() => ({}));
+              throw new Error(errBody?.error ?? `HTTP ${res.status}`);
+            }
+            const vaultData = await res.json();
+            if (vaultData?.vault_item_id) {
+              setMessages(prev => prev.map(m => m.id === messageId ? { ...m, vault_item_id: vaultData.vault_item_id } : m));
+            }
+            break;
+          } catch (e: any) {
+            if (attempt === 0) {
+              await new Promise(r => setTimeout(r, 1500));
+              continue;
+            }
+            logDebugEvent('chat_auto_vault_save_failed', { error: e?.message ?? String(e), chatMessageId: messageId });
           }
-          const vaultData = await res.json();
-          if (vaultData?.vault_item_id) {
-            setMessages(prev => prev.map(m => m.id === messageId ? { ...m, vault_item_id: vaultData.vault_item_id } : m));
-          }
-        } catch (e: any) {
-          logDebugEvent('chat_auto_vault_save_failed', { error: e?.message ?? String(e), chatMessageId: messageId });
         }
       }
 

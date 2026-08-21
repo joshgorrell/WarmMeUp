@@ -32,7 +32,7 @@ async function compressImage(uri: string, mimeType: string): Promise<{ uri: stri
   if (!needsConversion && !mimeType.startsWith('image/')) return { uri, mimeType };
   try {
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
-    const result = await manipulateAsync(uri, [{ resize: { width: 3000 } }], { compress: 0.92, format: SaveFormat.JPEG });
+    const result = await manipulateAsync(uri, [{ resize: { width: 1600 } }], { compress: 0.8, format: SaveFormat.JPEG });
     return { uri: result.uri, mimeType: 'image/jpeg' };
   } catch {
     return { uri, mimeType };
@@ -141,6 +141,7 @@ export async function uploadMediaFile(
     let uploadStoragePath = storagePath;
     let thumbnailPath: string | undefined;
     let thumbnailLocalUri: string | null = null;
+    let pendingThumbPromise: Promise<string | null> | null = null;
 
     if (isPhoto) {
       reportProgress(5);
@@ -149,11 +150,12 @@ export async function uploadMediaFile(
       uploadMime = compressed.mimeType;
       if (uploadMime !== normalizedMime) uploadStoragePath = storagePath.replace(/\.\w+$/, '.jpg');
 
-      // Generate a small thumbnail (200px wide, quality 70) for fast grid loading
-      const thumbUri = await generatePhotoThumbnail(uploadUri);
-      if (thumbUri) {
+      // Generate thumbnail and upload it in parallel with the main photo
+      const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
+      pendingThumbPromise = (async () => {
+        const thumbUri = await generatePhotoThumbnail(uploadUri);
+        if (!thumbUri) return null;
         thumbnailLocalUri = thumbUri;
-        const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
         try {
           const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
           const thumbResponse = await uploadToStorage(
@@ -166,9 +168,10 @@ export async function uploadMediaFile(
               'x-upsert': 'true',
             },
           );
-          if (thumbResponse.ok) thumbnailPath = thumbStoragePath;
+          if (thumbResponse.ok) return thumbStoragePath;
         } catch {}
-      }
+        return null;
+      })();
     }
 
     if (isVideo) {
@@ -239,6 +242,14 @@ export async function uploadMediaFile(
         errBody = await response.json();
       } catch {}
       throw new Error(mapStorageError(response.status, errBody));
+    }
+
+    // Await the thumbnail upload that was running in parallel with the main photo
+    if (pendingThumbPromise) {
+      try {
+        const thumbResult = await pendingThumbPromise;
+        if (thumbResult) thumbnailPath = thumbResult;
+      } catch {}
     }
 
     reportProgress(96);
