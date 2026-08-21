@@ -10,23 +10,17 @@ function isLocalUri(uri: string): boolean {
   return uri.startsWith('file://') || uri.startsWith('ph://') || uri.startsWith('content://');
 }
 
-async function buildUploadBody(uri: string, mimeType: string): Promise<FormData | Blob> {
-  if (Platform.OS === 'web' || !isLocalUri(uri)) {
-    const response = await fetch(uri);
-    return response.blob();
+async function buildUploadBody(uri: string, _mimeType: string): Promise<Blob | ArrayBuffer> {
+  const response = await fetch(uri);
+  if (!response.ok) {
+    throw new Error('Could not read media file — please try again.');
   }
-  const form = new FormData();
-  form.append('file', {
-    uri,
-    type: mimeType,
-    name: 'upload',
-  } as any);
-  return form;
+  return Platform.OS === 'web' ? response.blob() : response.arrayBuffer();
 }
 
 async function uploadToStorage(
   url: string,
-  body: FormData | Blob,
+  body: Blob | ArrayBuffer,
   headers: Record<string, string>,
 ): Promise<Response> {
   return fetch(url, { method: 'PUT', headers, body });
@@ -217,7 +211,7 @@ export async function uploadMediaFile(
 
     stopPulse = startProgressPulse(reportProgress);
 
-    let body: FormData | Blob;
+    let body: Blob | ArrayBuffer;
     try {
       body = await buildUploadBody(uploadUri, uploadMime);
     } catch {

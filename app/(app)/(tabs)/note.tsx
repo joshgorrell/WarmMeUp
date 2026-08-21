@@ -823,7 +823,7 @@ export default function ChatTab() {
             setMessages(prev => prev.map(m => m.id === messageId ? { ...m, vault_item_id: vaultData.vault_item_id } : m));
           }
         } catch (e: any) {
-          Alert.alert('Vault Save Failed', 'The media was sent but could not be saved to your Vault. You can save it manually from the chat bubble.');
+          logDebugEvent('chat_auto_vault_save_failed', { error: e?.message ?? String(e), chatMessageId: messageId });
         }
       }
 
