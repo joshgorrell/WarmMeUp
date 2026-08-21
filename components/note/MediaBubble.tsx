@@ -158,6 +158,8 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   const isBlurred = blurEnabled && !effectiveRevealed;
   const [imgError, setImgError] = useState(false);
   const [retryUrl, setRetryUrl] = useState<string | null>(null);
+  const [selfFetchedUrl, setSelfFetchedUrl] = useState<string | null>(null);
+  const [selfFetchFailed, setSelfFetchFailed] = useState(false);
   const retryAttempted = useRef(false);
   const overlayOpacity = useRef(new Animated.Value(isBlurred ? 1 : 0)).current;
   const prevEffectiveRevealedRef = useRef(effectiveRevealed);
@@ -165,7 +167,32 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   const [videoError, setVideoError] = useState(false);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [posterChecked, setPosterChecked] = useState(false);
-  const mediaUrl = retryUrl ?? signedUrl ?? null;
+  const effectiveSignedUrl = signedUrl ?? selfFetchedUrl;
+  const mediaUrl = retryUrl ?? effectiveSignedUrl ?? null;
+
+  // If the parent never resolves a signed URL (batch fetch failed silently),
+  // attempt a direct fetch after a short delay so the bubble doesn't shimmer forever.
+  useEffect(() => {
+    if (loaded) return;
+    const timer = setTimeout(async () => {
+      if (!msg.media_storage_path) return;
+      const bucket = msg.media_storage_bucket ?? 'chat_media';
+      const thumbPath = msg.thumbnail_path ?? msg.media_storage_path;
+      try {
+        const { data, error } = await supabase.storage.from(bucket).createSignedUrl(thumbPath, 12 * 3600);
+        if (error || !data?.signedUrl) {
+          setSelfFetchFailed(true);
+          return;
+        }
+        setSelfFetchedUrl(data.signedUrl);
+      } catch {
+        setSelfFetchFailed(true);
+      }
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [loaded, msg.media_storage_path, msg.media_storage_bucket, msg.thumbnail_path]);
+
+  const effectiveLoaded = loaded || selfFetchedUrl !== null || selfFetchFailed;
 
   useEffect(() => {
     let cancelled = false;
@@ -233,7 +260,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   return (
     <Pressable onPress={isVideo ? handleVideoOuterPress : handlePhotoPress} onLongPress={() => onLongPress(msg)} delayLongPress={350} android_ripple={null}
       style={[styles.mediaTap, { width: bubbleWidth, height: cappedHeight }, radii]}>
-      {!loaded ? <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View> : mediaUrl && !imgError ? <>
+      {!effectiveLoaded ? <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View> : mediaUrl && !imgError ? <>
         {isVideo ? <>
           {posterUrl && !videoPlaying && <ExpoImage source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />}
           {!posterUrl && !posterChecked && <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View>}
@@ -250,17 +277,17 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
             } else setImgError(true);
           }} />}
         {isBlurred && Platform.OS !== 'web' && <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />}
-      </> : <View style={styles.mediaPlaceholder}>{imgError || videoError ? <AppText style={styles.mediaErrorText}>{videoError ? 'Video could not be played' : 'Image failed to load'}</AppText> : <Lock color="rgba(255,255,255,0.5)" size={20} />}</View>}
+      </> : <View style={styles.mediaPlaceholder}>{imgError || videoError ? <AppText style={styles.mediaErrorText}>{videoError ? 'Video could not be played' : 'Image failed to load'}</AppText> : selfFetchFailed ? <AppText style={styles.mediaErrorText}>Image failed to load</AppText> : <Lock color="rgba(255,255,255,0.5)" size={20} />}</View>}
 
-      {isVideo && loaded && mediaUrl && !imgError && !videoError && !isBlurred && (
+      {isVideo && effectiveLoaded && mediaUrl && !imgError && !videoError && !isBlurred && (
         <Pressable onPress={toggleVideoPlayback} hitSlop={12} style={localStyles.videoPlayButton}>
           <View style={styles.playCircle}>{videoPlaying ? <Pause color="#fff" size={20} strokeWidth={2.2} /> : <Play color="#fff" size={22} strokeWidth={2.2} fill="#fff" />}</View>
         </Pressable>
       )}
-      {loaded && mediaUrl && !imgError && <Animated.View style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay, { opacity: overlayOpacity }]} pointerEvents="none"><View style={styles.blurRevealBtn}><EyeOff color="rgba(255,255,255,0.92)" size={20} strokeWidth={2} /></View></Animated.View>}
-      {loaded && mediaUrl && !imgError && !isBlurred && <Pressable onPress={handleExpandPress} hitSlop={8} style={localStyles.expandButton}><Maximize2 color="#fff" size={17} strokeWidth={2.4} /></Pressable>}
+      {effectiveLoaded && mediaUrl && !imgError && <Animated.View style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay, { opacity: overlayOpacity }]} pointerEvents="none"><View style={styles.blurRevealBtn}><EyeOff color="rgba(255,255,255,0.92)" size={20} strokeWidth={2} /></View></Animated.View>}
+      {effectiveLoaded && mediaUrl && !imgError && !isBlurred && <Pressable onPress={handleExpandPress} hitSlop={8} style={localStyles.expandButton}><Maximize2 color="#fff" size={17} strokeWidth={2.4} /></Pressable>}
       {msg.burns_at && msg.burn_after_seconds && new Date(msg.burns_at).getTime() > Date.now() && <View style={styles.burnBadge} pointerEvents="none"><View style={styles.burnBadgeBg} /><CountdownRing expiresAt={msg.burns_at} totalSeconds={msg.burn_after_seconds} onExpire={() => onBurn(msg)} size={44} /></View>}
-      {isMine && loaded && mediaUrl && !imgError && !msg.burns_at && !!msg.first_viewed_at && <View style={styles.seenBadge} pointerEvents="none"><View style={styles.seenBadgeBg} /><Check color="rgba(255,255,255,0.95)" size={17} strokeWidth={2.8} /></View>}
+      {isMine && effectiveLoaded && mediaUrl && !imgError && !msg.burns_at && !!msg.first_viewed_at && <View style={styles.seenBadge} pointerEvents="none"><View style={styles.seenBadgeBg} /><Check color="rgba(255,255,255,0.95)" size={17} strokeWidth={2.8} /></View>}
     </Pressable>
   );
 }

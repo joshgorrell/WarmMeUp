@@ -214,14 +214,22 @@ export default function ChatTab() {
     const results: Record<string, string | null> = {};
     await Promise.all(
       Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
-        const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
-        const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
-        const pathToUrl = new Map(data?.map(d => [d.path, d.signedUrl]) ?? []);
-        for (const m of bucketMsgs) {
-          const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
-          const signed = pathToUrl.get(thumbPath) ?? null;
-          results[m.id] = signed;
-          if (signed) setCachedUrl(thumbPath, signed);
+        try {
+          const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
+          const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+          if (error) logDebugEvent('chat_signed_url_batch_error', { bucket, error: error.message });
+          const pathToUrl = new Map(data?.map(d => [d.path, d.signedUrl]) ?? []);
+          for (const m of bucketMsgs) {
+            const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+            const signed = pathToUrl.get(thumbPath) ?? null;
+            results[m.id] = signed;
+            if (signed) setCachedUrl(thumbPath, signed);
+          }
+        } catch (e: any) {
+          logDebugEvent('chat_signed_url_fetch_exception', { bucket, error: e?.message ?? String(e) });
+          for (const m of bucketMsgs) {
+            results[m.id] = null;
+          }
         }
       })
     );
@@ -307,7 +315,7 @@ export default function ChatTab() {
           }
         }
         const visible = expired.length > 0 ? sorted.filter(m => !expired.some(e => e.id === m.id)) : sorted;
-        const urlMap: Record<string, string> = {};
+        const urlMap: Record<string, string | null> = {};
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of visible) {
           if (m.media_storage_path) {
@@ -329,15 +337,25 @@ export default function ChatTab() {
           }
           await Promise.all(
             Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
-              const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
-              const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
-              const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
-              for (const m of bucketMsgs) {
-                const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
-                const signed = pathToUrl.get(thumbPath) ?? null;
-                if (signed) {
-                  urlMap[m.id] = signed;
-                  setCachedUrl(thumbPath, signed);
+              try {
+                const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
+                const { data: urlData, error: urlErr } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+                if (urlErr) logDebugEvent('chat_load_signed_url_error', { bucket, error: urlErr.message });
+                const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
+                for (const m of bucketMsgs) {
+                  const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+                  const signed = pathToUrl.get(thumbPath) ?? null;
+                  if (signed) {
+                    urlMap[m.id] = signed;
+                    setCachedUrl(thumbPath, signed);
+                  } else {
+                    urlMap[m.id] = null;
+                  }
+                }
+              } catch (e: any) {
+                logDebugEvent('chat_load_signed_url_exception', { bucket, error: e?.message ?? String(e) });
+                for (const m of bucketMsgs) {
+                  urlMap[m.id] = null;
                 }
               }
             })
@@ -369,7 +387,7 @@ export default function ChatTab() {
         .limit(PAGE_SIZE);
       if (data && data.length > 0) {
         const sorted = [...data].reverse();
-        const urlMap: Record<string, string> = {};
+        const urlMap: Record<string, string | null> = {};
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of sorted) {
           if (m.media_storage_path) {
@@ -391,15 +409,25 @@ export default function ChatTab() {
           }
           await Promise.all(
             Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
-              const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
-              const { data: urlData } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
-              const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
-              for (const m of bucketMsgs) {
-                const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
-                const signed = pathToUrl.get(thumbPath) ?? null;
-                if (signed) {
-                  urlMap[m.id] = signed;
-                  setCachedUrl(thumbPath, signed);
+              try {
+                const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
+                const { data: urlData, error: urlErr } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+                if (urlErr) logDebugEvent('chat_load_older_signed_url_error', { bucket, error: urlErr.message });
+                const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
+                for (const m of bucketMsgs) {
+                  const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+                  const signed = pathToUrl.get(thumbPath) ?? null;
+                  if (signed) {
+                    urlMap[m.id] = signed;
+                    setCachedUrl(thumbPath, signed);
+                  } else {
+                    urlMap[m.id] = null;
+                  }
+                }
+              } catch (e: any) {
+                logDebugEvent('chat_load_older_signed_url_exception', { bucket, error: e?.message ?? String(e) });
+                for (const m of bucketMsgs) {
+                  urlMap[m.id] = null;
                 }
               }
             })
