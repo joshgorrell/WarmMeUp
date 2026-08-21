@@ -53,6 +53,50 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+// Apple requires Sign in with Apple authorization to be revoked when an account
+// is deleted. Existing users do not have a refresh token stored in Warm Me Up,
+// so immediately before a self-service deletion on iOS we refresh the native
+// Apple credential to obtain a short-lived authorization code. The delete-account
+// edge function exchanges that code server-side and revokes the resulting token.
+// Admin-initiated deletions intentionally skip this because the admin is not the
+// target Apple user.
+const originalFunctionsInvoke = supabase.functions.invoke.bind(supabase.functions);
+(supabase.functions as any).invoke = async (functionName: string, options: any = {}) => {
+  if (functionName === 'delete-account' && Platform.OS === 'ios' && !options?.body?.targetUserId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    const appleIdentity = user?.identities?.find((identity: any) => identity?.provider === 'apple');
+
+    if (appleIdentity) {
+      const appleUserId = appleIdentity?.identity_data?.sub ?? appleIdentity?.id;
+      if (!appleUserId) {
+        throw new Error('Could not verify your Apple identity for account deletion. Please sign out, sign back in with Apple, and try again.');
+      }
+
+      try {
+        const AppleAuthentication = await import('expo-apple-authentication');
+        const credential = await AppleAuthentication.refreshAsync({ user: appleUserId });
+        if (!credential.authorizationCode) {
+          throw new Error('Apple did not return the authorization needed to revoke Sign in with Apple. Please try again.');
+        }
+        options = {
+          ...options,
+          body: {
+            ...(options?.body ?? {}),
+            appleAuthorizationCode: credential.authorizationCode,
+          },
+        };
+      } catch (err: any) {
+        if (err?.code === 'ERR_REQUEST_CANCELED' || err?.name === 'ERR_REQUEST_CANCELED') {
+          throw new Error('Apple authorization is required to securely delete this account. Please try again and approve the Apple prompt.');
+        }
+        throw err;
+      }
+    }
+  }
+
+  return originalFunctionsInvoke(functionName, options);
+};
+
 function _decodeJwtRef(jwt: string): string | null {
   try {
     const parts = jwt.split('.');
