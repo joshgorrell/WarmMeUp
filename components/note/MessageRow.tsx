@@ -36,6 +36,7 @@ function parseActivity(msg: ChatMessage): ChatActivityItem | null {
       sourceId: String(raw.sourceId),
       title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : 'Something is waiting for you.',
       preview: typeof raw.preview === 'string' ? raw.preview : null,
+      expiresAt: typeof raw.expiresAt === 'string' && raw.expiresAt ? raw.expiresAt : null,
     };
   } catch {
     return null;

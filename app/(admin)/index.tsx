@@ -8,7 +8,7 @@ import {
   FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity,
   CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2,
   Star, UserCog, Bug, ShieldCheck, MessageSquare, TriangleAlert as AlertTriangle,
-  RefreshCw, X as XIcon, Clock, Bot, Mail, CircleQuestionMark,
+  RefreshCw, X as XIcon, Clock, Bot, Mail, CircleQuestionMark, TrendingUp,
 } from 'lucide-react-native';
 import BottomSheet from '@/components/BottomSheet';
 import { supabase } from '@/lib/supabase';
@@ -434,6 +434,15 @@ export default function AdminDashboard() {
     entry.error ? colors.danger : base;
 
   const navItems = [
+    {
+      label: 'Business Health',
+      sub: 'MRR, ARR, churn, cohorts, LTV & valuation metrics',
+      icon: <TrendingUp color="#33D17A" size={22} strokeWidth={2} />,
+      color: '#33D17A',
+      bg: 'rgba(51,209,122,0.10)',
+      border: 'rgba(51,209,122,0.25)',
+      route: '/(admin)/business-health',
+    },
     {
       label: 'Prompt Management',
       sub: 'Add, edit, or remove dice, dare & wish prompts',
