@@ -24,6 +24,7 @@
     },
     "ios": {
       "supportsTablet": false,
+      "usesAppleSignIn": true,
       "backgroundColor": "#050507",
       "bundleIdentifier": "app.warmmeup",
       "infoPlist": {
