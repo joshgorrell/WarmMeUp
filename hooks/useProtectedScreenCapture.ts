@@ -17,8 +17,6 @@ export function useProtectedScreenCapture(
   useEffect(() => {
     if (Platform.OS === 'web') return;
 
-    let mounted = true;
-
     const sync = async () => {
       try {
         if (protectedContent) {
@@ -41,12 +39,9 @@ export function useProtectedScreenCapture(
     sync();
 
     return () => {
-      mounted = false;
-      if (Platform.OS !== 'web') {
-        ScreenCapture.allowScreenCaptureAsync(key).catch(() => {});
-        if (Platform.OS === 'ios') {
-          ScreenCapture.disableAppSwitcherProtectionAsync().catch(() => {});
-        }
+      ScreenCapture.allowScreenCaptureAsync(key).catch(() => {});
+      if (Platform.OS === 'ios') {
+        ScreenCapture.disableAppSwitcherProtectionAsync().catch(() => {});
       }
     };
   }, [protectedContent, key]);
