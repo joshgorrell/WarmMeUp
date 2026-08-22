@@ -45,9 +45,9 @@ function resolveNotificationRoute(data: NotificationData): string | null {
   }
 }
 
-// Absolute hard deadline — if verification hasn't affirmatively resolved by
-// this point, route to the verify-retry screen instead of guessing.
-const HARD_DEADLINE_MS = 5000;
+// Give cold-start verification enough room to complete. Returning users with
+// already-known good state can resume immediately while the refresh finishes.
+const HARD_DEADLINE_MS = 10000;
 
 const DEBUG_TAP_TARGET = 5;
 const DEBUG_TAP_WINDOW_MS = 10000;
@@ -90,34 +90,25 @@ export default function TransitionScreen() {
   };
 
   // Returns true only when we have enough affirmatively-resolved data to make
-  // a routing decision. Unresolved state never counts as authorization.
+  // a routing decision. A returning authenticated user may keep using a
+  // previously verified premium state while a background refresh is in flight.
   const canRoute = (): boolean => {
-    // Admins/super-admins bypass subscription checks — but only when the
-    // profile has actually loaded and confirmed the admin flag.
     if (isAdmin || isSuperAdmin) return true;
-
-    // Profile must be loaded before deciding solo vs paired.
-    // A null profile means data is still loading — don't route yet.
     if (!profile) return false;
 
-    // Solo users (no couple, inactive couple, or no partner) go to /pair.
-    // This destination doesn't depend on subscription verification.
     const isSolo = !couple || couple.active === false || !couple.user_b_id;
     if (isSolo) return true;
 
-    // Paired users: subscription must be resolved.
-    // An unresolved state is never treated as authorized or unauthorized.
-    if (subscriptionInfo.loading) return false;
+    // refreshSubscription preserves the previous entitlement flags while it
+    // sets loading=true. If the user was already verified premium, don't block
+    // app resume just because the refresh is still running.
+    if (subscriptionInfo.loading) return subscriptionInfo.isPremium === true;
 
     return true;
   };
 
   const navigate = () => {
     if (routed.current) return;
-
-    // If we don't have enough resolved data, do NOT route — let the effect
-    // re-trigger when data arrives, or let the hard deadline catch the case
-    // where data never resolves.
     if (!canRoute()) return;
 
     routed.current = true;
@@ -144,7 +135,6 @@ export default function TransitionScreen() {
     });
 
     Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
-      // Privileged users bypass all subscription checks
       if (isPrivileged) {
         logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs) [privileged]`, { elapsedMs: elapsed() });
         router.replace('/(app)/(tabs)');
@@ -152,14 +142,11 @@ export default function TransitionScreen() {
       }
 
       if (couple?.active) {
-        // Solo users (no partner yet) should go to /pair to enter an invite code,
-        // not the paywall — their partner's subscription will cover them once paired.
         if (!couple.user_b_id) {
           logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/pair [solo, no partner]`, { elapsedMs: elapsed() });
           router.replace('/(auth)/pair');
           return;
         }
-        // Paired users: check subscription access (isPremium covers active trial, paid, partner-paid)
         if (!subscriptionInfo.isPremium) {
           const reason = subscriptionInfo.trialExpired
             ? 'expired_trial'
@@ -193,7 +180,6 @@ export default function TransitionScreen() {
           params: notifDest ? { pendingTab: notifDest } : {},
         });
       } else if (subscriptionInfo.canInvite) {
-        // User has no active partner yet but holds a valid subscription — route into app.
         logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs) [canInvite, no partner]`, { elapsedMs: elapsed() });
         router.replace('/(app)/(tabs)');
       } else {
@@ -220,9 +206,6 @@ export default function TransitionScreen() {
   useEffect(() => {
     logger.log('[TRANSITION START] +0ms');
 
-    // Hard deadline: if verification hasn't affirmatively resolved, route to
-    // the verify-retry screen instead of guessing. Unresolved network/database
-    // state is never treated as authorization.
     hardDeadlineRef.current = setTimeout(() => {
       hardDeadlineRef.current = null;
       if (!routed.current) {
