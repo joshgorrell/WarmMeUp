@@ -1,6 +1,9 @@
 name: Regenerate screen capture lock
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - fix/prebuild-screen-capture-lock
