@@ -589,7 +589,7 @@ export default function VaultViewerScreen() {
     if (!canDeleteFromVault || deleting) return;
     const noun = activeItem?.mediaType === 'video' ? 'video' : 'photo';
     const linkedChatNote = activeItem?.chatMessageId
-      ? '\n\nThis item was sent from Chat — it will also be hidden from your Chat history.'
+      ? '\n\nThis item was sent from Chat — it will also be deleted from your Chat history.'
       : '';
     Alert.alert(
       'Delete from Vault?',
