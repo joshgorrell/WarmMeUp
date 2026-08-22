@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
@@ -12,19 +12,35 @@ export default function VerifyRetryScreen() {
   const router = useRouter();
   const { refreshSubscription, refreshProfile, refreshCouple } = useAuth();
   const [retrying, setRetrying] = useState(false);
+  const autoRetryStarted = useRef(false);
 
-  const handleRetry = async () => {
+  const handleRetry = useCallback(async () => {
     if (retrying) return;
     setRetrying(true);
     logger.log('[VERIFY-RETRY] retry triggered');
     try {
       await Promise.all([refreshProfile(), refreshCouple(), refreshSubscription()]);
+      // Only return to transition after the refresh itself succeeds. This avoids
+      // looping between transition and this screen during a genuine outage.
+      router.replace('/transition');
     } catch (err) {
       logger.log('[VERIFY-RETRY] retry error:', String(err));
+      setRetrying(false);
     }
-    // Navigate back to transition so the full verification flow re-runs.
-    router.replace('/transition');
-  };
+  }, [refreshProfile, refreshCouple, refreshSubscription, retrying, router]);
+
+  useEffect(() => {
+    if (autoRetryStarted.current) return;
+    autoRetryStarted.current = true;
+
+    // Most visits to this screen are a cold/resume timing race. Retry once
+    // automatically so a healthy account does not require a manual tap.
+    const timer = setTimeout(() => {
+      handleRetry();
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [handleRetry]);
 
   return (
     <View style={styles.root}>
@@ -33,7 +49,9 @@ export default function VerifyRetryScreen() {
         <WarmupWordmark size={16} />
         <View style={{ height: 28 }} />
         <AppText style={styles.title}>We&apos;re having trouble verifying your account.</AppText>
-        <AppText style={styles.subtitle}>Check your connection and try again.</AppText>
+        <AppText style={styles.subtitle}>
+          {retrying ? 'Reconnecting…' : 'Check your connection and try again.'}
+        </AppText>
         <View style={{ height: 24 }} />
         {retrying ? (
           <ActivityIndicator color="#FF2E8A" size="small" />
