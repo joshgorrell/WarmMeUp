@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase';
 import { awardPoints } from '@/lib/points';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
+import { useProtectedScreenCapture } from '@/hooks/useProtectedScreenCapture';
 import { evictCachedUrl, GalleryItem, getGalleryItems } from '@/lib/mediaGalleryStore';
 import { clearLocalImageCache } from '@/lib/mediaCache';
 import { extensionToMime, mimeToExtension, uploadMediaFile } from '@/lib/uploadMedia';
@@ -289,7 +290,6 @@ function MediaPage({
     }
   })();
 
-  // Animated opacity for overlay controls
   const overlayOpacity = useSharedValue(controlsVisible ? 1 : 0);
   useEffect(() => {
     overlayOpacity.value = withTiming(controlsVisible ? 1 : 0, {
@@ -304,7 +304,6 @@ function MediaPage({
 
   return (
     <View style={[styles.page, { width: screenWidth, height: screenHeight }]}>
-      {/* Full-screen media stage — fills the entire screen */}
       <View style={[styles.mediaStage, { width: screenWidth, height: screenHeight }]}>
         {!mediaUri && !mediaError && <ActivityIndicator color="#fff" size="large" />}
 
@@ -385,7 +384,6 @@ function MediaPage({
                 {muted ? <VolumeX color="#fff" size={20} /> : <Volume2 color="#fff" size={20} />}
               </TouchableOpacity>
             )}
-            {/* Tap overlay for video to toggle controls */}
             {!loading && (
               <TouchableOpacity
                 style={styles.videoTapArea}
@@ -412,7 +410,6 @@ function MediaPage({
         )}
       </View>
 
-      {/* Floating overlay: timestamp + bottom permission bar */}
       <Animated.View style={[styles.overlayContainer, overlayStyle]} pointerEvents={controlsVisible ? 'box-none' : 'none'}>
         {formattedTimestamp ? (
           <View style={styles.timestampWrap} pointerEvents="none">
@@ -447,7 +444,7 @@ function MediaPage({
           <View style={styles.permissionRow}>
             <PermissionBadge
               icon={<Camera color={canScreenshot ? '#FF2E8A' : 'rgba(255,255,255,0.35)'} size={14} />}
-              label={canScreenshot ? 'Screenshot OK' : 'Screenshot restricted'}
+              label={canScreenshot ? 'Screen capture OK' : 'Screen capture blocked'}
               allowed={canScreenshot}
             />
             <PermissionBadge
@@ -470,8 +467,8 @@ function MediaPage({
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <AlertTriangle color="#FFB347" size={34} />
-            <AppText style={styles.modalTitle}>Screenshot Detected</AppText>
-            <AppText style={styles.modalBody}>Screenshots of this item are restricted. Your partner has been notified.</AppText>
+            <AppText style={styles.modalTitle}>Screen Capture Attempt Detected</AppText>
+            <AppText style={styles.modalBody}>Screen capture is restricted for this item. Your partner has been notified.</AppText>
             <TouchableOpacity style={styles.modalButton} onPress={() => setScreenshotWarning(false)}>
               <AppText style={styles.modalButtonText}>Got it</AppText>
             </TouchableOpacity>
@@ -519,6 +516,7 @@ export default function VaultViewerScreen() {
   const listRef = useRef<FlatList<GalleryItem>>(null);
 
   const activeItem = items[activeIndex] ?? null;
+  useProtectedScreenCapture(!!activeItem && !activeItem.allowScreenshot);
   const canDeleteFromVault = !!activeItem?.id && (activeItem.storageBucket ?? 'vault') === 'vault';
 
   const toggleControls = useCallback(() => {
@@ -609,7 +607,6 @@ export default function VaultViewerScreen() {
     index,
   }), [screenWidth]);
 
-  // Animated opacity for top controls
   const topOpacity = useSharedValue(1);
   useEffect(() => {
     topOpacity.value = withTiming(controlsVisible ? 1 : 0, {
@@ -668,7 +665,6 @@ export default function VaultViewerScreen() {
         style={{ width: screenWidth, height: screenHeight }}
       />
 
-      {/* Floating top controls (back, counter, delete) */}
       <Animated.View style={[styles.topControls, { top: insets.top + 8 }, topControlsStyle]} pointerEvents={controlsVisible ? 'box-none' : 'none'}>
         <TouchableOpacity style={styles.topButton} onPress={() => router.back()} activeOpacity={0.8}>
           <ChevronLeft color="#fff" size={24} />
