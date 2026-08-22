@@ -3,7 +3,7 @@
     "name": "Warm Me Up",
     "slug": "warmup",
     "version": "1.6.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "splash": {
       "image": "./assets/images/splash.png",
@@ -23,7 +23,7 @@
       }
     },
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "backgroundColor": "#050507",
       "bundleIdentifier": "app.warmmeup",
       "infoPlist": {

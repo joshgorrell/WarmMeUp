@@ -23,13 +23,20 @@ export default function WelcomeScreen() {
       router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } });
     }
   }, [codeToPreserve]);
-  const { width, height, isTablet, contentMaxWidth } = useLayout();
-  const logoSize = Math.min(Math.round(width * 0.38), 180);
+
+  const { width, height, isTabletOrLarger } = useLayout();
+  const isLandscape = width > height;
+  const logoSize = Math.min(Math.round(width * 0.38), isTabletOrLarger ? 160 : 180);
   const wordmarkSize = Math.round(logoSize * 0.16);
-  const taglineWidth = Math.min(width - Spacing.md * 2, 440);
+  const contentWidth = isTabletOrLarger ? Math.min(width - Spacing.xl * 2, 600) : width;
+  const taglineWidth = Math.min(contentWidth - Spacing.md * 2, isLandscape ? 360 : 440);
   const taglineHeight = taglineWidth * (148 / 340);
-  const paddingTop = Math.max(40, Math.round(height * 0.1)) + insets.top;
-  const paddingBottom = Math.max(28, Math.round(height * 0.07)) + insets.bottom;
+  const paddingTop = isTabletOrLarger
+    ? Math.max(24, Math.round(height * 0.06)) + insets.top
+    : Math.max(40, Math.round(height * 0.1)) + insets.top;
+  const paddingBottom = isTabletOrLarger
+    ? Math.max(20, Math.round(height * 0.04)) + insets.bottom
+    : Math.max(28, Math.round(height * 0.07)) + insets.bottom;
 
   return (
     <View style={styles.root}>
@@ -41,7 +48,7 @@ export default function WelcomeScreen() {
       <View style={[
         styles.container,
         { paddingTop, paddingBottom },
-        isTablet && { alignSelf: 'center', width: '100%', maxWidth: contentMaxWidth },
+        isTabletOrLarger && { alignSelf: 'center', width: '100%', maxWidth: 600 },
       ]}>
         {/* Hero: logo + wordmark + tagline */}
         <View style={styles.hero}>
@@ -57,7 +64,7 @@ export default function WelcomeScreen() {
           </TouchableOpacity>
           <Image
             source={TAGLINE_SOURCE}
-            style={{ width: taglineWidth, height: taglineHeight, marginTop: 20, alignSelf: 'center' }}
+            style={{ width: taglineWidth, height: taglineHeight, marginTop: isTabletOrLarger ? 12 : 20, alignSelf: 'center' }}
             resizeMode="contain"
           />
         </View>
