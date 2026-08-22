@@ -17,23 +17,18 @@ import {
 import type { UserSettings } from '@/lib/types';
 
 export function SettingsTab({
-  // Auth
   user,
-  // Settings + couple
   s,
   couple,
-  // Security/biometric
   bioAvailable,
   hasHardware,
   biometricLabel,
   bioAuthenticate,
   update,
-  // Points & streaks
   optimisticPointsEnabled,
   optimisticStreaksEnabled,
   onTogglePoints,
   onToggleStreaks,
-  // Change email
   showChangeEmail,
   newEmail,
   emailError,
@@ -43,7 +38,6 @@ export function SettingsTab({
   onCloseChangeEmail,
   onSetNewEmail,
   onSaveEmail,
-  // Change password
   showChangePw,
   currentPw,
   newPw,
@@ -57,23 +51,17 @@ export function SettingsTab({
   onSetNewPw,
   onSetConfirmPw,
   onSavePassword,
-  // Info modals
   onShowVaultSecurityInfo,
   onShowDiscreetInfo,
   onShowCommunityGuidelines,
   onShowTerms,
   onShowPrivacyPolicy,
-  // Subscription
   subscriptionInfo,
   onRestorePurchase,
-  // Delete account
   onDeleteAccount,
-  // Support
   onContactSupport,
-  // Feedback
   feedbackEnabled,
   onSendFeedback,
-  // Vault section layout ref
   onVaultSectionLayout,
 }: {
   user: any;
@@ -128,20 +116,11 @@ export function SettingsTab({
   const didProbingRef = useRef(false);
   const [confirmSheet, setConfirmSheet] = useState<{ title: string; message: string; actions: { label: string; onPress: () => void; destructive?: boolean }[] } | null>(null);
 
-  // Proactively trigger the iOS Face ID permission prompt once when the user
-  // visits Settings and the device has biometric hardware but hasn't been
-  // confirmed as enrolled yet. This is what makes the app appear in
-  // iOS Settings > Face ID so the user can grant permission.
   useEffect(() => {
     if (didProbingRef.current) return;
     if (!hasHardware || bioAvailable) return;
     didProbingRef.current = true;
-    bioAuthenticate('Warm Me Up wants to use Face ID').then((result) => {
-      // If it succeeded, the permission is now granted and the app will
-      // appear in iOS Settings > Face ID. If it failed (user cancelled or
-      // face not enrolled), we silently ignore — the tile is still tappable
-      // and will re-prompt when the user taps it.
-    });
+    bioAuthenticate('Warm Me Up wants to use Face ID').then(() => {});
   }, [hasHardware, bioAvailable, bioAuthenticate]);
 
   return (
@@ -235,7 +214,6 @@ export function SettingsTab({
             )}
           </View>
         )}
-
       </Section>
 
       <Section title="MY DEVICE PRIVACY" note="These settings only affect your device. Your partner manages their own independently.">
@@ -295,10 +273,23 @@ export function SettingsTab({
             update({ vault_face_id_required: additional });
           }}
         />
-        <SettingsRow label="Notify Me if My Content is Screenshotted" sub="When on, screenshots of your content are detected and your partner sees a warning. When off, screenshots are allowed with no warning. Applies to all your past and future uploads." toggle value={s?.screenshot_notify_partner ?? true} onChange={v => {
-          if (v) { update({ screenshot_notify_partner: v }); return; }
-          setConfirmSheet({ title: 'Allow Screenshots?', message: 'Your partner will be able to screenshot your photos and videos — including everything you have already uploaded — with no warning or notification. Turn this off?', actions: [{ label: 'Allow Screenshots', onPress: () => { update({ screenshot_notify_partner: false }); setConfirmSheet(null); }, destructive: true }, { label: 'Keep Protection', onPress: () => setConfirmSheet(null) } ] });
-        }} />
+        <SettingsRow
+          label="Protect My Content from Screen Capture"
+          sub="When on, Warm Me Up blocks screenshots, screen recording, and mirroring where supported. When off, screen capture is allowed. Applies to all your past and future uploads."
+          toggle
+          value={s?.screenshot_notify_partner ?? true}
+          onChange={v => {
+            if (v) { update({ screenshot_notify_partner: true }); return; }
+            setConfirmSheet({
+              title: 'Allow Screen Capture?',
+              message: 'Your partner will be able to screenshot, screen record, or mirror your photos and videos — including everything you have already uploaded — without Warm Me Up blocking capture. Turn protection off?',
+              actions: [
+                { label: 'Allow Screen Capture', onPress: () => { update({ screenshot_notify_partner: false }); setConfirmSheet(null); }, destructive: true },
+                { label: 'Keep Protection', onPress: () => setConfirmSheet(null) },
+              ],
+            });
+          }}
+        />
       </Section>
 
       <View onLayout={(e) => onVaultSectionLayout(e.nativeEvent.layout.y)}>
@@ -319,11 +310,7 @@ export function SettingsTab({
 
       <Section title="CHAT">
         <SettingsRow label="Blur Chat Photos & Videos" sub="Photos and videos sent in Chat stay blurred until tapped; re-blurs when you leave the app." toggle value={s?.blur_chat_media ?? s?.blur_media ?? true} onChange={v => update({ blur_chat_media: v })} />
-        <ChatFontSizeRow
-          current={s?.chat_font_scale ?? 1.0}
-          colors={colors}
-          onSelect={(scale) => update({ chat_font_scale: scale })}
-        />
+        <ChatFontSizeRow current={s?.chat_font_scale ?? 1.0} colors={colors} onSelect={(scale) => update({ chat_font_scale: scale })} />
       </Section>
 
       <Section title="NOTIFICATIONS">
@@ -331,146 +318,47 @@ export function SettingsTab({
         <SettingsRow label="App Icon Badge" sub="Show a red dot on the app icon when you have unread activity" toggle value={s?.app_icon_badge_enabled ?? true} onChange={async (v) => { await update({ app_icon_badge_enabled: v }); if (!v) { const { setAppBadge } = await import('@/lib/appBadge'); setAppBadge(0); } }} last />
       </Section>
 
-      <Section
-        title="POINTS & SCORE"
-        note={
-          couple?.id
-            ? "This setting affects both you and your partner. Points are always tallied in the background — turning this off just hides the scores."
-            : "Connect with a partner to enable the points system."
-        }
-      >
-        <SettingsRow
-          label="Sparks System"
-          sub="Show scores, leaderboard, and Cash In features"
-          toggle
-          value={optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)}
-          onChange={onTogglePoints}
-          disabled={!couple?.id}
-          last
-        />
+      <Section title="POINTS & SCORE" note={couple?.id ? "This setting affects both you and your partner. Points are always tallied in the background — turning this off just hides the scores." : "Connect with a partner to enable the points system."}>
+        <SettingsRow label="Sparks System" sub="Show scores, leaderboard, and Cash In features" toggle value={optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)} onChange={onTogglePoints} disabled={!couple?.id} last />
       </Section>
 
-      <Section
-        title="STREAKS"
-        note={
-          couple?.id
-            ? "This setting affects both you and your partner. Your streak is always tracked in the background — turning this off just hides it."
-            : "Connect with a partner to enable streaks."
-        }
-      >
-        <SettingsRow
-          label="Day Streak"
-          sub="Show your current consecutive-day activity streak"
-          toggle
-          value={optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)}
-          onChange={onToggleStreaks}
-          disabled={!couple?.id}
-          last
-        />
+      <Section title="STREAKS" note={couple?.id ? "This setting affects both you and your partner. Your streak is always tracked in the background — turning this off just hides it." : "Connect with a partner to enable streaks."}>
+        <SettingsRow label="Day Streak" sub="Show your current consecutive-day activity streak" toggle value={optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)} onChange={onToggleStreaks} disabled={!couple?.id} last />
       </Section>
 
       <Section title="SUPPORT">
-        {feedbackEnabled && (
-          <SettingsRow
-            label="Send Feedback"
-            sub="Share ideas, report issues, or send us a note"
-            onPress={onSendFeedback}
-          />
-        )}
-        <SettingsRow
-          label="Contact Support"
-          sub="Get help from the Warm Me Up team"
-          onPress={onContactSupport}
-        />
-        <SettingsRow
-          label="Community Guidelines"
-          sub="How we keep this space safe and respectful"
-          onPress={onShowCommunityGuidelines}
-          last
-        />
+        {feedbackEnabled && <SettingsRow label="Send Feedback" sub="Share ideas, report issues, or send us a note" onPress={onSendFeedback} />}
+        <SettingsRow label="Contact Support" sub="Get help from the Warm Me Up team" onPress={onContactSupport} />
+        <SettingsRow label="Community Guidelines" sub="How we keep this space safe and respectful" onPress={onShowCommunityGuidelines} last />
       </Section>
 
       <Section title="MEMBERSHIP">
         {subscriptionInfo.loading ? (
           <SettingsRow label="Status" sub="Loading…" last />
-
         ) : (subscriptionInfo.source === 'admin' || subscriptionInfo.source === 'super_admin' || subscriptionInfo.source === 'admin_grant') ? (
-          <SettingsRow
-            label="Access"
-            sub="Complimentary — full access granted"
-            last
-          />
-
+          <SettingsRow label="Access" sub="Complimentary — full access granted" last />
         ) : subscriptionInfo.source === 'partner' ? (
           <>
-            <SettingsRow
-              label="Plan"
-              sub="Covered by partner's subscription"
-            />
-            <SettingsRow
-              label="Manage"
-              sub="View or cancel in the App Store"
-              onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
-              accent
-              last
-            />
+            <SettingsRow label="Plan" sub="Covered by partner's subscription" />
+            <SettingsRow label="Manage" sub="View or cancel in the App Store" onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')} accent last />
           </>
-
         ) : subscriptionInfo.source === 'self' && subscriptionInfo.isOnTrial ? (
           <>
-            <SettingsRow
-              label="Plan"
-              sub={`Free Trial${subscriptionInfo.trialExpiresAt ? ` · ends ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`}
-            />
-            <SettingsRow
-              label="Subscribe"
-              sub="Unlock full access · your partner joins free"
-              onPress={() => router.push('/(auth)/subscription')}
-              accent
-            />
-            <SettingsRow
-              label="Restore Purchase"
-              sub="Recover a previous subscription"
-              onPress={onRestorePurchase}
-              last
-            />
+            <SettingsRow label="Plan" sub={`Free Trial${subscriptionInfo.trialExpiresAt ? ` · ends ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`} />
+            <SettingsRow label="Subscribe" sub="Unlock full access · your partner joins free" onPress={() => router.push('/(auth)/subscription')} accent />
+            <SettingsRow label="Restore Purchase" sub="Recover a previous subscription" onPress={onRestorePurchase} last />
           </>
-
         ) : subscriptionInfo.source === 'self' && subscriptionInfo.isPremium ? (
           <>
-            <SettingsRow
-              label="Plan"
-              sub={`${subscriptionInfo.plan === 'yearly' ? 'Yearly' : 'Monthly'} · Active${subscriptionInfo.expiresAt ? ` — renews ${new Date(subscriptionInfo.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`}
-            />
-            <SettingsRow
-              label="Manage Subscription"
-              sub="View or cancel in the App Store"
-              onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
-              accent
-            />
-            <SettingsRow
-              label="Restore Purchase"
-              sub="Recover a previous subscription"
-              onPress={onRestorePurchase}
-              last
-            />
+            <SettingsRow label="Plan" sub={`${subscriptionInfo.plan === 'yearly' ? 'Yearly' : 'Monthly'} · Active${subscriptionInfo.expiresAt ? ` — renews ${new Date(subscriptionInfo.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`} />
+            <SettingsRow label="Manage Subscription" sub="View or cancel in the App Store" onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')} accent />
+            <SettingsRow label="Restore Purchase" sub="Recover a previous subscription" onPress={onRestorePurchase} last />
           </>
-
         ) : (
           <>
             <SettingsRow label="Plan" sub="No active subscription" />
-            <SettingsRow
-              label="Subscribe"
-              sub="One subscription covers both of you · partner joins free"
-              onPress={() => router.push('/(auth)/subscription')}
-              accent
-            />
-            <SettingsRow
-              label="Restore Purchase"
-              sub="Recover a previous subscription"
-              onPress={onRestorePurchase}
-              last
-            />
+            <SettingsRow label="Subscribe" sub="One subscription covers both of you · partner joins free" onPress={() => router.push('/(auth)/subscription')} accent />
+            <SettingsRow label="Restore Purchase" sub="Recover a previous subscription" onPress={onRestorePurchase} last />
           </>
         )}
       </Section>
@@ -481,16 +369,10 @@ export function SettingsTab({
         <SettingsRow label="Delete My Account" danger onPress={onDeleteAccount} last />
       </Section>
 
-      {/* Footer logo */}
       <View style={styles.footerLogoWrap}>
-        <Image
-          source={require('@/assets/images/image_(2).png')}
-          style={styles.footerLogo}
-          resizeMode="contain"
-        />
+        <Image source={require('@/assets/images/image_(2).png')} style={styles.footerLogo} resizeMode="contain" />
       </View>
 
-      {/* Share app with a friend — subtle link, not a button */}
       <TouchableOpacity onPress={shareApp} activeOpacity={0.6} style={styles.shareAppLink}>
         <Share2 color={colors.textMuted} size={13} strokeWidth={2} />
         <AppText style={[styles.shareAppLinkText, { color: colors.textMuted }]}>Share Warm Me Up with a friend</AppText>
@@ -518,7 +400,6 @@ const styles = StyleSheet.create({
   },
 });
 
-// Shared row styles (mirror of SharedSections styles, used for the LOGIN & SECURITY inline rows)
 const stylesShared = {
   row: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
