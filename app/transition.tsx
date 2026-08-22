@@ -11,6 +11,13 @@ import type { NotificationData } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
 
 function resolveNotificationRoute(data: NotificationData): string | null {
+  // Screenshot alerts should open Activity, where the event already includes
+  // the captured item's thumbnail/context and a tap-through to the exact media
+  // when Warm Me Up can identify it reliably.
+  if ((data.event_type as string) === 'screenshot_detected') {
+    return '/(app)/activity';
+  }
+
   switch (data.event_type) {
     case 'new_message':
       return '/(app)/(tabs)/note';
