@@ -1,14 +1,14 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import * as ScreenCapture from 'expo-screen-capture';
 
 /**
  * Protects sensitive media from screenshots, screen recording and mirroring
  * only while that media is active and capture is not allowed by its owner.
  *
- * A unique key keeps this protection isolated from any other privacy guards.
- * Normal app use is unaffected and capture is restored as soon as the media
- * becomes inactive or its owner allows screen capture.
+ * expo-screen-capture is loaded lazily so OTA updates remain compatible with
+ * older native binaries that were built before the module was added. On those
+ * binaries the import simply fails inside the guarded async path and media
+ * viewing continues normally. New native builds get full capture protection.
  */
 export function useProtectedScreenCapture(
   protectedContent: boolean,
@@ -17,12 +17,16 @@ export function useProtectedScreenCapture(
   useEffect(() => {
     if (Platform.OS === 'web') return;
 
+    let cancelled = false;
+
     const sync = async () => {
       try {
+        const ScreenCapture = await import('expo-screen-capture');
+        if (cancelled) return;
+
         if (protectedContent) {
           await ScreenCapture.preventScreenCaptureAsync(key);
           if (Platform.OS === 'ios') {
-            // Also hides protected content in app-switcher/background snapshots.
             await ScreenCapture.enableAppSwitcherProtectionAsync(1);
           }
         } else {
@@ -32,17 +36,26 @@ export function useProtectedScreenCapture(
           }
         }
       } catch {
-        // Privacy protection must never crash or interrupt normal media viewing.
+        // Older OTA-compatible binaries may not contain the native module yet.
+        // Never let missing capture protection interrupt normal media viewing.
       }
     };
 
     sync();
 
     return () => {
-      ScreenCapture.allowScreenCaptureAsync(key).catch(() => {});
-      if (Platform.OS === 'ios') {
-        ScreenCapture.disableAppSwitcherProtectionAsync().catch(() => {});
-      }
+      cancelled = true;
+      void (async () => {
+        try {
+          const ScreenCapture = await import('expo-screen-capture');
+          await ScreenCapture.allowScreenCaptureAsync(key);
+          if (Platform.OS === 'ios') {
+            await ScreenCapture.disableAppSwitcherProtectionAsync();
+          }
+        } catch {
+          // See note above: old native binaries may not have this module.
+        }
+      })();
     };
   }, [protectedContent, key]);
 }
