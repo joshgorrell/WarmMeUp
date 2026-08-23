@@ -138,7 +138,7 @@ Deno.serve(async (req: Request) => {
     const [{ data: partnerProfile }, { data: partnerSettings }, { data: senderProfile }] = await Promise.all([
       adminClient.from("profiles").select("push_token, display_name").eq("id", partnerId).maybeSingle(),
       adminClient.from("user_settings").select("push_notifications_enabled, discreet_notifications, notification_copy").eq("user_id", partnerId).maybeSingle(),
-      adminClient.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+      adminClient.from("profiles").select("first_name, display_name").eq("id", user.id).maybeSingle(),
     ]);
 
     // Respect partner's notification opt-in (system events like disconnection bypass this)
@@ -157,7 +157,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Build notification text
-    const senderName = senderProfile?.display_name ?? "Your partner";
+    const senderName = senderProfile?.first_name?.trim() || senderProfile?.display_name?.trim().split(/\s+/)[0] || "Your partner";
     const isSystemEvent = ALWAYS_SHOW_EVENTS.has(event_type);
     const isDiscreet = isSystemEvent ? false : (partnerSettings?.discreet_notifications ?? true);
     const notifCopy = partnerSettings?.notification_copy ?? "New activity";

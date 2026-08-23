@@ -98,6 +98,7 @@ export default function ChatTab() {
     };
   }, []);
 
+  const partnerFirstName = partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\s+/)[0] || (hasPartner ? 'Partner' : 'Chat');
   const blurEnabled = settings?.blur_chat_media ?? settings?.blur_media ?? true;
   const chatFontScale = settings?.chat_font_scale ?? 1.0;
 
@@ -1300,7 +1301,7 @@ export default function ChatTab() {
 
   const renderItem = useCallback(({ item, index }: { item: ChatMessage & { __prevCreatedAt?: string | null; __nextCreatedAt?: string | null; __prevSenderId?: string | null; __nextSenderId?: string | null }; index: number }) => {
     const isMine = item.sender_id === user?.id;
-    const name = isMine ? (profile?.display_name ?? 'You') : (partnerProfile?.display_name ?? 'Partner');
+    const name = isMine ? (profile?.first_name || profile?.display_name?.trim().split(/\s+/)[0] || 'You') : partnerFirstName;
     const hasMedia = !!item.media_storage_path;
     const isMenuOpen = activeMenuId === item.id;
     const itemReactions = reactionsMap[item.id] ?? [];
@@ -1338,7 +1339,7 @@ export default function ChatTab() {
         prevCreatedAt={index > 0 ? (item as any).__prevCreatedAt : undefined}
         highlighted={item.id === highlightedId}
         repliedMessage={repliedMessage}
-        replySenderName={repliedMessage ? (repliedMessage.sender_id === user?.id ? 'You' : (partnerProfile?.first_name || partnerProfile?.display_name || 'Partner')) : undefined}
+        replySenderName={repliedMessage ? (repliedMessage.sender_id === user?.id ? 'You' : partnerFirstName) : undefined}
         onJumpToMessage={handleJumpToMessage}
       />
     );
@@ -1371,7 +1372,7 @@ export default function ChatTab() {
       >
         <AppShell scrollable={false} noTopPadding>
           <ChatHeader
-            partnerName={partnerProfile?.display_name ?? (hasPartner ? 'Partner' : 'Chat')}
+            partnerName={partnerFirstName}
             partnerAvatarUri={partnerProfile?.avatar_url ?? null}
             hasPartner={hasPartner}
             partnerIsOnline={partnerIsOnline}
@@ -1479,7 +1480,7 @@ export default function ChatTab() {
               <View style={styles.replyBannerAccent} />
               <View style={styles.replyBannerInfo}>
                 <AppText style={styles.replyBannerName}>
-                  {replyingTo.sender_id === user?.id ? 'You' : (partnerProfile?.first_name || partnerProfile?.display_name || 'Partner')}
+                  {replyingTo.sender_id === user?.id ? 'You' : partnerFirstName}
                 </AppText>
                 <AppText style={styles.replyBannerPreview} numberOfLines={1} ellipsizeMode="tail">
                   {replyingTo.content_text ?? (replyingTo.media_type === 'video' ? 'Video' : 'Photo')}

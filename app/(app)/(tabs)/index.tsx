@@ -221,7 +221,7 @@ export default function HomeScreen() {
 
   const loadRecentActivity = async () => {
     if (!couple?.id || !user) return;
-    const partnerName = partnerProfile?.display_name ?? 'Partner';
+    const partnerName = partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\s+/)[0] || 'Partner';
 
     const [{ data: interactions }, { data: chatMsgs }, { data: activityEvts }, { data: viewedRows }] = await Promise.all([
       // Only items where current user is the receiver
