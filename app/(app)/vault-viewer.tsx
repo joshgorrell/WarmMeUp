@@ -22,7 +22,6 @@ import { supabase } from '@/lib/supabase';
 import { awardPoints } from '@/lib/points';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
-import { useProtectedScreenCapture } from '@/hooks/useProtectedScreenCapture';
 import { evictCachedUrl, GalleryItem, getGalleryItems } from '@/lib/mediaGalleryStore';
 import { clearLocalImageCache } from '@/lib/mediaCache';
 import { extensionToMime, mimeToExtension, uploadMediaFile } from '@/lib/uploadMedia';
@@ -516,7 +515,6 @@ export default function VaultViewerScreen() {
   const listRef = useRef<FlatList<GalleryItem>>(null);
 
   const activeItem = items[activeIndex] ?? null;
-  useProtectedScreenCapture(!!activeItem && !activeItem.allowScreenshot);
   const canDeleteFromVault = !!activeItem?.id && (activeItem.storageBucket ?? 'vault') === 'vault';
 
   const toggleControls = useCallback(() => {
