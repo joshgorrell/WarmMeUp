@@ -10,7 +10,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { awardPoints, deactivatePreviousEphemeral, getPointValue, verifyCompletion, incrementMonthlyCounter, reversePoints } from '@/lib/points';
+import { awardPoints, deactivatePreviousEphemeral, getPointValue, verifyCompletion, incrementMonthlyCounter } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { Interaction } from '@/lib/types';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -64,8 +64,6 @@ const HOLD_DURATION = 2000;
 const RING_SIZE_MAX = 240;
 const STROKE = 6;
 
-type RolledFor = 'self' | 'partner';
-
 export default function DiceTab() {
   const { user, couple, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
@@ -73,7 +71,6 @@ export default function DiceTab() {
   const { width: screenWidth } = useWindowDimensions();
   const { isTabletOrLarger } = useLayout();
 
-  // Scale the ring: tablet gets up to 340pt, phone stays capped at 240pt
   const RING_MAX = isTabletOrLarger ? 340 : RING_SIZE_MAX;
   const ringSize = Math.min(RING_MAX, screenWidth - 80);
   const diceSize = Math.round(ringSize * (200 / 240));
@@ -84,11 +81,11 @@ export default function DiceTab() {
   const hasPartner = !!couple?.user_b_id;
   const expiryHours = settings?.challenge_expiry_hours ?? 24;
   const expirySeconds = expiryHours * 3600;
+  const partnerFirstName = partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\s+/)[0] || undefined;
+
   const [prompts, setPrompts] = useState<string[]>(FALLBACK_PROMPTS);
   const [hasCustomPrompts, setHasCustomPrompts] = useState<'unknown' | 'yes' | 'no'>('unknown');
   const [promptsLoaded, setPromptsLoaded] = useState(false);
-  const [rolledFor, setRolledFor] = useState<RolledFor>('self');
-  const [rolledForResult, setRolledForResult] = useState<RolledFor>('self');
   const [result, setResult] = useState<string | null>(null);
   const [resultLabel, setResultLabel] = useState<'you' | 'partner'>('you');
   const [rolling, setRolling] = useState(false);
@@ -106,9 +103,6 @@ export default function DiceTab() {
   const [highlightChallenge, setHighlightChallenge] = useState(false);
   const handledDiceLinkRef = useRef<string | null>(null);
 
-  // Tracks the id of the last self-roll interaction so we can delete it
-  const lastSelfRollId = useRef<string | null>(null);
-
   const diceRef = useRef<NeonDiceHandle>(null);
   const sentOpacity = useRef(new Animated.Value(0)).current;
   const sentTranslate = useRef(new Animated.Value(10)).current;
@@ -124,7 +118,6 @@ export default function DiceTab() {
     return () => holdProgress.removeListener(id);
   }, [holdProgress, circumference]);
 
-  // Sync ring to full "empty" position when circumference changes (e.g. screen resize)
   useEffect(() => { setRingOffset(circumference); }, [circumference]);
 
   useEffect(() => {
@@ -208,18 +201,23 @@ export default function DiceTab() {
         .maybeSingle(),
     ]);
 
-    const incoming = incomingRes.data;
-    if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {
-      // Auto-reject expired incoming dice challenge silently
-      await supabase.from('interactions').update({ status: 'rejected', is_active: false }).eq('id', incoming.id);
-      await incrementMonthlyCounter(couple.id, user.id, 'dice_skipped', 0);
-      setIncomingChallenge(null);
-    } else {
-      setIncomingChallenge(incoming);
-    }
+    const expireIfOverdue = async (item: Interaction | null) => {
+      if (!item?.expires_at || new Date(item.expires_at) > new Date()) return item;
+      await supabase
+        .from('interactions')
+        .update({ status: 'expired', is_active: false })
+        .eq('id', item.id)
+        .in('status', ['sent', 'accepted', 'pending_verification']);
+      return null;
+    };
 
-    setPendingVerification(pendingRes.data);
-    setSentDice(mySentRes.data ?? null);
+    const incoming = await expireIfOverdue(incomingRes.data);
+    const pending = await expireIfOverdue(pendingRes.data);
+    const mySent = await expireIfOverdue(mySentRes.data);
+
+    setIncomingChallenge(incoming);
+    setPendingVerification(pending);
+    setSentDice(mySent);
   }, [couple?.id, user?.id]);
 
   useEffect(() => {
@@ -239,7 +237,6 @@ export default function DiceTab() {
     return () => { supabase.removeChannel(ch); };
   }, [couple?.id, user?.id, checkStates]);
 
-  // Deep-link: when dice_id param arrives, check if the roll is still active
   useEffect(() => {
     if (!deepLinkDiceId || !couple?.id) return;
     if (handledDiceLinkRef.current === deepLinkDiceId) return;
@@ -254,14 +251,14 @@ export default function DiceTab() {
         Alert.alert('Roll not found', 'This dice roll could not be found.');
         return;
       }
-      if (roll.status === 'sent' && incomingChallenge?.id === deepLinkDiceId) {
+      const activeStatuses = ['sent', 'accepted', 'pending_verification'];
+      const isLoaded = incomingChallenge?.id === deepLinkDiceId || pendingVerification?.id === deepLinkDiceId;
+      if (activeStatuses.includes(roll.status) && isLoaded) {
         setHighlightChallenge(true);
         setTimeout(() => setHighlightChallenge(false), 2000);
-      } else if (!['sent'].includes(roll.status)) {
-        Alert.alert('Roll already resolved', 'This dice roll has already been accepted or has expired.');
       }
     })();
-  }, [deepLinkDiceId]);
+  }, [deepLinkDiceId, couple?.id, incomingChallenge?.id, pendingVerification?.id]);
 
   const showResult = useCallback((text: string, from: 'you' | 'partner') => {
     setResult(text);
@@ -276,6 +273,11 @@ export default function DiceTab() {
 
   const triggerRoll = async () => {
     if (rolling) return;
+    if (!hasPartner) {
+      setError('Pair with your partner before rolling.');
+      return;
+    }
+
     setRolling(true);
     setHolding(false);
     setError('');
@@ -286,46 +288,33 @@ export default function DiceTab() {
     const idx = Math.floor(Math.random() * prompts.length);
     const prompt = prompts[idx];
     const landFace = Math.ceil(Math.random() * 6);
-    const forPartner = rolledFor === 'partner' && hasPartner;
 
     diceRef.current?.roll(
       (f) => setFace(f),
       async () => {
         setFace(landFace);
-        setRolledForResult(forPartner ? 'partner' : 'self');
         try {
           if (couple?.id && user) {
             const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-            const receiverId = forPartner ? (partnerId ?? user.id) : user.id;
+            if (!partnerId) throw new Error('No partner');
             await deactivatePreviousEphemeral(couple.id, user.id);
-            const diceExpiresAt = forPartner
-              ? new Date(Date.now() + expirySeconds * 1000).toISOString()
-              : null;
-            const { data: interaction, error: insertError } = await supabase
+            const diceExpiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
+            const { error: insertError } = await supabase
               .from('interactions')
               .insert({
                 couple_id: couple.id,
                 type: 'dice',
                 sender_id: user.id,
-                receiver_id: receiverId,
+                receiver_id: partnerId,
                 content_text: prompt,
                 status: 'sent',
                 is_active: true,
-                rolled_for: rolledFor,
-                ...(diceExpiresAt ? { expires_at: diceExpiresAt } : {}),
-              })
-              .select()
-              .single();
+                rolled_for: 'partner',
+                expires_at: diceExpiresAt,
+              });
             if (insertError) throw insertError;
-            if (interaction && !forPartner) {
-              lastSelfRollId.current = interaction.id;
-            } else {
-              lastSelfRollId.current = null;
-            }
-            if (forPartner && partnerId) {
-              notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
-              await checkStates();
-            }
+            notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
+            await checkStates();
           }
           showResult(prompt, 'you');
         } catch {
@@ -341,13 +330,11 @@ export default function DiceTab() {
   const handleRespond = async (accepted: boolean) => {
     if (!incomingChallenge || !couple?.id || !user) return;
     if (accepted) {
-      // Keep is_active true so the receiver can later tap "I Did It!"
       await supabase.from('interactions').update({ status: 'accepted', is_active: false }).eq('id', incomingChallenge.id);
       notifyPartner({ event_type: 'dice_accepted', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
       const pts = await getPointValue('dice_accept');
       await awardPoints(couple.id, user.id, pts, 'Dice challenge accepted', incomingChallenge.id);
       await incrementMonthlyCounter(couple.id, user.id, 'dice_accepted', pts);
-      // Update local state to reflect accepted stage so card transitions
       setIncomingChallenge({ ...incomingChallenge, status: 'accepted' });
     } else {
       await supabase.from('interactions').update({ status: 'rejected', is_active: false }).eq('id', incomingChallenge.id);
@@ -390,49 +377,33 @@ export default function DiceTab() {
     }
   };
 
-  const confirmDeleteRoll = (onConfirm: () => void) => {
+  const handleCancelSentRoll = () => {
+    const id = sentDice?.id;
+    if (!id || !couple?.id || !user?.id) return;
     Alert.alert(
-      'Remove this roll?',
-      'This will remove the roll and any points earned from it.',
+      'Cancel this roll?',
+      'This ends the roll for both of you.',
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: onConfirm },
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Cancel roll',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase
+              .from('interactions')
+              .update({ status: 'cancelled', is_active: false })
+              .eq('id', id)
+              .eq('sender_id', user.id);
+            setSentDice(null);
+            await checkStates();
+          },
+        },
       ]
     );
   };
 
-  const handleDeleteSelfRoll = () => {
-    const id = lastSelfRollId.current;
-    if (!id || !couple?.id || !user?.id) return;
-    confirmDeleteRoll(async () => {
-      await supabase
-        .from('interactions')
-        .update({ deleted_at: new Date().toISOString(), is_active: false })
-        .eq('id', id);
-      lastSelfRollId.current = null;
-      setResult(null);
-      setFace(5);
-      sentOpacity.setValue(0);
-      sentTranslate.setValue(10);
-    });
-  };
-
-  const handleCancelSentRoll = () => {
-    const id = sentDice?.id;
-    if (!id || !couple?.id || !user?.id) return;
-    confirmDeleteRoll(async () => {
-      await supabase
-        .from('interactions')
-        .update({ deleted_at: new Date().toISOString(), is_active: false, status: 'rejected' })
-        .eq('id', id);
-      await reversePoints(id, couple.id, user.id);
-      setSentDice(null);
-      await checkStates();
-    });
-  };
-
   const onPressIn = () => {
-    if (rolling) return;
+    if (rolling || !hasPartner) return;
     if (result) {
       setResult(null);
       setFace(5);
@@ -464,15 +435,13 @@ export default function DiceTab() {
 
   const sentSubtitle = resultLabel === 'partner'
     ? 'Your partner rolled for you'
-    : rolledForResult === 'partner'
-      ? 'Rolled for your partner — waiting for them'
-      : 'Just for you';
+    : 'Rolled for your partner — waiting for them';
 
   const hintText = holding
     ? 'Keep holding…'
-    : rolledFor === 'partner'
+    : hasPartner
       ? 'Press & hold to roll for your partner'
-      : 'Press & hold the dice to roll';
+      : 'Pair with your partner to roll';
 
   return (
     <AppShell scrollable={false}>
@@ -483,7 +452,6 @@ export default function DiceTab() {
         scrollEnabled={!!(incomingChallenge || pendingVerification)}
         showsVerticalScrollIndicator={false}
       >
-        {/* Incoming challenge card */}
         {incomingChallenge && (
           <View style={[styles.challengeSection, highlightChallenge && styles.challengeHighlight]}>
             <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,179,71,0.08)', borderColor: 'rgba(255,179,71,0.25)' }]}>
@@ -496,21 +464,20 @@ export default function DiceTab() {
               status={incomingChallenge.status}
               expiresAt={incomingChallenge.expires_at}
               totalExpirySeconds={expirySeconds}
-              partnerName={partnerProfile?.display_name ?? partnerProfile?.first_name ?? undefined}
+              partnerName={partnerFirstName}
               onAccept={() => handleRespond(true)}
               onReject={() => handleRespond(false)}
               onComplete={handleDiceComplete}
-              onTimeout={() => handleRespond(false)}
+              onTimeout={checkStates}
             />
           </View>
         )}
 
-        {/* Pending verification */}
         {pendingVerification && (
           <View style={[styles.verifyCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.35)' }]}>
             <View style={styles.verifyHeader}>
               <CheckCircle color="#33D17A" size={20} strokeWidth={2} />
-              <AppText style={[styles.verifyTitle, { color: colors.text }]}>Partner accepted your roll!</AppText>
+              <AppText style={[styles.verifyTitle, { color: colors.text }]}>{partnerFirstName ?? 'Your partner'} completed your roll!</AppText>
             </View>
             {pendingVerification.content_text ? (
               <AppText style={[styles.verifyDareText, { color: colors.textSecondary }]}>
@@ -518,7 +485,7 @@ export default function DiceTab() {
               </AppText>
             ) : null}
             <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>
-              When they complete it, confirm here — they earn <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText>
+              Confirm it here — they earn <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText>
             </AppText>
             <TouchableOpacity
               style={styles.verifyBtn}
@@ -533,58 +500,35 @@ export default function DiceTab() {
           </View>
         )}
 
-        {/* Roll For toggle — only shown when a partner has joined */}
-        {hasPartner && (
-          <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-            {(['self', 'partner'] as RolledFor[]).map((option) => {
-              const active = rolledFor === option;
-              return (
-                <TouchableOpacity
-                  key={option}
-                  style={[styles.toggleOption, active && styles.toggleOptionActive]}
-                  onPress={() => { if (!rolling) setRolledFor(option); }}
-                  activeOpacity={0.8}
-                  disabled={rolling}
-                >
-                  {active && <View style={[StyleSheet.absoluteFill, styles.toggleActiveBg]} />}
-                  <AppText style={[styles.toggleText, { color: active ? '#FFB347' : colors.textMuted }]}>
-                    {option === 'self' ? 'For Me' : 'For My Partner'}
-                  </AppText>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-          <View style={[styles.diceArea, { paddingTop: Spacing.md }]}>
-            <View style={[styles.diceContainer, { width: ringSize, height: ringSize }]}>
-              {!rolling && (
-                <Svg width={ringSize} height={ringSize} style={StyleSheet.absoluteFill} pointerEvents="none">
-                  <Defs>
-                    <SvgGradient id="ringGrad" x1="0" y1="0" x2="1" y2="0">
-                      <Stop offset="0" stopColor="#FFB347" />
-                      <Stop offset="0.5" stopColor="#FF5A3D" />
-                      <Stop offset="1" stopColor="#FF2E8A" />
-                    </SvgGradient>
-                  </Defs>
-                  <Circle cx={ringSize / 2} cy={ringSize / 2} r={radius} stroke="rgba(255,255,255,0.08)" strokeWidth={STROKE} fill="none" />
-                  <Circle
-                    cx={ringSize / 2} cy={ringSize / 2} r={radius}
-                    stroke="url(#ringGrad)" strokeWidth={STROKE} fill="none"
-                    strokeDasharray={circumference} strokeDashoffset={ringOffset}
-                    strokeLinecap="round" transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
-                  />
-                </Svg>
-              )}
-              <Animated.View style={{ transform: [{ scale: holdScale }] }}>
-                <TouchableOpacity
+        <View style={[styles.diceArea, { paddingTop: Spacing.md }]}>
+          <View style={[styles.diceContainer, { width: ringSize, height: ringSize }]}>
+            {!rolling && (
+              <Svg width={ringSize} height={ringSize} style={StyleSheet.absoluteFill} pointerEvents="none">
+                <Defs>
+                  <SvgGradient id="ringGrad" x1="0" y1="0" x2="1" y2="0">
+                    <Stop offset="0" stopColor="#FFB347" />
+                    <Stop offset="0.5" stopColor="#FF5A3D" />
+                    <Stop offset="1" stopColor="#FF2E8A" />
+                  </SvgGradient>
+                </Defs>
+                <Circle cx={ringSize / 2} cy={ringSize / 2} r={radius} stroke="rgba(255,255,255,0.08)" strokeWidth={STROKE} fill="none" />
+                <Circle
+                  cx={ringSize / 2} cy={ringSize / 2} r={radius}
+                  stroke="url(#ringGrad)" strokeWidth={STROKE} fill="none"
+                  strokeDasharray={circumference} strokeDashoffset={ringOffset}
+                  strokeLinecap="round" transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
+                />
+              </Svg>
+            )}
+            <Animated.View style={{ transform: [{ scale: holdScale }] }}>
+              <TouchableOpacity
                 activeOpacity={1}
                 onPressIn={onPressIn}
                 onPressOut={onPressOut}
-                disabled={rolling}
+                disabled={rolling || !hasPartner}
                 accessible
-                accessibilityLabel="Hold to roll dice"
-                accessibilityHint="Press and hold for 2 seconds to roll"
+                accessibilityLabel="Hold to roll dice for your partner"
+                accessibilityHint="Press and hold for 2 seconds to send a roll to your partner"
               >
                 <View style={[styles.diceWrapper, { width: diceSize, height: diceSize }]}>
                   <NeonDice
@@ -603,25 +547,17 @@ export default function DiceTab() {
             </Animated.View>
           </View>
 
-          {/* Sent subtitle fades in below the die after a roll */}
           <Animated.View
             style={[styles.sentWrap, { opacity: sentOpacity, transform: [{ translateY: sentTranslate }] }]}
           >
             <AppText style={[styles.sent, { color: colors.textMuted }]}>{sentSubtitle}</AppText>
-            {senderCountdown && rolledForResult === 'partner' && (
+            {senderCountdown && sentDice && (
               <View style={styles.expiryRow}>
                 <Timer color={colors.textMuted} size={12} strokeWidth={2} />
                 <AppText style={[styles.expiryText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText>
               </View>
             )}
-            {/* Remove link for self-rolls */}
-            {result && rolledForResult === 'self' && lastSelfRollId.current && (
-              <TouchableOpacity onPress={handleDeleteSelfRoll} activeOpacity={0.7} style={styles.deleteLink}>
-                <AppText style={[styles.deleteLinkText, { color: colors.textMuted }]}>Remove</AppText>
-              </TouchableOpacity>
-            )}
-            {/* Cancel link for pending partner rolls */}
-            {rolledForResult === 'partner' && sentDice && (
+            {sentDice && (
               <TouchableOpacity onPress={handleCancelSentRoll} activeOpacity={0.7} style={styles.deleteLink}>
                 <AppText style={[styles.deleteLinkText, { color: colors.textMuted }]}>Cancel roll</AppText>
               </TouchableOpacity>
@@ -636,8 +572,8 @@ export default function DiceTab() {
             >
               <UserPlus color={colors.textMuted} size={13} strokeWidth={2} />
               <AppText style={[styles.soloNoticeText, { color: colors.textMuted }]}>
-                Rolling for a partner requires{' '}
-                <AppText style={[styles.soloNoticeLink, { color: '#FFB347' }]}>pairing up first</AppText>
+                Dice is for the two of you —{' '}
+                <AppText style={[styles.soloNoticeLink, { color: '#FFB347' }]}>pair up first</AppText>
               </AppText>
             </TouchableOpacity>
           )}
@@ -675,11 +611,6 @@ const styles = StyleSheet.create({
   verifyBtn: { borderRadius: Radius.pill, overflow: 'hidden', marginTop: Spacing.xs },
   verifyGrad: { height: 50, alignItems: 'center', justifyContent: 'center' },
   verifyBtnText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-Bold' },
-  toggleRow: { flexDirection: 'row', borderRadius: Radius.pill, borderWidth: 1, padding: 3, marginTop: Spacing.md, marginBottom: Spacing.lg },
-  toggleOption: { flex: 1, height: 38, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  toggleOptionActive: {},
-  toggleActiveBg: { backgroundColor: 'rgba(255,179,71,0.15)', borderRadius: Radius.pill },
-  toggleText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', letterSpacing: 0.2 },
   diceArea: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.lg },
   diceContainer: { alignItems: 'center', justifyContent: 'center' },
   diceWrapper: { alignItems: 'center', justifyContent: 'center' },
