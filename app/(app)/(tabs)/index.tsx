@@ -28,6 +28,8 @@ import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from
 import { reversePoints, awardPoints, getPointValue } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 
+const CHAT_ACTIVITY_PREFIX = '__WMU_ACTIVITY__:';
+
 function getTimeGreeting() {
   const h = new Date().getHours();
   if (h >= 5 && h < 12) return 'Morning';
@@ -333,6 +335,9 @@ export default function HomeScreen() {
 
     (chatMsgs ?? []).forEach((m: any) => {
       if (viewedSet.has(`chat_messages:${m.id}`)) return;
+      // Internal Chat activity-card transport rows are represented by the
+      // interaction/activity feed and must never surface as raw Home text.
+      if (typeof m.content_text === 'string' && m.content_text.startsWith(CHAT_ACTIVITY_PREFIX)) return;
       const preview = m.content_text
         ? `"${m.content_text.slice(0, 60)}${m.content_text.length > 60 ? '…' : ''}"`
         : '';
