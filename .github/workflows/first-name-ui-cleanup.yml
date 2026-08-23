@@ -1,0 +1,74 @@
+name: One-time first-name UI cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/first-name-ui-cleanup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Use partner first names in user-facing UI
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f'Anchor not found in {path}: {old[:80]!r}')
+              p.write_text(s.replace(old, new, 1))
+
+          # Home activity: first_name first; otherwise first token of display_name.
+          replace_once(
+              'app/(app)/(tabs)/index.tsx',
+              "    const partnerName = partnerProfile?.display_name ?? 'Partner';",
+              "    const partnerName = partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\\s+/)[0] || 'Partner';",
+          )
+
+          # Chat: use one normalized first-name value everywhere partner identity is shown.
+          note = Path('app/(app)/(tabs)/note.tsx')
+          s = note.read_text()
+          anchor = "  const blurEnabled = settings?.blur_chat_media ?? settings?.blur_media ?? true;\n"
+          insert = "  const partnerFirstName = partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\\s+/)[0] || (hasPartner ? 'Partner' : 'Chat');\n"
+          if insert.strip() not in s:
+              if anchor not in s:
+                  raise SystemExit('Chat name anchor not found')
+              s = s.replace(anchor, insert + anchor, 1)
+          s = s.replace("const name = isMine ? (profile?.display_name ?? 'You') : (partnerProfile?.display_name ?? 'Partner');", "const name = isMine ? (profile?.first_name || profile?.display_name?.trim().split(/\\s+/)[0] || 'You') : partnerFirstName;")
+          s = s.replace("(partnerProfile?.first_name || partnerProfile?.display_name || 'Partner')", "partnerFirstName")
+          s = s.replace("partnerName={partnerProfile?.display_name ?? (hasPartner ? 'Partner' : 'Chat')}", "partnerName={partnerFirstName}")
+          note.write_text(s)
+
+          # Push notifications: fetch first_name and never expose a full display name.
+          edge = Path('supabase/functions/notify-partner/index.ts')
+          s = edge.read_text()
+          old = 'adminClient.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),'
+          new = 'adminClient.from("profiles").select("first_name, display_name").eq("id", user.id).maybeSingle(),'
+          if old not in s:
+              raise SystemExit('Notification sender profile anchor not found')
+          s = s.replace(old, new, 1)
+          old2 = '    const senderName = senderProfile?.display_name ?? "Your partner";'
+          new2 = '    const senderName = senderProfile?.first_name?.trim() || senderProfile?.display_name?.trim().split(/\\s+/)[0] || "Your partner";'
+          if old2 not in s:
+              raise SystemExit('Notification senderName anchor not found')
+          s = s.replace(old2, new2, 1)
+          edge.write_text(s)
+          PY
+
+          rm .github/workflows/first-name-ui-cleanup.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 'app/(app)/(tabs)/index.tsx' 'app/(app)/(tabs)/note.tsx' 'supabase/functions/notify-partner/index.ts' .github/workflows/first-name-ui-cleanup.yml
+          git commit -m "Use first names across partner-facing UI"
+          git push origin HEAD:main
