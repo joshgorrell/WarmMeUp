@@ -77,7 +77,7 @@ export interface Interaction {
   answered_at: string | null;
   prompt_id: string | null;
   mode: 'tell_me' | 'text_me' | null;
-  status: 'sent' | 'seen' | 'accepted' | 'rejected' | 'completed' | 'answered' | 'pending_verification' | 'cancelled';
+  status: 'sent' | 'seen' | 'accepted' | 'rejected' | 'completed' | 'answered' | 'pending_verification' | 'cancelled' | 'expired';
   rolled_for: 'self' | 'partner' | null;
   decline_reason: string | null;
   is_active: boolean;
