@@ -1,0 +1,303 @@
+name: One-time Dice Flow Cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-dice-flow-cleanup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Simplify Dice to partner-only and terminal expiry
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/(app)/(tabs)/dice.tsx')
+          s = p.read_text()
+
+          s = s.replace("import { awardPoints, deactivatePreviousEphemeral, getPointValue, verifyCompletion, incrementMonthlyCounter, reversePoints } from '@/lib/points';", "import { awardPoints, deactivatePreviousEphemeral, getPointValue, verifyCompletion, incrementMonthlyCounter } from '@/lib/points';")
+          s = s.replace("\ntype RolledFor = 'self' | 'partner';\n", "\n")
+          s = s.replace("  const [rolledFor, setRolledFor] = useState<RolledFor>('self');\n  const [rolledForResult, setRolledForResult] = useState<RolledFor>('self');\n", "")
+          s = s.replace("\n  // Tracks the id of the last self-roll interaction so we can delete it\n  const lastSelfRollId = useRef<string | null>(null);\n", "")
+
+          old = """    const incoming = incomingRes.data;
+    if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {
+      // Auto-reject expired incoming dice challenge silently
+      await supabase.from('interactions').update({ status: 'rejected', is_active: false }).eq('id', incoming.id);
+      await incrementMonthlyCounter(couple.id, user.id, 'dice_skipped', 0);
+      setIncomingChallenge(null);
+    } else {
+      setIncomingChallenge(incoming);
+    }
+
+    setPendingVerification(pendingRes.data);
+    setSentDice(mySentRes.data ?? null);"""
+          new = """    const expireIfOverdue = async (item: Interaction | null) => {
+      if (!item?.expires_at || new Date(item.expires_at) > new Date()) return item;
+      await supabase
+        .from('interactions')
+        .update({ status: 'expired', is_active: false })
+        .eq('id', item.id)
+        .in('status', ['sent', 'accepted', 'pending_verification']);
+      return null;
+    };
+
+    const incoming = await expireIfOverdue(incomingRes.data);
+    const pending = await expireIfOverdue(pendingRes.data);
+    const mySent = await expireIfOverdue(mySentRes.data);
+
+    setIncomingChallenge(incoming);
+    setPendingVerification(pending);
+    setSentDice(mySent);"""
+          if old not in s: raise SystemExit('expiry block not found')
+          s = s.replace(old, new)
+
+          old = """      if (roll.status === 'sent' && incomingChallenge?.id === deepLinkDiceId) {
+        setHighlightChallenge(true);
+        setTimeout(() => setHighlightChallenge(false), 2000);
+      } else if (!['sent'].includes(roll.status)) {
+        Alert.alert('Roll already resolved', 'This dice roll has already been accepted or has expired.');
+      }"""
+          new = """      const activeStatuses = ['sent', 'accepted', 'pending_verification'];
+      const isLoaded = incomingChallenge?.id === deepLinkDiceId || pendingVerification?.id === deepLinkDiceId;
+      if (activeStatuses.includes(roll.status) && isLoaded) {
+        setHighlightChallenge(true);
+        setTimeout(() => setHighlightChallenge(false), 2000);
+      }
+      // Completed, declined, cancelled and expired rolls are terminal history states.
+      // Do not interrupt the user with a popup when following an old notification."""
+          if old not in s: raise SystemExit('deep link block not found')
+          s = s.replace(old, new)
+          s = s.replace("  }, [deepLinkDiceId]);", "  }, [deepLinkDiceId, couple?.id, incomingChallenge?.id, pendingVerification?.id]);", 1)
+
+          old = """    const landFace = Math.ceil(Math.random() * 6);
+    const forPartner = rolledFor === 'partner' && hasPartner;
+
+    diceRef.current?.roll("""
+          new = """    const landFace = Math.ceil(Math.random() * 6);
+    if (!hasPartner) {
+      setRolling(false);
+      setError('Pair with your partner before rolling.');
+      return;
+    }
+
+    diceRef.current?.roll("""
+          if old not in s: raise SystemExit('forPartner declaration not found')
+          s = s.replace(old, new)
+
+          old = """        setFace(landFace);
+        setRolledForResult(forPartner ? 'partner' : 'self');
+        try {
+          if (couple?.id && user) {
+            const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
+            const receiverId = forPartner ? (partnerId ?? user.id) : user.id;
+            await deactivatePreviousEphemeral(couple.id, user.id);
+            const diceExpiresAt = forPartner
+              ? new Date(Date.now() + expirySeconds * 1000).toISOString()
+              : null;
+            const { data: interaction, error: insertError } = await supabase
+              .from('interactions')
+              .insert({
+                couple_id: couple.id,
+                type: 'dice',
+                sender_id: user.id,
+                receiver_id: receiverId,
+                content_text: prompt,
+                status: 'sent',
+                is_active: true,
+                rolled_for: rolledFor,
+                ...(diceExpiresAt ? { expires_at: diceExpiresAt } : {}),
+              })
+              .select()
+              .single();
+            if (insertError) throw insertError;
+            if (interaction && !forPartner) {
+              lastSelfRollId.current = interaction.id;
+            } else {
+              lastSelfRollId.current = null;
+            }
+            if (forPartner && partnerId) {
+              notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
+              await checkStates();
+            }
+          }
+          showResult(prompt, 'you');"""
+          new = """        setFace(landFace);
+        try {
+          if (couple?.id && user) {
+            const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
+            if (!partnerId) throw new Error('No partner');
+            await deactivatePreviousEphemeral(couple.id, user.id);
+            const diceExpiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
+            const { error: insertError } = await supabase
+              .from('interactions')
+              .insert({
+                couple_id: couple.id,
+                type: 'dice',
+                sender_id: user.id,
+                receiver_id: partnerId,
+                content_text: prompt,
+                status: 'sent',
+                is_active: true,
+                rolled_for: 'partner',
+                expires_at: diceExpiresAt,
+              });
+            if (insertError) throw insertError;
+            notifyPartner({ event_type: 'dice_roll', couple_id: couple.id, target_route: '/(app)/(tabs)/dice', partnerUserId: partnerProfile?.id });
+            await checkStates();
+          }
+          showResult(prompt, 'you');"""
+          if old not in s: raise SystemExit('roll insert block not found')
+          s = s.replace(old, new)
+
+          start = s.index("  const handleDeleteSelfRoll = () => {")
+          end = s.index("\n  const handleCancelSentRoll = () => {", start)
+          s = s[:start] + s[end+1:]
+
+          old = """    confirmDeleteRoll(async () => {
+      await supabase
+        .from('interactions')
+        .update({ deleted_at: new Date().toISOString(), is_active: false, status: 'rejected' })
+        .eq('id', id);
+      await reversePoints(id, couple.id, user.id);
+      setSentDice(null);
+      await checkStates();
+    });"""
+          new = """    Alert.alert(
+      'Cancel this roll?',
+      'This ends the roll for both of you.',
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Cancel roll',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase
+              .from('interactions')
+              .update({ is_active: false, status: 'cancelled' })
+              .eq('id', id)
+              .eq('sender_id', user.id);
+            setSentDice(null);
+            await checkStates();
+          },
+        },
+      ]
+    );"""
+          if old not in s: raise SystemExit('cancel block not found')
+          s = s.replace(old, new)
+
+          # confirmDeleteRoll is no longer used.
+          start = s.index("  const confirmDeleteRoll = (onConfirm: () => void) => {")
+          end = s.index("\n  const handleCancelSentRoll = () => {", start)
+          s = s[:start] + s[end+1:]
+
+          old = """  const sentSubtitle = resultLabel === 'partner'
+    ? 'Your partner rolled for you'
+    : rolledForResult === 'partner'
+      ? 'Rolled for your partner — waiting for them'
+      : 'Just for you';
+
+  const hintText = holding
+    ? 'Keep holding…'
+    : rolledFor === 'partner'
+      ? 'Press & hold to roll for your partner'
+      : 'Press & hold the dice to roll';"""
+          new = """  const sentSubtitle = resultLabel === 'partner'
+    ? 'Your partner rolled for you'
+    : 'Rolled for your partner — waiting for them';
+
+  const hintText = holding
+    ? 'Keep holding…'
+    : hasPartner
+      ? 'Press & hold to roll for your partner'
+      : 'Pair with your partner to roll';"""
+          if old not in s: raise SystemExit('subtitle/hint block not found')
+          s = s.replace(old, new)
+
+          # Remove For Me / For My Partner toggle UI.
+          start = s.index("        {/* Roll For toggle — only shown when a partner has joined */}")
+          end = s.index("\n\n          <View style={[styles.diceArea", start)
+          s = s[:start] + s[end:]
+
+          s = s.replace("                disabled={rolling}\n", "                disabled={rolling || !hasPartner}\n")
+
+          old = """            {senderCountdown && rolledForResult === 'partner' && (
+              <View style={styles.expiryRow}>
+                <Timer color={colors.textMuted} size={12} strokeWidth={2} />
+                <AppText style={[styles.expiryText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText>
+              </View>
+            )}
+            {/* Remove link for self-rolls */}
+            {result && rolledForResult === 'self' && lastSelfRollId.current && (
+              <TouchableOpacity onPress={handleDeleteSelfRoll} activeOpacity={0.7} style={styles.deleteLink}>
+                <AppText style={[styles.deleteLinkText, { color: colors.textMuted }]}>Remove</AppText>
+              </TouchableOpacity>
+            )}
+            {/* Cancel link for pending partner rolls */}
+            {rolledForResult === 'partner' && sentDice && (
+              <TouchableOpacity onPress={handleCancelSentRoll} activeOpacity={0.7} style={styles.deleteLink}>
+                <AppText style={[styles.deleteLinkText, { color: colors.textMuted }]}>Cancel roll</AppText>
+              </TouchableOpacity>
+            )}"""
+          new = """            {senderCountdown && sentDice && (
+              <View style={styles.expiryRow}>
+                <Timer color={colors.textMuted} size={12} strokeWidth={2} />
+                <AppText style={[styles.expiryText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText>
+              </View>
+            )}
+            {sentDice && (
+              <TouchableOpacity onPress={handleCancelSentRoll} activeOpacity={0.7} style={styles.deleteLink}>
+                <AppText style={[styles.deleteLinkText, { color: colors.textMuted }]}>Cancel roll</AppText>
+              </TouchableOpacity>
+            )}"""
+          if old not in s: raise SystemExit('result controls block not found')
+          s = s.replace(old, new)
+
+          # Timeout should expire, never decline.
+          s = s.replace("              onTimeout={() => handleRespond(false)}", "              onTimeout={checkStates}")
+
+          # First-name only for the incoming card.
+          s = s.replace("              partnerName={partnerProfile?.display_name ?? partnerProfile?.first_name ?? undefined}", "              partnerName={partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\\s+/)[0] || undefined}")
+
+          # Remove now-unused toggle styles.
+          for line in [
+            "  toggleRow: { flexDirection: 'row', borderRadius: Radius.pill, borderWidth: 1, padding: 3, marginTop: Spacing.md, marginBottom: Spacing.lg },\n",
+            "  toggleOption: { flex: 1, height: 38, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },\n",
+            "  toggleOptionActive: {},\n",
+            "  toggleActiveBg: { backgroundColor: 'rgba(255,179,71,0.15)', borderRadius: Radius.pill },\n",
+            "  toggleText: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold', letterSpacing: 0.2 },\n",
+          ]:
+            s = s.replace(line, '')
+
+          # Sanity guards: no self-roll UI/state/code remains.
+          banned = ['rolledFor', 'rolledForResult', 'lastSelfRollId', 'handleDeleteSelfRoll', 'For Me', "rolled_for: rolledFor"]
+          for token in banned:
+            if token in s:
+              raise SystemExit(f'unexpected leftover token: {token}')
+
+          p.write_text(s)
+          PY
+      - name: Install and typecheck
+        run: |
+          npm ci
+          npm run typecheck
+      - name: Commit cleanup
+        run: |
+          rm .github/workflows/one-time-dice-flow-cleanup.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/'(app)'/'(tabs)'/dice.tsx .github/workflows/one-time-dice-flow-cleanup.yml
+          git commit -m "Simplify Dice to partner-only terminal flow"
+          git push
