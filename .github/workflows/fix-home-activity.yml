@@ -1,0 +1,53 @@
+name: One-time Home activity cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-home-activity.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch Home recent activity safely
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/(app)/(tabs)/index.tsx')
+          s = p.read_text()
+
+          import_anchor = "import { notifyPartner } from '@/lib/notifications';\n"
+          prefix_decl = "\nconst CHAT_ACTIVITY_PREFIX = '__WMU_ACTIVITY__:';\n"
+          if "const CHAT_ACTIVITY_PREFIX = '__WMU_ACTIVITY__:';" not in s:
+              if import_anchor not in s:
+                  raise SystemExit('Import anchor not found')
+              s = s.replace(import_anchor, import_anchor + prefix_decl, 1)
+
+          loop_anchor = "    (chatMsgs ?? []).forEach((m: any) => {\n      if (viewedSet.has(`chat_messages:${m.id}`)) return;\n"
+          guard = (
+              "      // Internal Chat activity-card transport rows are represented by the\n"
+              "      // interaction/activity feed and must never surface as raw Home text.\n"
+              "      if (typeof m.content_text === 'string' && m.content_text.startsWith(CHAT_ACTIVITY_PREFIX)) return;\n"
+          )
+          if guard.strip() not in s:
+              if loop_anchor not in s:
+                  raise SystemExit('Chat loop anchor not found')
+              s = s.replace(loop_anchor, loop_anchor + guard, 1)
+
+          p.write_text(s)
+          PY
+
+          rm .github/workflows/fix-home-activity.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 'app/(app)/(tabs)/index.tsx' .github/workflows/fix-home-activity.yml
+          git commit -m "Hide internal activity payloads from Home recent activity"
+          git push origin HEAD:main
