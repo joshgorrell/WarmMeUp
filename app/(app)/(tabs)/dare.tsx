@@ -145,6 +145,10 @@ export default function DareTab() {
   const checkStates = useCallback(async () => {
     if (!couple?.id || !user) return;
 
+    // Expiry is a terminal state. Clean up overdue dares before building UI state
+    // so expired items never render as actionable cards.
+    await supabase.rpc('expire_overdue_dares');
+
     const { data: incoming } = await supabase
       .from('interactions')
       .select('*')
@@ -160,9 +164,8 @@ export default function DareTab() {
     if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {
       await supabase
         .from('interactions')
-        .update({ status: 'rejected', is_active: false })
+        .update({ status: 'expired', is_active: false })
         .eq('id', incoming.id);
-      await incrementMonthlyCounter(couple.id, user.id, 'dares_skipped', 0);
       setIncomingDare(null);
     } else {
       setIncomingDare(incoming ?? null);
@@ -210,7 +213,7 @@ export default function DareTab() {
       .select('*')
       .eq('couple_id', couple.id)
       .eq('type', 'dare')
-      .in('status', ['completed', 'rejected', 'cancelled'])
+      .in('status', ['completed', 'rejected', 'cancelled', 'expired'])
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(5);
@@ -261,7 +264,7 @@ export default function DareTab() {
         setTimeout(() => setHighlightDare(false), 2000);
       } else if (!isActive) {
         handledDareLinkRef.current = deepLinkDareId;
-        Alert.alert('Dare no longer active', 'This dare has already been completed or has expired.');
+        // Terminal dares are intentionally non-actionable; history already shows the final state.
       }
     })();
   }, [deepLinkDareId, couple?.id, incomingDare?.id, pendingVerification?.id]);
