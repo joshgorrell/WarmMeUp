@@ -1,16 +1,15 @@
 name: One-time Dice Flow Cleanup
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/one-time-dice-flow-cleanup.yml'
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   cleanup:
+    if: github.event.issue.title == 'RUN_DICE_FLOW_CLEANUP'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,8 +75,7 @@ jobs:
         setHighlightChallenge(true);
         setTimeout(() => setHighlightChallenge(false), 2000);
       }
-      // Completed, declined, cancelled and expired rolls are terminal history states.
-      // Do not interrupt the user with a popup when following an old notification."""
+      // Terminal rolls do not need an interruption when an old notification is opened."""
           if old not in s: raise SystemExit('deep link block not found')
           s = s.replace(old, new)
           s = s.replace("  }, [deepLinkDiceId]);", "  }, [deepLinkDiceId, couple?.id, incomingChallenge?.id, pendingVerification?.id]);", 1)
@@ -198,7 +196,6 @@ jobs:
           if old not in s: raise SystemExit('cancel block not found')
           s = s.replace(old, new)
 
-          # confirmDeleteRoll is no longer used.
           start = s.index("  const confirmDeleteRoll = (onConfirm: () => void) => {")
           end = s.index("\n  const handleCancelSentRoll = () => {", start)
           s = s[:start] + s[end+1:]
@@ -226,7 +223,6 @@ jobs:
           if old not in s: raise SystemExit('subtitle/hint block not found')
           s = s.replace(old, new)
 
-          # Remove For Me / For My Partner toggle UI.
           start = s.index("        {/* Roll For toggle — only shown when a partner has joined */}")
           end = s.index("\n\n          <View style={[styles.diceArea", start)
           s = s[:start] + s[end:]
@@ -265,13 +261,9 @@ jobs:
           if old not in s: raise SystemExit('result controls block not found')
           s = s.replace(old, new)
 
-          # Timeout should expire, never decline.
           s = s.replace("              onTimeout={() => handleRespond(false)}", "              onTimeout={checkStates}")
-
-          # First-name only for the incoming card.
           s = s.replace("              partnerName={partnerProfile?.display_name ?? partnerProfile?.first_name ?? undefined}", "              partnerName={partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\\s+/)[0] || undefined}")
 
-          # Remove now-unused toggle styles.
           for line in [
             "  toggleRow: { flexDirection: 'row', borderRadius: Radius.pill, borderWidth: 1, padding: 3, marginTop: Spacing.md, marginBottom: Spacing.lg },\n",
             "  toggleOption: { flex: 1, height: 38, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },\n",
@@ -281,7 +273,6 @@ jobs:
           ]:
             s = s.replace(line, '')
 
-          # Sanity guards: no self-roll UI/state/code remains.
           banned = ['rolledFor', 'rolledForResult', 'lastSelfRollId', 'handleDeleteSelfRoll', 'For Me', "rolled_for: rolledFor"]
           for token in banned:
             if token in s:
