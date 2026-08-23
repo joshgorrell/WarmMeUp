@@ -1,0 +1,101 @@
+name: One-time Dice Guidance Cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.dice-guidance-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Make Dice guidance first-use only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/(app)/(tabs)/dice.tsx')
+          s = p.read_text()
+          s = s.replace("  const [highlightChallenge, setHighlightChallenge] = useState(false);", "  const [highlightChallenge, setHighlightChallenge] = useState(false);\n  const [hasRolledBefore, setHasRolledBefore] = useState<boolean | null>(null);")
+          anchor = "  useEffect(() => {\n    Promise.all([getPointValue('dice_accept'), getPointValue('dice_complete')]).then(([a, c]) => {"
+          effect = """  useEffect(() => {
+    if (!couple?.id || !user?.id) {
+      setHasRolledBefore(null);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from('interactions')
+        .select('id')
+        .eq('couple_id', couple.id)
+        .eq('sender_id', user.id)
+        .eq('type', 'dice')
+        .eq('rolled_for', 'partner')
+        .limit(1);
+      setHasRolledBefore((data?.length ?? 0) > 0);
+    })();
+  }, [couple?.id, user?.id]);
+
+"""
+          if anchor not in s: raise SystemExit('points effect anchor missing')
+          s = s.replace(anchor, effect + anchor)
+          s = s.replace("            if (insertError) throw insertError;\n\n            notifyPartner({", "            if (insertError) throw insertError;\n            setHasRolledBefore(true);\n\n            notifyPartner({")
+          intro = """        <LinearGradient
+          colors={['rgba(255,179,71,0.12)', 'rgba(255,46,138,0.08)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.introCard}
+        >
+          <AppText style={[styles.introTitle, { color: colors.text }]}>Roll it. Send it. Let them decide.</AppText>
+          <AppText style={[styles.introText, { color: colors.textSecondary }]}>Hold the dice to send a random prompt. They can accept it, complete it, decline it, or let it expire.</AppText>
+        </LinearGradient>
+"""
+          if intro not in s: raise SystemExit('intro block missing')
+          s = s.replace(intro, "        {hasRolledBefore === false && (\n" + intro.replace('\n', '\n  ') + "        )}\n")
+          how = """        <View style={[styles.howItWorksCard, { borderColor: colors.borderSubtle }]}>
+          <AppText style={[styles.howItWorksTitle, { color: colors.textMuted }]}>HOW IT WORKS</AppText>
+          <View style={styles.howItWorksRow}>
+            <View style={styles.howStep}>
+              <AppText style={styles.howStepNumber}>1</AppText>
+              <AppText style={[styles.howStepTitle, { color: colors.text }]}>You roll</AppText>
+              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Hold the dice</AppText>
+            </View>
+            <View style={[styles.howDivider, { backgroundColor: colors.borderSubtle }]} />
+            <View style={styles.howStep}>
+              <AppText style={styles.howStepNumber}>2</AppText>
+              <AppText style={[styles.howStepTitle, { color: colors.text }]}>They play</AppText>
+              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Accept or decline</AppText>
+            </View>
+            <View style={[styles.howDivider, { backgroundColor: colors.borderSubtle }]} />
+            <View style={styles.howStep}>
+              <AppText style={styles.howStepNumber}>3</AppText>
+              <AppText style={[styles.howStepTitle, { color: colors.text }]}>You both win</AppText>
+              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Complete for points</AppText>
+            </View>
+          </View>
+        </View>
+"""
+          if how not in s: raise SystemExit('how block missing')
+          s = s.replace(how, "        {hasRolledBefore === false && (\n" + how.replace('\n', '\n  ') + "        )}\n")
+          p.write_text(s)
+          PY
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Commit
+        run: |
+          rm -f .dice-guidance-trigger .github/workflows/one-time-dice-guidance.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Hide Dice onboarding guidance after first roll"
+          git push
