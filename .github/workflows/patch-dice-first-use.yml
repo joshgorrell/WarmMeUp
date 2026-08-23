@@ -1,0 +1,75 @@
+name: Patch Dice First Use Guidance
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Patch Dice guidance
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/(app)/(tabs)/dice.tsx')
+          s=p.read_text()
+          old="""  const [recentDice, setRecentDice] = useState<Interaction[]>([]);\n  const [verifying, setVerifying] = useState(false);"""
+          new="""  const [recentDice, setRecentDice] = useState<Interaction[]>([]);\n  const [hasEverSentDice, setHasEverSentDice] = useState(false);\n  const [verifying, setVerifying] = useState(false);"""
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old="""    const [incomingRes, pendingRes, mySentRes] = await Promise.all(["""
+          new="""    const [incomingRes, pendingRes, mySentRes, sentHistoryRes] = await Promise.all(["""
+          assert old in s
+          s=s.replace(old,new,1)
+
+          marker="""        .limit(1)\n        .maybeSingle(),\n    ]);"""
+          replacement="""        .limit(1)\n        .maybeSingle(),\n      supabase\n        .from('interactions')\n        .select('id')\n        .eq('couple_id', couple.id)\n        .eq('sender_id', user.id)\n        .eq('type', 'dice')\n        .eq('rolled_for', 'partner')\n        .is('deleted_at', null)\n        .limit(1),\n    ]);"""
+          assert marker in s
+          s=s.replace(marker,replacement,1)
+
+          old="""    setIncomingChallenge(incoming);\n    setPendingVerification(pendingRes.data ?? null);\n    setSentDice(mySent);"""
+          new="""    setIncomingChallenge(incoming);\n    setPendingVerification(pendingRes.data ?? null);\n    setSentDice(mySent);\n    setHasEverSentDice((sentHistoryRes.data?.length ?? 0) > 0);"""
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old="""            if (insertError) throw insertError;\n\n            notifyPartner({"""
+          new="""            if (insertError) throw insertError;\n            // First-use guidance is only onboarding. Hide it immediately after the first successful send.\n            setHasEverSentDice(true);\n\n            notifyPartner({"""
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old="""        <LinearGradient\n          colors={['rgba(255,179,71,0.12)', 'rgba(255,46,138,0.08)']}"""
+          new="""        {!hasEverSentDice && (\n        <LinearGradient\n          colors={['rgba(255,179,71,0.12)', 'rgba(255,46,138,0.08)']}"""
+          assert old in s
+          s=s.replace(old,new,1)
+          old="""        </LinearGradient>\n\n        {incomingChallenge && ("""
+          new="""        </LinearGradient>\n        )}\n\n        {incomingChallenge && ("""
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old="""        <View style={[styles.howItWorksCard, { borderColor: colors.borderSubtle }]}>"""
+          new="""        {!hasEverSentDice && (\n        <View style={[styles.howItWorksCard, { borderColor: colors.borderSubtle }]}>"""
+          assert old in s
+          s=s.replace(old,new,1)
+          old="""        </View>\n\n        <View style={styles.diceArea}>"""
+          new="""        </View>\n        )}\n\n        <View style={styles.diceArea}>"""
+          assert old in s
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - run: npm run typecheck
+      - name: Commit patch and remove workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 'app/(app)/(tabs)/dice.tsx'
+          git commit -m 'Hide Dice onboarding guidance after first sent roll'
+          git rm .github/workflows/patch-dice-first-use.yml
+          git commit -m 'Remove one-time Dice guidance patch workflow'
+          git push
