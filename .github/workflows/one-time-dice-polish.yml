@@ -1,0 +1,276 @@
+name: One-time Dice Page Polish
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    if: github.event.issue.title == 'RUN_DICE_PAGE_POLISH'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Polish Dice page and align history with Dare
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/(app)/(tabs)/dice.tsx')
+          s = p.read_text()
+
+          s = s.replace(
+            "import { CircleCheck as CheckCircle, Timer, UserPlus } from 'lucide-react-native';",
+            "import { CircleCheck as CheckCircle, CircleX as XCircle, Timer, UserPlus } from 'lucide-react-native';"
+          )
+
+          marker = "function useSenderCountdown(expiresAt: string | null | undefined): string | null {"
+          if marker not in s: raise SystemExit('countdown marker missing')
+          format_fn = """function formatDate(value?: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  const now = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+"""
+          if 'function formatDate(value?: string | null)' not in s:
+            s = s.replace(marker, format_fn + marker)
+
+          old = "  const [sentDice, setSentDice] = useState<Interaction | null>(null);\n  const senderCountdown = useSenderCountdown(sentDice?.expires_at);"
+          new = "  const [sentDice, setSentDice] = useState<Interaction | null>(null);\n  const [recentDice, setRecentDice] = useState<Interaction[]>([]);\n  const senderCountdown = useSenderCountdown(sentDice?.expires_at);"
+          if old not in s: raise SystemExit('sentDice state marker missing')
+          s = s.replace(old, new)
+
+          old = """    setIncomingChallenge(incoming);
+    setPendingVerification(pending);
+    setSentDice(mySent);
+  }, [couple?.id, user?.id]);"""
+          new = """    setIncomingChallenge(incoming);
+    setPendingVerification(pending);
+    setSentDice(mySent);
+
+    const { data: history } = await supabase
+      .from('interactions')
+      .select('*')
+      .eq('couple_id', couple.id)
+      .eq('type', 'dice')
+      .eq('rolled_for', 'partner')
+      .in('status', ['completed', 'rejected', 'cancelled', 'expired'])
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    setRecentDice(history ?? []);
+  }, [couple?.id, user?.id]);"""
+          if old not in s: raise SystemExit('checkStates tail missing')
+          s = s.replace(old, new)
+
+          marker = "  const sentSubtitle = resultLabel === 'partner'"
+          if marker not in s: raise SystemExit('sentSubtitle marker missing')
+          render_fn = """  const renderHistoryRow = (roll: Interaction) => {
+    const isMine = roll.sender_id === user?.id;
+    const completed = roll.status === 'completed';
+    const declined = roll.status === 'rejected';
+    const expired = roll.status === 'expired';
+    const cancelled = roll.status === 'cancelled';
+    const title = completed ? 'Completed' : declined ? 'Declined' : expired ? 'Expired' : 'Cancelled';
+    const relationship = isMine
+      ? `You rolled for ${partnerFirstName ?? 'your partner'}`
+      : `${partnerFirstName ?? 'Your partner'} rolled for you`;
+    const dateValue = roll.completed_at ?? roll.created_at;
+    const statusColor = completed ? '#33D17A' : declined ? '#FF5A5F' : expired ? '#FFB347' : colors.textMuted;
+
+    return (
+      <View key={roll.id} style={[styles.historyRow, { borderBottomColor: colors.borderSubtle }]}>
+        <View style={[styles.historyIcon, { borderColor: statusColor }]}>
+          {completed ? (
+            <CheckCircle color={statusColor} size={18} strokeWidth={2.2} />
+          ) : (
+            <XCircle color={statusColor} size={18} strokeWidth={2.2} />
+          )}
+        </View>
+        <View style={styles.historyMain}>
+          <AppText style={[styles.historyTitle, { color: colors.text }]}>
+            {title} <AppText style={[styles.historyRelationship, { color: colors.textMuted }]}>· {relationship}</AppText>
+          </AppText>
+          <AppText numberOfLines={2} style={[styles.historyText, { color: colors.textSecondary }]}>
+            “{roll.content_text}”
+          </AppText>
+        </View>
+        <View style={styles.historyMeta}>
+          <AppText style={[styles.historyDate, { color: colors.textMuted }]}>{formatDate(dateValue)}</AppText>
+          {completed ? (
+            <AppText style={styles.historyPoints}>+{completePts} pts</AppText>
+          ) : (
+            <AppText style={[styles.historyPoints, { color: colors.textMuted }]}>0 pts</AppText>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+"""
+          if 'const renderHistoryRow = (roll: Interaction)' not in s:
+            s = s.replace(marker, render_fn + marker)
+
+          old = """      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        scrollEnabled={!!(incomingChallenge || pendingVerification)}
+        showsVerticalScrollIndicator={false}
+      >"""
+          new = """      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        scrollEnabled
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.heroSection}>
+          <AppText style={styles.heroTitle}>
+            <AppText style={styles.heroTitleWarm}>ROLL. </AppText>
+            <AppText style={styles.heroTitleHot}>REVEAL.</AppText>
+          </AppText>
+          <AppText style={[styles.heroSubtitle, { color: colors.textSecondary }]}>A little surprise for {partnerFirstName ?? 'your partner'}.</AppText>
+        </View>
+
+        <LinearGradient
+          colors={['rgba(255,179,71,0.12)', 'rgba(255,46,138,0.08)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.introCard, { borderColor: 'rgba(255,179,71,0.28)' }]}
+        >
+          <AppText style={[styles.introTitle, { color: colors.text }]}>Roll it. Send it. Let them decide.</AppText>
+          <AppText style={[styles.introText, { color: colors.textSecondary }]}>Hold the dice to send a random prompt. They can accept it, complete it, decline it, or let it expire.</AppText>
+        </LinearGradient>"""
+          if old not in s: raise SystemExit('ScrollView marker missing')
+          s = s.replace(old, new)
+
+          old = "        <View style={[styles.diceArea, { paddingTop: Spacing.md }]}>"
+          new = """        <View style={styles.howItWorksCard}>
+          <AppText style={[styles.howItWorksTitle, { color: colors.textMuted }]}>HOW IT WORKS</AppText>
+          <View style={styles.howItWorksRow}>
+            <View style={styles.howStep}>
+              <AppText style={styles.howStepNumber}>1</AppText>
+              <AppText style={[styles.howStepTitle, { color: colors.text }]}>You roll</AppText>
+              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Hold the dice</AppText>
+            </View>
+            <View style={[styles.howDivider, { backgroundColor: colors.borderSubtle }]} />
+            <View style={styles.howStep}>
+              <AppText style={styles.howStepNumber}>2</AppText>
+              <AppText style={[styles.howStepTitle, { color: colors.text }]}>They play</AppText>
+              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Accept or decline</AppText>
+            </View>
+            <View style={[styles.howDivider, { backgroundColor: colors.borderSubtle }]} />
+            <View style={styles.howStep}>
+              <AppText style={styles.howStepNumber}>3</AppText>
+              <AppText style={[styles.howStepTitle, { color: colors.text }]}>You both win</AppText>
+              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Complete for points</AppText>
+            </View>
+          </View>
+        </View>
+
+        <View style={[styles.diceArea, { paddingTop: Spacing.md }]}>
+          <View style={styles.rollLabelWrap}>
+            <AppText style={styles.rollLabel}>{holding ? 'KEEP HOLDING…' : 'PRESS & HOLD TO ROLL'}</AppText>
+            <AppText style={[styles.rollExpiry, { color: colors.textMuted }]}>Rolls expire in {expiryHours}h</AppText>
+          </View>"""
+          if old not in s: raise SystemExit('diceArea marker missing')
+          s = s.replace(old, new)
+
+          old = """          {error ? (
+            <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
+              <AppText style={{ color: colors.danger, fontSize: FontSize.sm, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</AppText>
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>"""
+          new = """          {error ? (
+            <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
+              <AppText style={{ color: colors.danger, fontSize: FontSize.sm, fontFamily: 'Inter-Medium', textAlign: 'center' }}>{error}</AppText>
+            </View>
+          ) : null}
+        </View>
+
+        {recentDice.length > 0 && (
+          <View style={styles.previousSection}>
+            <View style={styles.previousHeader}>
+              <AppText style={[styles.sectionTitle, { color: colors.text }]}>Previous Rolls</AppText>
+              {recentDice.length >= 5 && <AppText style={styles.viewAllText}>Recent 5</AppText>}
+            </View>
+            <View style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+              {recentDice.map(renderHistoryRow)}
+            </View>
+          </View>
+        )}
+      </ScrollView>"""
+          if old not in s: raise SystemExit('error/tail marker missing')
+          s = s.replace(old, new)
+
+          style_marker = "  scrollContent: { flexGrow: 1, paddingHorizontal: Spacing.screen, paddingBottom: Spacing.xl },\n"
+          if style_marker not in s: raise SystemExit('style marker missing')
+          added_styles = """  heroSection: { alignItems: 'center', marginTop: 2, marginBottom: 14 },
+  heroTitle: { fontSize: 28, fontFamily: 'Inter-Bold', letterSpacing: -0.7 },
+  heroTitleWarm: { color: '#FFB347' },
+  heroTitleHot: { color: '#FF2E8A' },
+  heroSubtitle: { marginTop: 5, fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
+  introCard: { borderRadius: 20, borderWidth: 1, padding: 15, marginBottom: 14 },
+  introTitle: { fontSize: FontSize.body, fontFamily: 'Inter-SemiBold' },
+  introText: { marginTop: 5, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20 },
+  howItWorksCard: { borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,179,71,0.16)', backgroundColor: 'rgba(255,255,255,0.025)', padding: 12, marginBottom: 10 },
+  howItWorksTitle: { fontSize: 10, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2, textAlign: 'center', marginBottom: 10 },
+  howItWorksRow: { flexDirection: 'row', alignItems: 'stretch' },
+  howStep: { flex: 1, alignItems: 'center', paddingHorizontal: 5 },
+  howStepNumber: { width: 24, height: 24, borderRadius: 12, textAlign: 'center', lineHeight: 24, overflow: 'hidden', color: '#FFB347', backgroundColor: 'rgba(255,179,71,0.12)', fontSize: 12, fontFamily: 'Inter-Bold', marginBottom: 6 },
+  howStepTitle: { fontSize: 12, fontFamily: 'Inter-SemiBold', textAlign: 'center' },
+  howStepText: { marginTop: 2, fontSize: 10, fontFamily: 'Inter-Regular', textAlign: 'center' },
+  howDivider: { width: StyleSheet.hairlineWidth, marginVertical: 4 },
+  rollLabelWrap: { alignItems: 'center', gap: 3 },
+  rollLabel: { color: '#FFB347', fontSize: 12, fontFamily: 'Inter-Bold', letterSpacing: 0.8 },
+  rollExpiry: { fontSize: 11, fontFamily: 'Inter-Regular' },
+"""
+          s = s.replace(style_marker, style_marker + added_styles)
+
+          end_marker = "  soloNoticeLink: { fontFamily: 'Inter-Medium' },\n});"
+          if end_marker not in s: raise SystemExit('end style marker missing')
+          history_styles = """  previousSection: { marginTop: 26 },
+  previousHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 },
+  sectionTitle: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold' },
+  viewAllText: { color: '#FF2E8A', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  historyCard: { borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
+  historyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingVertical: 13, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  historyIcon: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  historyMain: { flex: 1, minWidth: 0 },
+  historyTitle: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  historyRelationship: { fontFamily: 'Inter-Regular' },
+  historyText: { marginTop: 2, fontSize: 12, fontFamily: 'Inter-Regular', lineHeight: 17, fontStyle: 'italic' },
+  historyMeta: { alignItems: 'flex-end', gap: 3, marginLeft: 4 },
+  historyDate: { fontSize: 11, fontFamily: 'Inter-Regular' },
+  historyPoints: { color: '#33D17A', fontSize: 12, fontFamily: 'Inter-Bold' },
+"""
+          s = s.replace(end_marker, "  soloNoticeLink: { fontFamily: 'Inter-Medium' },\n" + history_styles + "});")
+
+          p.write_text(s)
+          PY
+      - name: Install and typecheck
+        run: |
+          npm ci
+          npm run typecheck
+      - name: Commit Dice polish
+        run: |
+          rm .github/workflows/one-time-dice-polish.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/'(app)'/'(tabs)'/dice.tsx .github/workflows/one-time-dice-polish.yml
+          git commit -m "Polish Dice page and align history cards"
+          git push
