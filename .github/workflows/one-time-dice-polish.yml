@@ -2,7 +2,7 @@ name: One-time Dice Page Polish
 
 on:
   issues:
-    types: [opened]
+    types: [opened, edited]
 
 permissions:
   contents: write
@@ -85,7 +85,6 @@ jobs:
     const completed = roll.status === 'completed';
     const declined = roll.status === 'rejected';
     const expired = roll.status === 'expired';
-    const cancelled = roll.status === 'cancelled';
     const title = completed ? 'Completed' : declined ? 'Declined' : expired ? 'Expired' : 'Cancelled';
     const relationship = isMine
       ? `You rolled for ${partnerFirstName ?? 'your partner'}`
