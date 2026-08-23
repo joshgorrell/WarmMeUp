@@ -1,0 +1,64 @@
+name: One-time Dare expiry cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-dare-expiry.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Fix Dare terminal states
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/(app)/(tabs)/dare.tsx')
+          s = p.read_text()
+
+          anchor = "  const checkStates = useCallback(async () => {\n    if (!couple?.id || !user) return;\n"
+          repl = anchor + "\n    // Expiry is a terminal state. Clean up overdue dares before building UI state\n    // so expired items never render as actionable cards.\n    await supabase.rpc('expire_overdue_dares');\n"
+          if "await supabase.rpc('expire_overdue_dares');" not in s:
+              if anchor not in s: raise SystemExit('checkStates anchor not found')
+              s = s.replace(anchor, repl, 1)
+
+          old = """    if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {\n      await supabase\n        .from('interactions')\n        .update({ status: 'rejected', is_active: false })\n        .eq('id', incoming.id);\n      await incrementMonthlyCounter(couple.id, user.id, 'dares_skipped', 0);\n      setIncomingDare(null);\n    } else {"""
+          new = """    if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {\n      await supabase\n        .from('interactions')\n        .update({ status: 'expired', is_active: false })\n        .eq('id', incoming.id);\n      setIncomingDare(null);\n    } else {"""
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif ".update({ status: 'expired', is_active: false })" not in s:
+              raise SystemExit('expiry fallback block not found')
+
+          hist_old = ".in('status', ['completed', 'rejected', 'cancelled'])"
+          hist_new = ".in('status', ['completed', 'rejected', 'cancelled', 'expired'])"
+          if hist_old in s:
+              s = s.replace(hist_old, hist_new, 1)
+          elif hist_new not in s:
+              raise SystemExit('history status list not found')
+
+          # A stale notification/deep link to a terminal dare should just land on Dare history,
+          # not pop an error modal for a normal terminal state.
+          alert_old = """      } else if (!isActive) {\n        handledDareLinkRef.current = deepLinkDareId;\n        Alert.alert('Dare no longer active', 'This dare has already been completed or has expired.');\n      }"""
+          alert_new = """      } else if (!isActive) {\n        handledDareLinkRef.current = deepLinkDareId;\n        // Terminal dares are intentionally non-actionable; history already shows the final state.\n      }"""
+          if alert_old in s:
+              s = s.replace(alert_old, alert_new, 1)
+
+          p.write_text(s)
+          PY
+
+          npm ci
+          npm run typecheck
+          rm .github/workflows/fix-dare-expiry.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 'app/(app)/(tabs)/dare.tsx' .github/workflows/fix-dare-expiry.yml
+          git commit -m "Treat expired dares as terminal history"
+          git push origin HEAD:main
