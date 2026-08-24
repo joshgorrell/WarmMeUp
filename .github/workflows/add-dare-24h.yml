@@ -1,13 +1,12 @@
 name: Add 24h Dare timer
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/add-dare-24h.yml'
+  issues:
+    types: [opened]
 permissions:
   contents: write
 jobs:
   update:
+    if: github.event.issue.title == 'RUN_DARE_24H_UPDATE'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,4 +45,3 @@ jobs:
           git add 'app/(app)/(tabs)/dare.tsx' .github/workflows/add-dare-24h.yml
           git commit -m 'feat: add 24 hour Dare expiration option'
           git push
-# trigger
