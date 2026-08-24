@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, Animated,
 } from 'react-native';
@@ -8,12 +8,11 @@ import Avatar from '@/components/Avatar';
 import { Spacing, Radius, FontSize } from '@/constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
 
 export function ConnectedPartnerCard({
   userProfile,
   partnerProfile: partner,
+  streak,
   diceRolls,
   momentsToday,
   onManagePairing,
@@ -23,12 +22,9 @@ export function ConnectedPartnerCard({
   streak: number | string;
   diceRolls: number;
   momentsToday: number;
-  streaksEnabled?: boolean;
   onManagePairing: () => void;
 }) {
   const router = useRouter();
-  const { couple } = useAuth();
-  const [weeklyStreak, setWeeklyStreak] = useState(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -39,19 +35,6 @@ export function ConnectedPartnerCard({
       ])
     ).start();
   }, []);
-
-  useEffect(() => {
-    if (!couple?.id) {
-      setWeeklyStreak(0);
-      return;
-    }
-    let cancelled = false;
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    supabase.rpc('get_weekly_streak', { p_couple_id: couple.id, p_tz: tz }).then(({ data }) => {
-      if (!cancelled) setWeeklyStreak(typeof data === 'number' ? data : 0);
-    });
-    return () => { cancelled = true; };
-  }, [couple?.id]);
 
   return (
     <View style={pcc.outerWrap}>
@@ -153,8 +136,8 @@ export function ConnectedPartnerCard({
           <LinearGradient colors={['#FF5A3D', '#FF2E8A']} style={pcc.diceIconGrad}>
             <Flame color="#fff" size={14} strokeWidth={2} />
           </LinearGradient>
-          <AppText style={pcc.metricValue}>{weeklyStreak.toLocaleString()}</AppText>
-          <AppText style={pcc.metricLabel}>{'Week\nStreak'}</AppText>
+          <AppText style={pcc.metricValue}>{typeof streak === 'number' ? streak.toLocaleString() : streak}</AppText>
+          <AppText style={pcc.metricLabel}>{'Weekly\nStreak'}</AppText>
         </View>
       </TouchableOpacity>
     </View>
