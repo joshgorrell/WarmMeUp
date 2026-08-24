@@ -1,0 +1,142 @@
+name: Custom prompt notice consistency
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-custom-prompt-notices.yml'
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Keep Dice and Dare customize notices in sync
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # DICE: refresh whether custom Dice prompts exist whenever the screen is focused.
+          p = Path('app/(app)/(tabs)/dice.tsx')
+          s = p.read_text()
+          if "from '@react-navigation/native'" not in s:
+            anchor = "import { useLocalSearchParams, useRouter } from 'expo-router';\n"
+            if anchor not in s:
+              raise SystemExit('Dice router import anchor not found')
+            s = s.replace(anchor, anchor + "import { useFocusEffect } from '@react-navigation/native';\n", 1)
+
+          dice_anchor = "  useEffect(() => {\n    Promise.all([getPointValue('dice_accept'), getPointValue('dice_complete')]).then(([a, c]) => {\n      setAcceptPts(a);\n      setCompletePts(c);\n    });\n  }, []);\n"
+          dice_focus = """
+
+  // Re-check on every visit so the customize notice disappears immediately after
+  // a couple adds a custom prompt, and returns if they later remove all custom prompts.
+  useFocusEffect(
+    useCallback(() => {
+      if (!couple?.id) {
+        setHasCustomPrompts('unknown');
+        return;
+      }
+      let cancelled = false;
+      (async () => {
+        const { data, error } = await supabase
+          .from('dice_prompts')
+          .select('id')
+          .eq('couple_id', couple.id)
+          .eq('is_default', false)
+          .eq('is_active', true)
+          .limit(1);
+        if (!cancelled && !error) setHasCustomPrompts(data?.length ? 'yes' : 'no');
+      })();
+      return () => { cancelled = true; };
+    }, [couple?.id]),
+  );
+"""
+          if dice_focus.strip() not in s:
+            if dice_anchor not in s:
+              raise SystemExit('Dice point effect anchor not found')
+            s = s.replace(dice_anchor, dice_anchor + dice_focus, 1)
+          p.write_text(s)
+
+          # DARE: add the same first-customization notice and focus-aware check.
+          p = Path('app/(app)/(tabs)/dare.tsx')
+          s = p.read_text()
+          if "from '@react-navigation/native'" not in s:
+            anchor = "import { useLocalSearchParams, useRouter } from 'expo-router';\n"
+            if anchor not in s:
+              raise SystemExit('Dare router import anchor not found')
+            s = s.replace(anchor, anchor + "import { useFocusEffect } from '@react-navigation/native';\n", 1)
+
+          notice_import = "import CustomizePromptsNotice from '@/components/CustomizePromptsNotice';\n"
+          if notice_import not in s:
+            anchor = "import ReceivedDareCard from '@/components/ReceivedDareCard';\n"
+            if anchor not in s:
+              raise SystemExit('Dare component import anchor not found')
+            s = s.replace(anchor, anchor + notice_import, 1)
+
+          state_anchor = "  const [incomingDare, setIncomingDare] = useState<Interaction | null>(null);\n"
+          state_line = "  const [hasCustomDarePrompts, setHasCustomDarePrompts] = useState<'unknown' | 'yes' | 'no'>('unknown');\n"
+          if state_line not in s:
+            if state_anchor not in s:
+              raise SystemExit('Dare state anchor not found')
+            s = s.replace(state_anchor, state_anchor + state_line, 1)
+
+          dare_anchor = "  useEffect(() => {\n    Promise.all([getPointValue('dare_accept'), getPointValue('dare_complete')]).then(([a, c]) => {\n      setAcceptPts(a);\n      setCompletePts(c);\n    });\n  }, []);\n"
+          dare_focus = """
+
+  // Show customization guidance until this couple has at least one active custom
+  // Dare prompt. Re-check on focus so returning from Customize Prompts updates instantly.
+  useFocusEffect(
+    useCallback(() => {
+      if (!couple?.id) {
+        setHasCustomDarePrompts('unknown');
+        return;
+      }
+      let cancelled = false;
+      (async () => {
+        const { data, error } = await supabase
+          .from('dare_prompts')
+          .select('id')
+          .eq('couple_id', couple.id)
+          .eq('is_default', false)
+          .eq('is_active', true)
+          .limit(1);
+        if (!cancelled && !error) setHasCustomDarePrompts(data?.length ? 'yes' : 'no');
+      })();
+      return () => { cancelled = true; };
+    }, [couple?.id]),
+  );
+"""
+          if dare_focus.strip() not in s:
+            if dare_anchor not in s:
+              raise SystemExit('Dare point effect anchor not found')
+            s = s.replace(dare_anchor, dare_anchor + dare_focus, 1)
+
+          render_anchor = "              {error ? (\n"
+          notice_render = """              {hasPartner && hasCustomDarePrompts === 'no' && (
+                <CustomizePromptsNotice
+                  onPress={() => router.push('/(app)/customize-prompts?tab=dare')}
+                  accentColor="#FF2E8A"
+                />
+              )}
+
+"""
+          if notice_render.strip() not in s:
+            if render_anchor not in s:
+              raise SystemExit('Dare render anchor not found')
+            s = s.replace(render_anchor, notice_render + render_anchor, 1)
+          p.write_text(s)
+          PY
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Commit change and remove one-time workflow
+        run: |
+          rm .github/workflows/fix-custom-prompt-notices.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: keep Dice and Dare custom prompt notices accurate'
+          git push
