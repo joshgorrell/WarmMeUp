@@ -49,9 +49,12 @@ BEGIN
       FROM vault_items
       WHERE couple_id = p_couple_id AND deleted_at IS NULL
       UNION
+      -- Send Love has its own durable activity event. Do not derive this from
+      -- point_events because Reset Points intentionally deletes point history
+      -- and must never alter the couple's Weekly Streak.
       SELECT date_trunc('week', created_at AT TIME ZONE p_tz)::date AS week_start
-      FROM point_events
-      WHERE couple_id = p_couple_id AND reason = 'send_love'
+      FROM activity_events
+      WHERE couple_id = p_couple_id AND event_type = 'send_love'
     ) activity
   ) INTO v_active_weeks;
 
