@@ -20,10 +20,7 @@ export default function HomeMiniCard({
   style,
 }: HomeMiniCardProps) {
   const { colors } = useTheme();
-  // Home's legacy caller still passes "Day streak". The database compatibility
-  // bridge already supplies the weekly value; normalize the label here so the
-  // large Home screen does not need a risky whole-file rewrite for one string.
-  const displayLabel = label === 'Day streak' ? 'Weekly streak' : label;
+  const displayLabel = label === 'Day streak' ? 'Weekly Streak' : label;
 
   return (
     <TouchableOpacity
@@ -42,7 +39,7 @@ export default function HomeMiniCard({
         <AppText style={[styles.value, { color: colors.text }]} numberOfLines={1}>
           {value}
         </AppText>
-        <AppText style={[styles.label, { color: colors.textMuted }]} numberOfLines={1}>
+        <AppText style={[styles.label, { color: colors.text }]} numberOfLines={2}>
           {displayLabel}
         </AppText>
       </View>
@@ -53,18 +50,19 @@ export default function HomeMiniCard({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
+    minHeight: 72,
     borderRadius: Radius.md,
     borderWidth: 1,
     paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.sm + 2,
+    paddingHorizontal: Spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: 7,
   },
   iconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -72,16 +70,16 @@ const styles = StyleSheet.create({
   textWrap: {
     flex: 1,
     minWidth: 0,
-    gap: 1,
+    gap: 2,
   },
   value: {
     fontSize: FontSize.body,
     fontFamily: 'Inter-Bold',
-    lineHeight: 18,
+    lineHeight: 19,
   },
   label: {
-    fontSize: 10,
-    fontFamily: 'Inter-Medium',
-    lineHeight: 12,
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    lineHeight: 14,
   },
 });
