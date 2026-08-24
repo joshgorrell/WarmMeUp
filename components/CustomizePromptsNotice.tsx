@@ -53,9 +53,9 @@ export default function CustomizePromptsNotice({ onPress, accentColor = '#FFB347
     }, [couple?.id, inferredFeature]),
   );
 
-  // The reminder is feature-specific. A custom Dice prompt only dismisses the
-  // Dice reminder; Dare keeps its own reminder until a Dare prompt is customized.
   if (hasCustomPrompt === true) return null;
+
+  const featureLabel = inferredFeature === 'dare' ? 'Dare' : 'Dice';
 
   return (
     <TouchableOpacity
@@ -69,7 +69,7 @@ export default function CustomizePromptsNotice({ onPress, accentColor = '#FFB347
       <View style={styles.copy}>
         <AppText style={[styles.title, { color: colors.text }]}>Make it more yours</AppText>
         <AppText style={[styles.text, { color: colors.textSecondary }]} numberOfLines={2}>
-          Add or edit prompts to make {inferredFeature === 'dare' ? 'Dares' : 'Dice'} feel like the two of you.
+          Customize your {featureLabel} prompts to make them feel like the two of you.
         </AppText>
       </View>
       <ChevronRight color={accentColor} size={17} strokeWidth={2.2} />
