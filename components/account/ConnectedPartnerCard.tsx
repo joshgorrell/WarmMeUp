@@ -22,6 +22,7 @@ export function ConnectedPartnerCard({
   streak: number | string;
   diceRolls: number;
   momentsToday: number;
+  streaksEnabled?: boolean;
   onManagePairing: () => void;
 }) {
   const router = useRouter();
