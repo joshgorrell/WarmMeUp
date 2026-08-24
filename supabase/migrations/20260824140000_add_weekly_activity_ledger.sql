@@ -48,10 +48,6 @@ AS $$
 DECLARE
   v_week_start date;
 BEGIN
-  IF TG_TABLE_NAME = 'activity_events' AND NEW.event_type IS DISTINCT FROM 'send_love' THEN
-    RETURN NEW;
-  END IF;
-
   v_week_start := date_trunc('week', NEW.created_at AT TIME ZONE 'UTC')::date;
 
   INSERT INTO public.weekly_activity (couple_id, week_start)
@@ -82,6 +78,9 @@ AFTER INSERT ON public.vault_items
 FOR EACH ROW
 EXECUTE FUNCTION public.record_weekly_activity();
 
+-- Only Send Love activity_events qualify. The WHEN clause keeps unrelated
+-- activity-feed events from affecting the streak and lets the shared trigger
+-- function remain safe for tables that do not have an event_type column.
 DROP TRIGGER IF EXISTS record_weekly_activity_send_love ON public.activity_events;
 CREATE TRIGGER record_weekly_activity_send_love
 AFTER INSERT ON public.activity_events
