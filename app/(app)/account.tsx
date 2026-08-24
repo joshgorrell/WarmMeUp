@@ -81,7 +81,6 @@ export default function AccountScreen() {
   // Settings tab state
   const [optimistic, setOptimistic] = useState<Partial<UserSettings>>({});
   const [optimisticPointsEnabled, setOptimisticPointsEnabled] = useState<boolean | null>(null);
-  const [optimisticStreaksEnabled, setOptimisticStreaksEnabled] = useState<boolean | null>(null);
 
   // Change Password
   const [showChangePw, setShowChangePw] = useState(false);
@@ -198,7 +197,7 @@ export default function AccountScreen() {
     (async () => {
       const { data, error } = await supabase
         .from('couples')
-        .select('invite_code, id, user_b_id, user_a_id, active, points_enabled, streaks_enabled, subscription_owner_id, disconnected_at, admin_notes')
+        .select('invite_code, id, user_b_id, user_a_id, active, points_enabled, subscription_owner_id, disconnected_at, admin_notes')
         .eq('user_a_id', user.id)
         .is('user_b_id', null)
         .eq('active', true)
@@ -256,32 +255,17 @@ export default function AccountScreen() {
     if (!couple?.id || !user) return;
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    // Fetch streak data: only dates from the past 366 days (enough for a full year streak).
-    // Fetching by a date window instead of a row limit avoids truncating couples with
-    // many interactions spread across many calendar days.
-    const streakWindowStart = new Date();
-    streakWindowStart.setDate(streakWindowStart.getDate() - 366);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     const [scoresRes, momentsTodayRes, streakRes, diceRes] = await Promise.all([
       supabase.from('scores').select('points').eq('couple_id', couple.id),
       supabase.from('interactions').select('*', { count: 'exact', head: true }).eq('couple_id', couple.id).gte('created_at', start.toISOString()),
-      supabase.from('interactions').select('created_at').eq('couple_id', couple.id).gte('created_at', streakWindowStart.toISOString()).order('created_at', { ascending: false }),
+      supabase.rpc('get_weekly_streak', { p_couple_id: couple.id, p_tz: tz }),
       supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('couple_id', couple.id).eq('type', 'dice'),
     ]);
     if (scoresRes.data) setTotalPoints(scoresRes.data.reduce((sum, s) => sum + (s.points ?? 0), 0));
     setMomentsToday(momentsTodayRes.count ?? 0);
     setDiceRolls(diceRes.count ?? 0);
-    const streakData = streakRes.data ?? [];
-    if (streakData.length > 0) {
-      const activeDays = new Set(streakData.map((r: { created_at: string }) => new Date(r.created_at).toDateString()));
-      let days = 0;
-      const cursor = new Date();
-      cursor.setHours(0, 0, 0, 0);
-      while (activeDays.has(cursor.toDateString())) {
-        days++;
-        cursor.setDate(cursor.getDate() - 1);
-      }
-      setStreak(days);
-    }
+    setStreak(typeof streakRes.data === 'number' ? streakRes.data : 0);
   };
 
   const s = settings ? { ...settings, ...optimistic } : (Object.keys(optimistic).length > 0 ? optimistic as UserSettings : null);
@@ -530,20 +514,6 @@ export default function AccountScreen() {
     await refreshCouple();
     setOptimisticPointsEnabled(null);
   };
-
-  const handleToggleStreaks = async (enabled: boolean) => {
-    if (!couple?.id) return;
-    setOptimisticStreaksEnabled(enabled);
-    const { error } = await supabase.from('couples').update({ streaks_enabled: enabled }).eq('id', couple.id);
-    if (error) {
-      setOptimisticStreaksEnabled(null);
-      Alert.alert('Error', 'Could not update streaks setting. Please try again.');
-      return;
-    }
-    await refreshCouple();
-    setOptimisticStreaksEnabled(null);
-  };
-
 
   // ── Name edit ────────────────────────────────────────────────────
   const startEditName = () => {
@@ -932,7 +902,6 @@ export default function AccountScreen() {
               totalPoints={totalPoints}
               diceRolls={diceRolls}
               optimisticPointsEnabled={optimisticPointsEnabled}
-              optimisticStreaksEnabled={optimisticStreaksEnabled}
               copied={copied}
               codeRefreshing={codeRefreshing}
               editingName={editingName}
@@ -979,9 +948,7 @@ export default function AccountScreen() {
               bioAuthenticate={bioAuthenticate}
               update={update}
               optimisticPointsEnabled={optimisticPointsEnabled}
-              optimisticStreaksEnabled={optimisticStreaksEnabled}
               onTogglePoints={handleTogglePoints}
-              onToggleStreaks={handleToggleStreaks}
               showChangeEmail={showChangeEmail}
               newEmail={newEmail}
               emailError={emailError}
@@ -1033,9 +1000,9 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(255,179,71,0.12)' }]}>
                   <RotateCcw color="#FFB347" size={28} strokeWidth={1.5} />
                 </View>
-                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Reset All Sparks?</AppText>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Reset All Points?</AppText>
                 <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
-                  This will reset all Sparks back to zero — including all-time history. It's like starting the game over fresh!{'\n\n'}Your content, vault, and settings are not affected. This cannot be undone.
+                  This will reset all points back to zero — including all-time history. It's like starting the game over fresh!{'\n\n'}Your content, vault, settings, and Weekly Streak are not affected. This cannot be undone.
                 </AppText>
                 <View style={styles.dataModalBtns}>
                   <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => setResetPointsOpen(false)} activeOpacity={0.7} disabled={resetting}>
@@ -1051,7 +1018,7 @@ export default function AccountScreen() {
                 <View style={[styles.dataModalIcon, { backgroundColor: 'rgba(51,209,122,0.12)' }]}>
                   <Check color="#33D17A" size={28} strokeWidth={2} />
                 </View>
-                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Sparks Reset</AppText>
+                <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Points Reset</AppText>
                 <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>Both scores are back to zero. Ready for a fresh start!</AppText>
                 <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle, marginTop: 4 }]} onPress={() => { setResetPointsOpen(false); setResetDone(false); }} activeOpacity={0.7}>
                   <AppText style={[styles.dataModalCancelText, { color: colors.textSecondary }]}>Done</AppText>
