@@ -97,7 +97,7 @@ export const noteStyles = StyleSheet.create({
   list: {
     paddingHorizontal: 10,
     paddingTop: Spacing.md,
-    paddingBottom: 120,
+    paddingBottom: 160,
   },
   loadingOlderWrap: { alignItems: 'center', paddingVertical: Spacing.sm },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl, gap: Spacing.sm },
