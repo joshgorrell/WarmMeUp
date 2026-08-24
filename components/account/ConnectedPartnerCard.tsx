@@ -15,7 +15,6 @@ export function ConnectedPartnerCard({
   streak,
   diceRolls,
   momentsToday,
-  streaksEnabled,
   onManagePairing,
 }: {
   userProfile: { display_name?: string; avatar_url?: string | null } | null;
@@ -23,7 +22,6 @@ export function ConnectedPartnerCard({
   streak: number | string;
   diceRolls: number;
   momentsToday: number;
-  streaksEnabled: boolean;
   onManagePairing: () => void;
 }) {
   const router = useRouter();
@@ -138,8 +136,8 @@ export function ConnectedPartnerCard({
           <LinearGradient colors={['#FF5A3D', '#FF2E8A']} style={pcc.diceIconGrad}>
             <Flame color="#fff" size={14} strokeWidth={2} />
           </LinearGradient>
-          <AppText style={pcc.metricValue}>{streaksEnabled ? streak.toLocaleString() : '—'}</AppText>
-          <AppText style={pcc.metricLabel}>{'Day\nStreak'}</AppText>
+          <AppText style={pcc.metricValue}>{typeof streak === 'number' ? streak.toLocaleString() : streak}</AppText>
+          <AppText style={pcc.metricLabel}>{'Weekly\nStreak'}</AppText>
         </View>
       </TouchableOpacity>
     </View>

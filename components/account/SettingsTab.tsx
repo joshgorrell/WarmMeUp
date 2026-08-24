@@ -26,9 +26,7 @@ export function SettingsTab({
   bioAuthenticate,
   update,
   optimisticPointsEnabled,
-  optimisticStreaksEnabled,
   onTogglePoints,
-  onToggleStreaks,
   showChangeEmail,
   newEmail,
   emailError,
@@ -73,9 +71,7 @@ export function SettingsTab({
   bioAuthenticate: (msg: string) => Promise<{ success: boolean; error?: string }>
   update: (patch: Record<string, unknown>) => Promise<void>;
   optimisticPointsEnabled: boolean | null;
-  optimisticStreaksEnabled: boolean | null;
   onTogglePoints: (enabled: boolean) => Promise<void>;
-  onToggleStreaks: (enabled: boolean) => Promise<void>;
   showChangeEmail: boolean;
   newEmail: string;
   emailError: string | null;
@@ -318,12 +314,8 @@ export function SettingsTab({
         <SettingsRow label="App Icon Badge" sub="Show a red dot on the app icon when you have unread activity" toggle value={s?.app_icon_badge_enabled ?? true} onChange={async (v) => { await update({ app_icon_badge_enabled: v }); if (!v) { const { setAppBadge } = await import('@/lib/appBadge'); setAppBadge(0); } }} last />
       </Section>
 
-      <Section title="POINTS & SCORE" note={couple?.id ? "This setting affects both you and your partner. Points are always tallied in the background — turning this off just hides the scores." : "Connect with a partner to enable the points system."}>
-        <SettingsRow label="Sparks System" sub="Show scores, leaderboard, and Cash In features" toggle value={optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)} onChange={onTogglePoints} disabled={!couple?.id} last />
-      </Section>
-
-      <Section title="STREAKS" note={couple?.id ? "This setting affects both you and your partner. Your streak is always tracked in the background — turning this off just hides it." : "Connect with a partner to enable streaks."}>
-        <SettingsRow label="Day Streak" sub="Show your current consecutive-day activity streak" toggle value={optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)} onChange={onToggleStreaks} disabled={!couple?.id} last />
+      <Section title="POINTS" note={couple?.id ? "Points are optional for couples who enjoy the game. Turning them off hides scores and Cash In features without affecting your Weekly Streak." : "Connect with a partner to enable Points."}>
+        <SettingsRow label="Points" sub="Show scores, leaderboard, and Cash In features" toggle value={optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)} onChange={onTogglePoints} disabled={!couple?.id} last />
       </Section>
 
       <Section title="SUPPORT">

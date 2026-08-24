@@ -31,7 +31,6 @@ export function ProfileTab({
   totalPoints,
   diceRolls,
   optimisticPointsEnabled,
-  optimisticStreaksEnabled,
   // Invite code state
   copied,
   codeRefreshing,
@@ -77,7 +76,6 @@ export function ProfileTab({
   totalPoints: number | string;
   diceRolls: number;
   optimisticPointsEnabled: boolean | null;
-  optimisticStreaksEnabled: boolean | null;
   copied: boolean;
   codeRefreshing: boolean;
   editingName: boolean;
@@ -115,7 +113,7 @@ export function ProfileTab({
       {!couple?.user_b_id && !coupleLoading && (
         <View style={styles.statsWrap}>
           <QuickStatsRow
-            streak={(optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)) ? streak : '—'}
+            streak={streak}
             momentsToday={momentsToday}
             totalPoints={(optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)) ? totalPoints : '—'}
           />
@@ -127,10 +125,9 @@ export function ProfileTab({
         <ConnectedPartnerCard
           userProfile={profile}
           partnerProfile={partnerProfile}
-          streak={(optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)) ? streak : '—'}
+          streak={streak}
           diceRolls={diceRolls}
           momentsToday={momentsToday}
-          streaksEnabled={optimisticStreaksEnabled !== null ? optimisticStreaksEnabled : (couple?.streaks_enabled ?? true)}
           onManagePairing={onManagePairing}
         />
       ) : coupleLoading ? (
@@ -326,7 +323,7 @@ export function ProfileTab({
           <View style={[styles.menuIcon, { backgroundColor: 'rgba(255,179,71,0.10)' }]}>
             <RotateCcw color="#FFB347" size={18} strokeWidth={2} />
           </View>
-          <AppText style={[styles.menuText, { color: colors.text }]}>Reset Sparks</AppText>
+          <AppText style={[styles.menuText, { color: colors.text }]}>Reset Points</AppText>
           <ChevronRight color={colors.textMuted} size={16} />
         </TouchableOpacity>
 

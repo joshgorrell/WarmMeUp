@@ -25,7 +25,7 @@ const CATEGORY_LABELS: Record<CategoryKey, string> = {
   wish: 'Wish Items',
   vault: 'Vault Photos & Videos',
   activity: 'Activity Feed',
-  points: 'Points & Streaks',
+  points: 'Points',
 };
 
 async function notifyPartnerOfDeletion(
@@ -134,7 +134,7 @@ async function deleteActivityHistory(coupleId: string) {
   await supabase.from('activity_views').delete().eq('couple_id', coupleId);
 }
 
-async function deletePointsAndStreaks(coupleId: string) {
+async function deletePoints(coupleId: string) {
   await supabase.from('cash_in_events').delete().eq('couple_id', coupleId);
   await supabase.from('point_events').delete().eq('couple_id', coupleId);
   await supabase.from('monthly_scores').delete().eq('couple_id', coupleId);
@@ -222,8 +222,8 @@ export default function DeleteContentScreen() {
     },
     {
       key: 'points',
-      label: 'Points & Streaks',
-      description: 'Reset points, scores, streaks, and game progress.',
+      label: 'Points',
+      description: 'Reset points, scores, and game progress. Your Weekly Streak is not affected.',
       icon: <Trophy color="#FFD700" size={18} strokeWidth={2} />,
       accentColor: '#FFD700',
     },
@@ -295,7 +295,7 @@ export default function DeleteContentScreen() {
       if (selected.has('wish')) await deleteWishHistory(couple.id);
       if (selected.has('vault')) await deleteVaultHistory(couple.id);
       if (selected.has('activity')) await deleteActivityHistory(couple.id);
-      if (selected.has('points')) await deletePointsAndStreaks(couple.id);
+      if (selected.has('points')) await deletePoints(couple.id);
       // If any media-bearing category was deleted, purge local image cache so
       // previously-viewed photos can't be recovered from the device.
       if (selected.has('chat') || selected.has('vault')) {
@@ -335,7 +335,7 @@ export default function DeleteContentScreen() {
 
   const countLabel = (key: CategoryKey): string => {
     if (!counts) return '–';
-    if (key === 'points') return 'Score & streak data';
+    if (key === 'points') return 'Score data';
     const n = counts[key];
     return n === 1 ? '1 item' : `${n} items`;
   };
@@ -419,12 +419,12 @@ export default function DeleteContentScreen() {
             <AppText style={[styles.burnTitle, { color: '#FF3B30' }]}>Burn It All</AppText>
           </View>
           <AppText style={[styles.burnDesc, { color: colors.textSecondary }]}>
-            Permanently removes ALL relationship content and resets the account to a brand-new state. Includes chat, dice, dares, wishes, vault, activity, points, and any future content modules.
+            Permanently removes ALL relationship content and resets game data for both partners. Your Weekly Streak history is preserved.
           </AppText>
           <View style={[styles.burnList, { borderColor: 'rgba(255,59,48,0.15)' }]}>
             {[
               'Chat Messages', 'Dice History', 'Dare History', 'Wish Items',
-              'Vault Photos & Videos', 'Activity Feed', 'Points & Streaks',
+              'Vault Photos & Videos', 'Activity Feed', 'Points',
               'Relationship Statistics',
             ].map(item => (
               <View key={item} style={styles.burnListRow}>
@@ -523,7 +523,7 @@ export default function DeleteContentScreen() {
                 </View>
                 <AppText style={[styles.modalTitle, { color: '#FF3B30' }]}>Burn It All?</AppText>
                 <AppText style={[styles.modalBody, { color: colors.textSecondary }]}>
-                  This will permanently delete ALL content for both partners. This cannot be undone.
+                  This will permanently delete ALL relationship content for both partners. Your Weekly Streak history is preserved. This cannot be undone.
                 </AppText>
                 <AppText style={[styles.burnPrompt, { color: colors.textMuted }]}>
                   Type <AppText style={{ color: '#FF3B30', fontFamily: 'Inter-Bold' }}>BURN IT ALL</AppText> to confirm
@@ -574,7 +574,7 @@ export default function DeleteContentScreen() {
                 </Animated.View>
                 <AppText style={[styles.modalTitle, { color: colors.text }]}>All Clear</AppText>
                 <AppText style={[styles.modalBody, { color: colors.textSecondary }]}>
-                  Everything has been permanently deleted.{'\n'}Taking you home...
+                  Relationship content has been permanently deleted. Your Weekly Streak history is preserved.{'\n'}Taking you home...
                 </AppText>
               </>
             )}

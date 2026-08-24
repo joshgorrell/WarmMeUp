@@ -20,6 +20,10 @@ export default function HomeMiniCard({
   style,
 }: HomeMiniCardProps) {
   const { colors } = useTheme();
+  // Home's legacy caller still passes "Day streak". The database compatibility
+  // bridge already supplies the weekly value; normalize the label here so the
+  // large Home screen does not need a risky whole-file rewrite for one string.
+  const displayLabel = label === 'Day streak' ? 'Weekly streak' : label;
 
   return (
     <TouchableOpacity
@@ -39,7 +43,7 @@ export default function HomeMiniCard({
           {value}
         </AppText>
         <AppText style={[styles.label, { color: colors.textMuted }]} numberOfLines={1}>
-          {label}
+          {displayLabel}
         </AppText>
       </View>
     </TouchableOpacity>

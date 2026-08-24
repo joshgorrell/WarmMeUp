@@ -55,7 +55,7 @@ export default function QuickStatsRow({ streak, momentsToday, totalPoints }: Qui
       <StatItem
         icon={<Flame color="#fff" size={16} strokeWidth={2} />}
         value={streak}
-        label="Day Streak"
+        label="Weekly Streak"
         showDivider
       />
       <StatItem
