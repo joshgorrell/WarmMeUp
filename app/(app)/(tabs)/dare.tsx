@@ -27,6 +27,7 @@ import TabHeader from '@/components/TabHeader';
 import WarmTextInput from '@/components/WarmTextInput';
 import SecondaryButton from '@/components/SecondaryButton';
 import ReceivedDareCard from '@/components/ReceivedDareCard';
+import CustomizePromptsNotice from '@/components/CustomizePromptsNotice';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -40,6 +41,7 @@ import {
 import { notifyPartner } from '@/lib/notifications';
 import { Interaction } from '@/lib/types';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import { useCustomPromptNotice } from '@/hooks/useCustomPromptNotice';
 
 function useSenderCountdown(expiresAt: string | null | undefined): string | null {
   const [text, setText] = useState<string | null>(null);
@@ -100,6 +102,7 @@ export default function DareTab() {
 
   const hasPartner = !!couple?.user_b_id;
   const partnerName = partnerProfile?.display_name?.trim().split(/\s+/)[0] || 'your partner';
+  const customPromptState = useCustomPromptNotice(couple?.id, 'dare_prompts');
 
   const TIMER_PRESETS = [
     { label: '15m', seconds: 15 * 60 },
@@ -146,8 +149,6 @@ export default function DareTab() {
   const checkStates = useCallback(async () => {
     if (!couple?.id || !user) return;
 
-    // Expiry is a terminal state. Clean up overdue dares before building UI state
-    // so expired items never render as actionable cards.
     await supabase.rpc('expire_overdue_dares');
 
     const { data: incoming } = await supabase
@@ -265,7 +266,6 @@ export default function DareTab() {
         setTimeout(() => setHighlightDare(false), 2000);
       } else if (!isActive) {
         handledDareLinkRef.current = deepLinkDareId;
-        // Terminal dares are intentionally non-actionable; history already shows the final state.
       }
     })();
   }, [deepLinkDareId, couple?.id, incomingDare?.id, pendingVerification?.id]);
@@ -456,7 +456,8 @@ export default function DareTab() {
     const completed = dare.status === 'completed';
     const declined = dare.status === 'rejected';
     const cancelled = dare.status === 'cancelled';
-    const title = completed ? 'Completed' : declined ? 'Declined' : 'Cancelled';
+    const expired = dare.status === 'expired';
+    const title = completed ? 'Completed' : declined ? 'Declined' : expired ? 'Expired' : 'Cancelled';
     const relationship = isMine ? `You dared ${partnerName}` : `${partnerName} dared you`;
     const dateValue = dare.completed_at ?? dare.created_at;
 
@@ -487,8 +488,7 @@ export default function DareTab() {
         <View style={styles.historyMeta}>
           <AppText style={[styles.historyDate, { color: colors.textMuted }]}>{formatDate(dateValue)}</AppText>
           {completed && <AppText style={styles.historyPoints}>+{completePts} pts</AppText>}
-          {cancelled && <AppText style={[styles.historyPoints, { color: colors.textMuted }]}>0 pts</AppText>}
-          {declined && <AppText style={[styles.historyPoints, { color: colors.textMuted }]}>0 pts</AppText>}
+          {!completed && <AppText style={[styles.historyPoints, { color: colors.textMuted }]}>0 pts</AppText>}
         </View>
       </View>
     );
@@ -505,19 +505,9 @@ export default function DareTab() {
         >
           {incomingDare && (
             <View style={[styles.incomingSection, highlightDare && styles.incomingHighlight]}>
-              <View
-                style={[
-                  styles.pointsHint,
-                  {
-                    backgroundColor: 'rgba(255,46,138,0.08)',
-                    borderColor: 'rgba(255,46,138,0.25)',
-                  },
-                ]}
-              >
+              <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
                 <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>
-                  Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText>
-                  {'  '}•{'  '}
-                  Complete = <AppText style={styles.pts}>+{completePts} ⚡</AppText>
+                  Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText>{'  '}•{'  '}Complete = <AppText style={styles.pts}>+{completePts} ⚡</AppText>
                 </AppText>
               </View>
               <ReceivedDareCard
@@ -529,39 +519,20 @@ export default function DareTab() {
                 onAccept={() => handleRespond(true)}
                 onReject={reason => handleRespond(false, reason)}
                 onComplete={handleMarkComplete}
-                onTimeout={() => handleRespond(false)}
+                onTimeout={checkStates}
               />
             </View>
           )}
 
           {pendingVerification && (
             <View style={styles.flipContainer}>
-              <Animated.View
-                style={[
-                  styles.verifyCard,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: 'rgba(51,209,122,0.35)',
-                    opacity: frontOpacity,
-                    transform: [{ rotateY: frontRotate }],
-                  },
-                ]}
-              >
+              <Animated.View style={[styles.verifyCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.35)', opacity: frontOpacity, transform: [{ rotateY: frontRotate }] }]}>
                 <View style={styles.verifyHeader}>
                   <CheckCircle color="#33D17A" size={20} strokeWidth={2} />
-                  <AppText style={[styles.verifyTitle, { color: colors.text }]}>
-                    {partnerName} completed the dare!
-                  </AppText>
+                  <AppText style={[styles.verifyTitle, { color: colors.text }]}>{partnerName} completed the dare!</AppText>
                 </View>
-                <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>
-                  Confirm it to award <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText>
-                </AppText>
-                <TouchableOpacity
-                  style={styles.verifyBtn}
-                  onPress={handleVerifyComplete}
-                  disabled={verifying}
-                  activeOpacity={0.85}
-                >
+                <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>Confirm it to award <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText></AppText>
+                <TouchableOpacity style={styles.verifyBtn} onPress={handleVerifyComplete} disabled={verifying} activeOpacity={0.85}>
                   <LinearGradient colors={['#33D17A', '#1A9E57']} style={styles.verifyGrad}>
                     <AppText style={styles.verifyBtnText}>{verifying ? 'Confirming…' : 'They Did It!'}</AppText>
                   </LinearGradient>
@@ -572,22 +543,9 @@ export default function DareTab() {
                 </TouchableOpacity>
               </Animated.View>
 
-              <Animated.View
-                style={[
-                  styles.verifyCard,
-                  styles.verifyCardBack,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: 'rgba(255,46,138,0.30)',
-                    opacity: backOpacity,
-                    transform: [{ rotateY: backRotate }],
-                  },
-                ]}
-              >
+              <Animated.View style={[styles.verifyCard, styles.verifyCardBack, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)', opacity: backOpacity, transform: [{ rotateY: backRotate }] }]}>
                 <AppText style={[styles.backLabel, { color: colors.textMuted }]}>THE DARE YOU SENT</AppText>
-                <AppText style={[styles.backDareText, { color: colors.text }]}>
-                  “{pendingVerification.content_text ?? 'No text recorded'}”
-                </AppText>
+                <AppText style={[styles.backDareText, { color: colors.text }]}>“{pendingVerification.content_text ?? 'No text recorded'}”</AppText>
                 <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}>
                   <RotateCcw color={colors.textMuted} size={13} strokeWidth={2} />
                   <AppText style={[styles.flipToggleText, { color: colors.textMuted }]}>Back to confirm</AppText>
@@ -600,9 +558,7 @@ export default function DareTab() {
             <View style={[styles.soloPlaceholder, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
               <Flame color="#FF2E8A" size={42} fill="rgba(255,46,138,0.12)" strokeWidth={1.5} />
               <AppText style={[styles.soloTitle, { color: colors.text }]}>Dares are more fun with two</AppText>
-              <AppText style={[styles.soloSub, { color: colors.textSecondary }]}>
-                Invite your partner and start challenging each other.
-              </AppText>
+              <AppText style={[styles.soloSub, { color: colors.textSecondary }]}>Invite your partner and start challenging each other.</AppText>
               <TouchableOpacity onPress={() => router.push('/(app)/account')} style={styles.soloBtn} activeOpacity={0.8}>
                 <AppText style={styles.soloBtnText}>Invite Partner</AppText>
               </TouchableOpacity>
@@ -615,14 +571,18 @@ export default function DareTab() {
                     <Flame color="#FF2E8A" size={27} strokeWidth={2.4} fill="rgba(255,46,138,0.15)" />
                   </View>
                   <AppText style={styles.heroTitle}>
-                    <AppText style={styles.heroTitleWarm}>I DARE </AppText>
-                    <AppText style={styles.heroTitleHot}>YOU...</AppText>
+                    <AppText style={styles.heroTitleWarm}>I DARE </AppText><AppText style={styles.heroTitleHot}>YOU...</AppText>
                   </AppText>
                 </View>
-                <AppText style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
-                  What do you dare <AppText style={styles.partnerAccent}>{partnerName}</AppText> to do?
-                </AppText>
+                <AppText style={[styles.heroSubtitle, { color: colors.textSecondary }]}>What do you dare <AppText style={styles.partnerAccent}>{partnerName}</AppText> to do?</AppText>
               </View>
+
+              {customPromptState === 'no' && (
+                <CustomizePromptsNotice
+                  onPress={() => router.push('/(app)/customize-prompts?tab=dare')}
+                  accentColor="#FF2E8A"
+                />
+              )}
 
               {error ? (
                 <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
@@ -646,9 +606,7 @@ export default function DareTab() {
                   <View style={styles.timerRow}>
                     <View style={styles.timerLabelRow}>
                       <Timer color={colors.textSecondary} size={14} strokeWidth={2} />
-                      <AppText style={[styles.timerLabelText, { color: colors.textSecondary }]}>
-                        Timer
-                      </AppText>
+                      <AppText style={[styles.timerLabelText, { color: colors.textSecondary }]}>Timer</AppText>
                     </View>
                     <View style={styles.timerChips}>
                       {TIMER_PRESETS.map(preset => {
@@ -658,49 +616,19 @@ export default function DareTab() {
                             key={preset.seconds}
                             onPress={() => setSelectedTimerSeconds(preset.seconds)}
                             activeOpacity={0.7}
-                            style={[
-                              styles.timerChip,
-                              {
-                                backgroundColor: active ? 'rgba(255,46,138,0.15)' : colors.card,
-                                borderColor: active ? 'rgba(255,46,138,0.45)' : colors.borderSubtle,
-                              },
-                            ]}
+                            style={[styles.timerChip, { backgroundColor: active ? 'rgba(255,46,138,0.15)' : colors.card, borderColor: active ? 'rgba(255,46,138,0.45)' : colors.borderSubtle }]}
                           >
-                            <AppText
-                              style={[
-                                styles.timerChipText,
-                                { color: active ? '#FF2E8A' : colors.textSecondary },
-                              ]}
-                            >
-                              {preset.label}
-                            </AppText>
+                            <AppText style={[styles.timerChipText, { color: active ? '#FF2E8A' : colors.textSecondary }]}>{preset.label}</AppText>
                           </TouchableOpacity>
                         );
                       })}
                     </View>
                   </View>
 
-                  <TouchableOpacity
-                    onPress={handleSend}
-                    disabled={!dareText.trim() || sending}
-                    activeOpacity={0.85}
-                    style={styles.sendButtonWrap}
-                  >
-                    <LinearGradient
-                      colors={dareText.trim() ? ['#FF8A28', '#FF395C', '#F41477'] : ['#5A3A2A', '#5B303D', '#552039']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.sendButton}
-                    >
-                      <Flame
-                        color={dareText.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.38)'}
-                        size={21}
-                        fill={dareText.trim() ? 'rgba(255,255,255,0.18)' : 'transparent'}
-                        strokeWidth={2.2}
-                      />
-                      <AppText style={[styles.sendButtonText, !dareText.trim() && styles.sendButtonTextDisabled]}>
-                        {sending ? 'SENDING…' : `DARE ${partnerName.toUpperCase()}`}
-                      </AppText>
+                  <TouchableOpacity onPress={handleSend} disabled={!dareText.trim() || sending} activeOpacity={0.85} style={styles.sendButtonWrap}>
+                    <LinearGradient colors={dareText.trim() ? ['#FF8A28', '#FF395C', '#F41477'] : ['#5A3A2A', '#5B303D', '#552039']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sendButton}>
+                      <Flame color={dareText.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.38)'} size={21} fill={dareText.trim() ? 'rgba(255,255,255,0.18)' : 'transparent'} strokeWidth={2.2} />
+                      <AppText style={[styles.sendButtonText, !dareText.trim() && styles.sendButtonTextDisabled]}>{sending ? 'SENDING…' : `DARE ${partnerName.toUpperCase()}`}</AppText>
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
@@ -711,12 +639,8 @@ export default function DareTab() {
                       <Flame color="#FF2E8A" size={20} strokeWidth={2} />
                     </View>
                     <View style={styles.statusTextWrap}>
-                      <AppText style={[styles.statusTitle, { color: colors.text }]}>
-                        {sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}
-                      </AppText>
-                      <AppText numberOfLines={2} style={[styles.openDareText, { color: colors.textSecondary }]}>
-                        “{sentDare.content_text}”
-                      </AppText>
+                      <AppText style={[styles.statusTitle, { color: colors.text }]}>{sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}</AppText>
+                      <AppText numberOfLines={2} style={[styles.openDareText, { color: colors.textSecondary }]}>“{sentDare.content_text}”</AppText>
                     </View>
                   </View>
 
@@ -746,11 +670,7 @@ export default function DareTab() {
                     )}
                   </View>
 
-                  <SecondaryButton
-                    label={`Dare ${partnerName} Again`}
-                    onPress={() => setSentDare(null)}
-                    style={{ marginTop: Spacing.md }}
-                  />
+                  <SecondaryButton label={`Dare ${partnerName} Again`} onPress={() => setSentDare(null)} style={{ marginTop: Spacing.md }} />
                   <TouchableOpacity onPress={handleCancelDare} style={styles.cancelDareBtn} activeOpacity={0.7}>
                     <AppText style={[styles.cancelDareBtnText, { color: colors.textMuted }]}>Cancel dare</AppText>
                   </TouchableOpacity>
@@ -767,16 +687,8 @@ export default function DareTab() {
                         <Flame color="#FF2E8A" size={20} strokeWidth={2} />
                       </View>
                       <View style={styles.statusTextWrap}>
-                        <AppText style={[styles.statusTitle, { color: colors.text }]}> 
-                          {sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}
-                        </AppText>
-                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}> 
-                          {sentDare.status === 'sent'
-                            ? 'Not seen yet'
-                            : sentDare.status === 'seen'
-                              ? 'Seen'
-                              : 'Waiting for completion'}
-                        </AppText>
+                        <AppText style={[styles.statusTitle, { color: colors.text }]}>{sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}</AppText>
+                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>{sentDare.status === 'sent' ? 'Not seen yet' : sentDare.status === 'seen' ? 'Seen' : 'Waiting for completion'}</AppText>
                       </View>
                       <ChevronRight color={colors.textMuted} size={19} strokeWidth={2} />
                     </View>
@@ -789,9 +701,7 @@ export default function DareTab() {
                       </View>
                       <View style={styles.statusTextWrap}>
                         <AppText style={[styles.statusTitle, { color: colors.text }]}>{partnerName} dared you</AppText>
-                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}> 
-                          {incomingDare.status === 'accepted' ? 'You accepted · mark it complete when done' : 'Tap the dare above to respond'}
-                        </AppText>
+                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>{incomingDare.status === 'accepted' ? 'You accepted · mark it complete when done' : 'Tap the dare above to respond'}</AppText>
                       </View>
                       <ChevronRight color={colors.textMuted} size={19} strokeWidth={2} />
                     </View>
@@ -819,404 +729,79 @@ export default function DareTab() {
 }
 
 const styles = StyleSheet.create({
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: Spacing.screen,
-    paddingBottom: Spacing.xl,
-  },
-  incomingSection: {
-    gap: Spacing.sm,
-    marginBottom: Spacing.lg,
-  },
-  incomingHighlight: {
-    borderRadius: Radius.lg,
-    borderWidth: 2,
-    borderColor: 'rgba(255,179,71,0.50)',
-    padding: Spacing.sm,
-    backgroundColor: 'rgba(255,179,71,0.07)',
-  },
-  pointsHint: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing.sm,
-    alignItems: 'center',
-  },
-  pointsHintText: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-  },
-  pts: {
-    fontFamily: 'Inter-Bold',
-    color: '#33D17A',
-  },
-  flipContainer: {
-    marginBottom: Spacing.lg,
-    position: 'relative',
-  },
-  verifyCard: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.card,
-    gap: Spacing.sm,
-    backfaceVisibility: 'hidden',
-  },
-  verifyCardBack: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-  },
-  verifyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  verifyTitle: {
-    fontSize: FontSize.body,
-    fontFamily: 'Inter-Bold',
-    flex: 1,
-  },
-  verifySubtitle: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 20,
-  },
-  verifyBtn: {
-    borderRadius: Radius.pill,
-    overflow: 'hidden',
-    marginTop: Spacing.xs,
-  },
-  verifyGrad: {
-    height: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  verifyBtnText: {
-    color: '#fff',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Bold',
-  },
-  flipToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    alignSelf: 'center',
-    paddingTop: 4,
-  },
-  flipToggleText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-  },
-  backLabel: {
-    fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-    letterSpacing: 1.2,
-  },
-  backDareText: {
-    fontSize: FontSize.lg,
-    fontFamily: 'Inter-SemiBold',
-    lineHeight: 28,
-    fontStyle: 'italic',
-  },
-  soloPlaceholder: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.xl,
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
-  },
-  soloTitle: {
-    fontSize: FontSize.md,
-    fontFamily: 'Inter-SemiBold',
-    textAlign: 'center',
-  },
-  soloSub: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  soloBtn: {
-    marginTop: Spacing.sm,
-    backgroundColor: '#FF2E8A',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  soloBtnText: {
-    color: '#fff',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-  },
-  dareHero: {
-    marginTop: 4,
-    marginBottom: 18,
-  },
-  heroTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  heroFlameBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,46,138,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,46,138,0.18)',
-  },
-  heroTitle: {
-    flexShrink: 1,
-    fontSize: 30,
-    fontFamily: 'Inter-Bold',
-    letterSpacing: -1,
-  },
-  heroTitleWarm: {
-    color: '#FF8A28',
-  },
-  heroTitleHot: {
-    color: '#FF2E8A',
-  },
-  heroSubtitle: {
-    marginTop: 10,
-    fontSize: FontSize.body,
-    lineHeight: 24,
-    fontFamily: 'Inter-Regular',
-  },
-  partnerAccent: {
-    color: '#FF2E8A',
-    fontFamily: 'Inter-SemiBold',
-  },
-  composerCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 16,
-    shadowColor: '#FF2E8A',
-    shadowOpacity: 0.10,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
-  },
-  composerGlow: {
-    position: 'absolute',
-    width: 175,
-    height: 175,
-    borderRadius: 88,
-    right: -70,
-    top: -100,
-    backgroundColor: 'rgba(255,46,138,0.06)',
-  },
-  dareInput: {
-    marginBottom: 14,
-  },
-  timerRow: {
-    marginBottom: 14,
-  },
-  timerLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 8,
-  },
-  timerLabelText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    letterSpacing: 0.4,
-  },
-  timerChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 7,
-  },
-  timerChip: {
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  timerChipText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-  },
-  sendButtonWrap: {
-    borderRadius: 28,
-    overflow: 'hidden',
-  },
-  sendButton: {
-    minHeight: 54,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 20,
-  },
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    letterSpacing: 0.4,
-  },
-  sendButtonTextDisabled: {
-    color: 'rgba(255,255,255,0.38)',
-  },
-  openSentCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 16,
-  },
-  openCardTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  openDareText: {
-    marginTop: 4,
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 20,
-    fontStyle: 'italic',
-  },
-  openMetaRow: {
-    marginTop: 13,
-    gap: 7,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  metaText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-  },
-  yourDaresSection: {
-    marginTop: 24,
-    gap: 9,
-  },
-  previousSection: {
-    marginTop: 26,
-  },
-  previousHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 9,
-  },
-  sectionTitle: {
-    fontSize: FontSize.lg,
-    fontFamily: 'Inter-Bold',
-  },
-  viewAllText: {
-    color: '#FF2E8A',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-  },
-  dareStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderRadius: 17,
-    padding: 14,
-  },
-  statusIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  statusTitle: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-  },
-  statusSub: {
-    marginTop: 2,
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-  },
-  historyCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  historyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 13,
-    paddingVertical: 13,
-    gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  historyIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyMain: {
-    flex: 1,
-    minWidth: 0,
-  },
-  historyTitle: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-SemiBold',
-  },
-  historyRelationship: {
-    fontFamily: 'Inter-Regular',
-  },
-  historyText: {
-    marginTop: 2,
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 17,
-    fontStyle: 'italic',
-  },
-  historyMeta: {
-    alignItems: 'flex-end',
-    gap: 3,
-    marginLeft: 4,
-  },
-  historyDate: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-  },
-  historyPoints: {
-    color: '#33D17A',
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
-  },
-  errorBanner: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  errorText: {
-    color: '#FF5A5F',
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    textAlign: 'center',
-  },
-  cancelDareBtn: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    marginTop: Spacing.xs,
-  },
-  cancelDareBtnText: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-  },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing.screen, paddingBottom: Spacing.xl },
+  incomingSection: { gap: Spacing.sm, marginBottom: Spacing.lg },
+  incomingHighlight: { borderRadius: Radius.lg, borderWidth: 2, borderColor: 'rgba(255,179,71,0.50)', padding: Spacing.sm, backgroundColor: 'rgba(255,179,71,0.07)' },
+  pointsHint: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.sm, alignItems: 'center' },
+  pointsHintText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
+  pts: { fontFamily: 'Inter-Bold', color: '#33D17A' },
+  flipContainer: { marginBottom: Spacing.lg, position: 'relative' },
+  verifyCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.card, gap: Spacing.sm, backfaceVisibility: 'hidden' },
+  verifyCardBack: { position: 'absolute', top: 0, left: 0, right: 0 },
+  verifyHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  verifyTitle: { fontSize: FontSize.body, fontFamily: 'Inter-Bold', flex: 1 },
+  verifySubtitle: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20 },
+  verifyBtn: { borderRadius: Radius.pill, overflow: 'hidden', marginTop: Spacing.xs },
+  verifyGrad: { height: 50, alignItems: 'center', justifyContent: 'center' },
+  verifyBtnText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-Bold' },
+  flipToggle: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'center', paddingTop: 4 },
+  flipToggleText: { fontSize: 12, fontFamily: 'Inter-Regular' },
+  backLabel: { fontSize: 10, fontFamily: 'Inter-SemiBold', letterSpacing: 1.2 },
+  backDareText: { fontSize: FontSize.lg, fontFamily: 'Inter-SemiBold', lineHeight: 28, fontStyle: 'italic' },
+  soloPlaceholder: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.xl, alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.md },
+  soloTitle: { fontSize: FontSize.md, fontFamily: 'Inter-SemiBold', textAlign: 'center' },
+  soloSub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20 },
+  soloBtn: { marginTop: Spacing.sm, backgroundColor: '#FF2E8A', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
+  soloBtnText: { color: '#fff', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  dareHero: { marginTop: 4, marginBottom: 18 },
+  heroTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heroFlameBadge: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,46,138,0.08)', borderWidth: 1, borderColor: 'rgba(255,46,138,0.18)' },
+  heroTitle: { flexShrink: 1, fontSize: 30, fontFamily: 'Inter-Bold', letterSpacing: -1 },
+  heroTitleWarm: { color: '#FF8A28' },
+  heroTitleHot: { color: '#FF2E8A' },
+  heroSubtitle: { marginTop: 10, fontSize: FontSize.body, lineHeight: 24, fontFamily: 'Inter-Regular' },
+  partnerAccent: { color: '#FF2E8A', fontFamily: 'Inter-SemiBold' },
+  composerCard: { position: 'relative', overflow: 'hidden', borderRadius: 22, borderWidth: 1, padding: 16, shadowColor: '#FF2E8A', shadowOpacity: 0.10, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 2 },
+  composerGlow: { position: 'absolute', width: 175, height: 175, borderRadius: 88, right: -70, top: -100, backgroundColor: 'rgba(255,46,138,0.06)' },
+  dareInput: { marginBottom: 14 },
+  timerRow: { marginBottom: 14 },
+  timerLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
+  timerLabelText: { fontSize: 12, fontFamily: 'Inter-SemiBold', letterSpacing: 0.4 },
+  timerChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  timerChip: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7 },
+  timerChipText: { fontSize: 12, fontFamily: 'Inter-SemiBold' },
+  sendButtonWrap: { borderRadius: 28, overflow: 'hidden' },
+  sendButton: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 20 },
+  sendButtonText: { color: '#FFFFFF', fontSize: 16, fontFamily: 'Inter-Bold', letterSpacing: 0.4 },
+  sendButtonTextDisabled: { color: 'rgba(255,255,255,0.38)' },
+  openSentCard: { borderRadius: 22, borderWidth: 1, padding: 16 },
+  openCardTopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  openDareText: { marginTop: 4, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20, fontStyle: 'italic' },
+  openMetaRow: { marginTop: 13, gap: 7 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metaText: { fontSize: 12, fontFamily: 'Inter-Medium' },
+  yourDaresSection: { marginTop: 24, gap: 9 },
+  previousSection: { marginTop: 26 },
+  previousHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 },
+  sectionTitle: { fontSize: FontSize.lg, fontFamily: 'Inter-Bold' },
+  viewAllText: { color: '#FF2E8A', fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  dareStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 17, padding: 14 },
+  statusIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  statusTextWrap: { flex: 1, minWidth: 0 },
+  statusTitle: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  statusSub: { marginTop: 2, fontSize: 12, fontFamily: 'Inter-Regular' },
+  historyCard: { borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
+  historyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingVertical: 13, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  historyIcon: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  historyMain: { flex: 1, minWidth: 0 },
+  historyTitle: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
+  historyRelationship: { fontFamily: 'Inter-Regular' },
+  historyText: { marginTop: 2, fontSize: 12, fontFamily: 'Inter-Regular', lineHeight: 17, fontStyle: 'italic' },
+  historyMeta: { alignItems: 'flex-end', gap: 3, marginLeft: 4 },
+  historyDate: { fontSize: 11, fontFamily: 'Inter-Regular' },
+  historyPoints: { color: '#33D17A', fontSize: 12, fontFamily: 'Inter-Bold' },
+  errorBanner: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.md },
+  errorText: { color: '#FF5A5F', fontSize: 13, fontFamily: 'Inter-Medium', textAlign: 'center' },
+  cancelDareBtn: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, marginTop: Spacing.xs },
+  cancelDareBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center' },
 });
