@@ -1,0 +1,48 @@
+name: Add 24h Dare timer
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-dare-24h.yml'
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Add 24 hour Dare preset
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/(app)/(tabs)/dare.tsx')
+          s = p.read_text()
+          old = """    { label: '3h', seconds: 3 * 60 * 60 },
+    { label: '6h', seconds: 6 * 60 * 60 },
+  ];
+  const MIN_TIMER = 15 * 60;
+  const MAX_TIMER = 6 * 60 * 60;"""
+          new = """    { label: '3h', seconds: 3 * 60 * 60 },
+    { label: '6h', seconds: 6 * 60 * 60 },
+    { label: '24h', seconds: 24 * 60 * 60 },
+  ];
+  const MIN_TIMER = 15 * 60;
+  const MAX_TIMER = 24 * 60 * 60;"""
+          if old not in s:
+            raise SystemExit('Expected Dare timer preset block not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Commit change and clean up workflow
+        run: |
+          rm .github/workflows/add-dare-24h.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add 'app/(app)/(tabs)/dare.tsx' .github/workflows/add-dare-24h.yml
+          git commit -m 'feat: add 24 hour Dare expiration option'
+          git push
