@@ -18,12 +18,14 @@ CREATE OR REPLACE FUNCTION public.get_day_streak(
   p_tz text DEFAULT 'UTC'
 )
 RETURNS integer
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
-  SELECT public.get_weekly_streak(p_couple_id, p_tz);
+BEGIN
+  RETURN public.get_weekly_streak(p_couple_id, p_tz);
+END;
 $$;
 
-REVOKE ALL ON FUNCTION public.get_day_streak(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_day_streak(uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_day_streak(uuid, text) TO authenticated;
