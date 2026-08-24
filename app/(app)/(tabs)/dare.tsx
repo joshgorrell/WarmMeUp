@@ -97,11 +97,11 @@ function formatDate(value?: string | null): string {
 export default function DareTab() {
   const router = useRouter();
   const { dare_id: deepLinkDareId } = useLocalSearchParams<{ dare_id?: string }>();
-  const { user, couple, partnerProfile, settings } = useAuth();
+  const { user, couple, partnerProfile } = useAuth();
   const { colors } = useTheme();
 
   const hasPartner = !!couple?.user_b_id;
-  const partnerName = partnerProfile?.display_name?.trim().split(/\s+/)[0] || 'your partner';
+  const partnerName = partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\s+/)[0] || 'your partner';
   const customPromptState = useCustomPromptNotice(couple?.id, 'dare_prompts');
 
   const TIMER_PRESETS = [
@@ -164,10 +164,7 @@ export default function DareTab() {
       .maybeSingle();
 
     if (incoming && incoming.expires_at && new Date(incoming.expires_at) <= new Date()) {
-      await supabase
-        .from('interactions')
-        .update({ status: 'expired', is_active: false })
-        .eq('id', incoming.id);
+      await supabase.from('interactions').update({ status: 'expired', is_active: false }).eq('id', incoming.id);
       setIncomingDare(null);
     } else {
       setIncomingDare(incoming ?? null);
@@ -177,9 +174,7 @@ export default function DareTab() {
           .update({ status: 'seen' })
           .eq('id', incoming.id)
           .eq('status', 'sent')
-          .then(() => {
-            setIncomingDare(prev => (prev ? { ...prev, status: 'seen' } : prev));
-          });
+          .then(() => setIncomingDare(prev => (prev ? { ...prev, status: 'seen' } : prev)));
       }
     }
 
@@ -227,44 +222,27 @@ export default function DareTab() {
     checkStates();
     const ch = supabase
       .channel(`dare_tab_${couple.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` },
-        checkStates,
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, checkStates)
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(ch);
-    };
+    return () => { supabase.removeChannel(ch); };
   }, [couple?.id, user, checkStates]);
 
   useEffect(() => {
-    if (!deepLinkDareId || !couple?.id) return;
-    if (handledDareLinkRef.current === deepLinkDareId) return;
-
+    if (!deepLinkDareId || !couple?.id || handledDareLinkRef.current === deepLinkDareId) return;
     (async () => {
-      const { data: dare } = await supabase
-        .from('interactions')
-        .select('id, status')
-        .eq('id', deepLinkDareId)
-        .maybeSingle();
-
+      const { data: dare } = await supabase.from('interactions').select('id, status').eq('id', deepLinkDareId).maybeSingle();
       if (!dare) {
         handledDareLinkRef.current = deepLinkDareId;
         Alert.alert('Dare not found', 'This dare could not be found.');
         return;
       }
-
       const activeStatuses = ['sent', 'seen', 'accepted', 'pending_verification'];
-      const isActive = activeStatuses.includes(dare.status);
       const isLoaded = incomingDare?.id === deepLinkDareId || pendingVerification?.id === deepLinkDareId;
-
-      if (isActive && isLoaded) {
+      if (activeStatuses.includes(dare.status) && isLoaded) {
         handledDareLinkRef.current = deepLinkDareId;
         setHighlightDare(true);
         setTimeout(() => setHighlightDare(false), 2000);
-      } else if (!isActive) {
+      } else if (!activeStatuses.includes(dare.status)) {
         handledDareLinkRef.current = deepLinkDareId;
       }
     })();
@@ -274,14 +252,12 @@ export default function DareTab() {
     if (!couple?.id || !user || !dareText.trim()) return;
     setSending(true);
     setError('');
-
     try {
       const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
       const receiverId = partnerId ?? user.id;
       await deactivatePreviousEphemeral(couple.id, user.id);
       const clampedSeconds = Math.min(MAX_TIMER, Math.max(MIN_TIMER, selectedTimerSeconds));
       const expiresAt = new Date(Date.now() + clampedSeconds * 1000).toISOString();
-
       const { error: insertError } = await supabase.from('interactions').insert({
         couple_id: couple.id,
         type: 'dare',
@@ -293,16 +269,7 @@ export default function DareTab() {
         expires_at: expiresAt,
       });
       if (insertError) throw insertError;
-
-      if (partnerId) {
-        notifyPartner({
-          event_type: 'new_dare',
-          couple_id: couple.id,
-          target_route: '/(app)/(tabs)/dare',
-          partnerUserId: partnerProfile?.id,
-        });
-      }
-
+      if (partnerId) notifyPartner({ event_type: 'new_dare', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
       setDareText('');
       await checkStates();
     } catch {
@@ -314,20 +281,11 @@ export default function DareTab() {
 
   const handleRespond = async (accepted: boolean, declineReason?: string) => {
     if (!incomingDare || !couple?.id || !user) return;
-
     const status = accepted ? 'accepted' : 'rejected';
     const update: Record<string, unknown> = { status, is_active: false };
     if (!accepted && declineReason) update.decline_reason = declineReason;
-
     await supabase.from('interactions').update(update).eq('id', incomingDare.id);
-
-    notifyPartner({
-      event_type: accepted ? 'dare_accepted' : 'dare_rejected',
-      couple_id: couple.id,
-      target_route: '/(app)/(tabs)/dare',
-      partnerUserId: partnerProfile?.id,
-    });
-
+    notifyPartner({ event_type: accepted ? 'dare_accepted' : 'dare_rejected', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
     if (accepted) {
       const pts = await getPointValue('dare_accept');
       await awardPoints(couple.id, user.id, pts, 'Dare accepted', incomingDare.id);
@@ -335,7 +293,6 @@ export default function DareTab() {
       setIncomingDare({ ...incomingDare, status: 'accepted' });
     } else {
       await incrementMonthlyCounter(couple.id, user.id, 'dares_skipped', 0);
-
       if (declineReason) {
         const { data: activityMsg } = await supabase
           .from('chat_messages')
@@ -347,58 +304,26 @@ export default function DareTab() {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
-
-        await supabase.from('chat_messages').insert({
-          couple_id: couple.id,
-          sender_id: user.id,
-          content_text: declineReason,
-          reply_to: activityMsg?.id ?? null,
-        });
+        await supabase.from('chat_messages').insert({ couple_id: couple.id, sender_id: user.id, content_text: declineReason, reply_to: activityMsg?.id ?? null });
       }
-
       setIncomingDare(null);
     }
-
     await checkStates();
   };
 
   const handleMarkComplete = async () => {
-    if (!incomingDare || !couple?.id || !user) return;
-    await supabase
-      .from('interactions')
-      .update({
-        status: 'pending_verification',
-        completion_requested_at: new Date().toISOString(),
-        is_active: false,
-      })
-      .eq('id', incomingDare.id);
+    if (!incomingDare) return;
+    await supabase.from('interactions').update({ status: 'pending_verification', completion_requested_at: new Date().toISOString(), is_active: false }).eq('id', incomingDare.id);
     await checkStates();
   };
 
   const handleVerifyComplete = async () => {
     if (!pendingVerification || !couple?.id || !user) return;
     setVerifying(true);
-
     try {
-      await verifyCompletion(
-        pendingVerification.id,
-        couple.id,
-        user.id,
-        pendingVerification.receiver_id,
-        'dare_complete',
-      );
-      await incrementMonthlyCounter(
-        couple.id,
-        pendingVerification.receiver_id,
-        'dares_completed',
-        completePts,
-      );
-      notifyPartner({
-        event_type: 'dare_completed',
-        couple_id: couple.id,
-        target_route: '/(app)/(tabs)/dare',
-        partnerUserId: partnerProfile?.id,
-      });
+      await verifyCompletion(pendingVerification.id, couple.id, user.id, pendingVerification.receiver_id, 'dare_complete');
+      await incrementMonthlyCounter(couple.id, pendingVerification.receiver_id, 'dares_completed', completePts);
+      notifyPartner({ event_type: 'dare_completed', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
       setPendingVerification(null);
       await checkStates();
     } catch {
@@ -410,21 +335,11 @@ export default function DareTab() {
 
   const handleCancelDare = () => {
     if (!sentDare || !user) return;
-
     const doCancel = async () => {
-      const { error: updateError } = await supabase
-        .from('interactions')
-        .update({ status: 'cancelled', is_active: false })
-        .eq('id', sentDare.id)
-        .eq('sender_id', user.id);
-
-      if (updateError) {
-        setError('Could not cancel the dare. Please try again.');
-        return;
-      }
+      const { error: updateError } = await supabase.from('interactions').update({ status: 'cancelled', is_active: false }).eq('id', sentDare.id).eq('sender_id', user.id);
+      if (updateError) return setError('Could not cancel the dare. Please try again.');
       await checkStates();
     };
-
     if (Platform.OS === 'web') {
       if (window.confirm("Cancel this dare? Your partner won't see it anymore.")) doCancel();
     } else {
@@ -437,12 +352,7 @@ export default function DareTab() {
 
   const handleFlip = () => {
     const toValue = flipped ? 0 : 1;
-    Animated.spring(flipAnim, {
-      toValue,
-      useNativeDriver: true,
-      friction: 8,
-      tension: 60,
-    }).start();
+    Animated.spring(flipAnim, { toValue, useNativeDriver: true, friction: 8, tension: 60 }).start();
     setFlipped(!flipped);
   };
 
@@ -455,40 +365,22 @@ export default function DareTab() {
     const isMine = dare.sender_id === user?.id;
     const completed = dare.status === 'completed';
     const declined = dare.status === 'rejected';
-    const cancelled = dare.status === 'cancelled';
     const expired = dare.status === 'expired';
     const title = completed ? 'Completed' : declined ? 'Declined' : expired ? 'Expired' : 'Cancelled';
     const relationship = isMine ? `You dared ${partnerName}` : `${partnerName} dared you`;
     const dateValue = dare.completed_at ?? dare.created_at;
-
     return (
       <View key={dare.id} style={[styles.historyRow, { borderBottomColor: colors.borderSubtle }]}>
-        <View
-          style={[
-            styles.historyIcon,
-            {
-              borderColor: completed ? '#33D17A' : declined ? '#FF5A5F' : colors.textMuted,
-            },
-          ]}
-        >
-          {completed ? (
-            <CheckCircle color="#33D17A" size={18} strokeWidth={2.2} />
-          ) : (
-            <XCircle color={declined ? '#FF5A5F' : colors.textMuted} size={18} strokeWidth={2.2} />
-          )}
+        <View style={[styles.historyIcon, { borderColor: completed ? '#33D17A' : declined ? '#FF5A5F' : colors.textMuted }]}>
+          {completed ? <CheckCircle color="#33D17A" size={18} strokeWidth={2.2} /> : <XCircle color={declined ? '#FF5A5F' : colors.textMuted} size={18} strokeWidth={2.2} />}
         </View>
         <View style={styles.historyMain}>
-          <AppText style={[styles.historyTitle, { color: colors.text }]}>
-            {title} <AppText style={[styles.historyRelationship, { color: colors.textMuted }]}>· {relationship}</AppText>
-          </AppText>
-          <AppText numberOfLines={2} style={[styles.historyText, { color: colors.textSecondary }]}>
-            “{dare.content_text}”
-          </AppText>
+          <AppText style={[styles.historyTitle, { color: colors.text }]}>{title} <AppText style={[styles.historyRelationship, { color: colors.textMuted }]}>· {relationship}</AppText></AppText>
+          <AppText numberOfLines={2} style={[styles.historyText, { color: colors.textSecondary }]}>“{dare.content_text}”</AppText>
         </View>
         <View style={styles.historyMeta}>
           <AppText style={[styles.historyDate, { color: colors.textMuted }]}>{formatDate(dateValue)}</AppText>
-          {completed && <AppText style={styles.historyPoints}>+{completePts} pts</AppText>}
-          {!completed && <AppText style={[styles.historyPoints, { color: colors.textMuted }]}>0 pts</AppText>}
+          <AppText style={[styles.historyPoints, { color: completed ? '#33D17A' : colors.textMuted }]}>{completed ? `+${completePts} pts` : '0 pts'}</AppText>
         </View>
       </View>
     );
@@ -498,58 +390,28 @@ export default function DareTab() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <AppShell scrollable={false}>
         <TabHeader title="Dare" />
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {incomingDare && (
             <View style={[styles.incomingSection, highlightDare && styles.incomingHighlight]}>
               <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
-                <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>
-                  Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText>{'  '}•{'  '}Complete = <AppText style={styles.pts}>+{completePts} ⚡</AppText>
-                </AppText>
+                <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText>{'  '}•{'  '}Complete = <AppText style={styles.pts}>+{completePts} ⚡</AppText></AppText>
               </View>
-              <ReceivedDareCard
-                text={incomingDare.content_text}
-                status={incomingDare.status}
-                expiresAt={incomingDare.expires_at}
-                totalExpirySeconds={incomingTotalExpirySeconds}
-                coupleId={couple?.id}
-                onAccept={() => handleRespond(true)}
-                onReject={reason => handleRespond(false, reason)}
-                onComplete={handleMarkComplete}
-                onTimeout={checkStates}
-              />
+              <ReceivedDareCard text={incomingDare.content_text} status={incomingDare.status} expiresAt={incomingDare.expires_at} totalExpirySeconds={incomingTotalExpirySeconds} coupleId={couple?.id} onAccept={() => handleRespond(true)} onReject={reason => handleRespond(false, reason)} onComplete={handleMarkComplete} onTimeout={checkStates} />
             </View>
           )}
 
           {pendingVerification && (
             <View style={styles.flipContainer}>
               <Animated.View style={[styles.verifyCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.35)', opacity: frontOpacity, transform: [{ rotateY: frontRotate }] }]}>
-                <View style={styles.verifyHeader}>
-                  <CheckCircle color="#33D17A" size={20} strokeWidth={2} />
-                  <AppText style={[styles.verifyTitle, { color: colors.text }]}>{partnerName} completed the dare!</AppText>
-                </View>
+                <View style={styles.verifyHeader}><CheckCircle color="#33D17A" size={20} strokeWidth={2} /><AppText style={[styles.verifyTitle, { color: colors.text }]}>{partnerName} completed the dare!</AppText></View>
                 <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>Confirm it to award <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText></AppText>
-                <TouchableOpacity style={styles.verifyBtn} onPress={handleVerifyComplete} disabled={verifying} activeOpacity={0.85}>
-                  <LinearGradient colors={['#33D17A', '#1A9E57']} style={styles.verifyGrad}>
-                    <AppText style={styles.verifyBtnText}>{verifying ? 'Confirming…' : 'They Did It!'}</AppText>
-                  </LinearGradient>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}>
-                  <RotateCcw color={colors.textMuted} size={13} strokeWidth={2} />
-                  <AppText style={[styles.flipToggleText, { color: colors.textMuted }]}>See the dare</AppText>
-                </TouchableOpacity>
+                <TouchableOpacity style={styles.verifyBtn} onPress={handleVerifyComplete} disabled={verifying} activeOpacity={0.85}><LinearGradient colors={['#33D17A', '#1A9E57']} style={styles.verifyGrad}><AppText style={styles.verifyBtnText}>{verifying ? 'Confirming…' : 'They Did It!'}</AppText></LinearGradient></TouchableOpacity>
+                <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}><RotateCcw color={colors.textMuted} size={13} strokeWidth={2} /><AppText style={[styles.flipToggleText, { color: colors.textMuted }]}>See the dare</AppText></TouchableOpacity>
               </Animated.View>
-
               <Animated.View style={[styles.verifyCard, styles.verifyCardBack, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)', opacity: backOpacity, transform: [{ rotateY: backRotate }] }]}>
                 <AppText style={[styles.backLabel, { color: colors.textMuted }]}>THE DARE YOU SENT</AppText>
                 <AppText style={[styles.backDareText, { color: colors.text }]}>“{pendingVerification.content_text ?? 'No text recorded'}”</AppText>
-                <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}>
-                  <RotateCcw color={colors.textMuted} size={13} strokeWidth={2} />
-                  <AppText style={[styles.flipToggleText, { color: colors.textMuted }]}>Back to confirm</AppText>
-                </TouchableOpacity>
+                <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}><RotateCcw color={colors.textMuted} size={13} strokeWidth={2} /><AppText style={[styles.flipToggleText, { color: colors.textMuted }]}>Back to confirm</AppText></TouchableOpacity>
               </Animated.View>
             </View>
           )}
@@ -559,167 +421,43 @@ export default function DareTab() {
               <Flame color="#FF2E8A" size={42} fill="rgba(255,46,138,0.12)" strokeWidth={1.5} />
               <AppText style={[styles.soloTitle, { color: colors.text }]}>Dares are more fun with two</AppText>
               <AppText style={[styles.soloSub, { color: colors.textSecondary }]}>Invite your partner and start challenging each other.</AppText>
-              <TouchableOpacity onPress={() => router.push('/(app)/account')} style={styles.soloBtn} activeOpacity={0.8}>
-                <AppText style={styles.soloBtnText}>Invite Partner</AppText>
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/(app)/account')} style={styles.soloBtn} activeOpacity={0.8}><AppText style={styles.soloBtnText}>Invite Partner</AppText></TouchableOpacity>
             </View>
           ) : (
             <>
               <View style={styles.dareHero}>
-                <View style={styles.heroTitleRow}>
-                  <View style={styles.heroFlameBadge}>
-                    <Flame color="#FF2E8A" size={27} strokeWidth={2.4} fill="rgba(255,46,138,0.15)" />
-                  </View>
-                  <AppText style={styles.heroTitle}>
-                    <AppText style={styles.heroTitleWarm}>I DARE </AppText><AppText style={styles.heroTitleHot}>YOU...</AppText>
-                  </AppText>
-                </View>
+                <View style={styles.heroTitleRow}><View style={styles.heroFlameBadge}><Flame color="#FF2E8A" size={27} strokeWidth={2.4} fill="rgba(255,46,138,0.15)" /></View><AppText style={styles.heroTitle}><AppText style={styles.heroTitleWarm}>I DARE </AppText><AppText style={styles.heroTitleHot}>YOU...</AppText></AppText></View>
                 <AppText style={[styles.heroSubtitle, { color: colors.textSecondary }]}>What do you dare <AppText style={styles.partnerAccent}>{partnerName}</AppText> to do?</AppText>
               </View>
 
               {customPromptState === 'no' && (
-                <CustomizePromptsNotice
-                  onPress={() => router.push('/(app)/customize-prompts?tab=dare')}
-                  accentColor="#FF2E8A"
-                />
+                <CustomizePromptsNotice feature="dare" onPress={() => router.push('/(app)/customize-prompts?tab=dare')} accentColor="#FF2E8A" />
               )}
 
-              {error ? (
-                <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}>
-                  <AppText style={styles.errorText}>{error}</AppText>
-                </View>
-              ) : null}
+              {error ? <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}><AppText style={styles.errorText}>{error}</AppText></View> : null}
 
               {!sentDare ? (
                 <View style={[styles.composerCard, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}>
                   <View style={styles.composerGlow} />
-                  <WarmTextInput
-                    value={dareText}
-                    onChangeText={setDareText}
-                    placeholder="Type your dare…"
-                    multiline
-                    minHeight={96}
-                    charLimit={200}
-                    containerStyle={styles.dareInput}
-                  />
-
+                  <WarmTextInput value={dareText} onChangeText={setDareText} placeholder="Type your dare…" multiline minHeight={96} charLimit={200} containerStyle={styles.dareInput} />
                   <View style={styles.timerRow}>
-                    <View style={styles.timerLabelRow}>
-                      <Timer color={colors.textSecondary} size={14} strokeWidth={2} />
-                      <AppText style={[styles.timerLabelText, { color: colors.textSecondary }]}>Timer</AppText>
-                    </View>
-                    <View style={styles.timerChips}>
-                      {TIMER_PRESETS.map(preset => {
-                        const active = selectedTimerSeconds === preset.seconds;
-                        return (
-                          <TouchableOpacity
-                            key={preset.seconds}
-                            onPress={() => setSelectedTimerSeconds(preset.seconds)}
-                            activeOpacity={0.7}
-                            style={[styles.timerChip, { backgroundColor: active ? 'rgba(255,46,138,0.15)' : colors.card, borderColor: active ? 'rgba(255,46,138,0.45)' : colors.borderSubtle }]}
-                          >
-                            <AppText style={[styles.timerChipText, { color: active ? '#FF2E8A' : colors.textSecondary }]}>{preset.label}</AppText>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
+                    <View style={styles.timerLabelRow}><Timer color={colors.textSecondary} size={14} strokeWidth={2} /><AppText style={[styles.timerLabelText, { color: colors.textSecondary }]}>Timer</AppText></View>
+                    <View style={styles.timerChips}>{TIMER_PRESETS.map(preset => { const active = selectedTimerSeconds === preset.seconds; return <TouchableOpacity key={preset.seconds} onPress={() => setSelectedTimerSeconds(preset.seconds)} activeOpacity={0.7} style={[styles.timerChip, { backgroundColor: active ? 'rgba(255,46,138,0.15)' : colors.card, borderColor: active ? 'rgba(255,46,138,0.45)' : colors.borderSubtle }]}><AppText style={[styles.timerChipText, { color: active ? '#FF2E8A' : colors.textSecondary }]}>{preset.label}</AppText></TouchableOpacity>; })}</View>
                   </View>
-
-                  <TouchableOpacity onPress={handleSend} disabled={!dareText.trim() || sending} activeOpacity={0.85} style={styles.sendButtonWrap}>
-                    <LinearGradient colors={dareText.trim() ? ['#FF8A28', '#FF395C', '#F41477'] : ['#5A3A2A', '#5B303D', '#552039']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sendButton}>
-                      <Flame color={dareText.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.38)'} size={21} fill={dareText.trim() ? 'rgba(255,255,255,0.18)' : 'transparent'} strokeWidth={2.2} />
-                      <AppText style={[styles.sendButtonText, !dareText.trim() && styles.sendButtonTextDisabled]}>{sending ? 'SENDING…' : `DARE ${partnerName.toUpperCase()}`}</AppText>
-                    </LinearGradient>
-                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleSend} disabled={!dareText.trim() || sending} activeOpacity={0.85} style={styles.sendButtonWrap}><LinearGradient colors={dareText.trim() ? ['#FF8A28', '#FF395C', '#F41477'] : ['#5A3A2A', '#5B303D', '#552039']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sendButton}><Flame color={dareText.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.38)'} size={21} fill={dareText.trim() ? 'rgba(255,255,255,0.18)' : 'transparent'} strokeWidth={2.2} /><AppText style={[styles.sendButtonText, !dareText.trim() && styles.sendButtonTextDisabled]}>{sending ? 'SENDING…' : `DARE ${partnerName.toUpperCase()}`}</AppText></LinearGradient></TouchableOpacity>
                 </View>
               ) : (
                 <View style={[styles.openSentCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)' }]}>
-                  <View style={styles.openCardTopRow}>
-                    <View style={[styles.statusIcon, { backgroundColor: 'rgba(255,46,138,0.14)' }]}>
-                      <Flame color="#FF2E8A" size={20} strokeWidth={2} />
-                    </View>
-                    <View style={styles.statusTextWrap}>
-                      <AppText style={[styles.statusTitle, { color: colors.text }]}>{sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}</AppText>
-                      <AppText numberOfLines={2} style={[styles.openDareText, { color: colors.textSecondary }]}>“{sentDare.content_text}”</AppText>
-                    </View>
-                  </View>
-
-                  <View style={styles.openMetaRow}>
-                    {sentDare.status === 'sent' ? (
-                      <View style={styles.metaItem}>
-                        <EyeOff color={colors.textMuted} size={14} strokeWidth={2} />
-                        <AppText style={[styles.metaText, { color: colors.textMuted }]}>Not seen yet</AppText>
-                      </View>
-                    ) : sentDare.status === 'seen' ? (
-                      <View style={styles.metaItem}>
-                        <Eye color="#FFB347" size={14} strokeWidth={2} />
-                        <AppText style={[styles.metaText, { color: '#FFB347' }]}>Seen</AppText>
-                      </View>
-                    ) : (
-                      <View style={styles.metaItem}>
-                        <CheckCircle color="#FFB347" size={14} strokeWidth={2} />
-                        <AppText style={[styles.metaText, { color: '#FFB347' }]}>Accepted · waiting for completion</AppText>
-                      </View>
-                    )}
-
-                    {senderCountdown && (
-                      <View style={styles.metaItem}>
-                        <Timer color={colors.textMuted} size={13} strokeWidth={2} />
-                        <AppText style={[styles.metaText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText>
-                      </View>
-                    )}
-                  </View>
-
+                  <View style={styles.openCardTopRow}><View style={[styles.statusIcon, { backgroundColor: 'rgba(255,46,138,0.14)' }]}><Flame color="#FF2E8A" size={20} strokeWidth={2} /></View><View style={styles.statusTextWrap}><AppText style={[styles.statusTitle, { color: colors.text }]}>{sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}</AppText><AppText numberOfLines={2} style={[styles.openDareText, { color: colors.textSecondary }]}>“{sentDare.content_text}”</AppText></View></View>
+                  <View style={styles.openMetaRow}>{sentDare.status === 'sent' ? <View style={styles.metaItem}><EyeOff color={colors.textMuted} size={14} strokeWidth={2} /><AppText style={[styles.metaText, { color: colors.textMuted }]}>Not seen yet</AppText></View> : sentDare.status === 'seen' ? <View style={styles.metaItem}><Eye color="#FFB347" size={14} strokeWidth={2} /><AppText style={[styles.metaText, { color: '#FFB347' }]}>Seen</AppText></View> : <View style={styles.metaItem}><CheckCircle color="#FFB347" size={14} strokeWidth={2} /><AppText style={[styles.metaText, { color: '#FFB347' }]}>Accepted · waiting for completion</AppText></View>}{senderCountdown && <View style={styles.metaItem}><Timer color={colors.textMuted} size={13} strokeWidth={2} /><AppText style={[styles.metaText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText></View>}</View>
                   <SecondaryButton label={`Dare ${partnerName} Again`} onPress={() => setSentDare(null)} style={{ marginTop: Spacing.md }} />
-                  <TouchableOpacity onPress={handleCancelDare} style={styles.cancelDareBtn} activeOpacity={0.7}>
-                    <AppText style={[styles.cancelDareBtnText, { color: colors.textMuted }]}>Cancel dare</AppText>
-                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleCancelDare} style={styles.cancelDareBtn} activeOpacity={0.7}><AppText style={[styles.cancelDareBtnText, { color: colors.textMuted }]}>Cancel dare</AppText></TouchableOpacity>
                 </View>
               )}
 
-              {(sentDare || incomingDare) && (
-                <View style={styles.yourDaresSection}>
-                  <AppText style={[styles.sectionTitle, { color: colors.text }]}>Your Dares</AppText>
+              {(sentDare || incomingDare) && <View style={styles.yourDaresSection}><AppText style={[styles.sectionTitle, { color: colors.text }]}>Your Dares</AppText>{sentDare && <View style={[styles.dareStatusRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}><View style={[styles.statusIcon, { backgroundColor: 'rgba(255,46,138,0.14)' }]}><Flame color="#FF2E8A" size={20} strokeWidth={2} /></View><View style={styles.statusTextWrap}><AppText style={[styles.statusTitle, { color: colors.text }]}>{sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}</AppText><AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>{sentDare.status === 'sent' ? 'Not seen yet' : sentDare.status === 'seen' ? 'Seen' : 'Waiting for completion'}</AppText></View><ChevronRight color={colors.textMuted} size={19} strokeWidth={2} /></View>}{incomingDare && <View style={[styles.dareStatusRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}><View style={[styles.statusIcon, { backgroundColor: 'rgba(255,138,40,0.14)' }]}><Flame color="#FF8A28" size={20} strokeWidth={2} /></View><View style={styles.statusTextWrap}><AppText style={[styles.statusTitle, { color: colors.text }]}>{partnerName} dared you</AppText><AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>{incomingDare.status === 'accepted' ? 'You accepted · mark it complete when done' : 'Tap the dare above to respond'}</AppText></View><ChevronRight color={colors.textMuted} size={19} strokeWidth={2} /></View>}</View>}
 
-                  {sentDare && (
-                    <View style={[styles.dareStatusRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                      <View style={[styles.statusIcon, { backgroundColor: 'rgba(255,46,138,0.14)' }]}>
-                        <Flame color="#FF2E8A" size={20} strokeWidth={2} />
-                      </View>
-                      <View style={styles.statusTextWrap}>
-                        <AppText style={[styles.statusTitle, { color: colors.text }]}>{sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}</AppText>
-                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>{sentDare.status === 'sent' ? 'Not seen yet' : sentDare.status === 'seen' ? 'Seen' : 'Waiting for completion'}</AppText>
-                      </View>
-                      <ChevronRight color={colors.textMuted} size={19} strokeWidth={2} />
-                    </View>
-                  )}
-
-                  {incomingDare && (
-                    <View style={[styles.dareStatusRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                      <View style={[styles.statusIcon, { backgroundColor: 'rgba(255,138,40,0.14)' }]}>
-                        <Flame color="#FF8A28" size={20} strokeWidth={2} />
-                      </View>
-                      <View style={styles.statusTextWrap}>
-                        <AppText style={[styles.statusTitle, { color: colors.text }]}>{partnerName} dared you</AppText>
-                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>{incomingDare.status === 'accepted' ? 'You accepted · mark it complete when done' : 'Tap the dare above to respond'}</AppText>
-                      </View>
-                      <ChevronRight color={colors.textMuted} size={19} strokeWidth={2} />
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {recentDares.length > 0 && (
-                <View style={styles.previousSection}>
-                  <View style={styles.previousHeader}>
-                    <AppText style={[styles.sectionTitle, { color: colors.text }]}>Previous Dares</AppText>
-                    {recentDares.length >= 5 && <AppText style={styles.viewAllText}>Recent 5</AppText>}
-                  </View>
-                  <View style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-                    {recentDares.map(renderHistoryRow)}
-                  </View>
-                </View>
-              )}
+              {recentDares.length > 0 && <View style={styles.previousSection}><View style={styles.previousHeader}><AppText style={[styles.sectionTitle, { color: colors.text }]}>Previous Dares</AppText>{recentDares.length >= 5 && <AppText style={styles.viewAllText}>Recent 5</AppText>}</View><View style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>{recentDares.map(renderHistoryRow)}</View></View>}
             </>
           )}
         </ScrollView>
