@@ -140,3 +140,4 @@ jobs:
           git add -A
           git commit -m 'fix: keep Dice and Dare custom prompt notices accurate'
           git push
+# trigger
