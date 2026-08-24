@@ -21,6 +21,7 @@ export default function HomeMiniCard({
 }: HomeMiniCardProps) {
   const { colors } = useTheme();
   const displayLabel = label === 'Day streak' ? 'Weekly Streak' : label;
+  const keepLabelOnOneLine = displayLabel === 'Send love' || displayLabel === 'Send Love' || displayLabel === 'Together';
 
   return (
     <TouchableOpacity
@@ -36,10 +37,15 @@ export default function HomeMiniCard({
         {icon}
       </View>
       <View style={styles.textWrap}>
-        <AppText style={[styles.value, { color: colors.text }]} numberOfLines={1}>
+        <AppText style={[styles.value, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.86}>
           {value}
         </AppText>
-        <AppText style={[styles.label, { color: colors.text }]} numberOfLines={2}>
+        <AppText
+          style={[styles.label, { color: colors.text }]}
+          numberOfLines={keepLabelOnOneLine ? 1 : 2}
+          adjustsFontSizeToFit={keepLabelOnOneLine}
+          minimumFontScale={0.82}
+        >
           {displayLabel}
         </AppText>
       </View>
@@ -54,14 +60,14 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1,
     paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: 7,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 6,
   },
   iconWrap: {
-    width: 28,
-    height: 28,
+    width: 27,
+    height: 27,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
