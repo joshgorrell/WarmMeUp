@@ -1,7 +1,11 @@
 /*
   Weekly couple streak
 
-  A week is Monday-Sunday in the caller's IANA timezone.
+  A week is Monday-Sunday using one canonical UTC boundary for the couple so both
+  partners always see the exact same streak, even if they are in different time zones.
+  The p_tz argument is retained for backward-compatible RPC calls but is intentionally
+  not used in the calculation.
+
   Any meaningful couple activity counts: a non-deleted interaction, a non-deleted
   chat message, a vault media item, or Send Love. Opening the app alone does not count.
 
@@ -19,7 +23,7 @@ SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  v_current_week date := date_trunc('week', now() AT TIME ZONE p_tz)::date;
+  v_current_week date := date_trunc('week', now() AT TIME ZONE 'UTC')::date;
   v_start_week date;
   v_cursor date;
   v_count integer := 0;
@@ -37,22 +41,22 @@ BEGIN
   SELECT ARRAY(
     SELECT DISTINCT week_start
     FROM (
-      SELECT date_trunc('week', created_at AT TIME ZONE p_tz)::date AS week_start
+      SELECT date_trunc('week', created_at AT TIME ZONE 'UTC')::date AS week_start
       FROM interactions
       WHERE couple_id = p_couple_id AND deleted_at IS NULL
       UNION
-      SELECT date_trunc('week', created_at AT TIME ZONE p_tz)::date AS week_start
+      SELECT date_trunc('week', created_at AT TIME ZONE 'UTC')::date AS week_start
       FROM chat_messages
       WHERE couple_id = p_couple_id AND deleted_at IS NULL
       UNION
-      SELECT date_trunc('week', created_at AT TIME ZONE p_tz)::date AS week_start
+      SELECT date_trunc('week', created_at AT TIME ZONE 'UTC')::date AS week_start
       FROM vault_items
       WHERE couple_id = p_couple_id AND deleted_at IS NULL
       UNION
       -- Send Love has its own durable activity event. Do not derive this from
       -- point_events because Reset Points intentionally deletes point history
       -- and must never alter the couple's Weekly Streak.
-      SELECT date_trunc('week', created_at AT TIME ZONE p_tz)::date AS week_start
+      SELECT date_trunc('week', created_at AT TIME ZONE 'UTC')::date AS week_start
       FROM activity_events
       WHERE couple_id = p_couple_id AND event_type = 'send_love'
     ) activity
