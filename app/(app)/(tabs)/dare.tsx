@@ -107,9 +107,10 @@ export default function DareTab() {
     { label: '1h', seconds: 60 * 60 },
     { label: '3h', seconds: 3 * 60 * 60 },
     { label: '6h', seconds: 6 * 60 * 60 },
+    { label: '24h', seconds: 24 * 60 * 60 },
   ];
   const MIN_TIMER = 15 * 60;
-  const MAX_TIMER = 6 * 60 * 60;
+  const MAX_TIMER = 24 * 60 * 60;
 
   const [dareText, setDareText] = useState('');
   const [selectedTimerSeconds, setSelectedTimerSeconds] = useState(30 * 60);
@@ -766,10 +767,10 @@ export default function DareTab() {
                         <Flame color="#FF2E8A" size={20} strokeWidth={2} />
                       </View>
                       <View style={styles.statusTextWrap}>
-                        <AppText style={[styles.statusTitle, { color: colors.text }]}>
+                        <AppText style={[styles.statusTitle, { color: colors.text }]}> 
                           {sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}
                         </AppText>
-                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>
+                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}> 
                           {sentDare.status === 'sent'
                             ? 'Not seen yet'
                             : sentDare.status === 'seen'
@@ -788,7 +789,7 @@ export default function DareTab() {
                       </View>
                       <View style={styles.statusTextWrap}>
                         <AppText style={[styles.statusTitle, { color: colors.text }]}>{partnerName} dared you</AppText>
-                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>
+                        <AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}> 
                           {incomingDare.status === 'accepted' ? 'You accepted · mark it complete when done' : 'Tap the dare above to respond'}
                         </AppText>
                       </View>
