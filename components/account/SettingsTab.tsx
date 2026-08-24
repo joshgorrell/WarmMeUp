@@ -71,9 +71,7 @@ export function SettingsTab({
   bioAuthenticate: (msg: string) => Promise<{ success: boolean; error?: string }>
   update: (patch: Record<string, unknown>) => Promise<void>;
   optimisticPointsEnabled: boolean | null;
-  optimisticStreaksEnabled?: boolean | null;
   onTogglePoints: (enabled: boolean) => Promise<void>;
-  onToggleStreaks?: (enabled: boolean) => Promise<void>;
   showChangeEmail: boolean;
   newEmail: string;
   emailError: string | null;
