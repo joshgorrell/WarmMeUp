@@ -189,44 +189,9 @@ export default function MyStatsScreen() {
 
   const loadStreak = useCallback(async () => {
     if (!couple?.id) return;
-    const [interactionsRes, eventsRes, chatRes] = await Promise.all([
-      supabase
-        .from('interactions')
-        .select('created_at')
-        .eq('couple_id', couple.id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(200),
-      supabase
-        .from('point_events')
-        .select('created_at')
-        .eq('couple_id', couple.id)
-        .eq('reason', 'send_love')
-        .order('created_at', { ascending: false })
-        .limit(50),
-      supabase
-        .from('chat_messages')
-        .select('created_at')
-        .eq('couple_id', couple.id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(200),
-    ]);
-    const rows = [
-      ...((interactionsRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
-      ...((eventsRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
-      ...((chatRes.data ?? []).map((r: { created_at: string }) => r.created_at)),
-    ];
-    if (rows.length === 0) { setStreak(0); return; }
-    const activeDays = new Set(rows.map((ts: string) => new Date(ts).toDateString()));
-    let days = 0;
-    const cursor = new Date();
-    cursor.setHours(0, 0, 0, 0);
-    while (activeDays.has(cursor.toDateString())) {
-      days++;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-    setStreak(days);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const { data } = await supabase.rpc('get_weekly_streak', { p_couple_id: couple.id, p_tz: tz });
+    setStreak(typeof data === 'number' ? data : 0);
   }, [couple?.id]);
 
   const loadAllTime = useCallback(async () => {
@@ -392,11 +357,12 @@ export default function MyStatsScreen() {
   const myPts = myStats?.points ?? 0;
   const partnerPts = partnerStats?.points ?? 0;
   const totalPts = myPts + partnerPts;
+  const pointsEnabled = couple?.points_enabled ?? true;
 
   // Category breakdown values:
-  // - Current month: show points earned per category (sums to top total)
-  // - Historical/all-time: show interaction counts (pts fields are null)
-  const showPts = myCatPts !== null;
+  // - Current month: show points earned per category only when Points are enabled
+  // - Historical/all-time or Points-off: show interaction counts instead
+  const showPts = pointsEnabled && myCatPts !== null;
 
   const categories = [
     {
@@ -512,46 +478,48 @@ export default function MyStatsScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-          {!(couple?.points_enabled ?? true) && (
+          {!pointsEnabled && (
             <View style={[styles.hiddenBanner, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: colors.borderSubtle }]}>
               <EyeOff color={colors.textMuted} size={16} strokeWidth={1.75} />
               <AppText style={[styles.hiddenBannerText, { color: colors.textMuted }]}>
-                Sparks are hidden — scores shown below are still being tracked in the background.
+                Points are off — activity stats and your Weekly Streak still work normally.
               </AppText>
             </View>
           )}
 
-          {/* Points VS card */}
+          {/* Points + Weekly Streak card */}
           <LinearGradient colors={['rgba(255,179,71,0.15)', 'rgba(255,46,138,0.10)']} style={[styles.vsCard, { borderColor: colors.borderSubtle }]}>
-            <View style={styles.vsInner}>
-              <View style={styles.vsSide}>
-                <Avatar name={myName} uri={profile?.avatar_url} size="md" />
-                <AppText style={[styles.vsName, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{myName}</AppText>
-                <AppText style={[styles.vsPts, { color: colors.text }]}>{myPts}</AppText>
-              </View>
-              <View style={styles.vsHeartWrap}>
-                <Heart color="#FF2E8A" size={48} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
-                <AppText style={styles.vsHeartScore}>{totalPts}</AppText>
-                <AppText style={styles.vsHeartLabel}>Together Sparks</AppText>
-              </View>
-              <View style={[styles.vsSide, { alignItems: 'flex-end' }]}>
-                <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="md" />
-                <AppText style={[styles.vsName, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{partnerName}</AppText>
-                <AppText style={[styles.vsPts, { color: colors.text }]}>{partnerPts}</AppText>
-              </View>
+            {pointsEnabled && (
+              <>
+                <View style={styles.vsInner}>
+                  <View style={styles.vsSide}>
+                    <Avatar name={myName} uri={profile?.avatar_url} size="md" />
+                    <AppText style={[styles.vsName, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{myName}</AppText>
+                    <AppText style={[styles.vsPts, { color: colors.text }]}>{myPts}</AppText>
+                  </View>
+                  <View style={styles.vsHeartWrap}>
+                    <Heart color="#FF2E8A" size={48} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
+                    <AppText style={styles.vsHeartScore}>{totalPts}</AppText>
+                    <AppText style={styles.vsHeartLabel}>Together Points</AppText>
+                  </View>
+                  <View style={[styles.vsSide, { alignItems: 'flex-end' }]}>
+                    <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="md" />
+                    <AppText style={[styles.vsName, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">{partnerName}</AppText>
+                    <AppText style={[styles.vsPts, { color: colors.text }]}>{partnerPts}</AppText>
+                  </View>
+                </View>
+                {totalPts > 0 && (
+                  <View style={[styles.progressTrack, { backgroundColor: 'rgba(255,255,255,0.10)' }]}>
+                    <View style={[styles.progressFill, { width: `${Math.round((myPts / totalPts) * 100)}%` as any, backgroundColor: '#FF5A3D' }]} />
+                  </View>
+                )}
+              </>
+            )}
+            <View style={styles.streakRow}>
+              <Flame color="#FF5A5F" size={13} strokeWidth={2} />
+              <AppText style={[styles.streakValue, { color: colors.text }]}>{streak}</AppText>
+              <AppText style={[styles.streakLabel, { color: colors.textMuted }]}>week streak</AppText>
             </View>
-            {totalPts > 0 && (
-              <View style={[styles.progressTrack, { backgroundColor: 'rgba(255,255,255,0.10)' }]}>
-                <View style={[styles.progressFill, { width: `${Math.round((myPts / totalPts) * 100)}%` as any, backgroundColor: '#FF5A3D' }]} />
-              </View>
-            )}
-            {(couple?.streaks_enabled ?? true) && (
-              <View style={styles.streakRow}>
-                <Flame color="#FF5A5F" size={13} strokeWidth={2} />
-                <AppText style={[styles.streakValue, { color: colors.text }]}>{streak}</AppText>
-                <AppText style={[styles.streakLabel, { color: colors.textMuted }]}>day streak</AppText>
-              </View>
-            )}
           </LinearGradient>
 
           {/* Brave Meter */}
