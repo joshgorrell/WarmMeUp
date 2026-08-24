@@ -20,7 +20,15 @@ export default function AppLayout() {
       <Stack.Screen name="settings" />
       <Stack.Screen name="dice" />
       <Stack.Screen name="dare" />
-<Stack.Screen name="vault-viewer" />
+      <Stack.Screen
+        name="vault-viewer"
+        options={{
+          animation: 'slide_from_bottom',
+          gestureEnabled: true,
+          gestureDirection: 'vertical',
+          fullScreenGestureEnabled: true,
+        }}
+      />
       <Stack.Screen name="customize-prompts" />
       <Stack.Screen name="my-stats" />
       <Stack.Screen name="delete-content" />
