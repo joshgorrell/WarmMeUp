@@ -11,6 +11,9 @@ import type { NotificationData } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
 
 function resolveNotificationRoute(data: NotificationData): string | null {
+  // Screenshot alerts should open Activity, where the event already includes
+  // the captured item's thumbnail/context and a tap-through to the exact media
+  // when Warm Me Up can identify it reliably.
   if ((data.event_type as string) === 'screenshot_detected') {
     return '/(app)/activity';
   }
@@ -42,7 +45,10 @@ function resolveNotificationRoute(data: NotificationData): string | null {
   }
 }
 
+// Give cold-start verification enough room to complete. Returning users with
+// already-known good state can resume immediately while the refresh finishes.
 const HARD_DEADLINE_MS = 10000;
+
 const DEBUG_TAP_TARGET = 5;
 const DEBUG_TAP_WINDOW_MS = 10000;
 
@@ -50,16 +56,14 @@ export default function TransitionScreen() {
   const router = useRouter();
   const { couple, partnerProfile, profile, settings, user, isAdmin, isSuperAdmin, loading, subscriptionInfo, debugModeEnabled, globalDebugAccessEnabled } = useAuth();
   const { width } = useWindowDimensions();
-  const logoW = Math.min(width * 0.42, 168);
+  const logoW = Math.min(width * 0.5, 200);
   const bgOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.94)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
-  const accentOpacity = useRef(new Animated.Value(0.35)).current;
   const routed = useRef(false);
   const animDone = useRef(false);
   const authReady = useRef(false);
   const hardDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const accentLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debugModeRef = useRef(debugModeEnabled);
@@ -85,6 +89,9 @@ export default function TransitionScreen() {
     }, DEBUG_TAP_WINDOW_MS);
   };
 
+  // Returns true only when we have enough affirmatively-resolved data to make
+  // a routing decision. A returning authenticated user may keep using a
+  // previously verified premium state while a background refresh is in flight.
   const canRoute = (): boolean => {
     if (isAdmin || isSuperAdmin) return true;
     if (!profile) return false;
@@ -92,6 +99,9 @@ export default function TransitionScreen() {
     const isSolo = !couple || couple.active === false || !couple.user_b_id;
     if (isSolo) return true;
 
+    // refreshSubscription preserves the previous entitlement flags while it
+    // sets loading=true. If the user was already verified premium, don't block
+    // app resume just because the refresh is still running.
     if (subscriptionInfo.loading) return subscriptionInfo.isPremium === true;
 
     return true;
@@ -124,7 +134,7 @@ export default function TransitionScreen() {
       loginMethod: settings?.login_method ?? null,
     });
 
-    Animated.timing(bgOpacity, { toValue: 0, duration: 220, useNativeDriver: true }).start(async () => {
+    Animated.timing(bgOpacity, { toValue: 0, duration: 260, useNativeDriver: true }).start(async () => {
       if (isPrivileged) {
         logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(app)/(tabs) [privileged]`, { elapsedMs: elapsed() });
         router.replace('/(app)/(tabs)');
@@ -205,17 +215,9 @@ export default function TransitionScreen() {
       }
     }, HARD_DEADLINE_MS);
 
-    accentLoopRef.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(accentOpacity, { toValue: 1, duration: 520, useNativeDriver: true }),
-        Animated.timing(accentOpacity, { toValue: 0.35, duration: 520, useNativeDriver: true }),
-      ])
-    );
-    accentLoopRef.current.start();
-
     Animated.parallel([
-      Animated.timing(bgOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
-      Animated.timing(logoOpacity, { toValue: 1, duration: 240, useNativeDriver: true }),
+      Animated.timing(bgOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(logoOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
       Animated.spring(logoScale, { toValue: 1.0, friction: 8, tension: 80, useNativeDriver: true }),
     ]).start(() => {
       animDone.current = true;
@@ -224,7 +226,6 @@ export default function TransitionScreen() {
 
     return () => {
       if (hardDeadlineRef.current) clearTimeout(hardDeadlineRef.current);
-      accentLoopRef.current?.stop();
     };
   }, []);
 
@@ -241,14 +242,9 @@ export default function TransitionScreen() {
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
       <TouchableOpacity onPress={handleDebugTap} activeOpacity={1}>
-        <Animated.View style={[styles.brandBlock, { transform: [{ scale: logoScale }], opacity: logoOpacity }]}>
+        <Animated.View style={{ transform: [{ scale: logoScale }], opacity: logoOpacity, alignItems: 'center', gap: 8 }}>
           <WarmupLogo size={logoW} />
           <WarmupWordmark size={18} />
-          <Animated.View style={[styles.loadingAccent, { opacity: accentOpacity }]}>
-            <Animated.View style={[styles.dot, styles.dotOrange]} />
-            <Animated.View style={[styles.dot, styles.dotCoral]} />
-            <Animated.View style={[styles.dot, styles.dotPink]} />
-          </Animated.View>
         </Animated.View>
       </TouchableOpacity>
     </Animated.View>
@@ -261,24 +257,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#050507',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
   },
-  brandBlock: {
-    alignItems: 'center',
-    gap: 9,
-  },
-  loadingAccent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    marginTop: 9,
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-  },
-  dotOrange: { backgroundColor: '#FFB347' },
-  dotCoral: { backgroundColor: '#FF6B55' },
-  dotPink: { backgroundColor: '#FF2E8A' },
 });
