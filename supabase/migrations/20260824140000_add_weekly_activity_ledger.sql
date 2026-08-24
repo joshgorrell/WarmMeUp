@@ -8,13 +8,12 @@
 
   This migration therefore stores only the minimum durable fact needed for the
   streak: couple_id + UTC Monday week_start. It stores no message text, media,
-  prompt content, game result, or other private content.
+  prompt content, game result, exact activity timestamp, or other private content.
 */
 
 CREATE TABLE IF NOT EXISTS public.weekly_activity (
   couple_id uuid NOT NULL REFERENCES public.couples(id) ON DELETE CASCADE,
   week_start date NOT NULL,
-  first_activity_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (couple_id, week_start)
 );
 
@@ -39,8 +38,7 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE public.weekly_activity FROM authenticated
 GRANT SELECT ON TABLE public.weekly_activity TO authenticated;
 
 -- Record a qualifying week at insert time so later deletion of the underlying
--- content cannot rewrite streak history. The trigger function is deliberately
--- narrow and stores only the week marker.
+-- content cannot rewrite streak history. The trigger stores only the week marker.
 CREATE OR REPLACE FUNCTION public.record_weekly_activity()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -56,13 +54,9 @@ BEGIN
 
   v_week_start := date_trunc('week', NEW.created_at AT TIME ZONE 'UTC')::date;
 
-  INSERT INTO public.weekly_activity (couple_id, week_start, first_activity_at)
-  VALUES (NEW.couple_id, v_week_start, NEW.created_at)
-  ON CONFLICT (couple_id, week_start)
-  DO UPDATE SET first_activity_at = LEAST(
-    public.weekly_activity.first_activity_at,
-    EXCLUDED.first_activity_at
-  );
+  INSERT INTO public.weekly_activity (couple_id, week_start)
+  VALUES (NEW.couple_id, v_week_start)
+  ON CONFLICT (couple_id, week_start) DO NOTHING;
 
   RETURN NEW;
 END;
@@ -97,10 +91,10 @@ EXECUTE FUNCTION public.record_weekly_activity();
 
 -- Backfill every qualifying historical week that can still be derived today.
 -- After this migration, those week markers survive deletion of the source rows.
-INSERT INTO public.weekly_activity (couple_id, week_start, first_activity_at)
-SELECT couple_id,
-       date_trunc('week', created_at AT TIME ZONE 'UTC')::date AS week_start,
-       min(created_at) AS first_activity_at
+INSERT INTO public.weekly_activity (couple_id, week_start)
+SELECT DISTINCT
+       couple_id,
+       date_trunc('week', created_at AT TIME ZONE 'UTC')::date AS week_start
 FROM (
   SELECT couple_id, created_at
   FROM public.interactions
@@ -124,12 +118,7 @@ FROM (
   FROM public.activity_events
   WHERE event_type = 'send_love'
 ) activity
-GROUP BY couple_id, date_trunc('week', created_at AT TIME ZONE 'UTC')::date
-ON CONFLICT (couple_id, week_start)
-DO UPDATE SET first_activity_at = LEAST(
-  public.weekly_activity.first_activity_at,
-  EXCLUDED.first_activity_at
-);
+ON CONFLICT (couple_id, week_start) DO NOTHING;
 
 -- One canonical shared calculation for both partners. p_tz remains only for
 -- API compatibility with older JS bundles; the couple metric uses UTC Monday
