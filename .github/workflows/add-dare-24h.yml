@@ -46,3 +46,4 @@ jobs:
           git add 'app/(app)/(tabs)/dare.tsx' .github/workflows/add-dare-24h.yml
           git commit -m 'feat: add 24 hour Dare expiration option'
           git push
+# trigger
