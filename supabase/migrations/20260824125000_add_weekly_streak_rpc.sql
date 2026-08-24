@@ -3,7 +3,7 @@
 
   A week is Monday-Sunday in the caller's IANA timezone.
   Any meaningful couple activity counts: a non-deleted interaction, a non-deleted
-  chat message, or a vault media item. Opening the app alone does not count.
+  chat message, a vault media item, or Send Love. Opening the app alone does not count.
 
   Grace behavior: if the current week has no activity yet, the completed streak
   through last week is preserved until the current week ends. If the current week
@@ -48,6 +48,10 @@ BEGIN
       SELECT date_trunc('week', created_at AT TIME ZONE p_tz)::date AS week_start
       FROM vault_items
       WHERE couple_id = p_couple_id AND deleted_at IS NULL
+      UNION
+      SELECT date_trunc('week', created_at AT TIME ZONE p_tz)::date AS week_start
+      FROM point_events
+      WHERE couple_id = p_couple_id AND reason = 'send_love'
     ) activity
   ) INTO v_active_weeks;
 
