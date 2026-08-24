@@ -69,15 +69,18 @@ export function ZoomablePhoto({
       savedScale.value = clamp(scale.value, MIN_SCALE, MAX_SCALE);
     });
 
+  // Keep one-finger horizontal gestures free for the parent full-screen gallery.
+  // Panning a zoomed photo remains available with two fingers, while a normal
+  // one-finger swipe always moves to the previous/next gallery item.
   const panGesture = Gesture.Pan()
-    .minPointers(1)
+    .minPointers(2)
     .maxPointers(2)
     .onUpdate((e) => {
       if (scale.value <= 1.01) return;
       translateX.value = savedTranslateX.value + e.translationX;
       translateY.value = savedTranslateY.value + e.translationY;
     })
-    .onEnd((e) => {
+    .onEnd(() => {
       if (scale.value <= 1.01) return;
       const scaledW = width * scale.value;
       const scaledH = height * scale.value;
