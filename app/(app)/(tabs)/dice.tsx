@@ -8,6 +8,7 @@ import {
   Alert,
   useWindowDimensions,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import AppText from '@/components/AppText';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -151,6 +152,7 @@ export default function DiceTab() {
   const [verifying, setVerifying] = useState(false);
   const [acceptPts, setAcceptPts] = useState(5);
   const [completePts, setCompletePts] = useState(25);
+  const [showDiceInstructions, setShowDiceInstructions] = useState(false);
   const [ringOffset, setRingOffset] = useState(
     () => 2 * Math.PI * ((RING_SIZE_MAX - STROKE) / 2),
   );
@@ -165,6 +167,35 @@ export default function DiceTab() {
   const holdAnim = useRef<Animated.CompositeAnimation | null>(null);
   const holdScale = useRef(new Animated.Value(1)).current;
   const completedRef = useRef(false);
+
+  const markDiceUsed = useCallback(() => {
+    setShowDiceInstructions(false);
+    if (user?.id) {
+      SecureStore.setItemAsync(`dice_guidance_seen_${user.id}`, '1').catch(() => {});
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!user?.id) {
+      setShowDiceInstructions(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    SecureStore.getItemAsync(`dice_guidance_seen_${user.id}`)
+      .then(value => {
+        if (mounted) setShowDiceInstructions(value !== '1');
+      })
+      .catch(() => {
+        if (mounted) setShowDiceInstructions(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     const id = holdProgress.addListener(({ value }) => {
@@ -299,7 +330,11 @@ export default function DiceTab() {
       .order('created_at', { ascending: false })
       .limit(5);
     setRecentDice(history ?? []);
-  }, [couple?.id, user?.id]);
+
+    if (incoming || pendingRes.data || mySent || (history?.length ?? 0) > 0) {
+      markDiceUsed();
+    }
+  }, [couple?.id, user?.id, markDiceUsed]);
 
   useEffect(() => {
     if (!couple?.id || !user?.id) return;
@@ -392,6 +427,7 @@ export default function DiceTab() {
         setFace(landFace);
         setDraftRoll(prompt);
         showResult(prompt, 'you');
+        markDiceUsed();
         setRolling(false);
       },
     );
@@ -684,15 +720,17 @@ export default function DiceTab() {
           <AppText style={[styles.heroSubtitle, { color: colors.textSecondary }]}>A little surprise for {partnerFirstName ?? 'your partner'}.</AppText>
         </View>
 
-        <LinearGradient
-          colors={['rgba(255,179,71,0.12)', 'rgba(255,46,138,0.08)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.introCard}
-        >
-          <AppText style={[styles.introTitle, { color: colors.text }]}>Roll it. Pick it. Send it.</AppText>
-          <AppText style={[styles.introText, { color: colors.textSecondary }]}>Hold the dice to reveal a random prompt. Send the one you like, or roll again before your partner sees anything.</AppText>
-        </LinearGradient>
+        {showDiceInstructions && (
+          <LinearGradient
+            colors={['rgba(255,179,71,0.12)', 'rgba(255,46,138,0.08)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.introCard}
+          >
+            <AppText style={[styles.introTitle, { color: colors.text }]}>Roll it. Pick it. Send it.</AppText>
+            <AppText style={[styles.introText, { color: colors.textSecondary }]}>Hold the dice to reveal a random prompt. Send the one you like, or roll again before your partner sees anything.</AppText>
+          </LinearGradient>
+        )}
 
         {incomingChallenge && (
           <View style={[styles.challengeSection, highlightChallenge && styles.challengeHighlight]}>
@@ -754,28 +792,30 @@ export default function DiceTab() {
           </View>
         )}
 
-        <View style={[styles.howItWorksCard, { borderColor: colors.borderSubtle }]}>
-          <AppText style={[styles.howItWorksTitle, { color: colors.textMuted }]}>HOW IT WORKS</AppText>
-          <View style={styles.howItWorksRow}>
-            <View style={styles.howStep}>
-              <AppText style={styles.howStepNumber}>1</AppText>
-              <AppText style={[styles.howStepTitle, { color: colors.text }]}>You roll</AppText>
-              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Reveal a prompt</AppText>
-            </View>
-            <View style={[styles.howDivider, { backgroundColor: colors.borderSubtle }]} />
-            <View style={styles.howStep}>
-              <AppText style={styles.howStepNumber}>2</AppText>
-              <AppText style={[styles.howStepTitle, { color: colors.text }]}>You choose</AppText>
-              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Send or roll again</AppText>
-            </View>
-            <View style={[styles.howDivider, { backgroundColor: colors.borderSubtle }]} />
-            <View style={styles.howStep}>
-              <AppText style={styles.howStepNumber}>3</AppText>
-              <AppText style={[styles.howStepTitle, { color: colors.text }]}>They play</AppText>
-              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Accept or decline</AppText>
+        {showDiceInstructions && (
+          <View style={[styles.howItWorksCard, { borderColor: colors.borderSubtle }]}>
+            <AppText style={[styles.howItWorksTitle, { color: colors.textMuted }]}>HOW IT WORKS</AppText>
+            <View style={styles.howItWorksRow}>
+              <View style={styles.howStep}>
+                <AppText style={styles.howStepNumber}>1</AppText>
+                <AppText style={[styles.howStepTitle, { color: colors.text }]}>You roll</AppText>
+                <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Reveal a prompt</AppText>
+              </View>
+              <View style={[styles.howDivider, { backgroundColor: colors.borderSubtle }]} />
+              <View style={styles.howStep}>
+                <AppText style={styles.howStepNumber}>2</AppText>
+                <AppText style={[styles.howStepTitle, { color: colors.text }]}>You choose</AppText>
+                <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Send or roll again</AppText>
+              </View>
+              <View style={[styles.howDivider, { backgroundColor: colors.borderSubtle }]} />
+              <View style={styles.howStep}>
+                <AppText style={styles.howStepNumber}>3</AppText>
+                <AppText style={[styles.howStepTitle, { color: colors.text }]}>They play</AppText>
+                <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Accept or decline</AppText>
+              </View>
             </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.diceArea}>
           <View style={styles.rollLabelWrap}>
