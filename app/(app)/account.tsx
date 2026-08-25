@@ -1042,13 +1042,13 @@ export default function AccountScreen() {
               icon: <Lock color="#FF2E8A" size={20} strokeWidth={1.8} />,
               bg: 'rgba(255,46,138,0.10)',
               title: 'Private Storage',
-              desc: 'Your media lives in a locked, private vault. There is no public link anyone can guess or stumble upon — files are completely hidden from the internet.',
+              desc: 'Your media is stored privately and accessed using temporary, expiring links generated only when Warm Me Up needs to display it.',
             },
             {
               icon: <Clock color="#FF8A3D" size={20} strokeWidth={1.8} />,
               bg: 'rgba(255,138,61,0.10)',
-              title: 'Links Expire in 1 Hour',
-              desc: 'Every time a photo or video loads, the app generates a temporary access link. That link stops working after one hour — so even if intercepted, it quickly becomes useless.',
+              title: 'Temporary Access Links',
+              desc: 'When Warm Me Up needs to display a photo or video, it generates a temporary access link that expires automatically.',
             },
             {
               icon: <Users color="#69A7FF" size={20} strokeWidth={1.8} />,
@@ -1059,8 +1059,8 @@ export default function AccountScreen() {
             {
               icon: <Smartphone color="#33D17A" size={20} strokeWidth={1.8} />,
               bg: 'rgba(51,209,122,0.10)',
-              title: 'Never Saved to Your Device',
-              desc: 'Photos and videos taken inside the app go straight to the vault. They are never written to your camera roll or stored anywhere on your phone.',
+              title: 'Not Added to Your Camera Roll',
+              desc: 'Photos and videos taken inside Warm Me Up are uploaded to your Vault and are not automatically added to your device’s Photos or Camera Roll.',
             },
             {
               icon: <ScanFace color="#FFB347" size={20} strokeWidth={1.8} />,
@@ -1071,14 +1071,14 @@ export default function AccountScreen() {
             {
               icon: <Shield color="#FF5A3D" size={20} strokeWidth={1.8} />,
               bg: 'rgba(255,90,61,0.10)',
-              title: 'Screenshot Detection',
-              desc: 'When screenshots are turned off for an item, the app detects if your partner takes one and sends you a notification immediately.',
+              title: 'Screenshot Alerts & Protection',
+              desc: 'Warm Me Up can detect screenshots where supported and alert you when your partner captures your content. Available device protections also help limit screen capture where supported.',
             },
             {
               icon: <Sliders color="rgba(255,255,255,0.65)" size={20} strokeWidth={1.8} />,
               bg: 'rgba(255,255,255,0.06)',
               title: 'Your Rules, Your Control',
-              desc: 'You decide whether each upload can be screenshotted, saved, or shared. Defaults are set in your Profile and apply to every new item you add.',
+              desc: 'You control whether your uploads can be saved or shared outside Warm Me Up, and you can enable Screenshot Alerts & Protection for additional privacy.',
             },
           ].map(({ icon, bg, title, desc }) => (
             <View key={title} style={[styles.secInfoRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
