@@ -58,7 +58,7 @@ const FEATURES = [
   { Icon: Zap,           text: 'Unlimited Dares & Dice rolls' },
   { Icon: MessageCircle, text: 'Private couples chat' },
   { Icon: Lock,          text: 'Shared Vault for photos & videos' },
-  { Icon: Flame,         text: 'Streaks & daily challenges' },
+  { Icon: Flame,         text: 'Weekly Streaks & playful challenges' },
   { Icon: Star,          text: 'Points, rewards & milestones' },
   { Icon: Gift,          text: 'Custom prompts for your vibe' },
 ];
@@ -474,8 +474,6 @@ export default function SubscriptionScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Escape route for solo users trapped on the paywall — let them
-              enter a partner's invite code instead of subscribing. */}
           {!couple?.user_b_id && (
             <TouchableOpacity
               style={styles.partnerCodeBtn}
