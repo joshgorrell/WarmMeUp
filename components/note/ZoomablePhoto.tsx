@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -38,6 +39,7 @@ export function ZoomablePhoto({
   onZoomChange,
   onDismiss,
 }: ZoomablePhotoProps) {
+  const router = useRouter();
   const [isZoomed, setIsZoomed] = useState(false);
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -50,6 +52,11 @@ export function ZoomablePhoto({
     setIsZoomed(zoomed);
     onZoomChange?.(zoomed);
   }, [onZoomChange]);
+
+  const dismissViewer = useCallback(() => {
+    if (onDismiss) onDismiss();
+    else router.back();
+  }, [onDismiss, router]);
 
   const resetZoom = useCallback(() => {
     scale.value = 1;
@@ -105,8 +112,8 @@ export function ZoomablePhoto({
         e.velocityY > DISMISS_VELOCITY &&
         Math.abs(e.translationY) > Math.abs(e.translationX) * 1.15;
 
-      if (isDeliberateDismiss && onDismiss) {
-        runOnJS(onDismiss)();
+      if (isDeliberateDismiss) {
+        runOnJS(dismissViewer)();
         return;
       }
 
