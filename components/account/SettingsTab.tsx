@@ -270,15 +270,15 @@ export function SettingsTab({
           }}
         />
         <SettingsRow
-          label="Protect My Content from Screen Capture"
-          sub="When on, Warm Me Up blocks screenshots, screen recording, and mirroring where supported. When off, screen capture is allowed. Applies to all your past and future uploads."
+          label="Screen Capture Protection"
+          sub="When on, Warm Me Up uses available device protections to help prevent screenshots, screen recording, and mirroring of your content. If your partner takes a screenshot and Warm Me Up detects it, you’ll see a screenshot alert in Activity and may receive a notification. Protection and detection vary by device and operating system."
           toggle
           value={s?.screenshot_notify_partner ?? true}
           onChange={v => {
             if (v) { update({ screenshot_notify_partner: true }); return; }
             setConfirmSheet({
               title: 'Allow Screen Capture?',
-              message: 'Your partner will be able to screenshot, screen record, or mirror your photos and videos — including everything you have already uploaded — without Warm Me Up blocking capture. Turn protection off?',
+              message: 'Turning this off allows screen capture of your photos and videos where the device permits it, and screenshot alerts for that content will no longer be generated. Turn protection off?',
               actions: [
                 { label: 'Allow Screen Capture', onPress: () => { update({ screenshot_notify_partner: false }); setConfirmSheet(null); }, destructive: true },
                 { label: 'Keep Protection', onPress: () => setConfirmSheet(null) },
