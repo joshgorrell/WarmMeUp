@@ -17,6 +17,7 @@ const MAX_SCALE = 5;
 const DOUBLE_TAP_SCALE = 2.5;
 const DISMISS_DISTANCE = 110;
 const DISMISS_VELOCITY = 550;
+const EDGE_RESISTANCE = 0.35;
 
 type ZoomablePhotoProps = {
   uri: string;
@@ -28,6 +29,14 @@ type ZoomablePhotoProps = {
   onZoomChange?: (zoomed: boolean) => void;
   onDismiss?: () => void;
 };
+
+function getContainedSize(containerWidth: number, containerHeight: number, imageWidth: number, imageHeight: number) {
+  if (imageWidth <= 0 || imageHeight <= 0) {
+    return { width: containerWidth, height: containerHeight };
+  }
+  const ratio = Math.min(containerWidth / imageWidth, containerHeight / imageHeight);
+  return { width: imageWidth * ratio, height: imageHeight * ratio };
+}
 
 export function ZoomablePhoto({
   uri,
@@ -47,6 +56,11 @@ export function ZoomablePhoto({
   const translateY = useSharedValue(0);
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
+  const imageWidth = useSharedValue(width);
+  const imageHeight = useSharedValue(height);
+  const pinchStartScale = useSharedValue(1);
+  const pinchStartX = useSharedValue(0);
+  const pinchStartY = useSharedValue(0);
 
   const updateZoomState = useCallback((zoomed: boolean) => {
     setIsZoomed(zoomed);
@@ -72,16 +86,43 @@ export function ZoomablePhoto({
     updateZoomState(false);
   }, [uri, resetZoom, updateZoomState]);
 
+  const settleWithinBounds = (animated = true) => {
+    'worklet';
+    const maxX = Math.max(0, (imageWidth.value * scale.value - width) / 2);
+    const maxY = Math.max(0, (imageHeight.value * scale.value - height) / 2);
+    const x = clamp(translateX.value, -maxX, maxX);
+    const y = clamp(translateY.value, -maxY, maxY);
+    if (animated) {
+      translateX.value = withTiming(x, { duration: 180, easing: Easing.out(Easing.ease) });
+      translateY.value = withTiming(y, { duration: 180, easing: Easing.out(Easing.ease) });
+    } else {
+      translateX.value = x;
+      translateY.value = y;
+    }
+    savedTranslateX.value = x;
+    savedTranslateY.value = y;
+  };
+
   const pinchGesture = Gesture.Pinch()
+    .onBegin((e) => {
+      pinchStartScale.value = scale.value;
+      pinchStartX.value = translateX.value;
+      pinchStartY.value = translateY.value;
+    })
     .onUpdate((e) => {
-      const newScale = savedScale.value * e.scale;
-      scale.value = clamp(newScale, MIN_SCALE, MAX_SCALE);
+      const nextScale = clamp(pinchStartScale.value * e.scale, MIN_SCALE, MAX_SCALE);
+      const scaleRatio = nextScale / pinchStartScale.value;
+      const focalX = e.focalX - width / 2;
+      const focalY = e.focalY - height / 2;
+      scale.value = nextScale;
+      translateX.value = focalX - (focalX - pinchStartX.value) * scaleRatio;
+      translateY.value = focalY - (focalY - pinchStartY.value) * scaleRatio;
     })
     .onEnd(() => {
       if (scale.value < 1.05) {
-        scale.value = 1;
-        translateX.value = 0;
-        translateY.value = 0;
+        scale.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.ease) });
+        translateX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.ease) });
+        translateY.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.ease) });
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
         savedScale.value = 1;
@@ -89,48 +130,47 @@ export function ZoomablePhoto({
         return;
       }
       savedScale.value = clamp(scale.value, MIN_SCALE, MAX_SCALE);
+      settleWithinBounds(true);
       runOnJS(updateZoomState)(true);
     });
 
-  // At normal size, one-finger horizontal swipes remain available to the parent
-  // gallery. Once zoomed, one finger pans the enlarged photo naturally.
   const panGesture = Gesture.Pan()
     .enabled(isZoomed)
     .minPointers(1)
     .maxPointers(1)
     .onUpdate((e) => {
       if (scale.value <= 1.01) return;
-      translateX.value = savedTranslateX.value + e.translationX;
-      translateY.value = savedTranslateY.value + e.translationY;
+      const maxX = Math.max(0, (imageWidth.value * scale.value - width) / 2);
+      const maxY = Math.max(0, (imageHeight.value * scale.value - height) / 2);
+      const rawX = savedTranslateX.value + e.translationX;
+      const rawY = savedTranslateY.value + e.translationY;
+
+      translateX.value = rawX < -maxX
+        ? -maxX + (rawX + maxX) * EDGE_RESISTANCE
+        : rawX > maxX
+          ? maxX + (rawX - maxX) * EDGE_RESISTANCE
+          : rawX;
+      translateY.value = rawY < -maxY
+        ? -maxY + (rawY + maxY) * EDGE_RESISTANCE
+        : rawY > maxY
+          ? maxY + (rawY - maxY) * EDGE_RESISTANCE
+          : rawY;
     })
     .onEnd(() => {
       if (scale.value <= 1.01) return;
-      const scaledW = width * scale.value;
-      const scaledH = height * scale.value;
-      const maxX = Math.max(0, (scaledW - width) / 2);
-      const maxY = Math.max(0, (scaledH - height) / 2);
-
-      const clampedX = clamp(translateX.value, -maxX, maxX);
-      const clampedY = clamp(translateY.value, -maxY, maxY);
-
-      translateX.value = clampedX;
-      translateY.value = clampedY;
-      savedTranslateX.value = clampedX;
-      savedTranslateY.value = clampedY;
+      settleWithinBounds(true);
     });
 
-  // A separate vertical gesture keeps iOS-style swipe-down dismissal available
-  // at normal size and while zoomed, without stealing deliberate horizontal swipes.
   const dismissGesture = Gesture.Pan()
     .minPointers(1)
     .maxPointers(1)
-    .activeOffsetY([-18, 18])
-    .failOffsetX([-42, 42])
+    .activeOffsetY([-24, 24])
+    .failOffsetX([-70, 70])
     .onEnd((e) => {
       const isDeliberateDismiss =
         e.translationY > DISMISS_DISTANCE &&
         e.velocityY > DISMISS_VELOCITY &&
-        Math.abs(e.translationY) > Math.abs(e.translationX) * 1.2;
+        Math.abs(e.translationY) > Math.abs(e.translationX) * 1.35;
       if (isDeliberateDismiss) {
         runOnJS(dismissViewer)();
       }
@@ -150,22 +190,13 @@ export function ZoomablePhoto({
       } else {
         const tapX = e.x - width / 2;
         const tapY = e.y - height / 2;
-        scale.value = withTiming(DOUBLE_TAP_SCALE, {
-          duration: 250,
-          easing: Easing.out(Easing.ease),
-        });
-        const maxX = (width * DOUBLE_TAP_SCALE - width) / 2;
-        const maxY = (height * DOUBLE_TAP_SCALE - height) / 2;
+        scale.value = withTiming(DOUBLE_TAP_SCALE, { duration: 250, easing: Easing.out(Easing.ease) });
+        const maxX = Math.max(0, (imageWidth.value * DOUBLE_TAP_SCALE - width) / 2);
+        const maxY = Math.max(0, (imageHeight.value * DOUBLE_TAP_SCALE - height) / 2);
         const targetX = clamp(-tapX * (DOUBLE_TAP_SCALE - 1), -maxX, maxX);
         const targetY = clamp(-tapY * (DOUBLE_TAP_SCALE - 1), -maxY, maxY);
-        translateX.value = withTiming(targetX, {
-          duration: 250,
-          easing: Easing.out(Easing.ease),
-        });
-        translateY.value = withTiming(targetY, {
-          duration: 250,
-          easing: Easing.out(Easing.ease),
-        });
+        translateX.value = withTiming(targetX, { duration: 250, easing: Easing.out(Easing.ease) });
+        translateY.value = withTiming(targetY, { duration: 250, easing: Easing.out(Easing.ease) });
         savedScale.value = DOUBLE_TAP_SCALE;
         savedTranslateX.value = targetX;
         savedTranslateY.value = targetY;
@@ -180,12 +211,7 @@ export function ZoomablePhoto({
     });
 
   const composedTap = Gesture.Exclusive(doubleTapGesture, singleTapGesture);
-  const composedGesture = Gesture.Simultaneous(
-    pinchGesture,
-    panGesture,
-    dismissGesture,
-    composedTap,
-  );
+  const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture, dismissGesture, composedTap);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -208,7 +234,13 @@ export function ZoomablePhoto({
               cachePolicy="memory-disk"
               transition={120}
               recyclingKey={uri}
-              onLoad={onLoad}
+              onLoad={(event) => {
+                const source = event.source;
+                const contained = getContainedSize(width, height, source.width ?? width, source.height ?? height);
+                imageWidth.value = contained.width;
+                imageHeight.value = contained.height;
+                onLoad();
+              }}
               onError={onError}
             />
           </Animated.View>
