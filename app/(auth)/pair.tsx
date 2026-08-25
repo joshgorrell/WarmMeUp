@@ -698,7 +698,7 @@ export default function PairScreen() {
                 </View>
               </View>
 
-              <View style={[styles.headerRow, { justifyContent: 'space-between', marginBottom: Spacing.sm }]}>
+              <View style={[styles.headerRow, { marginBottom: Spacing.sm }]}>
                 <AppText style={[styles.heading, { fontSize: headingSize }]}>Enter your{'\n'}partner's code</AppText>
                 <TouchableOpacity
                   style={styles.helpBtn}
@@ -794,7 +794,7 @@ export default function PairScreen() {
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: scrollPaddingTop }]} showsVerticalScrollIndicator={false}>
         <View style={centerStyle}>
-          <View style={[styles.headerRow, { justifyContent: 'space-between', marginBottom: Spacing.sm }]}>
+          <View style={[styles.headerRow, { marginBottom: Spacing.sm }]}>
             <AppText style={[styles.heading, { fontSize: headingSize }]}>Connect with{'\n'}your partner</AppText>
             <TouchableOpacity
               style={styles.helpBtn}
@@ -1179,8 +1179,7 @@ export default function PairScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060406' },
   headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    position: 'relative',
   },
   backBtn: {
     position: 'absolute',
@@ -1575,6 +1574,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   helpBtn: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -1584,6 +1586,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.10)',
     flexShrink: 0,
+    zIndex: 10,
   },
   previewCard: {
     marginTop: Spacing.md,
