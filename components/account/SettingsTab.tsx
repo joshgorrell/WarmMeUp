@@ -26,7 +26,7 @@ export function SettingsTab({
   onShowCommunityGuidelines, onShowTerms, onShowPrivacyPolicy, subscriptionInfo,
   onRestorePurchase, onDeleteAccount, onContactSupport, feedbackEnabled, onSendFeedback,
   onVaultSectionLayout,
-}: any) {
+}: { onVaultSectionLayout: (y: number) => void; [key: string]: any }) {
   const { colors } = useTheme();
   const router = useRouter();
   const didProbingRef = useRef(false);
