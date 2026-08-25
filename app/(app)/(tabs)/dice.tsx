@@ -138,6 +138,8 @@ export default function DiceTab() {
   const [promptsLoaded, setPromptsLoaded] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [resultLabel, setResultLabel] = useState<'you' | 'partner'>('you');
+  const [draftRoll, setDraftRoll] = useState<string | null>(null);
+  const [sendingRoll, setSendingRoll] = useState(false);
   const [rolling, setRolling] = useState(false);
   const [face, setFace] = useState(5);
   const [error, setError] = useState('');
@@ -312,6 +314,7 @@ export default function DiceTab() {
           const row = payload.new as Interaction;
           if (row.type !== 'dice') return;
           if (payload.eventType === 'INSERT' && row.sender_id !== user.id && row.rolled_for === 'partner') {
+            setDraftRoll(null);
             showResult(row.content_text ?? '', 'partner');
           }
           checkStates();
@@ -366,7 +369,7 @@ export default function DiceTab() {
   );
 
   const triggerRoll = async () => {
-    if (rolling) return;
+    if (rolling || sendingRoll) return;
     if (!hasPartner) {
       setError('Pair with your partner before rolling.');
       return;
@@ -375,6 +378,7 @@ export default function DiceTab() {
     setRolling(true);
     setHolding(false);
     setError('');
+    setDraftRoll(null);
     setResult(null);
     sentOpacity.setValue(0);
     sentTranslate.setValue(10);
@@ -384,45 +388,55 @@ export default function DiceTab() {
 
     diceRef.current?.roll(
       f => setFace(f),
-      async () => {
+      () => {
         setFace(landFace);
-        try {
-          if (couple?.id && user) {
-            const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-            if (!partnerId) throw new Error('No partner');
-
-            await deactivatePreviousEphemeral(couple.id, user.id);
-            const diceExpiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
-            const { error: insertError } = await supabase.from('interactions').insert({
-              couple_id: couple.id,
-              type: 'dice',
-              sender_id: user.id,
-              receiver_id: partnerId,
-              content_text: prompt,
-              status: 'sent',
-              is_active: true,
-              rolled_for: 'partner',
-              expires_at: diceExpiresAt,
-            });
-            if (insertError) throw insertError;
-
-            notifyPartner({
-              event_type: 'dice_roll',
-              couple_id: couple.id,
-              target_route: '/(app)/(tabs)/dice',
-              partnerUserId: partnerProfile?.id,
-            });
-            await checkStates();
-          }
-          showResult(prompt, 'you');
-        } catch {
-          setError('Could not send to your partner. Try again.');
-          showResult(prompt, 'you');
-        } finally {
-          setRolling(false);
-        }
+        setDraftRoll(prompt);
+        showResult(prompt, 'you');
+        setRolling(false);
       },
     );
+  };
+
+  const handleSendRoll = async () => {
+    if (!draftRoll || !couple?.id || !user || sendingRoll) return;
+
+    const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
+    if (!partnerId) {
+      setError('Pair with your partner before sending.');
+      return;
+    }
+
+    setSendingRoll(true);
+    setError('');
+    try {
+      await deactivatePreviousEphemeral(couple.id, user.id);
+      const diceExpiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
+      const { error: insertError } = await supabase.from('interactions').insert({
+        couple_id: couple.id,
+        type: 'dice',
+        sender_id: user.id,
+        receiver_id: partnerId,
+        content_text: draftRoll,
+        status: 'sent',
+        is_active: true,
+        rolled_for: 'partner',
+        expires_at: diceExpiresAt,
+      });
+      if (insertError) throw insertError;
+
+      notifyPartner({
+        event_type: 'dice_roll',
+        couple_id: couple.id,
+        target_route: '/(app)/(tabs)/dice',
+        partnerUserId: partnerProfile?.id,
+      });
+      setDraftRoll(null);
+      await checkStates();
+    } catch {
+      setError('Could not send to your partner. Try again.');
+    } finally {
+      setSendingRoll(false);
+    }
   };
 
   const handleRespond = async (accepted: boolean) => {
@@ -538,8 +552,9 @@ export default function DiceTab() {
   };
 
   const onPressIn = () => {
-    if (rolling || !hasPartner) return;
+    if (rolling || sendingRoll || !hasPartner) return;
     if (result) {
+      setDraftRoll(null);
       setResult(null);
       setFace(5);
       sentOpacity.setValue(0);
@@ -642,7 +657,9 @@ export default function DiceTab() {
   const sentSubtitle =
     resultLabel === 'partner'
       ? `${partnerFirstName ?? 'Your partner'} rolled for you`
-      : `Rolled for ${partnerFirstName ?? 'your partner'} — waiting for them`;
+      : draftRoll
+        ? 'You rolled it — send this one or roll again'
+        : `Sent to ${partnerFirstName ?? 'your partner'} — waiting for them`;
 
   const hintText = holding
     ? 'Keep holding…'
@@ -673,8 +690,8 @@ export default function DiceTab() {
           end={{ x: 1, y: 1 }}
           style={styles.introCard}
         >
-          <AppText style={[styles.introTitle, { color: colors.text }]}>Roll it. Send it. Let them decide.</AppText>
-          <AppText style={[styles.introText, { color: colors.textSecondary }]}>Hold the dice to send a random prompt. They can accept it, complete it, decline it, or let it expire.</AppText>
+          <AppText style={[styles.introTitle, { color: colors.text }]}>Roll it. Pick it. Send it.</AppText>
+          <AppText style={[styles.introText, { color: colors.textSecondary }]}>Hold the dice to reveal a random prompt. Send the one you like, or roll again before your partner sees anything.</AppText>
         </LinearGradient>
 
         {incomingChallenge && (
@@ -743,19 +760,19 @@ export default function DiceTab() {
             <View style={styles.howStep}>
               <AppText style={styles.howStepNumber}>1</AppText>
               <AppText style={[styles.howStepTitle, { color: colors.text }]}>You roll</AppText>
-              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Hold the dice</AppText>
+              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Reveal a prompt</AppText>
             </View>
             <View style={[styles.howDivider, { backgroundColor: colors.borderSubtle }]} />
             <View style={styles.howStep}>
               <AppText style={styles.howStepNumber}>2</AppText>
-              <AppText style={[styles.howStepTitle, { color: colors.text }]}>They play</AppText>
-              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Accept or decline</AppText>
+              <AppText style={[styles.howStepTitle, { color: colors.text }]}>You choose</AppText>
+              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Send or roll again</AppText>
             </View>
             <View style={[styles.howDivider, { backgroundColor: colors.borderSubtle }]} />
             <View style={styles.howStep}>
               <AppText style={styles.howStepNumber}>3</AppText>
-              <AppText style={[styles.howStepTitle, { color: colors.text }]}>You both win</AppText>
-              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Complete for points</AppText>
+              <AppText style={[styles.howStepTitle, { color: colors.text }]}>They play</AppText>
+              <AppText style={[styles.howStepText, { color: colors.textMuted }]}>Accept or decline</AppText>
             </View>
           </View>
         </View>
@@ -763,7 +780,7 @@ export default function DiceTab() {
         <View style={styles.diceArea}>
           <View style={styles.rollLabelWrap}>
             <AppText style={styles.rollLabel}>{holding ? 'KEEP HOLDING…' : 'PRESS & HOLD TO ROLL'}</AppText>
-            <AppText style={[styles.rollExpiry, { color: colors.textMuted }]}>Rolls expire in {expiryHours}h</AppText>
+            <AppText style={[styles.rollExpiry, { color: colors.textMuted }]}>Sent rolls expire in {expiryHours}h</AppText>
           </View>
 
           <View style={[styles.diceContainer, { width: ringSize, height: ringSize }]}>
@@ -804,10 +821,10 @@ export default function DiceTab() {
                 activeOpacity={1}
                 onPressIn={onPressIn}
                 onPressOut={onPressOut}
-                disabled={rolling || !hasPartner}
+                disabled={rolling || sendingRoll || !hasPartner}
                 accessible
                 accessibilityLabel="Hold to roll dice for your partner"
-                accessibilityHint="Press and hold for 2 seconds to send a roll to your partner"
+                accessibilityHint="Press and hold for 2 seconds to reveal a roll. You choose whether to send it."
               >
                 <View style={[styles.diceWrapper, { width: diceSize, height: diceSize }]}>
                   <NeonDice ref={diceRef} face={face} size={diceSize} challengeText={result} />
@@ -825,13 +842,42 @@ export default function DiceTab() {
             style={[styles.sentWrap, { opacity: sentOpacity, transform: [{ translateY: sentTranslate }] }]}
           >
             <AppText style={[styles.sent, { color: colors.textMuted }]}>{sentSubtitle}</AppText>
-            {senderCountdown && sentDice && (
+
+            {draftRoll && resultLabel === 'you' && (
+              <View style={styles.draftActions}>
+                <TouchableOpacity
+                  style={styles.sendRollBtn}
+                  onPress={handleSendRoll}
+                  disabled={sendingRoll || rolling}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={['#FFB347', '#FF5A3D', '#FF2E8A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.sendRollGrad}
+                  >
+                    <AppText style={styles.sendRollText}>{sendingRoll ? 'Sending…' : `Send to ${partnerFirstName ?? 'Partner'}`}</AppText>
+                  </LinearGradient>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.rollAgainBtn, { borderColor: colors.borderSubtle }]}
+                  onPress={triggerRoll}
+                  disabled={sendingRoll || rolling}
+                  activeOpacity={0.75}
+                >
+                  <AppText style={[styles.rollAgainText, { color: colors.textSecondary }]}>Roll Again</AppText>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {senderCountdown && sentDice && !draftRoll && (
               <View style={styles.expiryRow}>
                 <Timer color={colors.textMuted} size={12} strokeWidth={2} />
                 <AppText style={[styles.expiryText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText>
               </View>
             )}
-            {sentDice && (
+            {sentDice && !draftRoll && (
               <TouchableOpacity onPress={handleCancelSentRoll} activeOpacity={0.7} style={styles.deleteLink}>
                 <AppText style={[styles.deleteLinkText, { color: colors.textMuted }]}>Cancel roll</AppText>
               </TouchableOpacity>
@@ -1110,12 +1156,45 @@ const styles = StyleSheet.create({
   },
   sentWrap: {
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    width: '100%',
   },
   sent: {
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     letterSpacing: 0.3,
+    textAlign: 'center',
+  },
+  draftActions: {
+    width: '100%',
+    gap: Spacing.sm,
+    marginTop: 4,
+  },
+  sendRollBtn: {
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+  },
+  sendRollGrad: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendRollText: {
+    color: '#fff',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Bold',
+  },
+  rollAgainBtn: {
+    height: 44,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.025)',
+  },
+  rollAgainText: {
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
   },
   expiryRow: {
     flexDirection: 'row',
