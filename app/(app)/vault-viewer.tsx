@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,7 +22,7 @@ import { supabase } from '@/lib/supabase';
 import { awardPoints } from '@/lib/points';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
-import { evictCachedUrl, GalleryItem, getCachedUrl, getGalleryItems, setCachedUrl } from '@/lib/mediaGalleryStore';
+import { evictCachedUrl, GalleryItem, getGalleryItems } from '@/lib/mediaGalleryStore';
 import { clearLocalImageCache } from '@/lib/mediaCache';
 import { extensionToMime, mimeToExtension, uploadMediaFile } from '@/lib/uploadMedia';
 import { ZoomablePhoto } from '@/components/note/ZoomablePhoto';
@@ -39,8 +38,6 @@ type MediaPageProps = {
   couple: any;
   controlsVisible: boolean;
   onTap: () => void;
-  onZoomChange: (zoomed: boolean) => void;
-  onDismiss: () => void;
 };
 
 function MediaPage({
@@ -52,8 +49,6 @@ function MediaPage({
   couple,
   controlsVisible,
   onTap,
-  onZoomChange,
-  onDismiss,
 }: MediaPageProps) {
   const isVideo = item.mediaType === 'video';
   const canScreenshot = item.allowScreenshot;
@@ -86,24 +81,18 @@ function MediaPage({
     if (!isActive) {
       setVideoPlaying(false);
       player.pause();
-      onZoomChange(false);
     }
-  }, [isActive, player, onZoomChange]);
+  }, [isActive, player]);
 
   useEffect(() => {
     if (!item.storagePath || !isActive) return;
     let cancelled = false;
     setMediaError(false);
     retryAttemptedRef.current = false;
+
     setLoading(true);
-
-    const cached = item.signedUri ?? getCachedUrl(item.storagePath);
-    if (cached) {
-      setMediaUri(cached);
-      return () => { cancelled = true; };
-    }
-
     setMediaUri(null);
+
     supabase.storage
       .from(item.storageBucket ?? 'vault')
       .createSignedUrl(item.storagePath, 12 * 60 * 60)
@@ -114,9 +103,9 @@ function MediaPage({
           setLoading(false);
           return;
         }
-        setCachedUrl(item.storagePath, data.signedUrl);
         setMediaUri(data.signedUrl);
         setMediaError(false);
+        setLoading(false);
       })
       .catch(() => {
         if (cancelled || !mountedRef.current) return;
@@ -127,7 +116,7 @@ function MediaPage({
     return () => {
       cancelled = true;
     };
-  }, [item.storagePath, item.storageBucket, item.signedUri, isActive]);
+  }, [item.storagePath, item.storageBucket, isActive]);
 
   useEffect(() => {
     if (!isVideo || !mediaUri || Platform.OS === 'web') return;
@@ -331,14 +320,13 @@ function MediaPage({
                 return;
               }
               retryAttemptedRef.current = true;
-              evictCachedUrl(item.storagePath);
+              if (item.storagePath) evictCachedUrl(item.storagePath);
               supabase.storage
                 .from(item.storageBucket ?? 'vault')
                 .createSignedUrl(item.storagePath, 12 * 60 * 60)
                 .then(({ data }) => {
                   if (!mountedRef.current) return;
                   if (data?.signedUrl) {
-                    setCachedUrl(item.storagePath, data.signedUrl);
                     setMediaUri(data.signedUrl);
                     setLoading(true);
                     setMediaError(false);
@@ -355,8 +343,6 @@ function MediaPage({
                 });
             }}
             onTap={onTap}
-            onZoomChange={onZoomChange}
-            onDismiss={onDismiss}
           />
         )}
 
@@ -524,7 +510,6 @@ export default function VaultViewerScreen() {
 
   const [items, setItems] = useState<GalleryItem[]>(initialItems);
   const [activeIndex, setActiveIndex] = useState(initialIndex);
-  const [activePhotoZoomed, setActivePhotoZoomed] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const listRef = useRef<FlatList<GalleryItem>>(null);
@@ -535,43 +520,6 @@ export default function VaultViewerScreen() {
   const toggleControls = useCallback(() => {
     setControlsVisible(prev => !prev);
   }, []);
-
-  const dismissViewer = useCallback(() => {
-    setActivePhotoZoomed(false);
-    router.back();
-  }, [router]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const neighbors = [items[activeIndex - 1], items[activeIndex + 1]].filter(Boolean) as GalleryItem[];
-    if (neighbors.length === 0) return;
-
-    (async () => {
-      await Promise.all(neighbors.map(async item => {
-        if (!item.storagePath) return;
-        let uri = item.signedUri ?? getCachedUrl(item.storagePath);
-        if (!uri) {
-          try {
-            const { data, error } = await supabase.storage
-              .from(item.storageBucket ?? 'vault')
-              .createSignedUrl(item.storagePath, 12 * 60 * 60);
-            if (error || !data?.signedUrl || cancelled) return;
-            uri = data.signedUrl;
-            setCachedUrl(item.storagePath, uri);
-          } catch {
-            return;
-          }
-        }
-        if (!cancelled && item.mediaType !== 'video') {
-          ExpoImage.prefetch(uri).catch(() => {});
-        }
-      }));
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [items, activeIndex]);
 
   const performDeleteActive = useCallback(async () => {
     const item = items[activeIndex];
@@ -623,7 +571,6 @@ export default function VaultViewerScreen() {
         return;
       }
       const nextIndex = Math.min(activeIndex, nextItems.length - 1);
-      setActivePhotoZoomed(false);
       setItems(nextItems);
       setActiveIndex(nextIndex);
       requestAnimationFrame(() => {
@@ -689,7 +636,6 @@ export default function VaultViewerScreen() {
         keyExtractor={(item, index) => item.id || String(index)}
         horizontal
         pagingEnabled
-        scrollEnabled={!activePhotoZoomed}
         bounces={false}
         decelerationRate="fast"
         showsHorizontalScrollIndicator={false}
@@ -708,20 +654,17 @@ export default function VaultViewerScreen() {
             couple={couple}
             controlsVisible={controlsVisible}
             onTap={toggleControls}
-            onZoomChange={index === activeIndex ? setActivePhotoZoomed : () => {}}
-            onDismiss={dismissViewer}
           />
         )}
         onMomentumScrollEnd={event => {
           const nextIndex = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
-          setActivePhotoZoomed(false);
           setActiveIndex(Math.min(Math.max(0, nextIndex), items.length - 1));
         }}
         style={{ width: screenWidth, height: screenHeight }}
       />
 
       <Animated.View style={[styles.topControls, { top: insets.top + 8 }, topControlsStyle]} pointerEvents={controlsVisible ? 'box-none' : 'none'}>
-        <TouchableOpacity style={styles.topButton} onPress={dismissViewer} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.topButton} onPress={() => router.back()} activeOpacity={0.8}>
           <ChevronLeft color="#fff" size={24} />
         </TouchableOpacity>
 
