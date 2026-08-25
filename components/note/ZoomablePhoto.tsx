@@ -15,8 +15,8 @@ import Animated, {
 const MIN_SCALE = 1;
 const MAX_SCALE = 5;
 const DOUBLE_TAP_SCALE = 2.5;
-const DISMISS_DISTANCE = 120;
-const DISMISS_VELOCITY = 650;
+const DISMISS_DISTANCE = 110;
+const DISMISS_VELOCITY = 550;
 
 type ZoomablePhotoProps = {
   uri: string;
@@ -94,7 +94,6 @@ export function ZoomablePhoto({
 
   // At normal size, one-finger horizontal swipes remain available to the parent
   // gallery. Once zoomed, one finger pans the enlarged photo naturally.
-  // A deliberate fast/downward swipe still dismisses the full-screen viewer.
   const panGesture = Gesture.Pan()
     .enabled(isZoomed)
     .minPointers(1)
@@ -104,19 +103,8 @@ export function ZoomablePhoto({
       translateX.value = savedTranslateX.value + e.translationX;
       translateY.value = savedTranslateY.value + e.translationY;
     })
-    .onEnd((e) => {
+    .onEnd(() => {
       if (scale.value <= 1.01) return;
-
-      const isDeliberateDismiss =
-        e.translationY > DISMISS_DISTANCE &&
-        e.velocityY > DISMISS_VELOCITY &&
-        Math.abs(e.translationY) > Math.abs(e.translationX) * 1.15;
-
-      if (isDeliberateDismiss) {
-        runOnJS(dismissViewer)();
-        return;
-      }
-
       const scaledW = width * scale.value;
       const scaledH = height * scale.value;
       const maxX = Math.max(0, (scaledW - width) / 2);
@@ -129,6 +117,23 @@ export function ZoomablePhoto({
       translateY.value = clampedY;
       savedTranslateX.value = clampedX;
       savedTranslateY.value = clampedY;
+    });
+
+  // A separate vertical gesture keeps iOS-style swipe-down dismissal available
+  // at normal size and while zoomed, without stealing deliberate horizontal swipes.
+  const dismissGesture = Gesture.Pan()
+    .minPointers(1)
+    .maxPointers(1)
+    .activeOffsetY([-18, 18])
+    .failOffsetX([-42, 42])
+    .onEnd((e) => {
+      const isDeliberateDismiss =
+        e.translationY > DISMISS_DISTANCE &&
+        e.velocityY > DISMISS_VELOCITY &&
+        Math.abs(e.translationY) > Math.abs(e.translationX) * 1.2;
+      if (isDeliberateDismiss) {
+        runOnJS(dismissViewer)();
+      }
     });
 
   const doubleTapGesture = Gesture.Tap()
@@ -175,7 +180,12 @@ export function ZoomablePhoto({
     });
 
   const composedTap = Gesture.Exclusive(doubleTapGesture, singleTapGesture);
-  const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture, composedTap);
+  const composedGesture = Gesture.Simultaneous(
+    pinchGesture,
+    panGesture,
+    dismissGesture,
+    composedTap,
+  );
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
