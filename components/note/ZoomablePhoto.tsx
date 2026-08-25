@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -14,6 +14,8 @@ import Animated, {
 const MIN_SCALE = 1;
 const MAX_SCALE = 5;
 const DOUBLE_TAP_SCALE = 2.5;
+const DISMISS_DISTANCE = 120;
+const DISMISS_VELOCITY = 650;
 
 type ZoomablePhotoProps = {
   uri: string;
@@ -22,6 +24,8 @@ type ZoomablePhotoProps = {
   onLoad: () => void;
   onError: () => void;
   onTap?: () => void;
+  onZoomChange?: (zoomed: boolean) => void;
+  onDismiss?: () => void;
 };
 
 export function ZoomablePhoto({
@@ -31,7 +35,10 @@ export function ZoomablePhoto({
   onLoad,
   onError,
   onTap,
+  onZoomChange,
+  onDismiss,
 }: ZoomablePhotoProps) {
+  const [isZoomed, setIsZoomed] = useState(false);
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -39,8 +46,12 @@ export function ZoomablePhoto({
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
 
+  const updateZoomState = useCallback((zoomed: boolean) => {
+    setIsZoomed(zoomed);
+    onZoomChange?.(zoomed);
+  }, [onZoomChange]);
+
   const resetZoom = useCallback(() => {
-    'worklet';
     scale.value = 1;
     savedScale.value = 1;
     translateX.value = 0;
@@ -51,7 +62,8 @@ export function ZoomablePhoto({
 
   useEffect(() => {
     resetZoom();
-  }, [uri, resetZoom]);
+    updateZoomState(false);
+  }, [uri, resetZoom, updateZoomState]);
 
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
@@ -65,23 +77,39 @@ export function ZoomablePhoto({
         translateY.value = 0;
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
+        savedScale.value = 1;
+        runOnJS(updateZoomState)(false);
+        return;
       }
       savedScale.value = clamp(scale.value, MIN_SCALE, MAX_SCALE);
+      runOnJS(updateZoomState)(true);
     });
 
-  // Keep one-finger horizontal gestures free for the parent full-screen gallery.
-  // Panning a zoomed photo remains available with two fingers, while a normal
-  // one-finger swipe always moves to the previous/next gallery item.
+  // At normal size, one-finger horizontal swipes remain available to the parent
+  // gallery. Once zoomed, one finger pans the enlarged photo naturally.
+  // A deliberate fast/downward swipe still dismisses the full-screen viewer.
   const panGesture = Gesture.Pan()
-    .minPointers(2)
-    .maxPointers(2)
+    .enabled(isZoomed)
+    .minPointers(1)
+    .maxPointers(1)
     .onUpdate((e) => {
       if (scale.value <= 1.01) return;
       translateX.value = savedTranslateX.value + e.translationX;
       translateY.value = savedTranslateY.value + e.translationY;
     })
-    .onEnd(() => {
+    .onEnd((e) => {
       if (scale.value <= 1.01) return;
+
+      const isDeliberateDismiss =
+        e.translationY > DISMISS_DISTANCE &&
+        e.velocityY > DISMISS_VELOCITY &&
+        Math.abs(e.translationY) > Math.abs(e.translationX) * 1.15;
+
+      if (isDeliberateDismiss && onDismiss) {
+        runOnJS(onDismiss)();
+        return;
+      }
+
       const scaledW = width * scale.value;
       const scaledH = height * scale.value;
       const maxX = Math.max(0, (scaledW - width) / 2);
@@ -100,12 +128,13 @@ export function ZoomablePhoto({
     .numberOfTaps(2)
     .onEnd((e) => {
       if (scale.value > 1.5) {
-        scale.value = 1;
-        translateX.value = 0;
-        translateY.value = 0;
+        scale.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.ease) });
+        translateX.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.ease) });
+        translateY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.ease) });
         savedScale.value = 1;
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
+        runOnJS(updateZoomState)(false);
       } else {
         const tapX = e.x - width / 2;
         const tapY = e.y - height / 2;
@@ -128,6 +157,7 @@ export function ZoomablePhoto({
         savedScale.value = DOUBLE_TAP_SCALE;
         savedTranslateX.value = targetX;
         savedTranslateY.value = targetY;
+        runOnJS(updateZoomState)(true);
       }
     });
 
@@ -140,15 +170,13 @@ export function ZoomablePhoto({
   const composedTap = Gesture.Exclusive(doubleTapGesture, singleTapGesture);
   const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture, composedTap);
 
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        { translateX: translateX.value },
-        { translateY: translateY.value },
-        { scale: scale.value },
-      ],
-    };
-  });
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
 
   return (
     <View style={styles.container}>
