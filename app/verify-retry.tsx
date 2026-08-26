@@ -48,15 +48,15 @@ export default function VerifyRetryScreen() {
         <WarmupLogo size={72} />
         <WarmupWordmark size={16} />
         <View style={{ height: 28 }} />
-        <AppText style={styles.title}>We&apos;re having trouble verifying your account.</AppText>
+        <AppText style={styles.title}>Getting things ready…</AppText>
         <AppText style={styles.subtitle}>
-          {retrying ? 'Reconnecting…' : 'Check your connection and try again.'}
+          {retrying ? 'Reconnecting…' : 'This is taking a little longer than usual.'}
         </AppText>
         <View style={{ height: 24 }} />
         {retrying ? (
           <ActivityIndicator color="#FF2E8A" size="small" />
         ) : (
-          <PrimaryButton label="Retry" onPress={handleRetry} />
+          <PrimaryButton label="Try Again" onPress={handleRetry} />
         )}
       </View>
     </View>
