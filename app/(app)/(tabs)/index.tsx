@@ -224,11 +224,10 @@ export default function HomeScreen() {
     const partnerName = partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\s+/)[0] || 'Partner';
 
     const [{ data: interactions }, { data: chatMsgs }, { data: activityEvts }, { data: viewedRows }] = await Promise.all([
-      // Only items where current user is the receiver
+      // All couple interactions — both sent and received
       supabase.from('interactions')
         .select('*')
         .eq('couple_id', couple.id)
-        .eq('receiver_id', user.id)
         .order('created_at', { ascending: false })
         .limit(30),
       // Only messages sent by the partner
@@ -273,6 +272,7 @@ export default function HomeScreen() {
       const isActionable = isActiveInteraction(i);
       if (!isActionable && viewedSet.has(`interactions:${i.id}`)) return;
 
+      const isMine = i.sender_id === user.id;
       let label = '';
       let icon: React.ReactNode;
       let color = '#FF2E8A';
@@ -282,33 +282,61 @@ export default function HomeScreen() {
       switch (i.type as string) {
         case 'dice':
           if (i.rolled_for === 'self') return;
-          label = `${partnerName} rolled the dice`;
+          label = isMine
+            ? `You rolled the dice for ${partnerName}`
+            : `${partnerName} rolled the dice`;
           icon = <Dice6 color="#FFB347" size={16} strokeWidth={2} />;
           color = '#FFB347';
           route = '/(app)/(tabs)/dice';
           routeParams = { dice_id: i.id };
           break;
-        case 'dare':
-          label = i.status === 'accepted'
-            ? `${partnerName} accepted your dare`
-            : `${partnerName} sent you a Dare`;
+        case 'dare': {
+          const s = i.status;
+          if (isMine) {
+            switch (s) {
+              case 'accepted': label = `${partnerName} accepted your Dare`; break;
+              case 'rejected': label = `${partnerName} declined your Dare`; break;
+              case 'pending_verification': label = `${partnerName} completed your Dare`; break;
+              case 'completed': label = `${partnerName} completed your Dare`; break;
+              default: label = `You dared ${partnerName}`;
+            }
+          } else {
+            switch (s) {
+              case 'accepted': label = `You accepted ${partnerName}'s Dare`; break;
+              case 'rejected': label = `You declined ${partnerName}'s Dare`; break;
+              case 'pending_verification': label = `You completed ${partnerName}'s Dare`; break;
+              case 'completed': label = `You completed ${partnerName}'s Dare`; break;
+              default: label = `${partnerName} sent you a Dare`;
+            }
+          }
           icon = <Zap color="#FF2E8A" size={16} strokeWidth={2} />;
           color = '#FF2E8A';
           route = '/(app)/(tabs)/dare';
           routeParams = { dare_id: i.id };
           break;
+        }
         case 'wish':
-        case 'tell_me':
-          label = i.status === 'answered'
-            ? `${partnerName} answered your Wish`
-            : `${partnerName} sent you a Wish`;
+        case 'tell_me': {
+          const s = i.status;
+          if (isMine) {
+            label = s === 'answered'
+              ? `${partnerName} answered your Wish`
+              : `You sent ${partnerName} a Wish`;
+          } else {
+            label = s === 'answered'
+              ? `You answered ${partnerName}'s Wish`
+              : `${partnerName} sent you a Wish`;
+          }
           icon = <Star color="#FF8A3D" size={16} strokeWidth={2} />;
           color = '#FF8A3D';
           route = '/(app)/(tabs)/wish';
           routeParams = { wish_id: i.id };
           break;
+        }
         case 'media':
-          label = `${partnerName} added to Vault`;
+          label = isMine
+            ? `You added to Vault`
+            : `${partnerName} added to Vault`;
           icon = <Lock color="#FF2E8A" size={16} strokeWidth={2} />;
           color = '#FF2E8A';
           route = '/(app)/(tabs)/vault';
