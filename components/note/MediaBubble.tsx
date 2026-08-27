@@ -294,7 +294,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
       {effectiveLoaded && mediaUrl && !imgError && <Animated.View style={[StyleSheet.absoluteFillObject, styles.mediaBlurOverlay, { opacity: overlayOpacity }]} pointerEvents="none"><View style={styles.blurRevealBtn}><EyeOff color="rgba(255,255,255,0.92)" size={20} strokeWidth={2} /></View></Animated.View>}
       {effectiveLoaded && mediaUrl && !imgError && !isBlurred && <Pressable onPress={handleExpandPress} hitSlop={8} style={localStyles.expandButton}><Maximize2 color="#fff" size={17} strokeWidth={2.4} /></Pressable>}
       {msg.burns_at && msg.burn_after_seconds && new Date(msg.burns_at).getTime() > Date.now() && <View style={styles.burnBadge} pointerEvents="none"><View style={styles.burnBadgeBg} /><CountdownRing expiresAt={msg.burns_at} totalSeconds={msg.burn_after_seconds} onExpire={() => onBurn(msg)} size={44} /></View>}
-      {isMine && effectiveLoaded && mediaUrl && !imgError && !msg.burns_at && !!msg.first_viewed_at && <View style={styles.seenBadge} pointerEvents="none"><View style={styles.seenBadgeBg} /><Check color="rgba(255,255,255,0.95)" size={17} strokeWidth={2.8} /></View>}
+      {isMine && effectiveLoaded && mediaUrl && !imgError && !msg.burns_at && !!msg.first_viewed_at && <View style={styles.seenBadge} pointerEvents="none"><View style={styles.seenBadgeBg} /><Check color="#FF2E8A" size={17} strokeWidth={2.8} /></View>}
     </Pressable>
   );
 }

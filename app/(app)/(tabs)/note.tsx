@@ -84,6 +84,11 @@ export default function ChatTab() {
   const lastInactiveAtRef = useRef<number | null>(null);
   const cameraActiveRef = useRef(false);
   const lastVisibleMediaMsgRef = useRef<ChatMessage | null>(null);
+  const userIdRef = useRef<string | undefined>(undefined);
+  const coupleIdRef = useRef<string | undefined>(undefined);
+  const blurEnabledRef = useRef(true);
+  useEffect(() => { userIdRef.current = user?.id; }, [user?.id]);
+  useEffect(() => { coupleIdRef.current = couple?.id; }, [couple?.id]);
   // Timestamp of the most recent send; used by onContentSizeChange to re-pin
   // the list to the bottom once large media bubbles finish laying out.
   const justSentAtRef = useRef(0);
@@ -100,6 +105,7 @@ export default function ChatTab() {
 
   const partnerFirstName = partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\s+/)[0] || (hasPartner ? 'Partner' : 'Chat');
   const blurEnabled = settings?.blur_chat_media ?? settings?.blur_media ?? true;
+  useEffect(() => { blurEnabledRef.current = blurEnabled; }, [blurEnabled]);
   const chatFontScale = settings?.chat_font_scale ?? 1.0;
 
   const messageIds = useMemo(() => messages.map(m => m.id), [messages]);
@@ -1099,6 +1105,19 @@ export default function ChatTab() {
   const handleOpenMedia = useCallback((msg: ChatMessage) => {
     if (!msg.media_storage_path) return;
 
+    if (msg.sender_id !== user?.id && !msg.first_viewed_at) {
+      const now = new Date().toISOString();
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, first_viewed_at: now } : m));
+      supabase
+        .from('chat_messages')
+        .update({ first_viewed_at: now })
+        .eq('id', msg.id)
+        .eq('couple_id', couple!.id)
+        .then(({ error }) => {
+          if (error) logDebugEvent('chat_mark_viewed_failed', { messageId: msg.id, error: error.message });
+        });
+    }
+
     const mediaMessages = messages.filter(m => !!m.media_storage_path);
     const gallery = mediaMessages.map(m => ({
       id: m.id,
@@ -1135,7 +1154,7 @@ export default function ChatTab() {
         signedUri: '',
       },
     });
-  }, [router, messages, signedUrls]);
+  }, [router, messages, signedUrls, user?.id, couple]);
 
   const handleSaveToVault = useCallback(async (msg: ChatMessage) => {
     if (!msg.media_storage_path || !couple?.id || !user) return;
@@ -1226,7 +1245,7 @@ export default function ChatTab() {
       m.sender_id !== user.id &&
       !m.first_viewed_at &&
       m.burn_after_seconds &&
-      (!m.media_storage_path || !blurEnabled)
+      !m.media_storage_path
     );
     if (toMark.length === 0) return;
     const now = new Date().toISOString();
@@ -1240,7 +1259,7 @@ export default function ChatTab() {
       .then(({ error }) => {
         if (error) logDebugEvent('chat_mark_text_viewed_failed', { error: error.message });
       });
-  }, [user?.id, couple?.id, messages, blurEnabled]);
+  }, [user?.id, couple?.id, messages]);
 
   const handleBurnMessage = useCallback((msg: ChatMessage) => {
     setMessages(prev => prev.filter(m => m.id !== msg.id));
@@ -1359,6 +1378,27 @@ export default function ChatTab() {
     lastVisibleMediaMsgRef.current = mediaItems.length > 0
       ? mediaItems[mediaItems.length - 1]
       : null;
+
+    if (blurEnabledRef.current) return;
+    const uid = userIdRef.current;
+    const cid = coupleIdRef.current;
+    if (!uid || !cid) return;
+    const toMark = mediaItems.filter(m =>
+      m.sender_id !== uid &&
+      !m.first_viewed_at
+    );
+    if (toMark.length === 0) return;
+    const now = new Date().toISOString();
+    const ids = toMark.map(m => m.id);
+    setMessages(prev => prev.map(m => ids.includes(m.id) ? { ...m, first_viewed_at: now } : m));
+    supabase
+      .from('chat_messages')
+      .update({ first_viewed_at: now })
+      .in('id', ids)
+      .eq('couple_id', cid)
+      .then(({ error }) => {
+        if (error) logDebugEvent('chat_mark_media_viewed_failed', { error: error.message });
+      });
   }, []);
 
   const viewabilityConfig = useMemo(() => ({ viewAreaCoveragePercentThreshold: 50 }), []);
