@@ -377,6 +377,11 @@ export default function DareTab() {
         <View style={styles.historyMain}>
           <AppText style={[styles.historyTitle, { color: colors.text }]}>{title} <AppText style={[styles.historyRelationship, { color: colors.textMuted }]}>· {relationship}</AppText></AppText>
           <AppText numberOfLines={2} style={[styles.historyText, { color: colors.textSecondary }]}>“{dare.content_text}”</AppText>
+          {declined && dare.decline_reason ? (
+            <AppText style={[styles.declineReasonText, { color: colors.textSecondary }]}>
+              {isMine ? `${partnerName} said:` : 'You said:'} {dare.decline_reason}
+            </AppText>
+          ) : null}
         </View>
         <View style={styles.historyMeta}>
           <AppText style={[styles.historyDate, { color: colors.textMuted }]}>{formatDate(dateValue)}</AppText>
@@ -535,6 +540,12 @@ const styles = StyleSheet.create({
   historyTitle: { fontSize: FontSize.sm, fontFamily: 'Inter-SemiBold' },
   historyRelationship: { fontFamily: 'Inter-Regular' },
   historyText: { marginTop: 2, fontSize: 12, fontFamily: 'Inter-Regular', lineHeight: 17, fontStyle: 'italic' },
+  declineReasonText: {
+    marginTop: 5,
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    lineHeight: 17,
+  },
   historyMeta: { alignItems: 'flex-end', gap: 3, marginLeft: 4 },
   historyDate: { fontSize: 11, fontFamily: 'Inter-Regular' },
   historyPoints: { color: '#33D17A', fontSize: 12, fontFamily: 'Inter-Bold' },
