@@ -19,7 +19,6 @@ import {
   Eye,
   EyeOff,
   CircleX as XCircle,
-  ChevronRight,
 } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import AppShell from '@/components/AppShell';
@@ -398,7 +397,7 @@ export default function DareTab() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {incomingDare && (
             <View style={[styles.incomingSection, highlightDare && styles.incomingHighlight]}>
-              <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
+              <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}> 
                 <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText>{'  '}•{'  '}Complete = <AppText style={styles.pts}>+{completePts} ⚡</AppText></AppText>
               </View>
               <ReceivedDareCard text={incomingDare.content_text} status={incomingDare.status} expiresAt={incomingDare.expires_at} totalExpirySeconds={incomingTotalExpirySeconds} coupleId={couple?.id} onAccept={() => handleRespond(true)} onReject={reason => handleRespond(false, reason)} onComplete={handleMarkComplete} onTimeout={checkStates} />
@@ -407,13 +406,13 @@ export default function DareTab() {
 
           {pendingVerification && (
             <View style={styles.flipContainer}>
-              <Animated.View style={[styles.verifyCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.35)', opacity: frontOpacity, transform: [{ rotateY: frontRotate }] }]}>
+              <Animated.View style={[styles.verifyCard, { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.35)', opacity: frontOpacity, transform: [{ rotateY: frontRotate }] }]}> 
                 <View style={styles.verifyHeader}><CheckCircle color="#33D17A" size={20} strokeWidth={2} /><AppText style={[styles.verifyTitle, { color: colors.text }]}>{partnerName} completed the dare!</AppText></View>
                 <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>Confirm it to award <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText></AppText>
                 <TouchableOpacity style={styles.verifyBtn} onPress={handleVerifyComplete} disabled={verifying} activeOpacity={0.85}><LinearGradient colors={['#33D17A', '#1A9E57']} style={styles.verifyGrad}><AppText style={styles.verifyBtnText}>{verifying ? 'Confirming…' : 'They Did It!'}</AppText></LinearGradient></TouchableOpacity>
                 <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}><RotateCcw color={colors.textMuted} size={13} strokeWidth={2} /><AppText style={[styles.flipToggleText, { color: colors.textMuted }]}>See the dare</AppText></TouchableOpacity>
               </Animated.View>
-              <Animated.View style={[styles.verifyCard, styles.verifyCardBack, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)', opacity: backOpacity, transform: [{ rotateY: backRotate }] }]}>
+              <Animated.View style={[styles.verifyCard, styles.verifyCardBack, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)', opacity: backOpacity, transform: [{ rotateY: backRotate }] }]}> 
                 <AppText style={[styles.backLabel, { color: colors.textMuted }]}>THE DARE YOU SENT</AppText>
                 <AppText style={[styles.backDareText, { color: colors.text }]}>“{pendingVerification.content_text ?? 'No text recorded'}”</AppText>
                 <TouchableOpacity onPress={handleFlip} style={styles.flipToggle} activeOpacity={0.7}><RotateCcw color={colors.textMuted} size={13} strokeWidth={2} /><AppText style={[styles.flipToggleText, { color: colors.textMuted }]}>Back to confirm</AppText></TouchableOpacity>
@@ -422,7 +421,7 @@ export default function DareTab() {
           )}
 
           {!hasPartner ? (
-            <View style={[styles.soloPlaceholder, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+            <View style={[styles.soloPlaceholder, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}> 
               <Flame color="#FF2E8A" size={42} fill="rgba(255,46,138,0.12)" strokeWidth={1.5} />
               <AppText style={[styles.soloTitle, { color: colors.text }]}>Dares are more fun with two</AppText>
               <AppText style={[styles.soloSub, { color: colors.textSecondary }]}>Invite your partner and start challenging each other.</AppText>
@@ -442,7 +441,7 @@ export default function DareTab() {
               {error ? <View style={[styles.errorBanner, { backgroundColor: 'rgba(255,90,95,0.08)', borderColor: 'rgba(255,90,95,0.25)' }]}><AppText style={styles.errorText}>{error}</AppText></View> : null}
 
               {!sentDare ? (
-                <View style={[styles.composerCard, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}>
+                <View style={[styles.composerCard, { borderColor: colors.borderSubtle, backgroundColor: colors.card }]}> 
                   <View style={styles.composerGlow} />
                   <WarmTextInput value={dareText} onChangeText={setDareText} placeholder="Type your dare…" multiline minHeight={96} charLimit={200} containerStyle={styles.dareInput} />
                   <View style={styles.timerRow}>
@@ -452,15 +451,13 @@ export default function DareTab() {
                   <TouchableOpacity onPress={handleSend} disabled={!dareText.trim() || sending} activeOpacity={0.85} style={styles.sendButtonWrap}><LinearGradient colors={dareText.trim() ? ['#FF8A28', '#FF395C', '#F41477'] : ['#5A3A2A', '#5B303D', '#552039']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sendButton}><Flame color={dareText.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.38)'} size={21} fill={dareText.trim() ? 'rgba(255,255,255,0.18)' : 'transparent'} strokeWidth={2.2} /><AppText style={[styles.sendButtonText, !dareText.trim() && styles.sendButtonTextDisabled]}>{sending ? 'SENDING…' : `DARE ${partnerName.toUpperCase()}`}</AppText></LinearGradient></TouchableOpacity>
                 </View>
               ) : (
-                <View style={[styles.openSentCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)' }]}>
+                <View style={[styles.openSentCard, { backgroundColor: colors.card, borderColor: 'rgba(255,46,138,0.30)' }]}> 
                   <View style={styles.openCardTopRow}><View style={[styles.statusIcon, { backgroundColor: 'rgba(255,46,138,0.14)' }]}><Flame color="#FF2E8A" size={20} strokeWidth={2} /></View><View style={styles.statusTextWrap}><AppText style={[styles.statusTitle, { color: colors.text }]}>{sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}</AppText><AppText numberOfLines={2} style={[styles.openDareText, { color: colors.textSecondary }]}>“{sentDare.content_text}”</AppText></View></View>
                   <View style={styles.openMetaRow}>{sentDare.status === 'sent' ? <View style={styles.metaItem}><EyeOff color={colors.textMuted} size={14} strokeWidth={2} /><AppText style={[styles.metaText, { color: colors.textMuted }]}>Not seen yet</AppText></View> : sentDare.status === 'seen' ? <View style={styles.metaItem}><Eye color="#FFB347" size={14} strokeWidth={2} /><AppText style={[styles.metaText, { color: '#FFB347' }]}>Seen</AppText></View> : <View style={styles.metaItem}><CheckCircle color="#FFB347" size={14} strokeWidth={2} /><AppText style={[styles.metaText, { color: '#FFB347' }]}>Accepted · waiting for completion</AppText></View>}{senderCountdown && <View style={styles.metaItem}><Timer color={colors.textMuted} size={13} strokeWidth={2} /><AppText style={[styles.metaText, { color: colors.textMuted }]}>Expires in {senderCountdown}</AppText></View>}</View>
                   <SecondaryButton label={`Dare ${partnerName} Again`} onPress={() => setSentDare(null)} style={{ marginTop: Spacing.md }} />
                   <TouchableOpacity onPress={handleCancelDare} style={styles.cancelDareBtn} activeOpacity={0.7}><AppText style={[styles.cancelDareBtnText, { color: colors.textMuted }]}>Cancel dare</AppText></TouchableOpacity>
                 </View>
               )}
-
-              {(sentDare || incomingDare) && <View style={styles.yourDaresSection}><AppText style={[styles.sectionTitle, { color: colors.text }]}>Your Dares</AppText>{sentDare && <View style={[styles.dareStatusRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}><View style={[styles.statusIcon, { backgroundColor: 'rgba(255,46,138,0.14)' }]}><Flame color="#FF2E8A" size={20} strokeWidth={2} /></View><View style={styles.statusTextWrap}><AppText style={[styles.statusTitle, { color: colors.text }]}>{sentDare.status === 'accepted' ? `${partnerName} accepted` : `Waiting on ${partnerName}`}</AppText><AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>{sentDare.status === 'sent' ? 'Not seen yet' : sentDare.status === 'seen' ? 'Seen' : 'Waiting for completion'}</AppText></View><ChevronRight color={colors.textMuted} size={19} strokeWidth={2} /></View>}{incomingDare && <View style={[styles.dareStatusRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}><View style={[styles.statusIcon, { backgroundColor: 'rgba(255,138,40,0.14)' }]}><Flame color="#FF8A28" size={20} strokeWidth={2} /></View><View style={styles.statusTextWrap}><AppText style={[styles.statusTitle, { color: colors.text }]}>{partnerName} dared you</AppText><AppText numberOfLines={1} style={[styles.statusSub, { color: colors.textMuted }]}>{incomingDare.status === 'accepted' ? 'You accepted · mark it complete when done' : 'Tap the dare above to respond'}</AppText></View><ChevronRight color={colors.textMuted} size={19} strokeWidth={2} /></View>}</View>}
 
               {recentDares.length > 0 && <View style={styles.previousSection}><View style={styles.previousHeader}><AppText style={[styles.sectionTitle, { color: colors.text }]}>Previous Dares</AppText>{recentDares.length >= 5 && <AppText style={styles.viewAllText}>Recent 5</AppText>}</View><View style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>{recentDares.map(renderHistoryRow)}</View></View>}
             </>
