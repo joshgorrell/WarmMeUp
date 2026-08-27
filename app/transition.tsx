@@ -54,7 +54,20 @@ const DEBUG_TAP_WINDOW_MS = 10000;
 
 export default function TransitionScreen() {
   const router = useRouter();
-  const { couple, partnerProfile, profile, settings, user, isAdmin, isSuperAdmin, loading, subscriptionInfo, debugModeEnabled, globalDebugAccessEnabled } = useAuth();
+  const {
+    couple,
+    coupleLoading,
+    partnerProfile,
+    profile,
+    settings,
+    user,
+    isAdmin,
+    isSuperAdmin,
+    loading,
+    subscriptionInfo,
+    debugModeEnabled,
+    globalDebugAccessEnabled,
+  } = useAuth();
   const { width } = useWindowDimensions();
   const logoW = Math.min(width * 0.5, 200);
   const bgOpacity = useRef(new Animated.Value(0)).current;
@@ -90,11 +103,12 @@ export default function TransitionScreen() {
   };
 
   // Returns true only when we have enough affirmatively-resolved data to make
-  // a routing decision. A returning authenticated user may keep using a
-  // previously verified premium state while a background refresh is in flight.
+  // a routing decision. A null couple is not meaningful until coupleLoading is
+  // false; otherwise a paired user can briefly be mistaken for a solo user.
   const canRoute = (): boolean => {
     if (isAdmin || isSuperAdmin) return true;
     if (!profile) return false;
+    if (coupleLoading) return false;
 
     const isSolo = !couple || couple.active === false || !couple.user_b_id;
     if (isSolo) return true;
@@ -127,6 +141,7 @@ export default function TransitionScreen() {
       isSuperAdmin,
       coupleId: couple?.id ?? null,
       coupleActive: couple?.active ?? null,
+      coupleLoading,
       canInvite: subscriptionInfo.canInvite,
       subLoading: subscriptionInfo.loading,
       isPremium: subscriptionInfo.isPremium,
@@ -196,6 +211,7 @@ export default function TransitionScreen() {
     logger.log(`[TRANSITION TRY NAVIGATE] +${elapsed()}ms`, {
       elapsedMs: elapsed(),
       couple: couple ? `id=${couple.id}` : 'null',
+      coupleLoading,
       userId: user?.id ?? 'null',
       canRoute: canRoute(),
     });
@@ -230,14 +246,21 @@ export default function TransitionScreen() {
   }, []);
 
   useEffect(() => {
-    if (!loading) {
+    const startupReady = !loading && (isAdmin || isSuperAdmin || !coupleLoading);
+    if (startupReady) {
       if (!authReady.current) {
-        logger.log(`[TRANSITION AUTH READY] +${elapsed()}ms`, { elapsedMs: elapsed(), userId: user?.id ?? null, isAdmin, isSuperAdmin });
+        logger.log(`[TRANSITION AUTH READY] +${elapsed()}ms`, {
+          elapsedMs: elapsed(),
+          userId: user?.id ?? null,
+          isAdmin,
+          isSuperAdmin,
+          coupleLoading,
+        });
       }
       authReady.current = true;
       tryNavigate();
     }
-  }, [loading, couple?.id, couple?.active, couple?.user_b_id, user?.id, isAdmin, isSuperAdmin, profile?.id, subscriptionInfo.loading, subscriptionInfo.isPremium, subscriptionInfo.canInvite]);
+  }, [loading, coupleLoading, couple?.id, couple?.active, couple?.user_b_id, user?.id, isAdmin, isSuperAdmin, profile?.id, subscriptionInfo.loading, subscriptionInfo.isPremium, subscriptionInfo.canInvite]);
 
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
