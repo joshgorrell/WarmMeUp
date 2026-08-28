@@ -174,6 +174,15 @@ export default function HomeScreen() {
     }
   }, [couple?.id, user]));
 
+  // Solo users (authenticated but no couple row yet) have no data to load,
+  // so clear the initial spinner immediately. Paired users are handled by
+  // the loadAll effect above, which keeps the spinner until real data arrives.
+  useEffect(() => {
+    if (user && !couple?.id && isMountedRef.current) {
+      setLoading(false);
+    }
+  }, [user, couple?.id]);
+
   // Reload immediately when Reset Points completes (scoreResetAt increments in AuthContext).
   useEffect(() => {
     if (scoreResetAt === 0) return;
