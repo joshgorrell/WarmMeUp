@@ -32,7 +32,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import {
   awardPoints,
-  deactivatePreviousEphemeral,
+
   getPointValue,
   verifyCompletion,
   incrementMonthlyCounter,
@@ -111,9 +111,6 @@ export default function DareTab() {
     { label: '6h', seconds: 6 * 60 * 60 },
     { label: '24h', seconds: 24 * 60 * 60 },
   ];
-  const MIN_TIMER = 15 * 60;
-  const MAX_TIMER = 24 * 60 * 60;
-
   const [dareText, setDareText] = useState('');
   const [selectedTimerSeconds, setSelectedTimerSeconds] = useState(30 * 60);
   const [sending, setSending] = useState(false);
@@ -253,21 +250,12 @@ export default function DareTab() {
     setError('');
     try {
       const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-      const receiverId = partnerId ?? user.id;
-      await deactivatePreviousEphemeral(couple.id, user.id);
-      const clampedSeconds = Math.min(MAX_TIMER, Math.max(MIN_TIMER, selectedTimerSeconds));
-      const expiresAt = new Date(Date.now() + clampedSeconds * 1000).toISOString();
-      const { error: insertError } = await supabase.from('interactions').insert({
-        couple_id: couple.id,
-        type: 'dare',
-        sender_id: user.id,
-        receiver_id: receiverId,
-        content_text: dareText.trim(),
-        status: 'sent',
-        is_active: true,
-        expires_at: expiresAt,
+      const { error: rpcError } = await supabase.rpc('create_dare', {
+        p_couple_id: couple.id,
+        p_content_text: dareText.trim(),
+        p_duration_seconds: selectedTimerSeconds,
       });
-      if (insertError) throw insertError;
+      if (rpcError) throw rpcError;
       if (partnerId) notifyPartner({ event_type: 'new_dare', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
       setDareText('');
       await checkStates();
