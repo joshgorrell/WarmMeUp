@@ -426,19 +426,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Safety net: if loading never resolves (e.g. network hang), unblock after 1.5s.
-    const timeout = setTimeout(() => setLoading(false), 1500);
-
     return () => {
       subscription.unsubscribe();
-      clearTimeout(timeout);
     };
   }, []);
 
   async function loadUserData(userId: string) {
+    const startupStart = __DEV__ ? Date.now() : 0;
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       const accessToken = currentSession?.access_token ?? '';
+
+      if (__DEV__) logger.log(`[STARTUP] session ready +${Date.now() - startupStart}ms`);
 
       const [, , fetchedSettings] = await Promise.all([
         fetchProfile(userId),
@@ -515,6 +514,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             result = grantFallback;
           }
           setSubscriptionInfo(result);
+          if (__DEV__) logger.log('[STARTUP] entitlement ready');
         } catch (err: any) {
           logger.log('[Auth] subscription fetch failed:', err?.message ?? String(err));
           setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
@@ -528,7 +528,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Network or unexpected error — don't wipe already-loaded state.
       setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
     } finally {
-      logger.log('[Auth] loadUserData done — setLoading(false)');
+      if (__DEV__) logger.log(`[STARTUP] loadUserData complete +${Date.now() - startupStart}ms`);
       setLoading(false);
     }
   }
@@ -585,7 +585,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = aPaired ? asA : (asB ?? asA ?? null);
 
     setCouple(data);
-    setCoupleLoading(false);
     coupleInitialLoadDoneRef.current = true;
 
     if (data) {
@@ -604,6 +603,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       setPartnerProfile(null);
     }
+    setCoupleLoading(false);
+    if (__DEV__) logger.log('[STARTUP] profile+couple+settings ready');
     return data;
   }
 

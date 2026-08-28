@@ -119,7 +119,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!couple?.id || !user) return;
-    loadAll().then(() => { if (isMountedRef.current) setLoading(false); });
+    loadAll().then(() => { if (isMountedRef.current) { setLoading(false); if (__DEV__) console.log('[STARTUP] Home first-data-ready'); } });
 
     // Remove ALL stale home channels for this couple, not just the one in the ref.
     // This prevents "already subscribed" crashes when rapid couple refreshes create
@@ -170,7 +170,7 @@ export default function HomeScreen() {
       const now = Date.now();
       if (now - lastLoadedAtRef.current < 5000) return;
       lastLoadedAtRef.current = now;
-      loadAll().then(() => { if (isMountedRef.current) setLoading(false); });
+      loadAll().then(() => { if (isMountedRef.current) { setLoading(false); if (__DEV__) console.log('[STARTUP] Home first-data-ready'); } });
     }
   }, [couple?.id, user]));
 
@@ -840,7 +840,7 @@ export default function HomeScreen() {
     </View>
   );
 
-  if (loading && !greetingText) {
+  if (loading) {
     return (
       <AppShell scrollable={false}>
         <BrandHeader

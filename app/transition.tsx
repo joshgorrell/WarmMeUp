@@ -127,6 +127,8 @@ export default function TransitionScreen() {
 
     routed.current = true;
 
+    if (__DEV__) logger.log(`[STARTUP] route to app +${elapsed()}ms`);
+
     if (hardDeadlineRef.current) {
       clearTimeout(hardDeadlineRef.current);
       hardDeadlineRef.current = null;
