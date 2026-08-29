@@ -14,6 +14,7 @@ const RETRY_INTERVAL_MS = 4000;
 async function checkBackendReachable(): Promise<boolean> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+
   try {
     const { data: sessionData } = await supabase.auth.getSession();
     if (!sessionData.session) return true;
@@ -31,6 +32,8 @@ async function checkBackendReachable(): Promise<boolean> {
       signal: controller.signal,
     });
 
+    // A reachable Supabase gateway may reject HEAD or the REST root itself.
+    // Those responses still prove that the service can be reached.
     return response.ok || response.status === 404 || response.status === 405;
   } catch {
     return false;
@@ -92,18 +95,38 @@ export default function OfflineGate({ children }: { children: React.ReactNode })
   if (!confirmedOffline) return <>{children}</>;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.bg1 }]}>
       <View style={styles.content}>
-        <View style={[styles.iconWrap, { borderColor: colors.border }]}> 
+        <View style={[styles.iconWrap, { borderColor: colors.borderSubtle }]}> 
           <WifiOff size={34} color={colors.text} strokeWidth={1.8} />
         </View>
+
         <AppText style={[styles.title, { color: colors.text }]}>You’re Offline</AppText>
-        <AppText style={[styles.body, { color: colors.textSecondary ?? colors.text }]}>Warm Me Up requires an internet connection to keep your private space in sync.</AppText>
-        <AppText style={[styles.body, { color: colors.textSecondary ?? colors.text }]}>That’s intentional. Both you and your partner can add or delete shared messages, photos, videos, Dares, and other content at any time. Staying connected helps make sure those changes take effect for both of you.</AppText>
-        <AppText style={[styles.body, { color: colors.textSecondary ?? colors.text }]}>We don’t keep an offline Vault that could let someone continue viewing a photo or video after their partner has deleted it.</AppText>
-        <AppText style={[styles.emphasis, { color: colors.text }]}>Your shared space stays shared — including control over what’s in it.</AppText>
+
+        <AppText style={[styles.body, { color: colors.textSecondary }]}> 
+          Warm Me Up requires an internet connection to keep your private space in sync.
+        </AppText>
+
+        <AppText style={[styles.body, { color: colors.textSecondary }]}> 
+          That’s intentional. Both you and your partner can add or delete shared messages, photos, videos, Dares, and other content at any time. Staying connected helps make sure those changes take effect for both of you.
+        </AppText>
+
+        <AppText style={[styles.body, { color: colors.textSecondary }]}> 
+          We don’t keep an offline Vault that could let someone continue viewing a photo or video after their partner has deleted it.
+        </AppText>
+
+        <AppText style={[styles.emphasis, { color: colors.text }]}> 
+          Your shared space stays shared — including control over what’s in it.
+        </AppText>
+
         <View style={styles.buttonWrap}>
-          <PillButton label={checking ? 'Checking…' : 'Try Again'} onPress={() => runCheck(true)} disabled={checking} />
+          <PillButton
+            label={checking ? 'Checking…' : 'Try Again'}
+            onPress={() => runCheck(true)}
+            disabled={checking}
+            active
+            style={styles.button}
+          />
           {checking ? <ActivityIndicator style={styles.spinner} /> : null}
         </View>
       </View>
@@ -112,12 +135,54 @@ export default function OfflineGate({ children }: { children: React.ReactNode })
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
-  content: { width: '100%', maxWidth: 520, alignItems: 'center' },
-  iconWrap: { width: 72, height: 72, borderRadius: 36, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  title: { fontSize: 28, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
-  body: { fontSize: 16, lineHeight: 24, textAlign: 'center', marginBottom: 14 },
-  emphasis: { fontSize: 16, lineHeight: 24, fontWeight: '600', textAlign: 'center', marginTop: 2 },
-  buttonWrap: { width: '100%', marginTop: 26, alignItems: 'center' },
-  spinner: { marginTop: 12 },
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  content: {
+    width: '100%',
+    maxWidth: 520,
+    alignItems: 'center',
+  },
+  iconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  body: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  emphasis: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  buttonWrap: {
+    width: '100%',
+    marginTop: 26,
+    alignItems: 'center',
+  },
+  button: {
+    minWidth: 150,
+  },
+  spinner: {
+    marginTop: 12,
+  },
 });
