@@ -98,22 +98,12 @@ export default function OfflineGate({ children }: { children: React.ReactNode })
           <WifiOff size={34} color={colors.text} strokeWidth={1.8} />
         </View>
         <AppText style={[styles.title, { color: colors.text }]}>You’re Offline</AppText>
-        <AppText style={[styles.body, { color: colors.textSecondary ?? colors.text }]}> 
-          Warm Me Up requires an internet connection to keep your private space in sync.
-        </AppText>
-        <AppText style={[styles.body, { color: colors.textSecondary ?? colors.text }]}> 
-          That’s intentional. Both you and your partner can add or delete shared messages, photos, videos, Dares, and other content at any time. Staying connected helps make sure those changes take effect for both of you.
-        </AppText>
-        <AppText style={[styles.body, { color: colors.textSecondary ?? colors.text }]}> 
-          We don’t keep an offline Vault that could let someone continue viewing a photo or video after their partner has deleted it.
-        </AppText>
+        <AppText style={[styles.body, { color: colors.textSecondary ?? colors.text }]}>Warm Me Up requires an internet connection to keep your private space in sync.</AppText>
+        <AppText style={[styles.body, { color: colors.textSecondary ?? colors.text }]}>That’s intentional. Both you and your partner can add or delete shared messages, photos, videos, Dares, and other content at any time. Staying connected helps make sure those changes take effect for both of you.</AppText>
+        <AppText style={[styles.body, { color: colors.textSecondary ?? colors.text }]}>We don’t keep an offline Vault that could let someone continue viewing a photo or video after their partner has deleted it.</AppText>
         <AppText style={[styles.emphasis, { color: colors.text }]}>Your shared space stays shared — including control over what’s in it.</AppText>
         <View style={styles.buttonWrap}>
-          <PillButton
-            label={checking ? 'Checking…' : 'Try Again'}
-            onPress={() => runCheck(true)}
-            disabled={checking}
-          />
+          <PillButton label={checking ? 'Checking…' : 'Try Again'} onPress={() => runCheck(true)} disabled={checking} />
           {checking ? <ActivityIndicator style={styles.spinner} /> : null}
         </View>
       </View>
@@ -122,51 +112,12 @@ export default function OfflineGate({ children }: { children: React.ReactNode })
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-  },
-  content: {
-    width: '100%',
-    maxWidth: 520,
-    alignItems: 'center',
-  },
-  iconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  body: {
-    fontSize: 16,
-    lineHeight: 24,
-    textAlign: 'center',
-    marginBottom: 14,
-  },
-  emphasis: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  buttonWrap: {
-    width: '100%',
-    marginTop: 26,
-    alignItems: 'center',
-  },
-  spinner: {
-    marginTop: 12,
-  },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+  content: { width: '100%', maxWidth: 520, alignItems: 'center' },
+  iconWrap: { width: 72, height: 72, borderRadius: 36, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  title: { fontSize: 28, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
+  body: { fontSize: 16, lineHeight: 24, textAlign: 'center', marginBottom: 14 },
+  emphasis: { fontSize: 16, lineHeight: 24, fontWeight: '600', textAlign: 'center', marginTop: 2 },
+  buttonWrap: { width: '100%', marginTop: 26, alignItems: 'center' },
+  spinner: { marginTop: 12 },
 });
