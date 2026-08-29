@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, AppStateStatus, StyleSheet, View } from 'react-native';
+import * as Network from 'expo-network';
 import { WifiOff } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import PillButton from '@/components/PillButton';
@@ -7,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 
 const INITIAL_GRACE_MS = 8000;
+const HARD_OFFLINE_DELAY_MS = 750;
 const CHECK_TIMEOUT_MS = 3500;
 const REQUIRED_FAILURES = 3;
 const RETRY_INTERVAL_MS = 4000;
@@ -32,14 +34,16 @@ async function checkBackendReachable(): Promise<boolean> {
       signal: controller.signal,
     });
 
-    // A reachable Supabase gateway may reject HEAD or the REST root itself.
-    // Those responses still prove that the service can be reached.
     return response.ok || response.status === 404 || response.status === 405;
   } catch {
     return false;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function isExplicitlyDisconnected(state: Network.NetworkState): boolean {
+  return state.type === Network.NetworkStateType.NONE || state.isConnected === false;
 }
 
 export default function OfflineGate({ children }: { children: React.ReactNode }) {
@@ -50,34 +54,68 @@ export default function OfflineGate({ children }: { children: React.ReactNode })
   const mountedAtRef = useRef(Date.now());
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const inFlightRef = useRef(false);
+  const hardOfflineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearHardOfflineTimer = useCallback(() => {
+    if (hardOfflineTimerRef.current) {
+      clearTimeout(hardOfflineTimerRef.current);
+      hardOfflineTimerRef.current = null;
+    }
+  }, []);
 
   const runCheck = useCallback(async (manual = false) => {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     if (manual) setChecking(true);
 
-    const reachable = await checkBackendReachable();
+    try {
+      const networkState = await Network.getNetworkStateAsync();
 
-    if (reachable) {
-      failureCountRef.current = 0;
-      setConfirmedOffline(false);
-    } else {
-      failureCountRef.current += 1;
-      const graceElapsed = Date.now() - mountedAtRef.current >= INITIAL_GRACE_MS;
-      if (graceElapsed && failureCountRef.current >= REQUIRED_FAILURES) {
+      if (isExplicitlyDisconnected(networkState)) {
+        clearHardOfflineTimer();
         setConfirmedOffline(true);
+        failureCountRef.current = 0;
+        return;
       }
-    }
 
-    if (manual) setChecking(false);
-    inFlightRef.current = false;
-  }, []);
+      const reachable = await checkBackendReachable();
+
+      if (reachable) {
+        failureCountRef.current = 0;
+        setConfirmedOffline(false);
+      } else {
+        failureCountRef.current += 1;
+        const graceElapsed = Date.now() - mountedAtRef.current >= INITIAL_GRACE_MS;
+        if (graceElapsed && failureCountRef.current >= REQUIRED_FAILURES) {
+          setConfirmedOffline(true);
+        }
+      }
+    } finally {
+      if (manual) setChecking(false);
+      inFlightRef.current = false;
+    }
+  }, [clearHardOfflineTimer]);
 
   useEffect(() => {
     const kickoff = setTimeout(() => runCheck(false), 1200);
     const interval = setInterval(() => runCheck(false), RETRY_INTERVAL_MS);
 
-    const sub = AppState.addEventListener('change', (next) => {
+    const networkSubscription = Network.addNetworkStateListener((state) => {
+      if (isExplicitlyDisconnected(state)) {
+        clearHardOfflineTimer();
+        hardOfflineTimerRef.current = setTimeout(() => {
+          setConfirmedOffline(true);
+          failureCountRef.current = 0;
+          hardOfflineTimerRef.current = null;
+        }, HARD_OFFLINE_DELAY_MS);
+        return;
+      }
+
+      clearHardOfflineTimer();
+      runCheck(false);
+    });
+
+    const appStateSubscription = AppState.addEventListener('change', (next) => {
       const prev = appStateRef.current;
       appStateRef.current = next;
       if ((prev === 'background' || prev === 'inactive') && next === 'active') {
@@ -88,34 +126,36 @@ export default function OfflineGate({ children }: { children: React.ReactNode })
     return () => {
       clearTimeout(kickoff);
       clearInterval(interval);
-      sub.remove();
+      clearHardOfflineTimer();
+      networkSubscription.remove();
+      appStateSubscription.remove();
     };
-  }, [runCheck]);
+  }, [clearHardOfflineTimer, runCheck]);
 
   if (!confirmedOffline) return <>{children}</>;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg1 }]}>
       <View style={styles.content}>
-        <View style={[styles.iconWrap, { borderColor: colors.borderSubtle }]}> 
+        <View style={[styles.iconWrap, { borderColor: colors.borderSubtle }]}>
           <WifiOff size={34} color={colors.text} strokeWidth={1.8} />
         </View>
 
         <AppText style={[styles.title, { color: colors.text }]}>You’re Offline</AppText>
 
-        <AppText style={[styles.body, { color: colors.textSecondary }]}> 
+        <AppText style={[styles.body, { color: colors.textSecondary }]}>
           Warm Me Up requires an internet connection to keep your private space in sync.
         </AppText>
 
-        <AppText style={[styles.body, { color: colors.textSecondary }]}> 
+        <AppText style={[styles.body, { color: colors.textSecondary }]}>
           That’s intentional. Both you and your partner can add or delete shared messages, photos, videos, Dares, and other content at any time. Staying connected helps make sure those changes take effect for both of you.
         </AppText>
 
-        <AppText style={[styles.body, { color: colors.textSecondary }]}> 
+        <AppText style={[styles.body, { color: colors.textSecondary }]}>
           We don’t keep an offline Vault that could let someone continue viewing a photo or video after their partner has deleted it.
         </AppText>
 
-        <AppText style={[styles.emphasis, { color: colors.text }]}> 
+        <AppText style={[styles.emphasis, { color: colors.text }]}>
           Your shared space stays shared — including control over what’s in it.
         </AppText>
 
