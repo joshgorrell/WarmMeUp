@@ -1,0 +1,169 @@
+
+=== public.chat_messages (rls=True) ===
+  GRANT: authenticated -> ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] (updatable: all)
+  POLICY [DELETE] Couple members can delete chat messages TO ['authenticated']
+    USING: (EXISTS ( SELECT 1
+   FROM couples
+  WHERE ((couples.id = chat_messages.couple_id) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+    CHECK: N/A
+  POLICY [SELECT] Couple members can read chat messages TO ['authenticated']
+    USING: (EXISTS ( SELECT 1
+   FROM couples
+  WHERE ((couples.id = chat_messages.couple_id) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+    CHECK: N/A
+  POLICY [INSERT] Couple members can send chat messages TO ['authenticated']
+    USING: N/A
+    CHECK: ((sender_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM couples
+  WHERE ((couples.id = chat_messages.couple_id) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))))
+  POLICY [UPDATE] Couple members can update chat messages TO ['authenticated']
+    USING: (EXISTS ( SELECT 1
+   FROM couples
+  WHERE ((couples.id = chat_messages.couple_id) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+    CHECK: (EXISTS ( SELECT 1
+   FROM couples
+  WHERE ((couples.id = chat_messages.couple_id) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+
+=== public.couples (rls=True) ===
+  GRANT: authenticated -> ['SELECT', 'INSERT', 'DELETE'] (updatable: ['active', 'points_enabled', 'streaks_enabled', 'disconnected_at', 'updated_at', 'anniversary_date'])
+  POLICY [SELECT] Admins can read all couples TO ['authenticated']
+    USING: is_current_user_admin()
+    CHECK: N/A
+  POLICY [UPDATE] Admins can update any couple TO ['authenticated']
+    USING: is_current_user_admin()
+    CHECK: is_current_user_admin()
+  POLICY [UPDATE] Couple members can update their couple TO ['authenticated']
+    USING: ((auth.uid() = user_a_id) OR (auth.uid() = user_b_id))
+    CHECK: (((auth.uid() = user_a_id) OR (auth.uid() = user_b_id)) AND (NOT ((auth.uid() = user_a_id) AND (NOT (user_b_id IS DISTINCT FROM auth.uid())))))
+  POLICY [SELECT] Couple members can view their couple TO ['authenticated']
+    USING: ((auth.uid() = user_a_id) OR (auth.uid() = user_b_id))
+    CHECK: N/A
+  POLICY [DELETE] Creator can delete their own pending invite TO ['authenticated']
+    USING: ((auth.uid() = user_a_id) AND (user_b_id IS NULL))
+    CHECK: N/A
+  POLICY [SELECT] Pending partner can view couple TO ['authenticated']
+    USING: ((pending_partner_id = auth.uid()) AND (user_b_id IS NULL))
+    CHECK: N/A
+  POLICY [INSERT] User can create couple as user_a TO ['authenticated']
+    USING: N/A
+    CHECK: (auth.uid() = user_a_id)
+
+=== public.interactions (rls=True) ===
+  GRANT: authenticated -> ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] (updatable: all)
+  POLICY [SELECT] Admins can read all interactions TO ['authenticated']
+    USING: is_current_user_admin()
+    CHECK: N/A
+  POLICY [DELETE] Couple members can delete interactions TO ['authenticated']
+    USING: (EXISTS ( SELECT 1
+   FROM couples
+  WHERE ((couples.id = interactions.couple_id) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+    CHECK: N/A
+  POLICY [INSERT] Couple members can insert interactions TO ['authenticated']
+    USING: N/A
+    CHECK: ((auth.uid() = sender_id) AND (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+  POLICY [UPDATE] Couple members can update interactions TO ['authenticated']
+    USING: (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))
+    CHECK: (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))
+  POLICY [SELECT] Couple members can view their interactions TO ['authenticated']
+    USING: (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))
+    CHECK: N/A
+
+=== public.media_reactions (rls=True) ===
+  GRANT: authenticated -> ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] (updatable: all)
+  POLICY [DELETE] Couple members can delete own media reactions TO ['authenticated']
+    USING: ((auth.uid() = user_id) AND (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+    CHECK: N/A
+  POLICY [INSERT] Couple members can insert own media reactions TO ['authenticated']
+    USING: N/A
+    CHECK: ((auth.uid() = user_id) AND (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+  POLICY [SELECT] Couple members can read media reactions TO ['authenticated']
+    USING: (EXISTS ( SELECT 1
+   FROM couples
+  WHERE ((couples.id = media_reactions.couple_id) AND ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+    CHECK: N/A
+  POLICY [UPDATE] Couple members can update own media reactions TO ['authenticated']
+    USING: ((auth.uid() = user_id) AND (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+    CHECK: ((auth.uid() = user_id) AND (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+
+=== public.profiles (rls=True) ===
+  GRANT: authenticated -> ['SELECT', 'INSERT', 'DELETE'] (updatable: ['display_name', 'avatar_url', 'push_token', 'tos_accepted_at', 'oauth_provider', 'first_name', 'last_name'])
+  POLICY [SELECT] Admins can read all profiles TO ['authenticated']
+    USING: is_current_user_admin()
+    CHECK: N/A
+  POLICY [UPDATE] Super-admins can grant or revoke admin privileges TO ['authenticated']
+    USING: is_super_admin()
+    CHECK: is_super_admin()
+  POLICY [INSERT] Users can insert own profile TO ['authenticated']
+    USING: N/A
+    CHECK: (auth.uid() = id)
+  POLICY [SELECT] Users can read own profile TO ['authenticated']
+    USING: (auth.uid() = id)
+    CHECK: N/A
+  POLICY [SELECT] Users can read their partner's profile TO ['authenticated']
+    USING: (id IN ( SELECT
+        CASE
+            WHEN (couples.user_a_id = auth.uid()) THEN couples.user_b_id
+            ELSE couples.user_a_id
+        END AS user_a_id
+   FROM couples
+  WHERE (((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())) AND (couples.user_b_id IS NOT NULL))))
+    CHECK: N/A
+  POLICY [UPDATE] Users can update own profile TO ['authenticated']
+    USING: (auth.uid() = id)
+    CHECK: (auth.uid() = id)
+
+=== public.user_settings (rls=True) ===
+  GRANT: authenticated -> ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] (updatable: all)
+  POLICY [INSERT] Users can insert own settings TO ['authenticated']
+    USING: N/A
+    CHECK: (auth.uid() = user_id)
+  POLICY [SELECT] Users can read own settings TO ['authenticated']
+    USING: (auth.uid() = user_id)
+    CHECK: N/A
+  POLICY [UPDATE] Users can update own settings TO ['authenticated']
+    USING: (auth.uid() = user_id)
+    CHECK: (auth.uid() = user_id)
+
+=== public.vault_items (rls=True) ===
+  GRANT: authenticated -> ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] (updatable: all)
+  POLICY [DELETE] Couple members can delete vault items TO ['authenticated']
+    USING: (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))
+    CHECK: N/A
+  POLICY [INSERT] Couple members can insert vault items TO ['authenticated']
+    USING: N/A
+    CHECK: ((auth.uid() = uploaded_by_user_id) AND (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+  POLICY [SELECT] Couple members can view vault items TO ['authenticated']
+    USING: (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid()))))
+    CHECK: N/A
+  POLICY [UPDATE] Partner can mark vault item as viewed TO ['authenticated']
+    USING: ((uploaded_by_user_id <> auth.uid()) AND (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+    CHECK: ((uploaded_by_user_id <> auth.uid()) AND (couple_id IN ( SELECT couples.id
+   FROM couples
+  WHERE ((couples.user_a_id = auth.uid()) OR (couples.user_b_id = auth.uid())))))
+  POLICY [UPDATE] Uploader can update own vault items TO ['authenticated']
+    USING: (auth.uid() = uploaded_by_user_id)
+    CHECK: (auth.uid() = uploaded_by_user_id)

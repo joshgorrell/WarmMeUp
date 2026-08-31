@@ -1,0 +1,97 @@
+export const Colors = {
+  dark: {
+    bg1: '#050507',
+    bg2: '#0A0A0F',
+    bg3: '#111018',
+    card: 'rgba(255,255,255,0.055)',
+    cardStrong: 'rgba(255,255,255,0.085)',
+    cardBorder: 'rgba(255,46,138,0.28)',
+    borderSubtle: 'rgba(255,255,255,0.10)',
+    borderActive: 'rgba(255,90,61,0.65)',
+    navBg: 'rgba(8,8,12,0.88)',
+    modalBg: '#111018',
+    text: '#FFFFFF',
+    textSecondary: 'rgba(255,255,255,0.68)',
+    textMuted: 'rgba(255,255,255,0.44)',
+    textDisabled: 'rgba(255,255,255,0.28)',
+    accentPink: '#FF2E8A',
+    accentOrange: '#FFB347',
+    accentCoral: '#FF5A3D',
+    accentRed: '#FF3D4F',
+    success: '#33D17A',
+    danger: '#FF5A5F',
+    warning: '#FFB347',
+    info: '#69A7FF',
+  },
+  light: {
+    bg1: '#FFF8F3',
+    bg2: '#FFF1EA',
+    bg3: '#FFE8DC',
+    card: 'rgba(255,255,255,0.72)',
+    cardStrong: 'rgba(255,255,255,0.92)',
+    cardBorder: 'rgba(255,46,138,0.20)',
+    borderSubtle: 'rgba(26,17,20,0.10)',
+    borderActive: 'rgba(255,90,61,0.55)',
+    navBg: 'rgba(255,248,243,0.92)',
+    modalBg: '#FFFFFF',
+    text: '#1A1114',
+    textSecondary: 'rgba(26,17,20,0.66)',
+    textMuted: 'rgba(26,17,20,0.44)',
+    textDisabled: 'rgba(26,17,20,0.28)',
+    accentPink: '#E8196E',
+    accentOrange: '#E87020',
+    accentCoral: '#E84E30',
+    accentRed: '#E83040',
+    success: '#1F9E57',
+    danger: '#D94040',
+    warning: '#E87020',
+    info: '#3A7FCC',
+  },
+};
+
+export const Gradient = {
+  primary: ['#FFB347', '#FF5A3D', '#FF3D4F', '#FF2E8A'] as const,
+  primaryStart: '#FFB347',
+  primaryMid: '#FF5A3D',
+  primaryEnd: '#FF2E8A',
+};
+
+export const Radius = {
+  sm: 10,
+  md: 16,
+  lg: 22,
+  xl: 28,
+  pill: 999,
+  full: 9999,
+};
+
+export const Spacing = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 48,
+  screen: 20,
+  card: 18,
+};
+
+export const FontSize = {
+  tiny: 11,
+  xs: 11,
+  label: 12,
+  sm: 13,
+  body: 16,
+  md: 16,
+  bodyStrong: 16,
+  lg: 20,
+  h3: 20,
+  xl: 20,
+  h2: 24,
+  xxl: 24,
+  h1: 32,
+  hero: 40,
+  display: 40,
+};
+
+export const NavHeight = 88;
