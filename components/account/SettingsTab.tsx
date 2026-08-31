@@ -154,7 +154,7 @@ export function SettingsTab({
       </Section>
 
       <View style={styles.footerLogoWrap}><Image source={require('@/assets/images/image_(2).png')} style={styles.footerLogo} resizeMode="contain" /></View>
-      <TouchableOpacity onPress={() => { void shareApp(); }} activeOpacity={0.6} style={styles.shareAppLink}><Share2 color={colors.textMuted} size={13} strokeWidth={2} /><AppText style={[styles.shareAppLinkText, { color: colors.textMuted }]}>Share Warm Me Up with a friend</AppText></TouchableOpacity>
+      <TouchableOpacity onPress={shareApp} activeOpacity={0.6} style={styles.shareAppLink}><Share2 color={colors.textMuted} size={13} strokeWidth={2} /><AppText style={[styles.shareAppLinkText, { color: colors.textMuted }]}>Share Warm Me Up with a friend</AppText></TouchableOpacity>
       <ConfirmSheet visible={!!confirmSheet} title={confirmSheet?.title ?? ''} message={confirmSheet?.message ?? ''} actions={confirmSheet?.actions ?? []} onDismiss={() => setConfirmSheet(null)} />
     </>
   );

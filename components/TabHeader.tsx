@@ -72,7 +72,7 @@ export default function TabHeader({ rightSlot }: TabHeaderProps) {
       <View style={styles.right}>
         {rightSlot}
         <TouchableOpacity onPress={() => router.push('/(app)/account')} activeOpacity={0.85}>
-          <Avatar name={profile?.display_name ?? undefined} uri={profile?.avatar_url} size="sm" bgColor="rgba(255,46,138,0.20)" />
+          <Avatar name={profile?.display_name} uri={profile?.avatar_url} size="sm" bgColor="rgba(255,46,138,0.20)" />
         </TouchableOpacity>
       </View>
     </View>

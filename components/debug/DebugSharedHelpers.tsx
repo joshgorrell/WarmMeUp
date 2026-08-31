@@ -50,7 +50,7 @@ export function EventRow({ event }: { event: DebugEvent }) {
   const isError = event.tag.includes('ERROR');
   const isSuccess = event.tag.includes('SUCCESS');
   const tagColor = isError ? '#FF6B6B' : isSuccess ? '#4CAF50' : '#FFA040';
-  const pairs = Object.entries(event.data ?? {})
+  const pairs = Object.entries(event.data)
     .map(([k, v]) => `${k}=${v === null ? 'null' : String(v)}`)
     .join('  ');
   return (
@@ -314,6 +314,3 @@ export const sharedStyles = StyleSheet.create({
     lineHeight: 14,
   },
 });
-
-
-export { Row }

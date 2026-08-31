@@ -271,35 +271,39 @@ export default function RegisterScreen() {
 
         // Prefer name from OAuth provider (Apple provides it on first sign-in);
         // fall back to whatever the user typed in the form.
-        // Check completion state instead of profile existence — the backend
-        // auto-creates a profile for every new auth user, so "profile exists"
-        // is not a reliable new-user signal.
-        const { data: existingProfile } = await supabase
+        const meta = session.user?.user_metadata ?? {};
+        const providerFn = meta.first_name || meta.given_name || '';
+        const providerLn = meta.last_name || meta.family_name || '';
+        const fn = providerFn || firstName.trim();
+        const ln = providerLn || lastName.trim();
+        const fullName = [fn, ln].filter(Boolean).join(' ');
+
+        const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
+        const { data: updatedProfile } = await supabase
           .from('profiles')
-          .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at')
+          .update({
+            ...(fn ? { first_name: fn } : {}),
+            ...(ln ? { last_name: ln } : {}),
+            ...(fullName ? { display_name: fullName } : {}),
+            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: new Date().toISOString() } : {}),
+          })
           .eq('id', userId)
+          .is('tos_accepted_at', null)
+          .select('id')
           .maybeSingle();
 
-        const isComplete = !!existingProfile &&
-          !!existingProfile.tos_accepted_at &&
-          !!existingProfile.age_verified_at &&
-          !!existingProfile.date_of_birth &&
-          !!existingProfile.first_name &&
-          existingProfile.first_name.trim().length > 0;
-
-        if (isComplete) {
-          // Existing fully-established user — route to transition.
-          router.replace('/transition');
-        } else {
-          // New or incomplete user — route through name/avatar steps.
-          const meta = session.user?.user_metadata ?? {};
-          const providerFn = meta.first_name || meta.given_name || '';
+        const isNewUser = !!updatedProfile;
+        if (isNewUser) {
           setCreatedUserId(userId);
-          if (providerFn) {
+          // If we got a name from the provider or the form, go to avatar.
+          // Otherwise prompt for name first.
+          if (fn) {
             setStep('avatar');
           } else {
             setStep('name');
           }
+        } else {
+          router.replace('/transition');
         }
       }
     } catch (e: unknown) {
@@ -361,28 +365,25 @@ export default function RegisterScreen() {
         ? (typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined)
         : 'warmup://auth/callback';
 
-      const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          emailRedirectTo: redirectTo,
-          data: {
-            first_name: fn,
-            last_name: ln,
-            full_name: fullName,
-            date_of_birth: dob ? isoDate(dob) : '',
-            age_verified_at: dob ? new Date().toISOString() : '',
-            tos_accepted_at: new Date().toISOString(),
-            ...(pendingCode ? { pending_invite_code: pendingCode } : {}),
-          },
-        },
+        options: { emailRedirectTo: redirectTo },
       });
       if (signUpError) throw signUpError;
       if (data.user) {
-        // The handle_new_user trigger reads the metadata above and populates
-        // the profile row — no pre-auth profiles.update() needed (it would
-        // silently fail before email verification anyway).
+        const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
+        await supabase
+          .from('profiles')
+          .update({
+            first_name: fn,
+            last_name: ln,
+            display_name: fullName,
+            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: new Date().toISOString() } : {}),
+          })
+          .eq('id', data.user.id);
+        await refreshProfile();
+
         setCreatedUserId(data.user.id);
         setStep('avatar');
       }

@@ -1,18 +1,25 @@
-type LogArgs = unknown[];
+/**
+ * Gated logger — all console output is suppressed in production.
+ * Set EXPO_PUBLIC_DEBUG_ALWAYS_ON=1 to enable verbose logging.
+ */
+
+const DEBUG = process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
 
 export const logger = {
-  log: (...args: LogArgs): void => {
-    console.log('[WarmMeUp]', ...args);
+  log: (...args: unknown[]): void => {
+    if (DEBUG) console.log(...args);
   },
-  warn: (...args: LogArgs): void => {
-    console.warn('[WarmMeUp]', ...args);
+  warn: (...args: unknown[]): void => {
+    if (DEBUG) console.warn(...args);
   },
-  error: (...args: LogArgs): void => {
-    console.error('[WarmMeUp]', ...args);
+  error: (...args: unknown[]): void => {
+    // Errors are always logged — they indicate real problems
+    console.error(...args);
   },
-  debug: (...args: LogArgs): void => {
-    if (__DEV__) {
-      console.debug('[WarmMeUp]', ...args);
-    }
+  debug: (...args: unknown[]): void => {
+    if (DEBUG) console.debug(...args);
+  },
+  info: (...args: unknown[]): void => {
+    if (DEBUG) console.info(...args);
   },
 };

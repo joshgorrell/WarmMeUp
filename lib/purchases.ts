@@ -1,101 +1,97 @@
 import { Platform } from 'react-native';
-import { logger } from '@/lib/logger';
+import { logger } from './logger';
 
-type PurchasesModule = any;
+let configured = false;
+let configurePromise: Promise<void> | null = null;
 
-let purchasesInstance: PurchasesModule | null = null;
-let configuredUserId: string | null = null;
-
-function getApiKey(): string | null {
-  if (Platform.OS === 'ios') {
-    return process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || null;
-  }
-  if (Platform.OS === 'android') {
-    return process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || null;
-  }
-  return null;
-}
-
-/**
- * Initialize the RevenueCat SDK if not already configured.
- * Returns the Purchases module instance, or null if unavailable (e.g. web
- * or missing API key).
- */
-export async function ensureConfigured(): Promise<PurchasesModule | null> {
-  if (purchasesInstance) return purchasesInstance;
+async function ensureConfigured(): Promise<typeof import('react-native-purchases').default | null> {
   if (Platform.OS === 'web') return null;
 
-  const apiKey = getApiKey();
+  const iosKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
+  const androidKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
+  const apiKey = Platform.OS === 'ios' ? iosKey : androidKey;
+
   if (!apiKey) {
-    logger.log('[Purchases] no API key configured for platform:', Platform.OS);
+    console.error(
+      `[RevenueCat] Missing API key for platform "${Platform.OS}". ` +
+      `Set EXPO_PUBLIC_REVENUECAT_${Platform.OS.toUpperCase()}_KEY in your EAS build environment. ` +
+      `Paywall will remain locked.`
+    );
     return null;
   }
 
-  try {
-    const Purchases = (await import('react-native-purchases')).default;
-    await Purchases.configure({ apiKey });
-    purchasesInstance = Purchases;
-    logger.log('[Purchases] configured successfully');
-    return purchasesInstance;
-  } catch (e: any) {
-    logger.warn('[Purchases] configure failed:', e?.message);
-    return null;
-  }
-}
-
-/**
- * Configure RevenueCat with a specific user ID (app user ID).
- * If already configured with the same user, returns the existing instance.
- * If configured with a different user, calls logIn to switch.
- */
-export async function ensureRevenueCatUser(userId: string): Promise<PurchasesModule | null> {
-  if (Platform.OS === 'web') return null;
-
-  const apiKey = getApiKey();
-  if (!apiKey) return null;
-
-  // Already configured with the same user
-  if (purchasesInstance && configuredUserId === userId) {
-    return purchasesInstance;
-  }
-
-  try {
-    if (!purchasesInstance) {
-      const Purchases = (await import('react-native-purchases')).default;
-      await Purchases.configure({ apiKey, appUserID: userId });
-      purchasesInstance = Purchases;
-      configuredUserId = userId;
-      logger.log('[Purchases] configured with user:', userId);
-    } else {
-      // Already configured — switch user via logIn
-      const { customerInfo } = await purchasesInstance.logIn(userId);
-      configuredUserId = userId;
-      logger.log('[Purchases] logged in user:', userId);
+  if (!configured) {
+    if (!configurePromise) {
+      configurePromise = (async () => {
+        try {
+          const Purchases = (await import('react-native-purchases')).default;
+          Purchases.configure({ apiKey });
+          configured = true;
+          logger.log(`[RevenueCat] Configured for platform "${Platform.OS}"`);
+        } catch (err: any) {
+          logger.warn('[RevenueCat] configure() failed — native module may be unavailable:', err?.message);
+        } finally {
+          configurePromise = null;
+        }
+      })();
     }
-    return purchasesInstance;
-  } catch (e: any) {
-    logger.warn('[Purchases] ensureRevenueCatUser failed:', e?.message);
+    await configurePromise;
+  }
+
+  if (!configured) return null;
+  return (await import('react-native-purchases')).default;
+}
+
+async function logInRevenueCat(userId: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const Purchases = await ensureConfigured();
+    if (!Purchases) return;
+    const { created } = await Purchases.logIn(userId);
+    logger.log(`[RevenueCat] logIn userId=${userId} created=${created}`);
+  } catch (err: any) {
+    logger.warn('[RevenueCat] logIn failed:', err?.message);
+  }
+}
+
+/**
+ * Guarantees the RevenueCat App User ID matches the authenticated Supabase UUID
+ * before any purchase or restore. If the current RC user is anonymous or mismatched,
+ * calls logIn() to switch to the correct identity. Safe to call when already logged
+ * in — returns immediately if the identity is already correct.
+ */
+async function ensureRevenueCatUser(userId: string): Promise<typeof import('react-native-purchases').default | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    const Purchases = await ensureConfigured();
+    if (!Purchases) return null;
+
+    const currentId = await Purchases.getAppUserID();
+    const isAnonymous = await Purchases.isAnonymous();
+    if (!isAnonymous && currentId === userId) {
+      return Purchases;
+    }
+
+    logger.log(`[RevenueCat] identity mismatch — current=${currentId} anonymous=${isAnonymous} → logging in ${userId}`);
+    await Purchases.logIn(userId);
+    logger.log(`[RevenueCat] ensureRevenueCatUser resolved to ${userId}`);
+    return Purchases;
+  } catch (err: any) {
+    logger.warn('[RevenueCat] ensureRevenueCatUser failed:', err?.message);
     return null;
   }
 }
 
-/**
- * Log out the current RevenueCat user (call on sign-out).
- */
-export async function logOutRevenueCat(): Promise<void> {
-  if (!purchasesInstance || Platform.OS === 'web') return;
+async function logOutRevenueCat(): Promise<void> {
+  if (Platform.OS === 'web') return;
   try {
-    await purchasesInstance.logOut();
-    configuredUserId = null;
-    logger.log('[Purchases] logged out');
-  } catch (e: any) {
-    logger.warn('[Purchases] logOut failed:', e?.message);
+    const Purchases = await ensureConfigured();
+    if (!Purchases) return;
+    await Purchases.logOut();
+    logger.log('[RevenueCat] logged out');
+  } catch (err: any) {
+    logger.warn('[RevenueCat] logOut failed:', err?.message);
   }
 }
 
-/**
- * Log in a RevenueCat user after sign-in (alias for ensureRevenueCatUser).
- */
-export async function logInRevenueCat(userId: string): Promise<void> {
-  await ensureRevenueCatUser(userId);
-}
+export { ensureConfigured, ensureRevenueCatUser, logInRevenueCat, logOutRevenueCat };

@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { logDebugEvent } from '@/lib/debugLog';
 
 export type JoinResult =
-  | { ok: true; status: 'accepted'; coupleId: string; inviterName: string | null; inviterAvatar: string | null }
+  | { ok: true; status: 'accepted'; coupleId: string; inviterName: string | null }
   | { ok: false; reason: 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'no_subscription' | 'error' };
 
 type JoinReason = 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'no_subscription' | 'error';
@@ -129,6 +129,5 @@ export async function completePendingJoin(
     status: 'accepted',
     coupleId: result.couple_id,
     inviterName: result.inviter_name ?? null,
-    inviterAvatar: result.inviter_avatar ?? null,
   };
 }

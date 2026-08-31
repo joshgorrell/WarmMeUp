@@ -1,147 +1,101 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Mail, RefreshCw, Check } from 'lucide-react-native';
+import { Mail, RefreshCw } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
+import WarmupBrand from '@/components/WarmupBrand';
 import { useLayout } from '@/hooks/useLayout';
-import { clearPendingCode, loadPendingCode } from '@/lib/inviteCode';
 import { completePendingJoin } from '@/lib/coupleJoin';
-import { friendlyAuthError } from '@/lib/authError';
+import { loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { useAuth } from '@/context/AuthContext';
-import { logger } from '@/lib/logger';
-
-const POLL_INTERVAL_MS = 3000;
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
-  const { email, pendingCode } = useLocalSearchParams<{ email?: string; pendingCode?: string }>();
+  const { pendingCode, email } = useLocalSearchParams<{ pendingCode?: string; email?: string }>();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
-  const { refreshProfile } = useAuth();
+  const { refreshSubscription } = useAuth();
 
-  const headingSize = Math.min(Math.round(width * 0.076), 30);
-  const vMd = Math.round(height * 0.03);
-  const vSm = Math.round(height * 0.02);
-
-  const [otp, setOtp] = useState('');
-  const [verifying, setVerifying] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
-  const [joining, setJoining] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const joinedRef = useRef(false);
+  const [resent, setResent] = useState(false);
 
-  const displayEmail = email || 'your email';
+  const logoSize = Math.min(Math.round(width * 0.14), 56);
+  const vMd = Math.round(height * 0.03);
 
-  // Poll for email confirmation — Supabase auto-refreshes the session when the
-  // user clicks the confirmation link. onAuthStateChange fires USER_UPDATED,
-  // but we also poll getUser() as a fallback in case the event is missed.
-  useEffect(() => {
-    let cancelled = false;
-
-    const checkConfirmed = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (cancelled) return;
-      if (user?.email_confirmed_at) {
-        setConfirmed(true);
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-        await handleConfirmed(user.id);
+  const handleContinue = async () => {
+    if (checking) return;
+    setChecking(true);
+    setError('');
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        setError('Connection error. Check your network and try again.');
+        return;
       }
-    };
+      if (!user.email_confirmed_at) {
+        setError('Email not verified yet. Please check your inbox and click the link, then try again.');
+        return;
+      }
 
-    checkConfirmed();
-    pollRef.current = setInterval(checkConfirmed, POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleConfirmed = useCallback(async (userId: string) => {
-    if (joinedRef.current) return;
-    joinedRef.current = true;
-
-    refreshProfile().catch(() => {});
-
-    const code = pendingCode || (await loadPendingCode()) || '';
-
-    if (code) {
-      setJoining(true);
-      try {
+      // Email is confirmed — handle pending invite code before routing
+      const code = pendingCode || (await loadPendingCode()) || '';
+      if (code) {
         const result = await completePendingJoin(code);
-        await clearPendingCode();
         if (result.ok) {
+          await clearPendingCode();
           router.replace({
             pathname: '/(auth)/paired-celebration',
             params: { partnerName: result.inviterName || '' },
           });
           return;
         }
-        // Join failed — don't block the user. Send them to onboarding.
-        logger.log('[verify-email] join failed:', result.reason);
-      } catch (e: any) {
-        logger.log('[verify-email] join error:', e?.message);
-      } finally {
-        setJoining(false);
+        await clearPendingCode();
+        const msg =
+          result.reason === 'self' ? "You can't use your own invite code." :
+          result.reason === 'already_connected' ? "You're already connected to a partner." :
+          result.reason === 'not_found' ? "Invite code not found. You can pair from the app later." :
+          result.reason === 'rate_limited' ? 'Too many attempts. You can pair from the app later.' :
+          result.reason === 'no_subscription' ? "Your partner's free trial has ended. They can subscribe and try again." :
+          'Something went wrong connecting you. You can pair from the app later.';
+        setError(msg);
+        setTimeout(() => router.replace('/(auth)/onboarding'), 3000);
+        return;
       }
-    }
 
-    router.replace('/(auth)/onboarding');
-  }, [pendingCode, refreshProfile, router]);
-
-  const handleVerifyOtp = async () => {
-    if (!otp.trim() || verifying) return;
-    setError('');
-    setVerifying(true);
-    try {
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({
-        email: displayEmail,
-        token: otp.trim(),
-        type: 'email_confirmation',
-      });
-      if (verifyError) throw verifyError;
-      if (data.user?.email_confirmed_at) {
-        setConfirmed(true);
-        await handleConfirmed(data.user.id);
-      }
-    } catch (e: unknown) {
-      setError(friendlyAuthError(e));
+      router.replace('/(auth)/onboarding');
+    } catch {
+      setError('Something went wrong. Please try again.');
     } finally {
-      setVerifying(false);
+      setChecking(false);
     }
   };
 
   const handleResend = async () => {
-    if (resending) return;
+    if (resending || !email) return;
     setResending(true);
+    setResent(false);
     setError('');
     try {
-      const { error: resendError } = await supabase.auth.resend({
-        type: 'signup',
-        email: displayEmail,
-      });
-      if (resendError) throw resendError;
-    } catch (e: unknown) {
-      setError(friendlyAuthError(e));
+      const { error: resendError } = await supabase.auth.resend({ type: 'signup', email });
+      if (resendError) {
+        setError('Could not resend. Please try again shortly.');
+      } else {
+        setResent(true);
+      }
+    } catch {
+      setError('Could not resend. Please try again shortly.');
     } finally {
       setResending(false);
     }
@@ -161,248 +115,178 @@ export default function VerifyEmailScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: vMd + insets.top, paddingBottom: Math.max(insets.bottom, vMd) + vMd }]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={isTablet ? [styles.innerWrap, centerStyle] : styles.innerWrap}>
-          <View style={[styles.headerRow, { marginBottom: vSm }]}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-              <ChevronLeft color="rgba(255,255,255,0.75)" size={20} strokeWidth={2.2} />
-            </TouchableOpacity>
+      <View style={[styles.content, { paddingTop: insets.top + vMd, paddingBottom: Math.max(insets.bottom, vMd) }]}>
+        <View style={[centerStyle, styles.inner]}>
+          <View style={[styles.brandWrap, { marginBottom: vMd }]}>
+            <WarmupBrand logoSize={logoSize} showTagline={false} />
           </View>
 
           <View style={styles.iconWrap}>
-            <LinearGradient
-              colors={['rgba(255,122,69,0.18)', 'rgba(255,46,138,0.12)']}
-              style={styles.iconCircle}
-            >
-              {confirmed ? (
-                <Check color="#4CAF50" size={28} strokeWidth={2.2} />
-              ) : (
-                <Mail color="#FF8A3D" size={28} strokeWidth={1.8} />
-              )}
-            </LinearGradient>
+            <Mail color="#FF7A45" size={48} strokeWidth={1.5} />
           </View>
 
-          <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vSm }]}>
-            {confirmed ? 'Email confirmed!' : 'Check your email'}
+          <AppText style={styles.heading}>Check your inbox</AppText>
+          <AppText style={styles.sub}>
+            We sent a verification link to{'\n'}
+            {email ? <AppText style={styles.emailHighlight}>{email}</AppText> : 'your email address'}.
+            {'\n'}Click the link, then come back here.
           </AppText>
 
-          <AppText style={[styles.sub, { marginBottom: vMd }]}>
-            {confirmed
-              ? joining
-                ? 'Connecting you with your partner...'
-                : 'Setting up your account...'
-              : `We sent a confirmation link to ${displayEmail}. Tap the link in the email to verify your account.`}
-          </AppText>
+          {error ? <AppText style={styles.error}>{error}</AppText> : null}
+          {resent ? <AppText style={styles.success}>Verification email resent.</AppText> : null}
 
-          {joining && (
-            <View style={styles.joiningRow}>
-              <ActivityIndicator color="#FF8A3D" size="small" />
-              <AppText style={styles.joiningText}>Completing your connection...</AppText>
-            </View>
-          )}
+          <TouchableOpacity
+            style={styles.continueBtn}
+            onPress={handleContinue}
+            activeOpacity={0.85}
+            disabled={checking}
+          >
+            <LinearGradient
+              colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.continueGrad}
+            >
+              <AppText style={styles.continueLabel}>
+                {checking ? 'Checking…' : "I've Verified — Continue"}
+              </AppText>
+            </LinearGradient>
+          </TouchableOpacity>
 
-          {!confirmed && !joining && (
-            <>
-              <AppText style={styles.orText}>Or enter the 6-digit code from the email:</AppText>
-
-              <View style={styles.otpRow}>
-                <AppTextInput
-                  style={styles.otpInput}
-                  value={otp}
-                  onChangeText={(t) => { setOtp(t.replace(/[^0-9]/g, '').slice(0, 6)); setError(''); }}
-                  placeholder="000000"
-                  placeholderTextColor="rgba(255,255,255,0.20)"
-                  keyboardType="number-pad"
-                  autoCorrect={false}
-                  autoComplete="off"
-                  maxLength={6}
-                  textAlign="center"
-                />
-              </View>
-
-              {error ? <AppText style={styles.error}>{error}</AppText> : null}
-
-              <TouchableOpacity
-                style={[styles.verifyBtn, !otp.trim() && styles.verifyBtnDisabled]}
-                onPress={handleVerifyOtp}
-                activeOpacity={0.85}
-                disabled={!otp.trim() || verifying}
-              >
-                <LinearGradient
-                  colors={['#FF7B00', '#FF5A3D', '#FF2E8A']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.verifyGrad}
-                >
-                  {verifying ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <AppText style={styles.verifyLabel}>Verify</AppText>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.resendBtn}
-                onPress={handleResend}
-                activeOpacity={0.7}
-                disabled={resending}
-              >
-                {resending ? (
-                  <ActivityIndicator color="rgba(255,255,255,0.4)" size="small" />
-                ) : (
-                  <>
-                    <RefreshCw color="rgba(255,255,255,0.4)" size={14} strokeWidth={2} />
-                    <AppText style={styles.resendText}>Resend email</AppText>
-                  </>
-                )}
-              </TouchableOpacity>
-            </>
+          {email && (
+            <TouchableOpacity
+              style={styles.resendRow}
+              onPress={handleResend}
+              activeOpacity={0.7}
+              disabled={resending}
+            >
+              <RefreshCw color="rgba(255,255,255,0.40)" size={14} />
+              <AppText style={styles.resendText}>
+                {resending ? 'Resending…' : "Resend verification email"}
+              </AppText>
+            </TouchableOpacity>
           )}
 
           <TouchableOpacity
-            style={styles.skipRow}
-            onPress={() => router.replace('/(auth)/onboarding')}
-            activeOpacity={0.6}
+            style={styles.signInRow}
+            onPress={() => router.replace('/(auth)/login')}
+            activeOpacity={0.7}
           >
-            <AppText style={styles.skipText}>Skip for now</AppText>
+            <AppText style={styles.signInText}>
+              Wrong account?{'  '}
+              <AppText style={styles.signInLink}>Sign In</AppText>
+            </AppText>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: {
-    flexGrow: 1,
+  content: {
+    flex: 1,
     paddingHorizontal: Spacing.xl,
+    justifyContent: 'center',
   },
-  innerWrap: { flex: 1 },
-  headerRow: { flexDirection: 'row', alignItems: 'center' },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  inner: {
+    alignItems: 'center',
+  },
+  brandWrap: {
+    alignItems: 'center',
+  },
+  iconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(255,122,69,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,122,69,0.22)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-  iconWrap: { alignItems: 'center', marginBottom: Spacing.lg },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,138,61,0.25)',
+    marginBottom: 24,
   },
   heading: {
     color: '#fff',
+    fontSize: FontSize.h1,
     fontFamily: 'Inter-Bold',
-    textAlign: 'center',
     letterSpacing: -0.5,
+    textAlign: 'center',
+    marginBottom: 12,
   },
   sub: {
     color: 'rgba(255,255,255,0.50)',
     fontSize: FontSize.body,
     fontFamily: 'Inter-Regular',
+    textAlign: 'center',
     lineHeight: 24,
-    textAlign: 'center',
+    marginBottom: 28,
   },
-  orText: {
-    color: 'rgba(255,255,255,0.35)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  otpRow: { marginBottom: Spacing.md },
-  otpInput: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    borderRadius: Radius.lg,
-    color: '#fff',
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    letterSpacing: 8,
-    paddingVertical: 16,
+  emailHighlight: {
+    color: 'rgba(255,255,255,0.80)',
+    fontFamily: 'Inter-SemiBold',
   },
   error: {
     color: '#FF5A5F',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: 16,
+    paddingHorizontal: Spacing.md,
   },
-  verifyBtn: {
+  success: {
+    color: '#4CAF50',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  continueBtn: {
+    width: '100%',
     borderRadius: Radius.pill,
     overflow: 'hidden',
-    shadowColor: '#FF5A3D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.40,
-    shadowRadius: 16,
-    elevation: 8,
-    marginBottom: Spacing.md,
+    shadowColor: '#FF5000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    elevation: 10,
+    marginBottom: 16,
   },
-  verifyBtnDisabled: {
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  verifyGrad: {
-    paddingVertical: 16,
+  continueGrad: {
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 17,
     borderRadius: Radius.pill,
   },
-  verifyLabel: {
+  continueLabel: {
     color: '#fff',
-    fontSize: FontSize.body,
+    fontSize: FontSize.lg,
     fontFamily: 'Inter-Bold',
+    letterSpacing: 0.3,
   },
-  resendBtn: {
+  resendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: Spacing.sm,
+    gap: 6,
+    paddingVertical: 8,
+    marginBottom: 8,
   },
   resendText: {
     color: 'rgba(255,255,255,0.40)',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
   },
-  joiningRow: {
-    flexDirection: 'row',
+  signInRow: {
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    marginBottom: Spacing.md,
+    paddingVertical: 6,
   },
-  joiningText: {
-    color: 'rgba(255,138,61,0.80)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Medium',
-  },
-  skipRow: {
-    alignItems: 'center',
-    paddingVertical: Spacing.lg,
-    marginTop: Spacing.sm,
-  },
-  skipText: {
-    color: 'rgba(255,255,255,0.30)',
+  signInText: {
+    color: 'rgba(255,255,255,0.36)',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
-    textDecorationLine: 'underline',
-    textDecorationColor: 'rgba(255,255,255,0.20)',
+  },
+  signInLink: {
+    color: '#FF7A45',
+    fontFamily: 'Inter-SemiBold',
   },
 });

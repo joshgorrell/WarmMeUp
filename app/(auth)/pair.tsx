@@ -313,7 +313,7 @@ export default function PairScreen() {
       await refreshSubscription();
 
       // Now generate the invite code — server will allow it since we have premium
-      const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code', { force_new: false });
+      const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
       if (rpcError) {
         if ((rpcError as any)?.message === 'already_paired') {
           router.replace('/(app)/(tabs)');
@@ -371,8 +371,8 @@ export default function PairScreen() {
       }
 
       // Single code path: RPC finds or creates the solo couple and returns the invite code.
-      // Pass force_new: false so the existing code is returned as-is (no regeneration).
-      const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code', { force_new: false });
+      // This avoids a split between "DB query" and "RPC fallback" that could diverge.
+      const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
       if (rpcError) {
         // RPC refuses when the user is already paired — redirect to app instead of showing an error.
         if ((rpcError as any)?.message === 'already_paired') {
@@ -401,7 +401,7 @@ export default function PairScreen() {
           const delay = attempt === 1 ? 1000 : attempt === 2 ? 1500 : 2000;
           await new Promise(r => setTimeout(r, delay));
           await refreshSubscription();
-          const { data: retry } = await supabase.rpc('generate_invite_code', { force_new: false });
+          const { data: retry } = await supabase.rpc('generate_invite_code');
           lastRetryResult = retry;
           if ((retry as any)?.success !== false || (retry as any)?.reason !== 'no_subscription') {
             const retryCode = (retry as any)?.invite_code ?? null;
@@ -585,12 +585,7 @@ export default function PairScreen() {
         }).catch(() => {});
       }
 
-      // Prefer inviter info from the request_join result (authoritative),
-      // fall back to preview data, then any previously fetched name.
-      const partnerName = joinResult.inviter_name || previewName || inviterName || '';
-      if (joinResult.inviter_avatar) {
-        setInviterAvatar(joinResult.inviter_avatar);
-      }
+      const partnerName = previewName || inviterName || '';
       if (!settings?.celebration_seen) {
         router.replace({
           pathname: '/(auth)/paired-celebration',

@@ -1,21 +1,22 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import { logger } from '@/lib/logger';
 
 /**
- * Set the app icon badge count (iOS only; no-op on other platforms).
+ * Set the iOS home-screen app-icon badge to the given count.
+ * On Android and web this is a no-op (Android has no app-icon badge API).
+ * Pass 0 to clear the badge.
  */
 export async function setAppBadge(count: number): Promise<void> {
   if (Platform.OS !== 'ios') return;
   try {
-    await Notifications.setBadgeCountAsync(count);
-  } catch (e: any) {
-    logger.warn('[appBadge] setAppBadge failed:', e?.message);
+    const Notifications = await import('expo-notifications');
+    await Notifications.setBadgeCountAsync(Math.max(0, Math.floor(count)));
+  } catch {
+    // Best-effort — never throw on badge updates
   }
 }
 
 /**
- * Clear the app icon badge (set to 0).
+ * Clear the iOS home-screen app-icon badge (set it to 0).
  */
 export async function clearAppBadge(): Promise<void> {
   await setAppBadge(0);

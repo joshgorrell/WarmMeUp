@@ -348,24 +348,15 @@ export default function LoginScreen() {
 
       if (codeToRedeem && data.user) {
         const result = await completePendingJoin(codeToRedeem);
+        await clearPendingCode();
         if (result.ok) {
-          await clearPendingCode();
           router.replace({
-            pathname: '/(auth)/paired-celebration',
-            params: { partnerName: result.inviterName || '' },
+            pathname: '/(auth)/pair',
+            params: { prefilledCode: codeToRedeem },
           });
           return;
         }
-        // Definitive failures — clear the code so the user isn't stuck
-        const definitiveFailure =
-          result.reason === 'self' ||
-          result.reason === 'already_connected' ||
-          result.reason === 'not_found';
-        if (definitiveFailure) {
-          await clearPendingCode();
-        }
-        // Retryable failures (network, rate_limited, error) — preserve the code.
-        // Fall through to normal transition; user can retry pairing from the app.
+        // Join failed — fall through to normal transition; user can pair from account screen
       }
 
       router.replace('/transition');
@@ -397,49 +388,30 @@ export default function LoginScreen() {
           throw e;
         }
 
-        // Check completion state instead of profile existence — the backend
-        // auto-creates a profile for every new auth user.
-        const { data: existingProfile } = await supabase
+        const { data: existing } = await supabase
           .from('profiles')
-          .select('first_name, date_of_birth, age_verified_at, tos_accepted_at')
+          .select('id')
           .eq('id', userId)
           .maybeSingle();
-
-        const isComplete = !!existingProfile &&
-          !!existingProfile.tos_accepted_at &&
-          !!existingProfile.age_verified_at &&
-          !!existingProfile.date_of_birth &&
-          !!existingProfile.first_name &&
-          existingProfile.first_name.trim().length > 0;
-
-        if (!isComplete) {
-          // New or incomplete OAuth user — route through register for name/avatar steps.
+        if (!existing) {
+          // New OAuth user — route through register so they get the name/avatar steps.
           const redirectParams: Record<string, string> = { oauthComplete: '1' };
           if (codeToPreserve) redirectParams.pendingCode = codeToPreserve;
           router.replace({ pathname: '/(auth)/register', params: redirectParams });
         } else {
-          // Existing fully-established user signing in — check for code to redeem.
+          // Existing user signing in — check for stored or param code to redeem.
           const storedCode = await loadPendingCode();
           const codeToRedeem = codeToPreserve || storedCode || '';
           if (codeToRedeem) {
             const result = await completePendingJoin(codeToRedeem);
+            await clearPendingCode();
             if (result.ok) {
-              await clearPendingCode();
               router.replace({
-                pathname: '/(auth)/paired-celebration',
-                params: { partnerName: result.inviterName || '' },
+                pathname: '/(auth)/pair',
+                params: { prefilledCode: codeToRedeem },
               });
               return;
             }
-            // Definitive failures — clear the code.
-            const definitiveFailure =
-              result.reason === 'self' ||
-              result.reason === 'already_connected' ||
-              result.reason === 'not_found';
-            if (definitiveFailure) {
-              await clearPendingCode();
-            }
-            // Retryable failures — preserve the code, fall through to transition.
           }
           router.replace('/transition');
         }

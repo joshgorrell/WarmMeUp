@@ -1,41 +1,54 @@
-export interface UploadProgressState {
+export type UploadProgressState = {
   visible: boolean;
   label: string;
   pct: number;
+};
+
+type Listener = (state: UploadProgressState) => void;
+
+let state: UploadProgressState = {
+  visible: false,
+  label: 'Uploading…',
+  pct: 0,
+};
+
+const listeners = new Set<Listener>();
+
+function emit() {
+  listeners.forEach(listener => listener(state));
 }
 
-let currentState: UploadProgressState = { visible: false, label: '', pct: 0 };
-const subscribers = new Set<(s: UploadProgressState) => void>();
-
-/**
- * Get the current upload progress state.
- */
 export function getUploadProgressState(): UploadProgressState {
-  return currentState;
+  return state;
 }
 
-/**
- * Subscribe to upload progress changes. Returns an unsubscribe function.
- */
-export function subscribeUploadProgress(cb: (s: UploadProgressState) => void): () => void {
-  subscribers.add(cb);
-  return () => {
-    subscribers.delete(cb);
-  };
+export function subscribeUploadProgress(listener: Listener): () => void {
+  listeners.add(listener);
+  listener(state);
+  return () => listeners.delete(listener);
 }
 
-/**
- * Update the upload progress state and notify all subscribers.
- */
-export function setUploadProgress(label: string, pct: number): void {
-  currentState = { visible: true, label, pct };
-  subscribers.forEach((cb) => cb(currentState));
+export function beginUploadProgress(label: string) {
+  state = { visible: true, label, pct: 0 };
+  emit();
 }
 
-/**
- * Hide the upload progress overlay.
- */
-export function hideUploadProgress(): void {
-  currentState = { visible: false, label: '', pct: 0 };
-  subscribers.forEach((cb) => cb(currentState));
+export function setUploadProgressPct(pct: number) {
+  const nextPct = Math.max(0, Math.min(100, Math.round(pct)));
+  state = { ...state, visible: true, pct: nextPct };
+  emit();
+}
+
+export function finishUploadProgress() {
+  state = { ...state, pct: 100 };
+  emit();
+  setTimeout(() => {
+    state = { visible: false, label: 'Uploading…', pct: 0 };
+    emit();
+  }, 500);
+}
+
+export function cancelUploadProgress() {
+  state = { visible: false, label: 'Uploading…', pct: 0 };
+  emit();
 }

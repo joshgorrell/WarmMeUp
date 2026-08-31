@@ -1,60 +1,100 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Platform } from 'react-native';
+import 'react-native-url-polyfill/auto';
+import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+import { logger } from './logger';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+const _rawUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const _rawAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
-// Custom storage adapter — uses SecureStore on native, sessionStorage on web.
-// This ensures the auth session persists across app restarts on native.
-const customStorage = {
-  getItem: async (key: string): Promise<string | null> => {
-    if (Platform.OS !== 'web') {
-      return await SecureStore.getItemAsync(key);
-    }
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      return window.sessionStorage.getItem(key);
-    }
-    return null;
+const supabaseUrl = _rawUrl.trim();
+const supabaseAnonKey = _rawAnonKey.trim();
+
+const anonKeyEndsWithNewline = _rawAnonKey !== supabaseAnonKey;
+const anonKeyLengthRaw = _rawAnonKey.length;
+const anonKeyLengthTrimmed = supabaseAnonKey.length;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('[Supabase] FATAL: missing env vars at createClient time');
+  console.error('[Supabase] EXPO_PUBLIC_SUPABASE_URL:', supabaseUrl || 'EMPTY');
+  console.error('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY length:', supabaseAnonKey.length);
+}
+
+if (anonKeyEndsWithNewline) {
+  logger.warn('[Supabase] WARNING: anon key had trailing whitespace/newline — trimmed before use');
+}
+
+const webStorage = {
+  getItem: (key: string) => {
+    try { return window.localStorage.getItem(key); } catch { return null; }
   },
-  setItem: async (key: string, value: string): Promise<void> => {
-    if (Platform.OS !== 'web') {
-      await SecureStore.setItemAsync(key, value);
-    } else if (typeof window !== 'undefined' && window.sessionStorage) {
-      window.sessionStorage.setItem(key, value);
-    }
+  setItem: (key: string, value: string) => {
+    try { window.localStorage.setItem(key, value); } catch {}
   },
-  removeItem: async (key: string): Promise<void> => {
-    if (Platform.OS !== 'web') {
-      await SecureStore.deleteItemAsync(key);
-    } else if (typeof window !== 'undefined' && window.sessionStorage) {
-      window.sessionStorage.removeItem(key);
-    }
+  removeItem: (key: string) => {
+    try { window.localStorage.removeItem(key); } catch {}
   },
 };
 
-export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+const nativeStorage = {
+  getItem: (key: string) => SecureStore.getItemAsync(key),
+  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+};
+
+const storage = Platform.OS === 'web' ? webStorage : nativeStorage;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: customStorage as any,
+    storage: storage as any,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: Platform.OS === 'web',
   },
 });
 
-export interface SupabaseDiagnostics {
-  clientHasAnonKey: boolean;
-  clientAnonKeyLength: number;
-  sourcesMatch: boolean;
+function _decodeJwtRef(jwt: string): string | null {
+  try {
+    const parts = jwt.split('.');
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded));
+    return payload?.ref ?? null;
+  } catch {
+    return null;
+  }
 }
 
-export function getSupabaseDiagnostics(): SupabaseDiagnostics {
-  const authHeaders = (supabase.auth as any)?.headers ?? {};
-  const clientKey = authHeaders.apikey ?? '';
-  const envKey = supabaseAnonKey;
+export function getSupabaseDiagnostics() {
+  const authInternal = supabase.auth as any;
+  const authHeaders: Record<string, string> = authInternal?.headers ?? {};
   return {
-    clientHasAnonKey: Boolean(clientKey),
-    clientAnonKeyLength: clientKey.length,
-    sourcesMatch: clientKey === envKey,
+    clientUrl: supabaseUrl || 'EMPTY',
+    clientHasAnonKey: supabaseAnonKey.length > 0,
+    clientAnonKeyLength: supabaseAnonKey.length,
+    clientAnonKeyPrefix24: supabaseAnonKey.slice(0, 24) || 'EMPTY',
+    clientAnonKeyProjectRefDecoded: _decodeJwtRef(supabaseAnonKey),
+    envAnonKeyLength: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').length,
+    envAnonKeyPrefix24: (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').slice(0, 24) || 'EMPTY',
+    envAnonKeyProjectRefDecoded: _decodeJwtRef(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''),
+    envUrlHost: (() => { try { return new URL(process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').hostname; } catch { return 'INVALID'; } })(),
+    sourcesMatch:
+      supabaseAnonKey === (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '') &&
+      supabaseUrl === (process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''),
+    anonKeyLengthRaw,
+    anonKeyLengthTrimmed,
+    anonKeyEndsWithNewline,
+    anonKeyRawLastCharsJSON: JSON.stringify(_rawAnonKey.slice(-6)),
+    fetchWrapper: 'none (interceptor removed v35)',
+    authClientHasApiKey: Boolean(authHeaders['apikey']),
+    authClientAnonKeyLength: (authHeaders['apikey'] ?? '').length,
+    authClientUrl: authInternal?.url ?? 'UNKNOWN',
+    authClientHeaderKeys: Object.keys(authHeaders).join(', ') || '(none)',
+    clientCustomFetch: 'none',
+    interceptorActive: false,
   };
 }
+
+const _supabaseUrlHost = supabaseUrl ? (() => { try { return new URL(supabaseUrl).hostname; } catch { return null; } })() : null;
+const _dbProjectRef = _supabaseUrlHost ? _supabaseUrlHost.replace(/\.supabase\.co$/, '') : null;

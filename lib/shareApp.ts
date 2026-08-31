@@ -1,32 +1,26 @@
-import { Platform } from 'react-native';
-import { Share } from 'react-native';
+import { Platform, Share, Alert } from 'react-native';
 
-const DEEP_LINK_SCHEME = process.env.EXPO_PUBLIC_DEEP_LINK_SCHEME ?? 'warmup';
+const SHARE_MESSAGE =
+  "I just signed up for Warm Me Up — a private space for playful couples. Check it out!";
 
-/**
- * Open the system share sheet with the app's invite deep link.
- */
-export async function shareApp(inviteCode?: string): Promise<void> {
-  const deepLink = inviteCode
-    ? `${DEEP_LINK_SCHEME}://invite/${inviteCode}`
-    : `${DEEP_LINK_SCHEME}://`;
+const SHARE_URL = process.env.EXPO_PUBLIC_SHARE_URL?.trim() || '';
 
-  const shareText = inviteCode
-    ? `Join me on Warm Me Up!\n\nTap to connect: ${deepLink}\n\nOr enter code: ${inviteCode}`
-    : `Check out Warm Me Up! ${deepLink}`;
+function buildShareText(): string {
+  return SHARE_URL ? `${SHARE_MESSAGE}\n${SHARE_URL}` : SHARE_MESSAGE;
+}
 
-  if (Platform.OS === 'web') {
-    try {
-      await navigator.clipboard.writeText(deepLink);
-    } catch {
-      // ignore
-    }
-    return;
-  }
-
+export async function shareApp(): Promise<void> {
+  const text = buildShareText();
   try {
-    await Share.share({ message: shareText, url: deepLink });
-  } catch {
-    // ignore
-  }
+    if (Platform.OS === 'web') {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        Alert.alert('Copied!', 'Share text copied — paste it anywhere.');
+      } else {
+        Alert.alert(SHARE_MESSAGE);
+      }
+      return;
+    }
+    await Share.share({ message: text });
+  } catch {}
 }

@@ -211,7 +211,6 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
     }
     const bucket = msg.media_storage_bucket ?? 'chat_media';
     const thumbPath = videoThumbnailPath(msg.media_storage_path);
-    if (!thumbPath) { setPosterChecked(true); return; }
     supabase.storage.from(bucket).createSignedUrl(thumbPath, 12 * 3600)
       .then(({ data, error }) => {
         if (cancelled) return;
