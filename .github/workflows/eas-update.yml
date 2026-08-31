@@ -1,0 +1,119 @@
+name: EAS Update
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Synchronize dependency lockfile
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint report
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Verify video thumbnail dependency
+        run: |
+          node -e "
+            const pkg = require('expo-video-thumbnails/package.json');
+            console.log('expo-video-thumbnails:', pkg.version);
+            if (!pkg.version.startsWith('10.0.')) {
+              console.error('FAIL: unexpected expo-video-thumbnails version ' + pkg.version);
+              process.exit(1);
+            }
+            console.log('PASS: expo-video-thumbnails is installed and compatible with SDK 54');
+          "
+
+      - name: Expo dependency compatibility report
+        continue-on-error: true
+        run: npx expo install --check
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Validate Supabase anon key
+        env:
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          node -e "
+            const EXPECTED_REF  = 'vdhrcbaggplcktjamwcj';
+            const EXPECTED_ROLE = 'anon';
+            const k = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+            console.log('anon key length:', k.length);
+            if (!k) { console.error('FAIL: EXPO_PUBLIC_SUPABASE_ANON_KEY is empty'); process.exit(1); }
+            const parts = k.split('.');
+            console.log('jwt part count:', parts.length);
+            if (parts.length !== 3) { console.error('FAIL: not a 3-part JWT'); process.exit(1); }
+            let payload;
+            try {
+              payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+            } catch(e) {
+              console.error('FAIL: payload decode error:', e.message);
+              process.exit(1);
+            }
+            console.log('payload.ref :', payload.ref);
+            console.log('payload.role:', payload.role);
+            console.log('payload.iss :', payload.iss);
+            console.log('payload.exp :', payload.exp ? new Date(payload.exp * 1000).toISOString() : null);
+            if (payload.ref !== EXPECTED_REF) {
+              console.error('FAIL: payload.ref=' + payload.ref + ' expected=' + EXPECTED_REF);
+              process.exit(1);
+            }
+            if (payload.role !== EXPECTED_ROLE) {
+              console.error('FAIL: payload.role=' + payload.role + ' expected=' + EXPECTED_ROLE);
+              process.exit(1);
+            }
+            console.log('PASS: anon key is valid for project', EXPECTED_REF);
+          "
+
+      - name: Print app version marker
+        run: cat lib/appVersion.ts
+
+      - name: Extract and validate OTA_MARKER
+        run: |
+          MARKER=$(node -e "const fs=require('fs'); const s=fs.readFileSync('lib/appVersion.ts','utf8'); const m=s.match(/OTA_MARKER\s*=\s*['\"]([^'\"]+)['\"]/); if(!m){console.error('FAIL: OTA_MARKER not found in lib/appVersion.ts');process.exit(1)} console.log(m[1])")
+          if [ -z "$MARKER" ]; then
+            echo "FAIL: OTA_MARKER is empty"
+            exit 1
+          fi
+          echo "OTA_MARKER=$MARKER" >> $GITHUB_ENV
+          echo "Extracted marker: $MARKER"
+
+      - name: Verify production channel exists
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas channel:view production
+
+      - name: Verify runtime version and project config
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npx expo config --type public | grep -E "runtimeVersion|projectId|updates"
+
+      - name: Publish OTA update to production
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          echo "Publishing with message: $OTA_MARKER"
+          eas update --channel production --message "$OTA_MARKER" --non-interactive
