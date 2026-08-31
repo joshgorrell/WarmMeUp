@@ -3,9 +3,9 @@ import { logDebugEvent } from '@/lib/debugLog';
 
 export type JoinResult =
   | { ok: true; status: 'accepted'; coupleId: string; inviterName: string | null }
-  | { ok: false; reason: 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'no_subscription' | 'error' };
+  | { ok: false; reason: 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'no_subscription' | 'already_taken' | 'error' };
 
-type JoinReason = 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'no_subscription' | 'error';
+type JoinReason = 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'no_subscription' | 'already_taken' | 'error';
 
 export type PendingJoinStatus = 'accepted' | 'b_accepted' | 'pending';
 

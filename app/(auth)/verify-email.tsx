@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -30,6 +30,7 @@ export default function VerifyEmailScreen() {
   const [resending, setResending] = useState(false);
   const [error, setError] = useState('');
   const [resent, setResent] = useState(false);
+  const autoCheckedRef = useRef(false);
 
   const logoSize = Math.min(Math.round(width * 0.14), 56);
   const vMd = Math.round(height * 0.03);
@@ -67,6 +68,7 @@ export default function VerifyEmailScreen() {
           result.reason === 'already_connected' ? "You're already connected to a partner." :
           result.reason === 'not_found' ? "Invite code not found. You can pair from the app later." :
           result.reason === 'rate_limited' ? 'Too many attempts. You can pair from the app later.' :
+          result.reason === 'already_taken' ? "Someone just joined with that code. You can pair from the app later." :
           result.reason === 'no_subscription' ? "Your partner's free trial has ended. They can subscribe and try again." :
           'Something went wrong connecting you. You can pair from the app later.';
         setError(msg);
@@ -81,6 +83,20 @@ export default function VerifyEmailScreen() {
       setChecking(false);
     }
   };
+
+  // Auto-detect email confirmation: when the auth state changes (e.g. the user
+  // opens the email link and the session refreshes), automatically proceed.
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (autoCheckedRef.current) return;
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+        autoCheckedRef.current = true;
+        handleContinue();
+      }
+    });
+    return () => sub.subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleResend = async () => {
     if (resending || !email) return;

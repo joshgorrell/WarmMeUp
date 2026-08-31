@@ -27,6 +27,7 @@ import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import { useLayout } from '@/hooks/useLayout';
 import { savePendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
+import { logger } from '@/lib/logger';
 import { completePendingJoin } from '@/lib/coupleJoin';
 import { useAuth } from '@/context/AuthContext';
 
@@ -269,6 +270,16 @@ export default function RegisterScreen() {
           throw e;
         }
 
+        // Record pending invite code in user metadata so the server-side
+        // trial-suppression logic can identify invited OAuth users. The trigger
+        // fires before this update, so this records intent for a future cleanup
+        // function rather than suppressing the trial in real-time.
+        if (pendingCode) {
+          await supabase.auth.updateUser({
+            data: { pending_invite_code: pendingCode.toUpperCase().trim() },
+          }).catch(() => {});
+        }
+
         // Prefer name from OAuth provider (Apple provides it on first sign-in);
         // fall back to whatever the user typed in the form.
         const meta = session.user?.user_metadata ?? {};
@@ -365,23 +376,41 @@ export default function RegisterScreen() {
         ? (typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined)
         : 'warmup://auth/callback';
 
+      const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
+      const nowIso = new Date().toISOString();
+      const signUpData: Record<string, string> = {
+        first_name: fn,
+        last_name: ln,
+        full_name: fullName,
+        tos_accepted_at: nowIso,
+      };
+      if (dob) {
+        signUpData.date_of_birth = isoDate(dob);
+        signUpData.age_verified_at = nowIso;
+      }
+      if (pendingCode) {
+        signUpData.pending_invite_code = pendingCode.toUpperCase().trim();
+      }
+
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: redirectTo },
+        options: { emailRedirectTo: redirectTo, data: signUpData },
       });
       if (signUpError) throw signUpError;
       if (data.user) {
-        const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
-        await supabase
+        const { error: profileError } = await supabase
           .from('profiles')
           .update({
             first_name: fn,
             last_name: ln,
             display_name: fullName,
-            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: new Date().toISOString() } : {}),
+            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: nowIso } : {}),
           })
           .eq('id', data.user.id);
+        if (profileError) {
+          logger.warn('[register] profile update fallback failed (trigger should have handled it):', profileError.message);
+        }
         await refreshProfile();
 
         setCreatedUserId(data.user.id);

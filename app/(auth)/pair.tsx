@@ -563,6 +563,9 @@ export default function PairScreen() {
           case 'rate_limited':
             setError('Too many attempts. Wait a moment and try again.');
             break;
+          case 'already_taken':
+            setError("Someone just joined with that code. Double-check with your partner.");
+            break;
           default:
             setError('Something went wrong. Please try again.');
         }
