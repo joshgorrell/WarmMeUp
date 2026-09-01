@@ -28,7 +28,7 @@ import { useLayout } from '@/hooks/useLayout';
 import { savePendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
 import { logger } from '@/lib/logger';
-import { completePendingJoin } from '@/lib/coupleJoin';
+import { completePendingJoin, isDefinitiveJoinFailure } from '@/lib/coupleJoin';
 import { useAuth } from '@/context/AuthContext';
 
 // Only loaded on native — web falls back to text input
@@ -228,13 +228,16 @@ export default function RegisterScreen() {
       if (user?.email_confirmed_at) {
         if (pendingCode) {
           completePendingJoin(pendingCode).then(async (result) => {
-            await clearPendingCode();
             if (result.ok) {
+              await clearPendingCode();
               router.replace({
                 pathname: '/(auth)/paired-celebration',
-                params: { partnerName: result.inviterName || '' },
+                params: { partnerName: result.inviterName || '', partnerAvatar: result.inviterAvatar || '' },
               });
               return;
+            }
+            if (isDefinitiveJoinFailure(result.reason)) {
+              await clearPendingCode();
             }
             router.replace('/(auth)/onboarding');
           });

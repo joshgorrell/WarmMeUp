@@ -12,7 +12,7 @@ import { supabase, getSupabaseDiagnostics } from '@/lib/supabase';
 import { signInWithProvider, isOAuthSupported, assertNoEmailCollision, EmailCollisionError } from '@/lib/oauth';
 import { savePendingCode, loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
-import { completePendingJoin } from '@/lib/coupleJoin';
+import { completePendingJoin, isDefinitiveJoinFailure } from '@/lib/coupleJoin';
 import { logDebugEvent } from '@/lib/debugLog';
 import WarmupBrand from '@/components/WarmupBrand';
 import PrimaryButton from '@/components/PrimaryButton';
@@ -348,13 +348,16 @@ export default function LoginScreen() {
 
       if (codeToRedeem && data.user) {
         const result = await completePendingJoin(codeToRedeem);
-        await clearPendingCode();
         if (result.ok) {
+          await clearPendingCode();
           router.replace({
             pathname: '/(auth)/pair',
             params: { prefilledCode: codeToRedeem },
           });
           return;
+        }
+        if (isDefinitiveJoinFailure(result.reason)) {
+          await clearPendingCode();
         }
         // Join failed — fall through to normal transition; user can pair from account screen
       }
@@ -404,13 +407,16 @@ export default function LoginScreen() {
           const codeToRedeem = codeToPreserve || storedCode || '';
           if (codeToRedeem) {
             const result = await completePendingJoin(codeToRedeem);
-            await clearPendingCode();
             if (result.ok) {
+              await clearPendingCode();
               router.replace({
                 pathname: '/(auth)/pair',
                 params: { prefilledCode: codeToRedeem },
               });
               return;
+            }
+            if (isDefinitiveJoinFailure(result.reason)) {
+              await clearPendingCode();
             }
           }
           router.replace('/transition');

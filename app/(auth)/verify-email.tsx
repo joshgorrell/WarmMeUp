@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import WarmupBrand from '@/components/WarmupBrand';
 import { useLayout } from '@/hooks/useLayout';
-import { completePendingJoin } from '@/lib/coupleJoin';
+import { completePendingJoin, isDefinitiveJoinFailure } from '@/lib/coupleJoin';
 import { loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { useAuth } from '@/context/AuthContext';
 
@@ -58,11 +58,13 @@ export default function VerifyEmailScreen() {
           await clearPendingCode();
           router.replace({
             pathname: '/(auth)/paired-celebration',
-            params: { partnerName: result.inviterName || '' },
+            params: { partnerName: result.inviterName || '', partnerAvatar: result.inviterAvatar || '' },
           });
           return;
         }
-        await clearPendingCode();
+        if (isDefinitiveJoinFailure(result.reason)) {
+          await clearPendingCode();
+        }
         const msg =
           result.reason === 'self' ? "You can't use your own invite code." :
           result.reason === 'already_connected' ? "You're already connected to a partner." :

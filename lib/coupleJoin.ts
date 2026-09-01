@@ -2,10 +2,28 @@ import { supabase } from '@/lib/supabase';
 import { logDebugEvent } from '@/lib/debugLog';
 
 export type JoinResult =
-  | { ok: true; status: 'accepted'; coupleId: string; inviterName: string | null }
+  | { ok: true; status: 'accepted'; coupleId: string; inviterName: string | null; inviterAvatar: string | null }
   | { ok: false; reason: 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'no_subscription' | 'already_taken' | 'error' };
 
 type JoinReason = 'not_found' | 'self' | 'already_connected' | 'rate_limited' | 'trial_expired' | 'no_subscription' | 'already_taken' | 'error';
+
+const DEFINITIVE_FAILURE_REASONS: ReadonlySet<JoinReason> = new Set([
+  'not_found',
+  'self',
+  'already_connected',
+  'already_taken',
+  'no_subscription',
+]);
+
+/**
+ * Returns true when the join failure is permanent — the invite code is
+ * unusable and should be cleared from storage. Returns false for retryable
+ * failures (network, rate limit, server error) where the code should be
+ * preserved so the user can try again.
+ */
+export function isDefinitiveJoinFailure(reason: string): boolean {
+  return DEFINITIVE_FAILURE_REASONS.has(reason as JoinReason);
+}
 
 export type PendingJoinStatus = 'accepted' | 'b_accepted' | 'pending';
 
@@ -129,5 +147,6 @@ export async function completePendingJoin(
     status: 'accepted',
     coupleId: result.couple_id,
     inviterName: result.inviter_name ?? null,
+    inviterAvatar: result.inviter_avatar ?? null,
   };
 }

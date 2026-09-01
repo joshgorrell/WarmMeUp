@@ -18,11 +18,12 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
+import Avatar from '@/components/Avatar';
 
 export default function PairedCelebrationScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { partnerName } = useLocalSearchParams<{ partnerName?: string }>();
+  const { partnerName, partnerAvatar } = useLocalSearchParams<{ partnerName?: string; partnerAvatar?: string }>();
   const insets = useSafeAreaInsets();
   const { width, isTablet, contentMaxWidth } = useLayout();
 
@@ -105,7 +106,16 @@ export default function PairedCelebrationScreen() {
       </TouchableOpacity>
 
       <View style={[styles.container, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }, centerStyle]}>
-        {/* Heart graphic cluster */}
+        {/* Partner avatar or heart graphic cluster */}
+        {partnerAvatar ? (
+          <View style={styles.partnerAvatarWrap}>
+            <Avatar
+              name={partnerName || undefined}
+              uri={partnerAvatar || null}
+              size="lg"
+            />
+          </View>
+        ) : (
         <View style={styles.heartCluster}>
           <Animated.View style={[styles.heartOrbit, styles.heartLeft, heart1Style]}>
             <LinearGradient
@@ -143,6 +153,7 @@ export default function PairedCelebrationScreen() {
             </LinearGradient>
           </Animated.View>
         </View>
+        )}
 
         {/* Content */}
         <Animated.View style={[styles.content, contentAnimStyle]}>
@@ -226,6 +237,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
+  },
+  partnerAvatarWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 40,
   },
   heartCluster: {
     width: 260,
