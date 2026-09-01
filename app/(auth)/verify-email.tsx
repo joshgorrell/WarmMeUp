@@ -72,6 +72,7 @@ export default function VerifyEmailScreen() {
           result.reason === 'rate_limited' ? 'Too many attempts. You can pair from the app later.' :
           result.reason === 'already_taken' ? "Someone just joined with that code. You can pair from the app later." :
           result.reason === 'no_subscription' ? "Your partner's free trial has ended. They can subscribe and try again." :
+          result.reason === 'trial_expired' ? "Your partner's free trial has ended. They can subscribe and try again." :
           'Something went wrong connecting you. You can pair from the app later.';
         setError(msg);
         setTimeout(() => router.replace('/(auth)/onboarding'), 3000);

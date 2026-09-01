@@ -351,8 +351,8 @@ export default function LoginScreen() {
         if (result.ok) {
           await clearPendingCode();
           router.replace({
-            pathname: '/(auth)/pair',
-            params: { prefilledCode: codeToRedeem },
+            pathname: '/(auth)/paired-celebration',
+            params: { partnerName: result.inviterName || '', partnerAvatar: result.inviterAvatar || '' },
           });
           return;
         }
@@ -410,8 +410,8 @@ export default function LoginScreen() {
             if (result.ok) {
               await clearPendingCode();
               router.replace({
-                pathname: '/(auth)/pair',
-                params: { prefilledCode: codeToRedeem },
+                pathname: '/(auth)/paired-celebration',
+                params: { partnerName: result.inviterName || '', partnerAvatar: result.inviterAvatar || '' },
               });
               return;
             }

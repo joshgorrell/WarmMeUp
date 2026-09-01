@@ -184,7 +184,7 @@ export default function TransitionScreen() {
           logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → paired-celebration`, { elapsedMs: elapsed() });
           router.replace({
             pathname: '/(auth)/paired-celebration',
-            params: { partnerName: partnerProfile?.display_name || '' },
+            params: { partnerName: partnerProfile?.display_name || '', partnerAvatar: partnerProfile?.avatar_url || '' },
           });
           return;
         }

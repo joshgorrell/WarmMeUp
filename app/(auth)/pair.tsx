@@ -159,7 +159,7 @@ export default function PairScreen() {
         if (!settings?.celebration_seen) {
           router.replace({
             pathname: '/(auth)/paired-celebration',
-            params: { partnerName: pending.inviterName || '' },
+            params: { partnerName: pending.inviterName || '', partnerAvatar: pending.inviterAvatar || '' },
           });
         } else {
           router.replace('/(app)/(tabs)');
@@ -589,10 +589,11 @@ export default function PairScreen() {
       }
 
       const partnerName = previewName || inviterName || '';
+      const partnerAvatar = previewAvatar || inviterAvatar || '';
       if (!settings?.celebration_seen) {
         router.replace({
           pathname: '/(auth)/paired-celebration',
-          params: { partnerName },
+          params: { partnerName, partnerAvatar },
         });
       } else {
         router.replace('/(app)/(tabs)');
