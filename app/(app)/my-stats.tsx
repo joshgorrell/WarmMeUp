@@ -5,7 +5,7 @@ import {
 import AppText from '@/components/AppText';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { ChevronLeft, ChevronRight, Zap, MessageCircle, Star, Vault, Heart, Flame, Clock, EyeOff, Bug } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Zap, MessageCircle, Star, Vault, Heart, Flame, Clock, EyeOff, Bug, Sparkles, X, Settings } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -168,8 +168,11 @@ interface DebugInfo {
 
 export default function MyStatsScreen() {
   const router = useRouter();
-  const { user, couple, profile, partnerProfile, scoreResetAt } = useAuth();
+  const { user, couple, profile, partnerProfile, scoreResetAt, settings, refreshSettings, isAdmin, debugModeEnabled, globalDebugAccessEnabled } = useAuth();
   const { colors } = useTheme();
+
+  const canDebug = isAdmin || debugModeEnabled || globalDebugAccessEnabled;
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -340,6 +343,13 @@ export default function MyStatsScreen() {
     if (allTime) { loadAllTime(); } else { load(); }
   }, [scoreResetAt]);
 
+  const dismissBanner = useCallback(async () => {
+    setBannerDismissed(true);
+    if (!user) return;
+    await supabase.from('user_settings').update({ points_banner_seen: true }).eq('user_id', user.id);
+    refreshSettings();
+  }, [user, refreshSettings]);
+
   const prevMonth = () => {
     if (month === 1) { setYear(y => y - 1); setMonth(12); }
     else setMonth(m => m - 1);
@@ -358,6 +368,7 @@ export default function MyStatsScreen() {
   const partnerPts = partnerStats?.points ?? 0;
   const totalPts = myPts + partnerPts;
   const pointsEnabled = couple?.points_enabled ?? true;
+  const showPointsBanner = pointsEnabled && !settings?.points_banner_seen && !bannerDismissed;
 
   // Category breakdown values:
   // - Current month: show points earned per category only when Points are enabled
@@ -487,6 +498,29 @@ export default function MyStatsScreen() {
             </View>
           )}
 
+          {showPointsBanner && (
+            <View style={[styles.pointsBanner, { backgroundColor: 'rgba(255,179,71,0.10)', borderColor: 'rgba(255,179,71,0.30)' }]}>
+              <View style={styles.pointsBannerTop}>
+                <Sparkles color="#FFB347" size={18} strokeWidth={2} />
+                <AppText style={[styles.pointsBannerTitle, { color: colors.text }]}>Welcome to your points!</AppText>
+                <TouchableOpacity onPress={() => dismissBanner()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <X color={colors.textMuted} size={18} strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
+              <AppText style={[styles.pointsBannerBody, { color: colors.textSecondary }]}>
+                Every dare, dice roll, wish, chat, and vault upload earns points for you and your partner. Compete friendly each month and build your streak together.
+              </AppText>
+              <TouchableOpacity
+                style={[styles.pointsBannerLink, { borderColor: 'rgba(255,179,71,0.35)' }]}
+                onPress={() => { dismissBanner(); router.push('/(app)/account?section=points'); }}
+                activeOpacity={0.7}
+              >
+                <Settings color="#FFB347" size={14} strokeWidth={2} />
+                <AppText style={styles.pointsBannerLinkText}>Turn off points in Settings</AppText>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Points + Weekly Streak card */}
           <LinearGradient colors={['rgba(255,179,71,0.15)', 'rgba(255,46,138,0.10)']} style={[styles.vsCard, { borderColor: colors.borderSubtle }]}>
             {pointsEnabled && (
@@ -588,8 +622,8 @@ export default function MyStatsScreen() {
             </View>
           )}
 
-          {/* Debug panel */}
-          {debugInfo && (
+          {/* Debug panel — admin/debug-mode only */}
+          {canDebug && debugInfo && (
             <View style={styles.debugWrap}>
               <TouchableOpacity
                 onPress={() => setShowDebug(v => !v)}
@@ -743,6 +777,12 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center', lineHeight: 20 },
   hiddenBanner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, padding: Spacing.md, marginBottom: Spacing.md },
   hiddenBannerText: { flex: 1, fontSize: FontSize.xs, fontFamily: 'Inter-Regular', lineHeight: 17 },
+  pointsBanner: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.card, marginBottom: Spacing.lg, gap: Spacing.sm },
+  pointsBannerTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  pointsBannerTitle: { flex: 1, fontSize: FontSize.body, fontFamily: 'Inter-Bold' },
+  pointsBannerBody: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 20 },
+  pointsBannerLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 12, borderRadius: Radius.md, borderWidth: 1, marginTop: 4 },
+  pointsBannerLinkText: { fontSize: FontSize.xs, fontFamily: 'Inter-SemiBold', color: '#FFB347' },
   // Debug panel
   debugWrap: { marginTop: Spacing.lg },
   debugToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: Radius.sm, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, alignSelf: 'flex-start' },

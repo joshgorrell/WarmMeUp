@@ -26,7 +26,8 @@ export function SettingsTab({
   onShowCommunityGuidelines, onShowTerms, onShowPrivacyPolicy, subscriptionInfo,
   onRestorePurchase, onDeleteAccount, onContactSupport, feedbackEnabled, onSendFeedback,
   onVaultSectionLayout,
-}: { onVaultSectionLayout: (y: number) => void; [key: string]: any }) {
+  onPointsSectionLayout,
+}: { onVaultSectionLayout: (y: number) => void; onPointsSectionLayout: (y: number) => void; [key: string]: any }) {
   const { colors } = useTheme();
   const router = useRouter();
   const didProbingRef = useRef(false);
@@ -133,9 +134,11 @@ export function SettingsTab({
         <SettingsRow label="App Icon Badge" sub="Show a red dot on the app icon when you have unread activity" toggle value={s?.app_icon_badge_enabled ?? true} onChange={async (v: boolean) => { await update({ app_icon_badge_enabled: v }); if (!v) { const { setAppBadge } = await import('@/lib/appBadge'); setAppBadge(0); } }} last />
       </Section>
 
-      <Section title="POINTS" note={couple?.id ? "Points are optional for couples who enjoy the game. Turning them off hides scores and Cash In features without affecting your Weekly Streak." : "Connect with a partner to enable Points."}>
-        <SettingsRow label="Points" sub="Show scores, leaderboard, and Cash In features" toggle value={optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)} onChange={onTogglePoints} disabled={!couple?.id} last />
-      </Section>
+      <View onLayout={(e) => onPointsSectionLayout(e.nativeEvent.layout.y)}>
+        <Section title="POINTS" note={couple?.id ? "Points are optional for couples who enjoy the game. Turning them off hides scores and Cash In features without affecting your Weekly Streak." : "Connect with a partner to enable Points."}>
+          <SettingsRow label="Points" sub="Show scores, leaderboard, and Cash In features" toggle value={optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)} onChange={onTogglePoints} disabled={!couple?.id} last />
+        </Section>
+      </View>
 
       <Section title="SUPPORT">
         {feedbackEnabled && <SettingsRow label="Send Feedback" sub="Share ideas, report issues, or send us a note" onPress={onSendFeedback} />}

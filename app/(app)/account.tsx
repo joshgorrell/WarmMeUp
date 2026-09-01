@@ -46,11 +46,12 @@ export default function AccountScreen() {
   const { contentPadding } = useLayout();
 
   const params = useLocalSearchParams<{ tab?: string; section?: string }>();
-  const [activeTab, setActiveTab] = useState<AccountTab>(params.tab === 'settings' ? 'settings' : 'profile');
+  const [activeTab, setActiveTab] = useState<AccountTab>(params.tab === 'settings' || params.section === 'vault' || params.section === 'points' ? 'settings' : 'profile');
 
   // Deep-link scroll target (e.g. from Vault "Manage in My Profile")
   const scrollViewRef = useRef<ScrollView>(null);
   const [vaultSectionY, setVaultSectionY] = useState<number | null>(null);
+  const [pointsSectionY, setPointsSectionY] = useState<number | null>(null);
 
   useEffect(() => {
     if (params.section !== 'vault' || activeTab !== 'settings' || vaultSectionY === null) return;
@@ -59,6 +60,14 @@ export default function AccountScreen() {
     }, 50);
     return () => clearTimeout(id);
   }, [params.section, activeTab, vaultSectionY]);
+
+  useEffect(() => {
+    if (params.section !== 'points' || activeTab !== 'settings' || pointsSectionY === null) return;
+    const id = setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: Math.max(0, pointsSectionY - 20), animated: false });
+    }, 50);
+    return () => clearTimeout(id);
+  }, [params.section, activeTab, pointsSectionY]);
 
   useEffect(() => {
     if (params.section !== 'anniversary' || !couple?.user_b_id) return;
@@ -997,6 +1006,7 @@ export default function AccountScreen() {
               onDeleteAccount={() => { setDeleteAccountError(null); setDeleteAccountStep(1); setDeleteAccountOpen(true); }}
               onContactSupport={handleContactSupport}
               onVaultSectionLayout={(y) => setVaultSectionY(y)}
+              onPointsSectionLayout={(y) => setPointsSectionY(y)}
             />
           )}
 

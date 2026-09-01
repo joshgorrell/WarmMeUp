@@ -61,6 +61,7 @@ export interface UserSettings {
   chat_auto_save_to_vault: boolean;
   chat_font_scale: number;
   onboarding_seen: boolean;
+  points_banner_seen: boolean;
   weather_lat: number | null;
   weather_lon: number | null;
   updated_at: string;
