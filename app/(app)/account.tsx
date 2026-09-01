@@ -60,6 +60,20 @@ export default function AccountScreen() {
     return () => clearTimeout(id);
   }, [params.section, activeTab, vaultSectionY]);
 
+  useEffect(() => {
+    if (params.section !== 'anniversary' || !couple?.user_b_id) return;
+    const id = setTimeout(() => {
+      const existing = couple?.anniversary_date ? new Date(couple.anniversary_date) : null;
+      setAnniversaryDate(existing);
+      setAnnivMonth(existing ? String(existing.getMonth() + 1).padStart(2, '0') : '');
+      setAnnivDay(existing ? String(existing.getDate()).padStart(2, '0') : '');
+      setAnnivYear(existing ? String(existing.getFullYear()) : '');
+      setAnniversaryError(null);
+      setShowAnniversarySheet(true);
+    }, 100);
+    return () => clearTimeout(id);
+  }, [params.section, couple?.user_b_id, couple?.anniversary_date]);
+
   // Profile tab state
   const [copied, setCopied] = useState(false);
   const [codeRefreshing, setCodeRefreshing] = useState(false);

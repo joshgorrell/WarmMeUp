@@ -195,6 +195,15 @@ export default function PairedCelebrationScreen() {
               <AppText style={styles.ctaLabel}>Let's go</AppText>
             </LinearGradient>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.anniversaryBtn}
+            onPress={() => router.replace('/(app)/account?section=anniversary')}
+            activeOpacity={0.75}
+          >
+            <Heart color="#FF2E8A" size={16} strokeWidth={2} />
+            <AppText style={styles.anniversaryBtnText}>Set your anniversary</AppText>
+          </TouchableOpacity>
         </Animated.View>
       </View>
     </View>
@@ -353,5 +362,18 @@ const styles = StyleSheet.create({
     fontSize: FontSize.lg,
     fontFamily: 'Inter-Bold',
     letterSpacing: 0.3,
+  },
+  anniversaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  anniversaryBtnText: {
+    color: '#FF2E8A',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-SemiBold',
   },
 });

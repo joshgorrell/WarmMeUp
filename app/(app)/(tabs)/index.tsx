@@ -647,7 +647,7 @@ export default function HomeScreen() {
   // Anniversary labels
   const anniversaryDate = couple?.anniversary_date ? new Date(couple.anniversary_date) : null;
   const togetherDisplay = (() => {
-    if (!anniversaryDate) return { value: '—', label: 'Together' };
+    if (!anniversaryDate) return { value: 'Set date', label: 'Together' };
     const now = new Date();
     const diffMs = now.getTime() - anniversaryDate.getTime();
     if (diffMs < 0) return { value: '—', label: 'Together' };
@@ -679,12 +679,16 @@ export default function HomeScreen() {
   })();
 
   const cycleTogetherMode = useCallback(() => {
+    if (!anniversaryDate) {
+      router.push('/(app)/account?section=anniversary');
+      return;
+    }
     setTogetherMode(prev =>
       prev === 'total' ? 'months' :
       prev === 'months' ? 'days' :
       prev === 'days' ? 'hours' : 'total'
     );
-  }, []);
+  }, [anniversaryDate, router]);
 
   // Action zone cards
   // Ambient zone — streak, time together, send love
