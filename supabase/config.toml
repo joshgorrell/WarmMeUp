@@ -1,2 +1,5 @@
 [functions.get-effective-subscription]
 verify_jwt = true
+
+[functions.analytics-overview]
+verify_jwt = true

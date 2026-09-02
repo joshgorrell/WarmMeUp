@@ -55,7 +55,6 @@ Deno.serve(async (req: Request) => {
       { count: activeToday },
       { count: onTrial },
       { count: paid },
-      { count: freeAccess },
     ] = await Promise.all([
       adminClient.from("couples").select("id", { count: "exact", head: true })
         .not("user_b_id", "is", null).eq("active", true),
@@ -67,9 +66,6 @@ Deno.serve(async (req: Request) => {
         .or("expires_at.is.null,expires_at.gte." + new Date().toISOString()),
       adminClient.from("subscriptions").select("user_id", { count: "exact", head: true })
         .eq("status", "active").in("plan", ["monthly", "yearly"]),
-      adminClient.from("admin_grants").select("id", { count: "exact", head: true })
-        .eq("active", true)
-        .or("expires_at.is.null,expires_at.gte." + new Date().toISOString()),
     ]);
 
     return new Response(
@@ -79,7 +75,6 @@ Deno.serve(async (req: Request) => {
         activeToday: activeToday ?? 0,
         onTrial: onTrial ?? 0,
         paid: paid ?? 0,
-        freeAccess: freeAccess ?? 0,
         _ts: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

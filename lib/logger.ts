@@ -1,9 +1,9 @@
 /**
- * Gated logger — all console output is suppressed in production.
- * Set EXPO_PUBLIC_DEBUG_ALWAYS_ON=1 to enable verbose logging.
+ * Gated logger — all console output is suppressed in production builds.
+ * Verbose logging is enabled automatically in development (__DEV__).
  */
 
-const DEBUG = process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
+const DEBUG = typeof __DEV__ !== 'undefined' ? __DEV__ : false;
 
 export const logger = {
   log: (...args: unknown[]): void => {

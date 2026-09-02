@@ -159,7 +159,6 @@ export default function AdminDashboard() {
       { name: 'Read all profiles', status: 'pending' },
       { name: 'Read all couples', status: 'pending' },
       { name: 'Read all subscriptions', status: 'pending' },
-      { name: 'Read all admin_grants', status: 'pending' },
       { name: 'Read all wishes', status: 'pending' },
       { name: 'Email search RPC', status: 'pending' },
     ];
@@ -220,33 +219,24 @@ export default function AdminDashboard() {
         if (mountedRef.current) setDiag([...checks]);
       }
 
-      // 5. Read all admin_grants
-      {
-        const { count, error } = await supabase.from('admin_grants').select('id', { count: 'exact', head: true });
-        checks[5] = error
-          ? { name: 'Read all admin_grants', status: 'fail', detail: error.message }
-          : { name: 'Read all admin_grants', status: 'pass', detail: `${count ?? 0} rows` };
-        if (mountedRef.current) setDiag([...checks]);
-      }
-
-      // 6. Read all wishes
+      // 5. Read all wishes
       {
         const { count, error } = await supabase.from('wishes').select('id', { count: 'exact', head: true });
-        checks[6] = error
+        checks[5] = error
           ? { name: 'Read all wishes', status: 'fail', detail: error.message }
           : { name: 'Read all wishes', status: 'pass', detail: `${count ?? 0} rows` };
         if (mountedRef.current) setDiag([...checks]);
       }
 
-      // 7. Email search RPC (search for own email)
+      // 6. Email search RPC (search for own email)
       {
         const ownEmail = authUser.email ?? '';
         if (!ownEmail) {
-          checks[7] = { name: 'Email search RPC', status: 'fail', detail: 'No email on auth session' };
+          checks[6] = { name: 'Email search RPC', status: 'fail', detail: 'No email on auth session' };
         } else {
           const { data, error } = await supabase.rpc('admin_search_user_by_email', { p_email: ownEmail });
           const found = Array.isArray(data) ? data[0] : data;
-          checks[7] = error
+          checks[6] = error
             ? { name: 'Email search RPC', status: 'fail', detail: error.message }
             : found?.user_id === authUser.id
               ? { name: 'Email search RPC', status: 'pass', detail: `found ${found.display_name} (${found.user_id.slice(0, 8)}…)` }

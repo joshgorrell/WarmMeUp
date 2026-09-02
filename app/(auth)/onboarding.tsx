@@ -36,6 +36,13 @@ export default function OnboardingScreen() {
         .from('user_settings')
         .update({ onboarding_seen: true, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
+
+      // Mark onboarding as completed on the profile so the router can
+      // distinguish "never finished onboarding" from "returning user."
+      await supabase
+        .from('profiles')
+        .update({ onboarding_completed_at: new Date().toISOString() })
+        .eq('id', user.id);
     }
 
     // If subscription info is still loading, give it a brief moment before launching

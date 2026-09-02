@@ -120,9 +120,7 @@ async function signInWithAppleNative() {
   const { data, error } = await supabase.auth.signInWithIdToken({
     provider: 'apple',
     token: credential.identityToken,
-    options: {
-      nonce: rawNonce,
-    } as any,
+    nonce: rawNonce,
   });
 
   if (error) throw error;

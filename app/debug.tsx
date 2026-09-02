@@ -1870,7 +1870,6 @@ export default function DebugScreen() {
         <Row label="jwt.ref" value={jwtDecodeDebug.ref} />
         <Row label="jwt.iss" value={jwtDecodeDebug.iss} />
         <Row label="jwt.exp" value={jwtDecodeDebug.exp} />
-        <Row label="DEBUG_ALWAYS_ON" value={process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON ?? null} />
 
         {/* ── 4c. Env vs Client Source + Auth Client Internals ── */}
         {/* sourcesMatch=false → client initialised with wrong values.                   */}

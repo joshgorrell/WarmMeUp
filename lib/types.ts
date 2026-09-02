@@ -9,6 +9,7 @@ export interface Profile {
   is_super_admin: boolean;
   tos_accepted_at: string | null;
   oauth_provider: string | null;
+  onboarding_completed_at: string | null;
   created_at: string;
 }
 

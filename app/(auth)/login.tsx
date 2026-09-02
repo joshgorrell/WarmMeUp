@@ -102,14 +102,14 @@ export default function LoginScreen() {
 
         const { data: existing } = await supabase
           .from('profiles')
-          .select('id')
+          .select('onboarding_completed_at')
           .eq('id', userId)
           .maybeSingle();
-        if (!existing) {
-          // New OAuth user — route through register so they get the name/avatar steps.
+        if (!existing?.onboarding_completed_at) {
+          // New OAuth user or hasn't completed onboarding — route through onboarding.
           const redirectParams: Record<string, string> = { oauthComplete: '1' };
           if (codeToPreserve) redirectParams.pendingCode = codeToPreserve;
-          router.replace({ pathname: '/(auth)/register', params: redirectParams });
+          router.replace({ pathname: '/(auth)/onboarding', params: redirectParams });
         } else {
           // Existing user signing in — check for stored or param code to redeem.
           const storedCode = await loadPendingCode();
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   socialRow: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: Spacing.sm,
   },
   socialBtn: {

@@ -162,9 +162,13 @@ We reserve the right, but not the obligation, to investigate, remove, suspend, o
   },
   {
     title: '10. Subscription Services',
-    body: `Warm Me Up may offer free features, premium subscriptions, monthly plans, annual plans, and lifetime access options.
+    body: `Warm Me Up offers free features and premium subscriptions, including monthly and annual plans. A seven-day free trial may be available for eligible users.
 
-Subscriptions automatically renew unless canceled through the applicable app store or platform settings before the renewal date.
+One subscription covers both you and your connected partner — your partner joins free.
+
+iOS purchases are processed through Apple's In-App Purchase system using the App Store.
+
+Subscriptions automatically renew unless canceled through your App Store account settings before the renewal date.
 
 Pricing and features may change periodically.
 
