@@ -15,6 +15,13 @@ export class EmailCollisionError extends Error {
   }
 }
 
+/**
+ * Module-level flag set before assertNoEmailCollision signs out the duplicate
+ * session. Callers can check this to distinguish an intentional collision
+ * sign-out from a genuine session expiry.
+ */
+export let collisionSignOutInProgress = false;
+
 export async function signInWithProvider(provider: 'google' | 'apple') {
   if (provider === 'apple' && Platform.OS === 'ios') {
     return signInWithAppleNative();
@@ -89,6 +96,7 @@ async function signInWithAppleNative() {
 
   let credential: AppleAuthentication.AppleAuthenticationCredential;
   try {
+    logger.log('[oauth/apple] presenting native sign-in sheet');
     credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
         AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -98,10 +106,14 @@ async function signInWithAppleNative() {
     });
   } catch (e: any) {
     if (e?.code === 'ERR_REQUEST_CANCELED' || e?.name === 'ERR_REQUEST_CANCELED') {
+      logger.log('[oauth/apple] user cancelled the sign-in sheet');
       return null;
     }
+    logger.warn('[oauth/apple] signInAsync threw:', e?.code, e?.message);
     throw e;
   }
+
+  logger.log('[oauth/apple] credential received — identityToken present:', !!credential.identityToken, 'email:', credential.email ?? 'none', 'givenName:', credential.fullName?.givenName ?? 'none');
 
   if (!credential.identityToken) {
     throw new Error('Apple did not return an identity token.');
@@ -117,13 +129,19 @@ async function signInWithAppleNative() {
     userData.full_name = [givenName, familyName].filter(Boolean).join(' ');
   }
 
+  logger.log('[oauth/apple] calling signInWithIdToken');
   const { data, error } = await supabase.auth.signInWithIdToken({
     provider: 'apple',
     token: credential.identityToken,
     nonce: rawNonce,
   });
 
-  if (error) throw error;
+  if (error) {
+    logger.warn('[oauth/apple] signInWithIdToken error:', error.message);
+    throw error;
+  }
+
+  logger.log('[oauth/apple] signInWithIdToken success — userId:', data.user?.id ?? 'none');
 
   // Persist Apple-provided name to user metadata so the register flow can pick it up.
   if (data.user && Object.keys(userData).length > 0) {
@@ -171,7 +189,9 @@ export async function assertNoEmailCollision(): Promise<void> {
     const data = await res.json();
     if (data?.collision) {
       logger.log('[oauth] email collision detected — signing out duplicate session');
+      collisionSignOutInProgress = true;
       await supabase.auth.signOut();
+      collisionSignOutInProgress = false;
       throw new EmailCollisionError();
     }
   } catch (err) {

@@ -385,7 +385,12 @@ export default function RegisterScreen() {
         }
       }
     } catch (e: unknown) {
-      setApiError(friendlyAuthError(e));
+      if (e instanceof EmailCollisionError) {
+        logger.log('[register/oauth] email collision — staying on register screen with error');
+        setApiError(e.message);
+      } else {
+        setApiError(friendlyAuthError(e));
+      }
     } finally {
       setOauthLoading(null);
     }

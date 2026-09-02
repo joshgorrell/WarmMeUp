@@ -73,7 +73,14 @@ function SessionGuard() {
     // OAuth providers do not reliably return DOB, so require a one-time persisted age verification.
     const provider = session.user.app_metadata?.provider;
     const needsOAuthAgeGate = provider && provider !== 'email';
-    if (!needsOAuthAgeGate || current === 'verify-age' || ageCheckFor.current === session.user.id) return;
+    // Skip the age-gate check when the user is already on an auth screen — those
+    // screens handle their own age verification and profile completion. Without
+    // this guard, SessionGuard races with the register screen's OAuth flow:
+    // Apple sign-in creates a session before the register screen has saved the
+    // DOB, causing SessionGuard to push verify-age and derail the registration.
+    const authRoutes = ['welcome', 'login', 'register', 'verify-age', 'verify-email', 'onboarding', 'onboarding-preview', 'pair', 'paired-celebration', 'subscription', 'complete-profile', 'forgot-password', 'callback'];
+    const onAuthScreen = first === '(auth)' || authRoutes.includes(current);
+    if (!needsOAuthAgeGate || current === 'verify-age' || onAuthScreen || ageCheckFor.current === session.user.id) return;
 
     ageCheckFor.current = session.user.id;
     (async () => {
