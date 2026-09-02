@@ -27,7 +27,7 @@ import { MONTHLY_PRODUCT_ID, ANNUAL_PRODUCT_ID } from '@/lib/productIds';
 import { logger } from '@/lib/logger';
 
 type Plan = 'monthly' | 'yearly';
-type Reason = 'expired_trial' | 'expired_entitlement' | 'expiring_entitlement' | 'post_unpairing' | undefined;
+type Reason = 'expired_trial' | 'post_unpairing' | undefined;
 
 const PLANS: {
   id: Plan;
@@ -303,17 +303,6 @@ export default function SubscriptionScreen() {
             return `Your 7-day free trial ended on ${dateStr}. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
           }
           return 'Your 7-day free trial has ended. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.';
-        })() }
-      : reason === 'expiring_entitlement'
-      ? { Icon: AlertCircle, text: 'Your subscription is ending soon. Subscribe now to keep your access uninterrupted.' }
-      : reason === 'expired_entitlement'
-      ? { Icon: AlertCircle, text: (() => {
-          const grantEnd = null;
-          if (grantEnd) {
-            const dateStr = '';
-            return `Your complimentary access ended on ${dateStr}. Subscribe to restore full access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
-          }
-          return 'Your complimentary access has ended. Subscribe to restore full access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.';
         })() }
       : null;
 

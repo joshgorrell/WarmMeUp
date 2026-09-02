@@ -63,9 +63,6 @@ async function cacheCoords(userId: string, lat: number, lon: number) {
     .eq('user_id', userId);
 }
 
-const DEBUG_TAP_TARGET = 5;
-const DEBUG_TAP_WINDOW_MS = 10000;
-
 // Shimmer skeleton block
 function SkeletonBlock({ shimmer, style }: { shimmer: Animated.Value; style?: object }) {
   const bg = shimmer.interpolate({

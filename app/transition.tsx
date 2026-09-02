@@ -49,9 +49,6 @@ function resolveNotificationRoute(data: NotificationData): string | null {
 // already-known good state can resume immediately while the refresh finishes.
 const HARD_DEADLINE_MS = 10000;
 
-const DEBUG_TAP_TARGET = 5;
-const DEBUG_TAP_WINDOW_MS = 10000;
-
 export default function TransitionScreen() {
   const router = useRouter();
   const {
