@@ -26,6 +26,8 @@ interface AccessResult {
   trialGraceEndsAt: string | null;
 }
 
+const REVIEW_ACCESS_SOURCE = "review_access";
+
 const TRIAL_GRACE_MS = 24 * 60 * 60 * 1000;
 
 function isSubActive(row: SubscriptionRow | null): boolean {
@@ -86,7 +88,18 @@ async function userHasPremiumAccess(
   adminClient: ReturnType<typeof createClient>,
   userId: string
 ): Promise<AccessResult> {
-  // 1. admin / super_admin profile flags
+  // 1. Explicit permanent review access
+  const { data: reviewAccess } = await adminClient
+    .from("permanent_review_access")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (reviewAccess) {
+    return { hasPremium: true, isOnTrial: false, source: REVIEW_ACCESS_SOURCE, plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null };
+  }
+
+  // 2. admin / super_admin profile flags
   const { data: profile } = await adminClient
     .from("profiles")
     .select("is_admin, is_super_admin")
@@ -257,7 +270,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 4. RevenueCat API fallback — if the DB has no active subscription but
+    // 5. RevenueCat API fallback — if the DB has no active subscription but
     //    RevenueCat shows an active entitlement (e.g. purchase completed but
     //    confirm-subscription never ran), sync the DB and return premium.
     const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
