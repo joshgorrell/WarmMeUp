@@ -341,7 +341,7 @@ export default function DeleteContentScreen() {
   };
 
   return (
-    <AppShell scrollable={false} noTopPadding>
+    <AppShell scrollable={false} noTopPadding constrainContent>
       <ScreenHeader title="Delete & Reset" onBack={() => router.back()} />
 
       <ScrollView

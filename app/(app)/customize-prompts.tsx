@@ -242,7 +242,7 @@ export default function CustomizePromptsScreen() {
   };
 
   return (
-    <AppShell scrollable={false} noTopPadding>
+    <AppShell scrollable={false} noTopPadding constrainContent>
       <ScreenHeader title="Customize Prompts" onBack={() => router.back()} />
 
       {/* Tab Bar */}

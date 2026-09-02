@@ -7,6 +7,7 @@ import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { supabase } from '@/lib/supabase';
 import { Radius, Spacing, FontSize } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 let DateTimePicker: React.ComponentType<any> | null = null;
 if (Platform.OS !== 'web') DateTimePicker = require('@react-native-community/datetimepicker').default;
@@ -36,6 +37,7 @@ function isoDate(date: Date) {
 export default function VerifyAgeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { contentMaxWidth, contentPadding } = useLayout();
   const [dob, setDob] = useState<Date | null>(null);
   const [dobText, setDobText] = useState('');
   const [showPicker, setShowPicker] = useState(false);
@@ -79,7 +81,7 @@ export default function VerifyAgeScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl }]}>
       <LinearGradient colors={['#060406', '#0A060A', '#0E080E']} style={StyleSheet.absoluteFill} />
-      <View style={styles.card}>
+      <View style={[styles.card, { maxWidth: contentMaxWidth, paddingHorizontal: contentPadding, alignSelf: 'center', width: '100%' }]}>
         <AppText style={styles.title}>Confirm your age</AppText>
         <AppText style={styles.body}>Warm Me Up is for adults 18 and older. Enter your date of birth to continue.</AppText>
 

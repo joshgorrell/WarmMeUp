@@ -15,6 +15,7 @@ import AvatarUploader from '@/components/AvatarUploader';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Radius, Spacing, FontSize } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 const SUB_WAIT_MS = 600;
 
@@ -22,6 +23,7 @@ export default function CompleteProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, profile, settings, subscriptionInfo, refreshSubscription, refreshProfile } = useAuth();
+  const { contentMaxWidth, contentPadding } = useLayout();
 
   const [firstName, setFirstName] = useState(profile?.first_name ?? '');
   const [lastName, setLastName] = useState(profile?.last_name ?? '');
@@ -102,7 +104,7 @@ export default function CompleteProfileScreen() {
       <LinearGradient colors={['#060406', '#08060A', '#0C080C']} style={StyleSheet.absoluteFill} />
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24, maxWidth: contentMaxWidth, paddingHorizontal: contentPadding, alignSelf: 'center', width: '100%' }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

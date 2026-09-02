@@ -439,7 +439,7 @@ export default function MyStatsScreen() {
   const isFirstLoad = loading && myStats === null && partnerStats === null;
 
   return (
-    <AppShell noTopPadding>
+    <AppShell noTopPadding constrainContent>
       <ScreenHeader title="My Stats" onBack={() => router.back()} />
 
       {/* Month selector */}

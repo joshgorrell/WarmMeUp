@@ -460,6 +460,8 @@ export default function OnboardingCarousel({ mode, onComplete }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isShort = height < 760;
+  const isTablet = width >= 768;
+  const visualScale = isTablet ? 1.25 : 1;
   const flatRef = useRef<FlatList<Slide>>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const fade = useRef(new Animated.Value(1)).current;
@@ -534,7 +536,9 @@ export default function OnboardingCarousel({ mode, onComplete }: Props) {
                 ]}
               >
                 <View style={[styles.visualArea, isShort && styles.visualAreaShort]}>
-                  <Visual />
+                  <View style={isTablet ? { transform: [{ scale: visualScale }] } : undefined}>
+                    <Visual />
+                  </View>
                 </View>
                 <View style={styles.copy}>
                   <AppText style={styles.eyebrow}>{item.eyebrow}</AppText>
@@ -635,10 +639,10 @@ const styles = StyleSheet.create({
   // Visual shell
   visualShell: {
     width: '100%',
-    maxWidth: 500,
+    maxWidth: 620,
     alignSelf: 'center',
     height: '92%',
-    maxHeight: 390,
+    maxHeight: 488,
     minHeight: 275,
     borderRadius: 30,
     borderWidth: 1,

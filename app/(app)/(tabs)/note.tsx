@@ -1410,7 +1410,7 @@ export default function ChatTab() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <AppShell scrollable={false} noTopPadding>
+        <AppShell scrollable={false} noTopPadding constrainContent>
           <ChatHeader
             partnerName={partnerFirstName}
             partnerAvatarUri={partnerProfile?.avatar_url ?? null}

@@ -380,7 +380,7 @@ export default function DareTab() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <AppShell scrollable={false}>
+      <AppShell scrollable={false} constrainContent>
         <TabHeader title="Dare" />
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {incomingDare && (

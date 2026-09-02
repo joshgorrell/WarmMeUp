@@ -466,7 +466,7 @@ export default function ActivityScreen() {
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   return (
-    <AppShell scrollable={false}>
+    <AppShell scrollable={false} constrainContent>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity

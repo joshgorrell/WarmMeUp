@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
+import { useLayout } from '@/hooks/useLayout';
 
 interface BottomSheetProps {
   visible: boolean;
@@ -28,12 +29,13 @@ export default function BottomSheet({
 }: BottomSheetProps) {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { contentMaxWidth } = useLayout();
 
   const bg = isDark ? '#111018' : colors.bg3;
 
   const inner = (
     <View
-      style={[styles.sheet, { backgroundColor: bg }]}
+      style={[styles.sheet, { backgroundColor: bg, maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }]}
     >
       <View style={styles.handle} />
 
@@ -83,6 +85,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.82)',
     justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   sheet: {
     borderTopLeftRadius: Radius.xl,
