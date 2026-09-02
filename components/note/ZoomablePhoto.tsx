@@ -18,6 +18,7 @@ const DOUBLE_TAP_SCALE = 2.5;
 const DISMISS_DISTANCE = 110;
 const DISMISS_VELOCITY = 550;
 const EDGE_RESISTANCE = 0.35;
+const ZOOM_THRESHOLD = 1.01;
 
 type ZoomablePhotoProps = {
   uri: string;
@@ -112,8 +113,8 @@ export function ZoomablePhoto({
     .onUpdate((e) => {
       const nextScale = clamp(pinchStartScale.value * e.scale, MIN_SCALE, MAX_SCALE);
       const scaleRatio = nextScale / pinchStartScale.value;
-      const focalX = e.focalX - width / 2;
-      const focalY = e.focalY - height / 2;
+      const focalX = e.focalX - imageWidth.value / 2;
+      const focalY = e.focalY - imageHeight.value / 2;
       scale.value = nextScale;
       translateX.value = focalX - (focalX - pinchStartX.value) * scaleRatio;
       translateY.value = focalY - (focalY - pinchStartY.value) * scaleRatio;
@@ -130,16 +131,17 @@ export function ZoomablePhoto({
         return;
       }
       savedScale.value = clamp(scale.value, MIN_SCALE, MAX_SCALE);
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
       settleWithinBounds(true);
       runOnJS(updateZoomState)(true);
     });
 
   const panGesture = Gesture.Pan()
-    .enabled(isZoomed)
     .minPointers(1)
-    .maxPointers(1)
+    .maxPointers(2)
     .onUpdate((e) => {
-      if (scale.value <= 1.01) return;
+      if (scale.value <= ZOOM_THRESHOLD) return;
       const maxX = Math.max(0, (imageWidth.value * scale.value - width) / 2);
       const maxY = Math.max(0, (imageHeight.value * scale.value - height) / 2);
       const rawX = savedTranslateX.value + e.translationX;
@@ -157,11 +159,12 @@ export function ZoomablePhoto({
           : rawY;
     })
     .onEnd(() => {
-      if (scale.value <= 1.01) return;
+      if (scale.value <= ZOOM_THRESHOLD) return;
       settleWithinBounds(true);
     });
 
   const dismissGesture = Gesture.Pan()
+    .enabled(!isZoomed)
     .minPointers(1)
     .maxPointers(1)
     .activeOffsetY([-24, 24])
@@ -188,8 +191,8 @@ export function ZoomablePhoto({
         savedTranslateY.value = 0;
         runOnJS(updateZoomState)(false);
       } else {
-        const tapX = e.x - width / 2;
-        const tapY = e.y - height / 2;
+        const tapX = e.x - imageWidth.value / 2;
+        const tapY = e.y - imageHeight.value / 2;
         scale.value = withTiming(DOUBLE_TAP_SCALE, { duration: 250, easing: Easing.out(Easing.ease) });
         const maxX = Math.max(0, (imageWidth.value * DOUBLE_TAP_SCALE - width) / 2);
         const maxY = Math.max(0, (imageHeight.value * DOUBLE_TAP_SCALE - height) / 2);
