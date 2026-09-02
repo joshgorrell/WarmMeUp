@@ -414,7 +414,6 @@ export default function VaultScreen() {
     <AppShell scrollable={false}>
       <TabHeader title={selectMode ? `${selectedIds.size} selected` : (unviewed > 0 ? `Vault  ·  ${unviewed} new` : 'Vault')} rightSlot={items.length > 0 ? (selectMode ? <TouchableOpacity onPress={exitSelectMode}><X color="#FF2E8A" size={22} /></TouchableOpacity> : <TouchableOpacity onPress={enterSelectMode}><AppText style={styles.selectBtnText}>Select</AppText></TouchableOpacity>) : null} />
       <ScrollView ref={scrollViewRef} contentContainerStyle={[styles.scroll, { paddingHorizontal: contentPadding }]} showsVerticalScrollIndicator={false} onScroll={(e) => { const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent; if (loadingMore || !hasMore) return; if (contentSize.height - layoutMeasurement.height - contentOffset.y < 200) loadMore(); }} scrollEventThrottle={64} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2E8A" />}>
-        <View style={styles.vaultHeader}><Shield color="#FF2E8A" size={14} /><AppText style={[styles.vaultHeaderText, { color: colors.textSecondary }]}>Protected Media{items.length > 0 ? `  ·  ${thumbnailsVisible ? 'Tap any item to expand or blur.' : 'Tap any item to view.'}` : ''}</AppText></View>
         {items.length === 0 ? <View style={styles.empty}><View style={styles.emptyIconWrap}><Shield color="rgba(255,255,255,0.20)" size={48} /></View><AppText style={[styles.emptyTitle, { color: colors.text }]}>Nothing yet</AppText><AppText style={[styles.emptySub, { color: colors.textSecondary }]}>Something new is waiting. Add your first private moment.</AppText></View> :
           <View style={styles.grid}>{items.map(item => {
             const isNew = item.uploaded_by_user_id !== user?.id && !item.viewed_by_partner; const url = thumbUrls[item.id] ?? signedUrls[item.id]; const uniqueEmojis = [...new Set((vaultReactionsMap[item.id] ?? []).map(r => r.emoji))].slice(0, 2);
@@ -451,8 +450,6 @@ export default function VaultScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingBottom: 40 },
-  vaultHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.md },
-  vaultHeaderText: { flex: 1, fontSize: FontSize.sm, fontFamily: 'Inter-Regular', lineHeight: 18 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   gridItem: { borderRadius: Radius.sm, overflow: 'hidden', backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   gridPlaceholder: { borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' },
