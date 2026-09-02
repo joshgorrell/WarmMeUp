@@ -132,8 +132,9 @@ export default function RegisterScreen() {
 
   const maxDate = getMaxDate();
 
-  // When arriving from login-screen OAuth (oauthComplete=1), check if the session
-  // already has a name. If yes, go to avatar. If no, go to name step.
+  // When arriving from login-screen OAuth (oauthComplete=1), check the persisted
+  // profile to determine which registration steps are still needed. A profile row
+  // exists (created by the signup trigger) but may be missing required fields.
   useEffect(() => {
     if (oauthComplete !== '1') return;
     (async () => {
@@ -142,13 +143,39 @@ export default function RegisterScreen() {
         setStep('form');
         return;
       }
+
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const hasName = !!(prof?.first_name && prof?.last_name);
+      const hasDob = !!(prof?.date_of_birth && prof?.age_verified_at);
+      const hasTos = !!prof?.tos_accepted_at;
+
+      setCreatedUserId(user.id);
+
+      // Pre-fill name from OAuth metadata so the user doesn't re-enter it
       const meta = user.user_metadata ?? {};
-      const hasName = !!(meta.first_name || meta.given_name || meta.full_name);
-      if (hasName) {
-        setCreatedUserId(user.id);
+      if (meta.first_name || meta.given_name) {
+        setFirstName(String(meta.first_name || meta.given_name));
+      }
+      if (meta.last_name || meta.family_name) {
+        setLastName(String(meta.last_name || meta.family_name));
+      }
+
+      if (hasName && hasDob && hasTos) {
+        // All required registration fields present — go to avatar.
         setStep('avatar');
+      } else if (hasName && hasDob) {
+        // Name and DOB done but Terms not accepted — show form for ToS.
+        setStep('form');
+      } else if (hasName) {
+        // Name present but DOB missing — show form for DOB + ToS.
+        setStep('form');
       } else {
-        setCreatedUserId(user.id);
+        // Name missing — show name step.
         setStep('name');
       }
     })();
@@ -193,15 +220,23 @@ export default function RegisterScreen() {
   // Password hint (not red) while typing but not yet erroring
   const showPasswordHint = !showPasswordError;
 
+  // --- Derived: is this an OAuth-complete flow (already authenticated, just finishing profile)? ---
+  const isOAuthComplete = oauthComplete === '1' && !!createdUserId;
+
   // --- Create Account disabled until all fields valid ---
-  const formReady =
-    !firstNameError &&
-    !lastNameError &&
-    !emailError &&
-    !passwordError &&
-    !confirmPasswordError &&
-    dobValid &&
-    tosAccepted;
+  // For OAuth-complete users, email/password are not required (already authenticated)
+  const formReady = isOAuthComplete
+    ? !firstNameError &&
+      !lastNameError &&
+      dobValid &&
+      tosAccepted
+    : !firstNameError &&
+      !lastNameError &&
+      !emailError &&
+      !passwordError &&
+      !confirmPasswordError &&
+      dobValid &&
+      tosAccepted;
 
   // --- Web DOB text change ---
   const handleDobTextChange = (text: string) => {
@@ -293,31 +328,59 @@ export default function RegisterScreen() {
         const fullName = [fn, ln].filter(Boolean).join(' ');
 
         const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
-        const { data: updatedProfile } = await supabase
+        const nowIso = new Date().toISOString();
+
+        // Check the persisted profile to determine if this is a new user or a
+        // returning user whose registration is already complete.
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at')
+          .eq('id', userId)
+          .maybeSingle();
+
+        const registrationComplete = !!(
+          existingProfile?.first_name &&
+          existingProfile?.last_name &&
+          existingProfile?.date_of_birth &&
+          existingProfile?.age_verified_at &&
+          existingProfile?.tos_accepted_at
+        );
+
+        if (registrationComplete) {
+          // Returning user — go through normal transition routing.
+          router.replace('/transition');
+          return;
+        }
+
+        // New or incomplete user — persist all available registration fields.
+        // tos_accepted_at is written here because the user affirmatively agreed
+        // to Terms before the OAuth flow started (handleTosConsentAgree or the
+        // ToS checkbox on the form).
+        const { error: updateError } = await supabase
           .from('profiles')
           .update({
             ...(fn ? { first_name: fn } : {}),
             ...(ln ? { last_name: ln } : {}),
             ...(fullName ? { display_name: fullName } : {}),
-            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: new Date().toISOString() } : {}),
+            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: nowIso } : {}),
+            tos_accepted_at: nowIso,
           })
-          .eq('id', userId)
-          .is('tos_accepted_at', null)
-          .select('id')
-          .maybeSingle();
+          .eq('id', userId);
 
-        const isNewUser = !!updatedProfile;
-        if (isNewUser) {
-          setCreatedUserId(userId);
-          // If we got a name from the provider or the form, go to avatar.
-          // Otherwise prompt for name first.
-          if (fn) {
-            setStep('avatar');
-          } else {
-            setStep('name');
-          }
+        if (updateError) {
+          setApiError('Could not save your profile. Please check your connection and try again.');
+          return;
+        }
+
+        setCreatedUserId(userId);
+        await refreshProfile();
+
+        // If we got a name from the provider or the form, go to avatar.
+        // Otherwise prompt for name first.
+        if (fn) {
+          setStep('avatar');
         } else {
-          router.replace('/transition');
+          setStep('name');
         }
       }
     } catch (e: unknown) {
@@ -434,6 +497,57 @@ export default function RegisterScreen() {
       return;
     }
     runOAuth(provider);
+  };
+
+  // --- Complete registration for already-authenticated OAuth user ---
+  // Used when oauthComplete=1 and the user lands on the form step (has name
+  // but is missing DOB or Terms). Saves DOB, age verification, and Terms
+  // acceptance to the existing profile — does NOT create a new auth account.
+  const handleOAuthCompleteForm = async () => {
+    setSubmitAttempted(true);
+    setApiError('');
+
+    const fn = firstName.trim();
+    const ln = lastName.trim();
+    if (!fn || fn.length < 2 || !ln || ln.length < 2) return;
+    if (!dobValid) return;
+    if (!tosAccepted) return;
+
+    const fullName = `${fn} ${ln}`;
+    setLoading(true);
+    try {
+      const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
+      const nowIso = new Date().toISOString();
+      const userId = createdUserId ?? (await supabase.auth.getUser()).data.user?.id;
+      if (!userId) {
+        setApiError('Could not verify your session. Please restart the app.');
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          first_name: fn,
+          last_name: ln,
+          display_name: fullName,
+          ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: nowIso } : {}),
+          tos_accepted_at: nowIso,
+        })
+        .eq('id', userId);
+
+      if (updateError) {
+        setApiError('Could not save your profile. Please check your connection and try again.');
+        return;
+      }
+
+      setCreatedUserId(userId);
+      await refreshProfile();
+      setStep('avatar');
+    } catch (e: unknown) {
+      setApiError(friendlyAuthError(e));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleTosConsentAgree = () => {
@@ -716,11 +830,15 @@ export default function RegisterScreen() {
             </View>
 
             {/* Title */}
-            <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>Create your account</AppText>
-            <AppText style={[styles.sub, { marginBottom: vMd }]}>Private. Playful. Just for you and your partner.</AppText>
+            <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>
+              {isOAuthComplete ? 'Complete your account' : 'Create your account'}
+            </AppText>
+            <AppText style={[styles.sub, { marginBottom: vMd }]}>
+              {isOAuthComplete ? 'Just a few details to finish setting up.' : 'Private. Playful. Just for you and your partner.'}
+            </AppText>
 
-            {/* OAuth buttons — always enabled */}
-            {(showGoogle || showApple) && (
+            {/* OAuth buttons — only show for non-OAuth-complete users */}
+            {!isOAuthComplete && (showGoogle || showApple) && (
               <View style={[styles.oauthBlock, { gap: vSm, marginBottom: vMd }]}>
                 {showApple && (
                   Platform.OS === 'ios' ? (
@@ -809,7 +927,8 @@ export default function RegisterScreen() {
                 )}
               </View>
 
-              {/* Email */}
+              {/* Email — hidden for OAuth-complete users (already authenticated) */}
+              {!isOAuthComplete && (
               <View>
                 <View style={[styles.inputWrap, showEmailError && styles.inputWrapError]}>
                   <Mail color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
@@ -829,8 +948,10 @@ export default function RegisterScreen() {
                   <AppText style={styles.fieldError}>{emailError}</AppText>
                 )}
               </View>
+              )}
 
-              {/* Password */}
+              {/* Password — hidden for OAuth-complete users */}
+              {!isOAuthComplete && (
               <View>
                 <View style={[styles.inputWrap, showPasswordError && styles.inputWrapError]}>
                   <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
@@ -856,8 +977,10 @@ export default function RegisterScreen() {
                   <AppText style={styles.fieldHint}>Must be at least 8 characters</AppText>
                 ) : null}
               </View>
+              )}
 
-              {/* Confirm Password */}
+              {/* Confirm Password — hidden for OAuth-complete users */}
+              {!isOAuthComplete && (
               <View>
                 <View style={[styles.inputWrap, showConfirmPasswordError && styles.inputWrapError]}>
                   <Lock color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
@@ -881,6 +1004,7 @@ export default function RegisterScreen() {
                   <AppText style={styles.fieldError}>{confirmPasswordError}</AppText>
                 )}
               </View>
+              )}
 
               {/* Date of Birth */}
               <View>
@@ -965,10 +1089,10 @@ export default function RegisterScreen() {
                 </AppText>
               </TouchableOpacity>
 
-              {/* Create Account */}
+              {/* Create Account / Complete Registration */}
               <TouchableOpacity
                 style={[styles.createBtn, { marginTop: formGap }, !formReady && styles.createBtnDisabled]}
-                onPress={handleRegister}
+                onPress={isOAuthComplete ? handleOAuthCompleteForm : handleRegister}
                 activeOpacity={0.85}
                 disabled={loading || oauthLoading !== null || !formReady}
               >
@@ -979,15 +1103,20 @@ export default function RegisterScreen() {
                     end={{ x: 1, y: 0 }}
                     style={[styles.createGrad, { paddingVertical: inputPad + 4 }]}
                   >
-                    <AppText style={styles.createLabel}>{loading ? 'Creating...' : 'Create Account'}</AppText>
+                    <AppText style={styles.createLabel}>
+                      {loading ? 'Saving...' : isOAuthComplete ? 'Continue' : 'Create Account'}
+                    </AppText>
                   </LinearGradient>
                 ) : (
                   <View style={[styles.createGrad, styles.createGradDisabled, { paddingVertical: inputPad + 4 }]}>
-                    <AppText style={styles.createLabelDisabled}>{loading ? 'Creating...' : 'Create Account'}</AppText>
+                    <AppText style={styles.createLabelDisabled}>
+                      {loading ? 'Saving...' : isOAuthComplete ? 'Continue' : 'Create Account'}
+                    </AppText>
                   </View>
                 )}
               </TouchableOpacity>
 
+              {!isOAuthComplete && (
               <TouchableOpacity
                 style={[styles.loginRow, { marginTop: formGap }]}
                 onPress={() => router.replace('/(auth)/login')}
@@ -998,6 +1127,7 @@ export default function RegisterScreen() {
                   <AppText style={styles.loginLink}>Sign In</AppText>
                 </AppText>
               </TouchableOpacity>
+              )}
             </View>
           </View>
         </ScrollView>

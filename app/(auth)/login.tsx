@@ -102,11 +102,27 @@ export default function LoginScreen() {
 
         const { data: existing } = await supabase
           .from('profiles')
-          .select('onboarding_completed_at')
+          .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at, onboarding_completed_at')
           .eq('id', userId)
           .maybeSingle();
-        if (!existing?.onboarding_completed_at) {
-          // New OAuth user or hasn't completed onboarding — route through onboarding.
+
+        const registrationComplete = !!(
+          existing?.first_name &&
+          existing?.last_name &&
+          existing?.date_of_birth &&
+          existing?.age_verified_at &&
+          existing?.tos_accepted_at
+        );
+
+        if (!registrationComplete) {
+          // New/incomplete OAuth user — route through registration completion
+          // so they provide required fields (name, DOB, 18+ verification, Terms)
+          // before seeing the onboarding carousel.
+          const redirectParams: Record<string, string> = { oauthComplete: '1' };
+          if (codeToPreserve) redirectParams.pendingCode = codeToPreserve;
+          router.replace({ pathname: '/(auth)/register', params: redirectParams });
+        } else if (!existing?.onboarding_completed_at) {
+          // Registration complete but onboarding not yet finished.
           const redirectParams: Record<string, string> = { oauthComplete: '1' };
           if (codeToPreserve) redirectParams.pendingCode = codeToPreserve;
           router.replace({ pathname: '/(auth)/onboarding', params: redirectParams });

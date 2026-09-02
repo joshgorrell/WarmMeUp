@@ -131,9 +131,24 @@ export default function TransitionScreen() {
         return;
       }
 
-      // Onboarding guard — if the user has never completed onboarding, send them
-      // through it before anything else. This catches OAuth users (Apple/Google)
-      // whose profile was auto-created on signup and users who restart mid-flow.
+      // Registration guard — check all required profile fields. If any are
+      // missing, route to the registration-completion screen (not onboarding)
+      // so the user provides required info before seeing the carousel.
+      const registrationComplete = !!(
+        profile?.first_name &&
+        profile?.last_name &&
+        profile?.date_of_birth &&
+        profile?.age_verified_at &&
+        profile?.tos_accepted_at
+      );
+
+      if (!registrationComplete) {
+        logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/register [registration incomplete]`, { elapsedMs: elapsed() });
+        router.replace({ pathname: '/(auth)/register', params: { oauthComplete: '1' } });
+        return;
+      }
+
+      // Onboarding guard — registration complete but onboarding carousel not finished.
       if (!profile?.onboarding_completed_at) {
         logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/onboarding [onboarding not completed]`, { elapsedMs: elapsed() });
         router.replace({ pathname: '/(auth)/onboarding', params: { oauthComplete: '1' } });

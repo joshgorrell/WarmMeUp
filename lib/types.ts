@@ -10,6 +10,8 @@ export interface Profile {
   tos_accepted_at: string | null;
   oauth_provider: string | null;
   onboarding_completed_at: string | null;
+  date_of_birth: string | null;
+  age_verified_at: string | null;
   created_at: string;
 }
 
