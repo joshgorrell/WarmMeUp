@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import { supabase } from './supabase';
 import { logger } from './logger';
 
@@ -76,6 +77,16 @@ async function signInWithAppleNative() {
     throw new Error('Sign in with Apple is not available on this device.');
   }
 
+  // Generate a cryptographically secure nonce for the Apple sign-in flow.
+  // The raw nonce is sent to Supabase; the SHA-256 hash is sent to Apple.
+  // Apple includes the hashed nonce in the identity token, and Supabase
+  // verifies it matches the raw nonce we provide.
+  const rawNonce = Crypto.randomUUID().replace(/-/g, '');
+  const hashedNonce = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    rawNonce
+  );
+
   let credential: AppleAuthentication.AppleAuthenticationCredential;
   try {
     credential = await AppleAuthentication.signInAsync({
@@ -83,6 +94,7 @@ async function signInWithAppleNative() {
         AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
         AppleAuthentication.AppleAuthenticationScope.EMAIL,
       ],
+      nonce: hashedNonce,
     });
   } catch (e: any) {
     if (e?.code === 'ERR_REQUEST_CANCELED' || e?.name === 'ERR_REQUEST_CANCELED') {
@@ -108,6 +120,9 @@ async function signInWithAppleNative() {
   const { data, error } = await supabase.auth.signInWithIdToken({
     provider: 'apple',
     token: credential.identityToken,
+    options: {
+      nonce: rawNonce,
+    } as any,
   });
 
   if (error) throw error;

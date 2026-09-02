@@ -1,23 +1,22 @@
 import React, { useState } from 'react';
 import {
   View, StyleSheet, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ScrollView,
+  KeyboardAvoidingView, Platform, ScrollView, Modal,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase, getSupabaseDiagnostics } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { signInWithProvider, isOAuthSupported, assertNoEmailCollision, EmailCollisionError } from '@/lib/oauth';
 import { savePendingCode, loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
 import { completePendingJoin, isDefinitiveJoinFailure } from '@/lib/coupleJoin';
-import { logDebugEvent } from '@/lib/debugLog';
 import WarmupBrand from '@/components/WarmupBrand';
 import PrimaryButton from '@/components/PrimaryButton';
-import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
+import AppleIcon from '@/components/icons/AppleIcon';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
@@ -26,104 +25,6 @@ import { logger } from '@/lib/logger';
 const V_SM = 16;
 const V_MD = 24;
 const INPUT_PAD = 14;
-
-// Runs two lightweight fetches to detect connectivity vs. Supabase-specific
-// issues. Results are written to SecureStore so the debug screen can surface them.
-async function probeSupabaseNetwork(): Promise<void> {
-  const base = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-  if (!base) return;
-
-  // Probe 1 — root URL
-  try {
-    const r = await fetch(base, { method: 'GET' });
-    await Promise.all([
-      SecureStore.setItemAsync('debug_network_supabase_root_ok', 'true').catch(() => {}),
-      SecureStore.setItemAsync('debug_network_supabase_root_status', String(r.status)).catch(() => {}),
-    ]);
-    logDebugEvent('NETWORK PROBE root', { status: r.status });
-  } catch (e: any) {
-    await Promise.all([
-      SecureStore.setItemAsync('debug_network_supabase_root_ok', 'false').catch(() => {}),
-      SecureStore.setItemAsync('debug_network_supabase_root_status', e?.message ?? 'error').catch(() => {}),
-    ]);
-    logDebugEvent('NETWORK PROBE root error', { error: e?.message ?? 'unknown' });
-  }
-
-  // Probe 2 — auth health endpoint (no headers)
-  try {
-    const r = await fetch(`${base}/auth/v1/health`, { method: 'GET' });
-    let body = '';
-    try { body = await r.text(); } catch {}
-    await Promise.all([
-      SecureStore.setItemAsync('debug_network_supabase_auth_health_ok', String(r.ok)).catch(() => {}),
-      SecureStore.setItemAsync('debug_network_supabase_auth_health_status', String(r.status)).catch(() => {}),
-      SecureStore.setItemAsync('debug_network_supabase_auth_health_error', r.ok ? '' : body.slice(0, 200)).catch(() => {}),
-    ]);
-    logDebugEvent('NETWORK PROBE auth/v1/health', { status: r.status, ok: r.ok });
-  } catch (e: any) {
-    await Promise.all([
-      SecureStore.setItemAsync('debug_network_supabase_auth_health_ok', 'false').catch(() => {}),
-      SecureStore.setItemAsync('debug_network_supabase_auth_health_status', 'error').catch(() => {}),
-      SecureStore.setItemAsync('debug_network_supabase_auth_health_error', e?.message ?? 'unknown').catch(() => {}),
-    ]);
-    logDebugEvent('NETWORK PROBE auth/v1/health error', { error: e?.message ?? 'unknown' });
-  }
-
-  // Probe 3 — auth health WITH apikey header (key diagnostic: does RN fetch deliver custom headers?)
-  // Expected: 200 if headers arrive, 401 "No API key found" if RN networking strips them.
-  try {
-    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-    const r = await fetch(`${base}/auth/v1/health`, {
-      method: 'GET',
-      headers: { apikey: anonKey },
-    });
-    let body = '';
-    try { body = await r.text(); } catch {}
-    await Promise.all([
-      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_ok', String(r.ok)).catch(() => {}),
-      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_status', String(r.status)).catch(() => {}),
-      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_error', r.ok ? '' : body.slice(0, 200)).catch(() => {}),
-    ]);
-    logDebugEvent('NETWORK PROBE health+apikey', { status: r.status, ok: r.ok });
-  } catch (e: any) {
-    await Promise.all([
-      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_ok', 'false').catch(() => {}),
-      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_status', 'error').catch(() => {}),
-      SecureStore.setItemAsync('debug_network_raw_fetch_with_key_error', e?.message ?? 'unknown').catch(() => {}),
-    ]);
-    logDebugEvent('NETWORK PROBE health+apikey error', { error: e?.message ?? 'unknown' });
-  }
-
-  // Probe 4 — token endpoint WITH apikey + dummy credentials
-  // Expected: 400 "Invalid login credentials" if headers arrive, 401 "No API key" if stripped.
-  try {
-    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-    const r = await fetch(`${base}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${anonKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email: 'probe@probe.test', password: 'probe-wrong-v36' }),
-    });
-    let body = '';
-    try { body = await r.text(); } catch {}
-    await Promise.all([
-      SecureStore.setItemAsync('debug_network_raw_auth_with_key_ok', String(r.ok)).catch(() => {}),
-      SecureStore.setItemAsync('debug_network_raw_auth_with_key_status', String(r.status)).catch(() => {}),
-      SecureStore.setItemAsync('debug_network_raw_auth_with_key_error', body.slice(0, 300)).catch(() => {}),
-    ]);
-    logDebugEvent('NETWORK PROBE token+apikey', { status: r.status, ok: r.ok });
-  } catch (e: any) {
-    await Promise.all([
-      SecureStore.setItemAsync('debug_network_raw_auth_with_key_ok', 'false').catch(() => {}),
-      SecureStore.setItemAsync('debug_network_raw_auth_with_key_status', 'error').catch(() => {}),
-      SecureStore.setItemAsync('debug_network_raw_auth_with_key_error', e?.message ?? 'unknown').catch(() => {}),
-    ]);
-    logDebugEvent('NETWORK PROBE token+apikey error', { error: e?.message ?? 'unknown' });
-  }
-}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -138,24 +39,9 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'apple' | 'google' | null>(null);
   const [error, setError] = useState('');
-
-  // Hidden 5-second logo hold — intentional no-auth emergency escape hatch to debug screen
-  const handleLogoHold = () => {
-    router.push('/debug-access');
-  };
+  const [helpVisible, setHelpVisible] = useState(false);
 
   const handleLogin = async () => {
-    // Fire the debug event as the very first statement — before any validation or
-    // early returns — so it appears in recentEvents even if we bail out early.
-    logDebugEvent('LOGIN BUTTON PRESSED', {
-      handler: 'login.tsx:handleLogin',
-      emailPresent: !!email.trim(),
-      passwordPresent: !!password.trim(),
-    });
-    SecureStore.setItemAsync('debug_login_button_pressed_at', new Date().toISOString()).catch(() => {});
-    SecureStore.setItemAsync('debug_login_handler_file', 'login.tsx').catch(() => {});
-    SecureStore.setItemAsync('debug_login_handler_name', 'handleLogin').catch(() => {});
-
     if (!email.trim() || !password.trim()) {
       setError('Please enter your email and password.');
       return;
@@ -163,189 +49,14 @@ export default function LoginScreen() {
     setError('');
     setLoading(true);
     try {
-      SecureStore.setItemAsync('debug_login_reached_preflight', 'true').catch(() => {});
-      // Capture auth-client internals immediately before the call and persist
-      // them so the debug screen shows what was present at attempt time.
-      const authInternal = supabase.auth as any;
-      const authHeaders: Record<string, string> = authInternal?.headers ?? {};
-      const diag = getSupabaseDiagnostics();
-      const attemptPayload = JSON.stringify({
-        attemptAt: new Date().toISOString(),
+      const { data, error: err } = await supabase.auth.signInWithPassword({
         email: email.trim(),
-        method: 'signInWithPassword',
-        clientSource: 'supabase (shared lib/supabase.ts)',
-        clientUrl: authInternal?.url ?? 'UNKNOWN',
-        hasAnonKey: Boolean(authHeaders?.apikey),
-        anonKeyLength: (authHeaders?.apikey ?? '').length,
-        authHeaderKeys: Object.keys(authHeaders).join(', ') || '(none)',
-        diagClientHasAnonKey: diag.clientHasAnonKey,
-        diagClientAnonKeyLength: diag.clientAnonKeyLength,
-        diagSourcesMatch: diag.sourcesMatch,
+        password,
       });
-      // Write synchronously before the auth call so the data is present even if
-      // the app is killed mid-request. Surface any write error instead of swallowing it.
-      try {
-        await Promise.all([
-          SecureStore.setItemAsync('debug_last_login_attempt', attemptPayload),
-          SecureStore.setItemAsync('debug_auth_last_attempt_at', new Date().toISOString()),
-          // Standardised preflight fields (same keys as unlock.tsx so debug screen shows both)
-          SecureStore.setItemAsync('debug_login_button_pressed_at', new Date().toISOString()),
-          SecureStore.setItemAsync('debug_login_handler_file', 'login.tsx:handleLogin'),
-          SecureStore.setItemAsync('debug_login_preflight_has_supabase_client', String(!!supabase)),
-          SecureStore.setItemAsync('debug_login_preflight_has_anon_key', String(diag.clientHasAnonKey)),
-          SecureStore.setItemAsync('debug_login_preflight_anon_key_length', String(diag.clientAnonKeyLength)),
-          SecureStore.setItemAsync('debug_login_reached_signInWithPassword', 'false'),
-          SecureStore.setItemAsync('debug_login_error_source', ''),
-          SecureStore.setItemAsync('debug_login_visible_error_message', ''),
-        ]);
-      } catch (writeErr) {
-        console.error('[Login] SecureStore write failed:', writeErr);
-      }
-      logger.log('[Login] attempt recorded', attemptPayload);
+      if (err) throw err;
 
-      await SecureStore.setItemAsync('debug_login_reached_signInWithPassword', 'true').catch(() => {});
-
-      // V37 probe: build a Request object and inspect req.headers.entries() before fetching.
-      // Tests whether fetch(RequestObject) delivers headers — the path supabase-js uses internally.
-      try {
-        const probeAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-        const probeBase = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-        const probeReq = new Request(`${probeBase}/auth/v1/health`, {
-          method: 'GET',
-          headers: {
-            apikey: probeAnonKey,
-            Authorization: `Bearer ${probeAnonKey}`,
-          },
-        });
-        const headerEntries = Array.from(probeReq.headers.entries());
-        const headerEntriesJson = JSON.stringify(headerEntries);
-        await SecureStore.setItemAsync('debug_v37_req_headers_entries', headerEntriesJson).catch(() => {});
-
-        const probeR = await fetch(probeReq);
-        let probeBody = '';
-        try { probeBody = await probeR.text(); } catch {}
-        await Promise.all([
-          SecureStore.setItemAsync('debug_v37_req_fetch_status', String(probeR.status)).catch(() => {}),
-          SecureStore.setItemAsync('debug_v37_req_fetch_ok', String(probeR.ok)).catch(() => {}),
-          SecureStore.setItemAsync('debug_v37_req_fetch_body', probeBody.slice(0, 300)).catch(() => {}),
-        ]);
-        logDebugEvent('V37 REQUEST PROBE', { headerCount: headerEntries.length, status: probeR.status, ok: probeR.ok });
-      } catch (probeErr: any) {
-        await Promise.all([
-          SecureStore.setItemAsync('debug_v37_req_headers_entries', `ERROR: ${probeErr?.message ?? 'unknown'}`).catch(() => {}),
-          SecureStore.setItemAsync('debug_v37_req_fetch_status', 'error').catch(() => {}),
-          SecureStore.setItemAsync('debug_v37_req_fetch_ok', 'false').catch(() => {}),
-          SecureStore.setItemAsync('debug_v37_req_fetch_body', probeErr?.message ?? 'unknown').catch(() => {}),
-        ]);
-        logDebugEvent('V37 REQUEST PROBE ERROR', { error: probeErr?.message ?? 'unknown' });
-      }
-
-      const { data, error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (err) {
-        const errPayload = JSON.stringify({
-          message: err.message,
-          status: (err as any).status ?? null,
-          name: err.name ?? null,
-          code: (err as any).code ?? null,
-          httpBody: (err as any).__isAuthError
-            ? ((err as any).status + ' ' + err.message)
-            : ((err as any).body ?? (err as any).details ?? null),
-          stack: (err as any).stack ?? null,
-          clientDiag: getSupabaseDiagnostics(),
-        });
-        console.error('[Login] AUTH ERROR FULL', JSON.stringify(err, null, 2));
-        console.error('[Login] AUTH ERROR extra', errPayload);
-        logDebugEvent('LOGIN SIGN_IN_ERROR', {
-          handler: 'login.tsx:handleLogin',
-          message: err.message,
-          status: (err as any).status ?? null,
-          code: (err as any).code ?? null,
-        });
-        // Write every individual error field plus the full blob so debug rows
-        // show raw values without parsing JSON.
-        await Promise.all([
-          SecureStore.setItemAsync('debug_last_auth_error', errPayload).catch(() => {}),
-          SecureStore.setItemAsync('debug_auth_error_message', err.message ?? '').catch(() => {}),
-          SecureStore.setItemAsync('debug_auth_error_status', String((err as any).status ?? '')).catch(() => {}),
-          SecureStore.setItemAsync('debug_auth_error_code', String((err as any).code ?? '')).catch(() => {}),
-          SecureStore.setItemAsync('debug_auth_error_full_json', errPayload).catch(() => {}),
-          SecureStore.setItemAsync('debug_login_error_source', 'login.tsx:signInWithPassword:error').catch(() => {}),
-          SecureStore.setItemAsync('debug_login_visible_error_message', friendlyAuthError(err)).catch(() => {}),
-          SecureStore.setItemAsync('debug_login_error_full_json', errPayload).catch(() => {}),
-          // Individual raw fields (new — surfaces what was previously buried in the JSON blob)
-          SecureStore.setItemAsync('debug_login_error_name', err.name ?? '').catch(() => {}),
-          SecureStore.setItemAsync('debug_login_error_message', err.message ?? '').catch(() => {}),
-          SecureStore.setItemAsync('debug_login_error_status', String((err as any).status ?? '')).catch(() => {}),
-          SecureStore.setItemAsync('debug_login_error_code', String((err as any).code ?? '')).catch(() => {}),
-          SecureStore.setItemAsync('debug_login_error_stack', ((err as any).stack ?? '').slice(0, 500)).catch(() => {}),
-        ]);
-        // Fire network probes async — don't block the UI, results written when ready.
-        probeSupabaseNetwork().catch(() => {});
-        throw err;
-      }
-      logger.log('[Login] signInWithPassword success', { userId: data.user?.id ?? null });
-      await SecureStore.setItemAsync('debug_login_error_source', 'none:success').catch(() => {});
-
-      // Full signin-persistence probe: record every observable checkpoint so the
-      // debug screen can show exactly what happened at the moment of sign-in.
-      try {
-        const signinAt = new Date().toISOString();
-        const accessTokenPresent = !!data.session?.access_token;
-        const refreshTokenPresent = !!data.session?.refresh_token;
-
-        // Check getSession immediately — if supabase-js persisted the session this
-        // will return it; if storage is broken it will return null here.
-        const { data: sessionCheck } = await supabase.auth.getSession();
-        const sessionAfterSignin = sessionCheck?.session ?? null;
-
-        // Directly inspect SecureStore keys — the ground truth for persistence.
-        const supabaseUrlRaw = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-        const projectRef = supabaseUrlRaw.replace(/^https?:\/\//, '').split('.')[0] ?? '';
-        const sessionKey = `sb-${projectRef}-auth-token`;
-        const [sv0, sv1, sv2] = await Promise.all([
-          SecureStore.getItemAsync(sessionKey).catch(() => null),
-          SecureStore.getItemAsync(`${sessionKey}.0`).catch(() => null),
-          SecureStore.getItemAsync(`${sessionKey}.1`).catch(() => null),
-        ]);
-        const foundKeys: string[] = [];
-        if (sv0 !== null) foundKeys.push(sessionKey);
-        if (sv1 !== null) foundKeys.push(`${sessionKey}.0`);
-        if (sv2 !== null) foundKeys.push(`${sessionKey}.1`);
-        const rawSession = (sv1 !== null ? (sv1 + (sv2 ?? '')) : sv0) ?? null;
-        let storeParseOk: boolean | null = null;
-        if (rawSession !== null) {
-          try { JSON.parse(rawSession); storeParseOk = true; } catch { storeParseOk = false; }
-        }
-
-        await Promise.all([
-          SecureStore.setItemAsync('debug_last_signin_success', signinAt),
-          SecureStore.setItemAsync('debug_last_signin_user_id', data.user?.id ?? ''),
-          SecureStore.setItemAsync('debug_last_signin_session_present', String(!!data.session)),
-          SecureStore.setItemAsync('debug_last_signin_access_token_present', String(accessTokenPresent)),
-          SecureStore.setItemAsync('debug_last_signin_refresh_token_present', String(refreshTokenPresent)),
-          SecureStore.setItemAsync('debug_after_signin_getSession_has_session', String(!!sessionAfterSignin)),
-          SecureStore.setItemAsync('debug_after_signin_getSession_user_id', sessionAfterSignin?.user?.id ?? ''),
-          SecureStore.setItemAsync('debug_after_signin_storage_keys_found', foundKeys.length ? foundKeys.join(', ') : '(none found)'),
-          SecureStore.setItemAsync('debug_after_signin_session_key_exists', String(foundKeys.length > 0)),
-          SecureStore.setItemAsync('debug_after_signin_session_raw_length', String(rawSession?.length ?? 0)),
-          SecureStore.setItemAsync('debug_after_signin_session_parse_ok', storeParseOk === null ? 'null' : String(storeParseOk)),
-        ]);
-        logger.log('[Login] persistence probe:', {
-          accessTokenPresent, refreshTokenPresent,
-          sessionAfterSignin: !!sessionAfterSignin,
-          storageKeysFound: foundKeys,
-          rawLength: rawSession?.length ?? 0,
-          parseOk: storeParseOk,
-        });
-      } catch (writeErr) {
-        console.error('[Login] persistence probe write failed:', writeErr);
-      }
-
-      // After sign-in, check for a stored pending invite code (survives app restarts).
-      // Route-param code takes priority over stored code.
       const storedCode = await loadPendingCode();
       const codeToRedeem = codeToPreserve || storedCode || '';
-
       if (codeToRedeem && data.user) {
         const result = await completePendingJoin(codeToRedeem);
         if (result.ok) {
@@ -356,14 +67,12 @@ export default function LoginScreen() {
           });
           return;
         }
-        if (isDefinitiveJoinFailure(result.reason)) {
-          await clearPendingCode();
-        }
-        // Join failed — fall through to normal transition; user can pair from account screen
+        if (isDefinitiveJoinFailure(result.reason)) await clearPendingCode();
       }
 
       router.replace('/transition');
     } catch (e: unknown) {
+      logger.warn('[Login] sign-in failed', { errorId: 'login_failed' });
       setError(friendlyAuthError(e));
     } finally {
       setLoading(false);
@@ -449,11 +158,8 @@ export default function LoginScreen() {
         bounces={false}
       >
         <View style={isTablet ? [styles.innerWrap, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }] : styles.innerWrap}>
-          {/* Brand — hold 5 seconds to open debug screen */}
           <TouchableOpacity
             style={[styles.brandBlock, { marginBottom: V_MD }]}
-            onLongPress={handleLogoHold}
-            delayLongPress={5000}
             activeOpacity={1}
           >
             <WarmupBrand logoSize={logoSize} sloganWidth={sloganWidth} showTagline />
@@ -553,6 +259,28 @@ export default function LoginScreen() {
               </>
             )}
           </View>
+
+          <TouchableOpacity
+            style={[styles.footerLink, { marginTop: V_SM }]}
+            onPress={() => setHelpVisible(true)}
+            activeOpacity={0.7}
+          >
+            <AppText style={styles.footerAccent}>Having trouble signing in?</AppText>
+          </TouchableOpacity>
+
+          <Modal visible={helpVisible} transparent animationType="fade" onRequestClose={() => setHelpVisible(false)}>
+            <View style={styles.helpOverlay}>
+              <View style={styles.helpCard}>
+                <AppText style={styles.helpTitle}>Help signing in</AppText>
+                <AppText style={styles.helpBody}>Check your email and password, then try again. If you recently changed your password, use the newest one. You can also close and reopen the app before trying again.</AppText>
+                <AppText style={styles.helpBody}>If you still need help, contact support at support@warmmeup.app.</AppText>
+                <AppText style={styles.helpMeta}>App version {Constants.expoConfig?.version ?? '1.7.0'}{Constants.expoConfig?.ios?.buildNumber ? ` (build ${Constants.expoConfig.ios.buildNumber})` : ''}</AppText>
+                <TouchableOpacity style={styles.helpClose} onPress={() => setHelpVisible(false)} activeOpacity={0.8}>
+                  <AppText style={styles.helpCloseText}>Return to login</AppText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
 
           {/* Footer */}
           <TouchableOpacity
@@ -690,6 +418,45 @@ const styles = StyleSheet.create({
   },
   footerAccent: {
     color: '#E05548',
+    fontFamily: 'Inter-SemiBold',
+  },
+  helpOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    padding: Spacing.xl,
+  },
+  helpCard: {
+    backgroundColor: '#171317',
+    borderRadius: Radius.xl,
+    padding: Spacing.xl,
+    gap: Spacing.md,
+  },
+  helpTitle: {
+    color: '#fff',
+    fontSize: FontSize.lg,
+    fontFamily: 'Inter-Bold',
+  },
+  helpBody: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: FontSize.body,
+    lineHeight: 24,
+    fontFamily: 'Inter-Regular',
+  },
+  helpMeta: {
+    color: 'rgba(255,255,255,0.48)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+  },
+  helpClose: {
+    backgroundColor: '#FF5A3D',
+    borderRadius: Radius.pill,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  helpCloseText: {
+    color: '#fff',
+    fontSize: FontSize.body,
     fontFamily: 'Inter-SemiBold',
   },
 });

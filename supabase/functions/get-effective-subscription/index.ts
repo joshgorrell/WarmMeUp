@@ -15,14 +15,6 @@ interface SubscriptionRow {
   trial_started_at: string | null;
 }
 
-interface AdminGrantRow {
-  user_id: string;
-  entitlement_type: string;
-  expires_at: string | null;
-  active: boolean;
-  can_invite: boolean;
-}
-
 interface AccessResult {
   hasPremium: boolean;
   isOnTrial: boolean;
@@ -55,13 +47,6 @@ function isPaidPlan(plan: string): boolean {
 
 function isTrialPlan(plan: string): boolean {
   return plan === "trial";
-}
-
-function isGrantActive(grant: AdminGrantRow | null): boolean {
-  if (!grant) return false;
-  if (!grant.active) return false;
-  if (grant.expires_at && new Date(grant.expires_at) < new Date()) return false;
-  return true;
 }
 
 async function checkRevenueCatEntitlement(
@@ -133,26 +118,6 @@ async function userHasPremiumAccess(
     return { hasPremium: true, isOnTrial: true, source: "trial", plan: "trial", expiresAt: sub!.expires_at, canInvite: true, trialGraceEndsAt: graceEndsAt };
   }
 
-  // 3. Admin grant
-  const { data: grant } = await adminClient
-    .from("admin_grants")
-    .select("user_id, entitlement_type, expires_at, active, can_invite")
-    .eq("user_id", userId)
-    .eq("active", true)
-    .maybeSingle();
-
-  if (isGrantActive(grant)) {
-    return {
-      hasPremium: true,
-      isOnTrial: false,
-      source: "admin_grant",
-      plan: null,
-      expiresAt: grant!.expires_at,
-      canInvite: grant!.can_invite,
-      trialGraceEndsAt: null,
-    };
-  }
-
   return { hasPremium: false, isOnTrial: false, source: "none", plan: null, expiresAt: null, canInvite: false, trialGraceEndsAt: null };
 }
 
@@ -199,11 +164,8 @@ Deno.serve(async (req: Request) => {
           isOnTrial: ownAccess.isOnTrial,
           trialExpiresAt: ownAccess.isOnTrial ? ownAccess.expiresAt : null,
           trialExpired: false,
-          grantExpired: false,
-          grantExpiresAt: ownAccess.source === "admin_grant" ? ownAccess.expiresAt : null,
           canInvite: ownAccess.canInvite,
           trialGraceEndsAt: ownAccess.trialGraceEndsAt,
-          expiredGrantExpiresAt: null,
           _v: "2026-07-01",
           _ts: new Date().toISOString(),
         }),
@@ -242,7 +204,6 @@ Deno.serve(async (req: Request) => {
               trialExpired: false,
               canInvite: false,
               trialGraceEndsAt: null,
-              expiredGrantExpiresAt: null,
               _v: "2026-07-01",
               _ts: new Date().toISOString(),
             }),
@@ -283,7 +244,6 @@ Deno.serve(async (req: Request) => {
                   trialExpired: false,
                   canInvite: false,
                   trialGraceEndsAt: null,
-                  expiredGrantExpiresAt: null,
                   _v: "2026-07-01",
                   _ts: new Date().toISOString(),
                 }),
@@ -330,7 +290,6 @@ Deno.serve(async (req: Request) => {
               trialExpired: false,
               canInvite: true,
               trialGraceEndsAt: null,
-              expiredGrantExpiresAt: null,
               _v: "2026-07-01",
               _ts: new Date().toISOString(),
             }),
@@ -354,17 +313,6 @@ Deno.serve(async (req: Request) => {
       ).toISOString();
     }
 
-    // Check for an expired admin grant so the app can show the right messaging.
-    const { data: expiredGrant } = await adminClient
-      .from("admin_grants")
-      .select("expires_at")
-      .eq("user_id", user.id)
-      .eq("active", true)
-      .not("expires_at", "is", null)
-      .lt("expires_at", new Date().toISOString())
-      .maybeSingle();
-    const grantExpired = expiredGrant !== null;
-
     return new Response(
       JSON.stringify({
         isPremium: false,
@@ -374,11 +322,8 @@ Deno.serve(async (req: Request) => {
         isOnTrial: false,
         trialExpiresAt: ownSub?.expires_at ?? null,
         trialExpired,
-        grantExpired,
-        grantExpiresAt: null,
         canInvite: false,
         trialGraceEndsAt,
-        expiredGrantExpiresAt: expiredGrant?.expires_at ?? null,
         _v: "2026-07-01",
         _ts: new Date().toISOString(),
       }),

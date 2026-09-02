@@ -115,10 +115,6 @@ interface AuthContextType {
    */
   vaultUnlocked: boolean;
   setVaultUnlocked: (unlocked: boolean) => void;
-  /** True when the admin has enabled the hidden 5-tap emergency debug entry points. */
-  debugModeEnabled: boolean;
-  /** True when Global Debug Access is enabled (all users, pre-login). */
-  globalDebugAccessEnabled: boolean;
   /**
    * Increments every time Reset Points completes. Screens subscribe via useEffect
    * to this value and re-fetch scores when it changes.
@@ -153,8 +149,6 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticatingRef: { current: false },
   vaultUnlocked: false,
   setVaultUnlocked: () => {},
-  debugModeEnabled: false,
-  globalDebugAccessEnabled: false,
   scoreResetAt: 0,
   notifyScoreReset: () => {},
   justPairedPartnerName: null,
@@ -232,51 +226,6 @@ async function applyAdminOverrideAsync(info: SubscriptionInfo, userId: string): 
   return info;
 }
 
-/**
- * Separate from admin override — this checks the admin_grants table for an
- * active entitlement grant (free_access, etc.) with can_invite=true.
- * RLS allows users to read their own grants, so the authenticated client works.
- * This is the client-side fallback for when the edge function is unavailable
- * or returns stale data. It must NEVER be confused with the admin override above:
- * admin override is for is_admin/is_super_admin profile flags; this is for
- * regular users who received a premium entitlement grant.
- */
-async function applyEntitlementGrantFallbackAsync(info: SubscriptionInfo, userId: string): Promise<SubscriptionInfo> {
-  if (info.canInvite && info.isPremium) return info; // already correct, skip
-  try {
-    const { data: grant, error } = await supabase
-      .from('admin_grants')
-      .select('active, can_invite, expires_at, entitlement_type')
-      .eq('user_id', userId)
-      .eq('active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) {
-      logger.log('[Subscription] entitlement grant fallback query error:', error.message);
-      return info;
-    }
-    if (grant && grant.active === true && grant.can_invite === true) {
-      const expired = grant.expires_at && new Date(grant.expires_at) < new Date();
-      if (!expired) {
-        logger.log('[Subscription] entitlement grant fallback applied — canInvite forced true');
-        return {
-          ...info,
-          isPremium: true,
-          canInvite: true,
-          source: 'admin_grant',
-          plan: null,
-          expiresAt: grant.expires_at,
-          loading: false,
-        };
-      }
-    }
-  } catch (err: any) {
-    logger.log('[Subscription] entitlement grant fallback error:', err?.message);
-  }
-  return info;
-}
-
 async function fetchEffectiveSubscription(accessToken: string): Promise<SubscriptionInfo> {
   try {
     const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
@@ -302,7 +251,7 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
       logger.log('[Subscription] JSON parse failed. Raw:', rawText.slice(0, 500));
       return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
     }
-    logger.log('[Subscription] parsed:', JSON.stringify({ isPremium: data.isPremium, source: data.source, canInvite: data.canInvite, trialExpired: data.trialExpired, grantExpired: data.grantExpired }));
+    logger.log('[Subscription] parsed:', JSON.stringify({ isPremium: data.isPremium, source: data.source, canInvite: data.canInvite, trialExpired: data.trialExpired }));
     return {
       isPremium: data.isPremium ?? false,
       source: data.source ?? 'none',
@@ -311,11 +260,8 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
       isOnTrial: data.isOnTrial ?? false,
       trialExpiresAt: data.trialExpiresAt ?? null,
       trialExpired: data.trialExpired ?? false,
-      grantExpired: data.grantExpired ?? false,
-      grantExpiresAt: data.grantExpiresAt ?? null,
       canInvite: data.canInvite ?? false,
       trialGraceEndsAt: data.trialGraceEndsAt ?? null,
-      expiredGrantExpiresAt: data.expiredGrantExpiresAt ?? null,
       loading: false,
     };
   } catch (err: any) {
@@ -335,8 +281,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [appLocked, setAppLocked] = useState(false);
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
-  const [debugModeEnabled, setDebugModeEnabled] = useState(false);
-  const [globalDebugAccessEnabled, setGlobalDebugAccessEnabled] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo>(DEFAULT_SUBSCRIPTION_INFO);
   const [justPairedPartnerName, setJustPairedPartnerName] = useState<string | null>(null);
   const [scoreResetAt, setScoreResetAt] = useState(0);
@@ -445,29 +389,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetchSettings(userId),
       ]);
 
-      // Load global config flags — non-blocking, safe to fail
-      (async () => {
-        try {
-          const { data } = await supabase
-            .from('app_config')
-            .select('key, value')
-            .in('key', ['debug_mode_enabled', 'global_debug_access']);
-          if (Array.isArray(data)) {
-            for (const row of data) {
-              if (row.key === 'debug_mode_enabled') {
-                setDebugModeEnabled(row.value === true);
-              } else if (row.key === 'global_debug_access') {
-                const val = row.value;
-                const enabled = val?.enabled === true;
-                const expiresAt: string | null = val?.expires_at ?? null;
-                const expired = expiresAt ? Date.now() > new Date(expiresAt).getTime() : false;
-                setGlobalDebugAccessEnabled(enabled && !expired);
-              }
-            }
-          }
-        } catch {}
-      })();
-
       // Restore persisted unlock timestamp so lockIfNeeded() respects the grace period
       // across full app restarts, not just background/foreground transitions.
       const persistedTs = await readUnlockedAt(userId);
@@ -507,11 +428,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (adminOverride !== result) {
             logger.log('[Auth] admin override applied — canInvite forced true');
             result = adminOverride;
-          }
-          const grantFallback = await applyEntitlementGrantFallbackAsync(result, userId);
-          if (grantFallback !== result) {
-            logger.log('[Auth] entitlement grant fallback applied — canInvite forced true');
-            result = grantFallback;
           }
           setSubscriptionInfo(result);
           if (__DEV__) logger.log('[STARTUP] entitlement ready');
@@ -772,7 +688,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAppLocked(false);
     setVaultUnlocked(false);
     setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
-    setDebugModeEnabled(false);
     unlockedAtRef.current = null;
     clearWeatherSessionCache();
 
@@ -821,8 +736,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let result = info;
     const adminOverride = await applyAdminOverrideAsync(result, userId);
     if (adminOverride !== result) result = adminOverride;
-    const grantFallback = await applyEntitlementGrantFallbackAsync(result, userId);
-    if (grantFallback !== result) result = grantFallback;
     setSubscriptionInfo(result);
     return result;
   }, []);
@@ -832,7 +745,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, couple, partnerProfile, settings, loading, coupleLoading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, debugModeEnabled, globalDebugAccessEnabled, justPairedPartnerName, clearJustPaired, scoreResetAt, notifyScoreReset: () => setScoreResetAt(n => n + 1) }}
+      value={{ session, user, profile, couple, partnerProfile, settings, loading, coupleLoading, isAdmin, isSuperAdmin, subscriptionInfo, refreshSubscription, appLocked, unlockApp, lockApp, lockIfNeeded, unlockedAtMs, refreshCouple, patchCouple, refreshSettings, refreshProfile, signOut, isAuthenticatingRef, vaultUnlocked, setVaultUnlocked, justPairedPartnerName, clearJustPaired, scoreResetAt, notifyScoreReset: () => setScoreResetAt(n => n + 1) }}
     >
       {children}
     </AuthContext.Provider>

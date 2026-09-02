@@ -7,7 +7,7 @@ import { logger } from '../lib/logger';
 
 export type SubscriptionPlan = 'Free' | 'Monthly' | 'Annual';
 export type SubscriptionStatus = 'Active' | 'Inactive' | 'Trial';
-export type SubscriptionSource = 'self' | 'partner' | 'none' | 'admin_grant' | 'admin' | 'super_admin';
+export type SubscriptionSource = 'self' | 'partner' | 'none' | 'admin' | 'super_admin';
 
 interface SubscriptionState {
   plan: SubscriptionPlan;

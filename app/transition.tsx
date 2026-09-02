@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Animated, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { StyleSheet, Animated, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -65,8 +65,6 @@ export default function TransitionScreen() {
     isSuperAdmin,
     loading,
     subscriptionInfo,
-    debugModeEnabled,
-    globalDebugAccessEnabled,
   } = useAuth();
   const { width } = useWindowDimensions();
   const logoW = Math.min(width * 0.5, 200);
@@ -77,30 +75,8 @@ export default function TransitionScreen() {
   const animDone = useRef(false);
   const authReady = useRef(false);
   const hardDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debugTapCount = useRef(0);
-  const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debugModeRef = useRef(debugModeEnabled);
-  debugModeRef.current = debugModeEnabled;
-  const globalDebugRef = useRef(globalDebugAccessEnabled);
-  globalDebugRef.current = globalDebugAccessEnabled;
   const startMs = useRef(Date.now());
   const elapsed = () => Date.now() - startMs.current;
-
-  const handleDebugTap = () => {
-    const canDebug = __DEV__ || isAdmin || isSuperAdmin || debugModeRef.current || globalDebugRef.current || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
-    if (!canDebug) return;
-    debugTapCount.current += 1;
-    if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
-    if (debugTapCount.current >= DEBUG_TAP_TARGET) {
-      debugTapCount.current = 0;
-      routed.current = true;
-      router.replace(globalDebugRef.current ? '/debug-access' : '/debug');
-      return;
-    }
-    debugTapTimer.current = setTimeout(() => {
-      debugTapCount.current = 0;
-    }, DEBUG_TAP_WINDOW_MS);
-  };
 
   // Returns true only when we have enough affirmatively-resolved data to make
   // a routing decision. A null couple is not meaningful until coupleLoading is
@@ -167,8 +143,6 @@ export default function TransitionScreen() {
         if (!subscriptionInfo.isPremium) {
           const reason = subscriptionInfo.trialExpired
             ? 'expired_trial'
-            : subscriptionInfo.grantExpired
-            ? 'expired_entitlement'
             : undefined;
           logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → subscription [not premium, paired]`, { elapsedMs: elapsed() });
           router.replace({ pathname: '/(auth)/subscription', params: reason ? { reason } : {} });
@@ -266,12 +240,12 @@ export default function TransitionScreen() {
 
   return (
     <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
-      <TouchableOpacity onPress={handleDebugTap} activeOpacity={1}>
+      <View>
         <Animated.View style={{ transform: [{ scale: logoScale }], opacity: logoOpacity, alignItems: 'center', gap: 8 }}>
           <WarmupLogo size={logoW} />
           <WarmupWordmark size={18} />
         </Animated.View>
-      </TouchableOpacity>
+      </View>
     </Animated.View>
   );
 }

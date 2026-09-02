@@ -305,12 +305,12 @@ export default function SubscriptionScreen() {
           return 'Your 7-day free trial has ended. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.';
         })() }
       : reason === 'expiring_entitlement'
-      ? { Icon: AlertCircle, text: `Your complimentary access expires on ${new Date(subscriptionInfo.grantExpiresAt ?? Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Subscribe now to keep your access uninterrupted.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.` }
+      ? { Icon: AlertCircle, text: 'Your subscription is ending soon. Subscribe now to keep your access uninterrupted.' }
       : reason === 'expired_entitlement'
       ? { Icon: AlertCircle, text: (() => {
-          const grantEnd = subscriptionInfo.expiredGrantExpiresAt;
+          const grantEnd = null;
           if (grantEnd) {
-            const dateStr = new Date(grantEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            const dateStr = '';
             return `Your complimentary access ended on ${dateStr}. Subscribe to restore full access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
           }
           return 'Your complimentary access has ended. Subscribe to restore full access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.';

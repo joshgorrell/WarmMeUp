@@ -20,7 +20,7 @@ import { logger } from '@/lib/logger';
 
 export default function UnlockScreen() {
   const router = useRouter();
-  const { user, profile, settings, unlockApp, isAuthenticatingRef, debugModeEnabled, globalDebugAccessEnabled } = useAuth();
+  const { user, profile, settings, unlockApp, isAuthenticatingRef } = useAuth();
   const { available: bioAvailable, hasHardware: bioHasHardware, biometricLabel, authenticate } = useBiometricAuth();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
@@ -225,24 +225,6 @@ export default function UnlockScreen() {
     }
   };
 
-  const debugTapCount = useRef(0);
-  const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const canAccessDebug = useMemo(
-    () => __DEV__ || profile?.is_admin === true || debugModeEnabled || globalDebugAccessEnabled || process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1',
-    [profile?.is_admin, debugModeEnabled, globalDebugAccessEnabled],
-  );
-  const handleDebugTap = useCallback(() => {
-    if (!canAccessDebug) return;
-    debugTapCount.current += 1;
-    if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
-    if (debugTapCount.current >= 5) {
-      debugTapCount.current = 0;
-      router.replace(globalDebugAccessEnabled ? '/debug-access' : '/debug');
-      return;
-    }
-    debugTapTimer.current = setTimeout(() => { debugTapCount.current = 0; }, 10000);
-  }, [canAccessDebug, globalDebugAccessEnabled, router]);
-
   const BiometricIcon = biometricLabel === 'Touch ID' ? Fingerprint : ScanFace;
 
   const centerStyle = isTablet
@@ -257,9 +239,9 @@ export default function UnlockScreen() {
       <LinearGradient colors={['#07070A', '#0D0D12', '#151018']} style={StyleSheet.absoluteFill} />
 
       <View style={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
-        <TouchableOpacity onPress={handleDebugTap} activeOpacity={1} style={[{ marginBottom: vMd }, centerStyle]}>
+        <View style={[{ marginBottom: vMd }, centerStyle]}>
           <WarmupBrand logoSize={logoSize} showTagline={false} />
-        </TouchableOpacity>
+        </View>
 
         <View style={centerStyle}>
           {showEmailFallback ? (

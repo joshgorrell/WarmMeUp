@@ -168,10 +168,10 @@ interface DebugInfo {
 
 export default function MyStatsScreen() {
   const router = useRouter();
-  const { user, couple, profile, partnerProfile, scoreResetAt, settings, refreshSettings, isAdmin, debugModeEnabled, globalDebugAccessEnabled } = useAuth();
+  const { user, couple, profile, partnerProfile, scoreResetAt, settings, refreshSettings } = useAuth();
   const { colors } = useTheme();
 
-  const canDebug = isAdmin || debugModeEnabled || globalDebugAccessEnabled;
+  const canDebug = false;
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
   const now = new Date();

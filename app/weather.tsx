@@ -156,10 +156,7 @@ function WeatherLoading({ shimmer, pinPulse, dotCount }: {
 
 export default function WeatherScreen() {
   const router = useRouter();
-  const { session, loading, user, profile, settings, unlockedAtMs, refreshSettings, unlockApp, isAuthenticatingRef, debugModeEnabled, globalDebugAccessEnabled, refreshSubscription } = useAuth();
-  const debugTapCount = useRef(0);
-  const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debugLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { session, loading, user, profile, settings, unlockedAtMs, refreshSettings, unlockApp, isAuthenticatingRef, refreshSubscription } = useAuth();
   const insets = useSafeAreaInsets();
 
   // Warm up subscription data while the user views the weather screen so that
@@ -254,44 +251,6 @@ export default function WeatherScreen() {
       }).start();
     }
   }, [weather]);
-
-  const canAccessDebug =
-    __DEV__ ||
-    profile?.is_super_admin === true ||
-    debugModeEnabled ||
-    globalDebugAccessEnabled ||
-    process.env.EXPO_PUBLIC_DEBUG_ALWAYS_ON === '1';
-
-  const debugTarget = globalDebugAccessEnabled ? '/debug-access' : '/debug';
-
-  const handleDebugTap = () => {
-    if (!canAccessDebug) return;
-    debugTapCount.current += 1;
-    if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
-    if (debugTapCount.current >= DEBUG_TAP_TARGET) {
-      debugTapCount.current = 0;
-      router.replace(debugTarget);
-      return;
-    }
-    debugTapTimer.current = setTimeout(() => {
-      debugTapCount.current = 0;
-    }, DEBUG_TAP_WINDOW_MS);
-  };
-
-  const handleDebugLongPressIn = useCallback(() => {
-    if (!canAccessDebug) return;
-    debugLongPressTimer.current = setTimeout(() => {
-      debugLongPressTimer.current = null;
-      router.replace(debugTarget);
-    }, 5000);
-  }, [canAccessDebug, debugTarget, router]);
-
-  const handleDebugLongPressOut = useCallback(() => {
-    if (debugLongPressTimer.current) {
-      clearTimeout(debugLongPressTimer.current);
-      debugLongPressTimer.current = null;
-    }
-  }, []);
 
   // Hard timeout: 6s fallback so the screen never stays permanently blank.
   useEffect(() => {
@@ -491,7 +450,6 @@ export default function WeatherScreen() {
           <Animated.View style={{ opacity: contentFade }}>
             {/* Main temp — 5-tap opens debug when admin has enabled debug mode */}
             <TouchableOpacity
-              onPress={handleDebugTap}
               activeOpacity={1}
               style={styles.topSection}
             >
@@ -579,8 +537,6 @@ export default function WeatherScreen() {
         <TouchableOpacity
           style={styles.clearBtn}
           onPress={handleCoastIsClear}
-          onPressIn={handleDebugLongPressIn}
-          onPressOut={handleDebugLongPressOut}
           activeOpacity={0.88}
         >
           <View style={styles.clearBtnInner}>

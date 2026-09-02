@@ -257,7 +257,7 @@ export type WishCategory =
   | 'Intimate'
   | 'Someday';
 
-export type SubscriptionSource = 'self' | 'partner' | 'none' | 'admin_grant' | 'admin' | 'super_admin';
+export type SubscriptionSource = 'self' | 'partner' | 'none' | 'admin' | 'super_admin';
 
 export interface SubscriptionInfo {
   isPremium: boolean;
@@ -268,16 +268,10 @@ export interface SubscriptionInfo {
   trialExpiresAt: string | null;
   /** True when the user's own trial row exists but has expired */
   trialExpired: boolean;
-  /** True when an admin grant has expired and the user no longer has premium */
-  grantExpired: boolean;
-  /** Expiry date of the active admin grant, if premium comes from a grant */
-  grantExpiresAt: string | null;
   /** True when this user can generate an invite code (own active sub or active trial) */
   canInvite: boolean;
   /** When the trial grace period ends (trial expires_at + 24h). Null if not applicable. */
   trialGraceEndsAt: string | null;
-  /** Expiry date of the most recently expired admin grant, if one exists */
-  expiredGrantExpiresAt: string | null;
   loading: boolean;
 }
 
@@ -289,11 +283,8 @@ export const DEFAULT_SUBSCRIPTION_INFO: SubscriptionInfo = {
   isOnTrial: false,
   trialExpiresAt: null,
   trialExpired: false,
-  grantExpired: false,
-  grantExpiresAt: null,
   canInvite: false,
   trialGraceEndsAt: null,
-  expiredGrantExpiresAt: null,
   loading: true,
 };
 

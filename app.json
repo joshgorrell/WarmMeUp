@@ -2,7 +2,7 @@
   "expo": {
     "name": "Warm Me Up",
     "slug": "warmup",
-    "version": "1.6.0",
+    "version": "1.7.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "splash": {
@@ -24,6 +24,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "usesAppleSignIn": true,
       "backgroundColor": "#050507",
       "bundleIdentifier": "app.warmmeup",
       "infoPlist": {

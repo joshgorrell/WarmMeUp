@@ -6,7 +6,7 @@ import {
 import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles, CheckCheck, Flame, Send, Clock } from 'lucide-react-native';
+import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles, CheckCheck, Flame, Send } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -22,7 +22,6 @@ import HomeMiniCard from '@/components/HomeMiniCard';
 import Avatar from '@/components/Avatar';
 import { useGreeting } from '@/hooks/useGreeting';
 import { useTrialExpiryCheck } from '@/hooks/useTrialExpiryCheck';
-import { useEntitlementExpiryCheck } from '@/hooks/useEntitlementExpiryCheck';
 import { useLayout } from '@/hooks/useLayout';
 import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
 import { reversePoints, awardPoints, getPointValue } from '@/lib/points';
@@ -87,7 +86,6 @@ export default function HomeScreen() {
   const hasPartner = !!couple?.user_b_id;
   const greetingSub = useGreeting();
   const trialExpiry = useTrialExpiryCheck();
-  const entitlementExpiry = useEntitlementExpiryCheck();
   const isMountedRef = useRef(true);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -956,49 +954,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               onPress={trialExpiry.dismiss}
-              activeOpacity={0.7}
-              style={trialExpiryStyles.laterBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <AppText style={[trialExpiryStyles.laterText, { color: colors.textMuted }]}>Maybe later</AppText>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* Entitlement grant expiring soon */}
-      <Modal
-        visible={entitlementExpiry.visible}
-        transparent
-        animationType="fade"
-        onRequestClose={entitlementExpiry.dismiss}
-      >
-        <Pressable style={trialExpiryStyles.overlay} onPress={entitlementExpiry.dismiss}>
-          <View style={[trialExpiryStyles.card, { backgroundColor: colors.card }]} onStartShouldSetResponder={() => true} onResponderRelease={(e) => e.stopPropagation()}>
-            <View style={trialExpiryStyles.iconWrap}>
-              <Clock color="#FFB347" size={32} strokeWidth={2} />
-            </View>
-            <AppText style={[trialExpiryStyles.title, { color: colors.text }]}>
-              Your complimentary access ends soon
-            </AppText>
-            <AppText style={[trialExpiryStyles.body, { color: colors.textSecondary }]}>
-              {entitlementExpiry.expiresAt
-                ? `Your complimentary access expires on ${new Date(entitlementExpiry.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Subscribe now to keep your access uninterrupted.`
-                : 'Your complimentary access is ending soon. Subscribe now to keep your access uninterrupted.'}
-              {'\n\n'}All your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.
-            </AppText>
-            <TouchableOpacity
-              style={trialExpiryStyles.subscribeBtn}
-              activeOpacity={0.85}
-              onPress={() => {
-                entitlementExpiry.dismiss();
-                router.push({ pathname: '/(auth)/subscription', params: { reason: 'expiring_entitlement' } });
-              }}
-            >
-              <Text style={trialExpiryStyles.subscribeBtnText}>Subscribe Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={entitlementExpiry.dismiss}
               activeOpacity={0.7}
               style={trialExpiryStyles.laterBtn}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

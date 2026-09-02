@@ -12,7 +12,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, View, TouchableOpacity, AppState, AppStateStatus, Platform, Image } from 'react-native';
 import AppText from '@/components/AppText';
 import type { NotificationData } from '@/lib/notifications';
-import { logDebugEvent } from '@/lib/debugLog';
 import { emitIncoming } from '@/lib/incomingEvents';
 import IncomingSlash from '@/components/IncomingSlash';
 import UploadProgressOverlay from '@/components/UploadProgressOverlay';
@@ -44,7 +43,7 @@ function PrivacyOverlay() {
   if(!hidden)return null; return <View style={[StyleSheet.absoluteFillObject,{backgroundColor:'#07070A',zIndex:9999}]} pointerEvents="none"/>;
 }
 
-function NotificationHandler(){useEffect(()=>{if(Platform.OS==='web')return;const responseSub=Notifications.addNotificationResponseReceivedListener(response=>{const data=response.notification.request.content.data as unknown as NotificationData|undefined;if(data&&typeof data.event_type==='string')pendingNotificationRoute.current=data;});const receivedSub=Notifications.addNotificationReceivedListener(notification=>{const{title,body,data}=notification.request.content;logDebugEvent('PUSH_RECEIVED_FOREGROUND',{title:title??null,body:body??null,event_type:(data as any)?.event_type??null,identifier:notification.request.identifier});if(AppState.currentState==='active')emitIncoming();});return()=>{responseSub.remove();receivedSub.remove();};},[]);return null;}
+function NotificationHandler(){useEffect(()=>{if(Platform.OS==='web')return;const responseSub=Notifications.addNotificationResponseReceivedListener(response=>{const data=response.notification.request.content.data as unknown as NotificationData|undefined;if(data&&typeof data.event_type==='string')pendingNotificationRoute.current=data;});const receivedSub=Notifications.addNotificationReceivedListener(()=>{if(AppState.currentState==='active')emitIncoming();});return()=>{responseSub.remove();receivedSub.remove();};},[]);return null;}
 
 function SessionGuard() {
   const { session, loading, isAdmin, isSuperAdmin } = useAuth();
@@ -59,13 +58,13 @@ function SessionGuard() {
 
     if (!session) {
       ageCheckFor.current = null;
-      const protectedRoute = first === '(app)' || first === '(admin)' || first === 'weather' || first === 'unlock' || first === 'debug' || first === 'debug-access' || first === 'debug-fallback';
+      const protectedRoute = first === '(app)' || first === '(admin)' || first === 'weather' || first === 'unlock' || first === 'debug';
       if (protectedRoute) router.replace('/(auth)/welcome');
       return;
     }
 
     // Debug screens are developer/admin tools. Merely knowing the route must never grant access.
-    if ((first === 'debug' || first === 'debug-access' || first === 'debug-fallback') && !isAdmin && !isSuperAdmin) {
+    if (first === 'debug' && !isAdmin && !isSuperAdmin) {
       router.replace('/(app)/(tabs)/');
       return;
     }
@@ -88,6 +87,6 @@ function SessionGuard() {
 
 function BackgroundLockManager(){const{session,settings,lockApp,isAuthenticatingRef,refreshCouple}=useAuth();const router=useRouter();const segments=useSegments();const appStateRef=useRef<AppStateStatus>(AppState.currentState);const wasBackgroundedRef=useRef(false);const backgroundedAtRef=useRef<number|null>(null);useEffect(()=>{if(Platform.OS==='web')return;const sub=AppState.addEventListener('change',(next:AppStateStatus)=>{appStateRef.current=next;if(next==='background'||next==='inactive'){wasBackgroundedRef.current=true;backgroundedAtRef.current=Date.now();}else if(next==='active'&&wasBackgroundedRef.current){wasBackgroundedRef.current=false;refreshCouple();const method=settings?.login_method??'none';if(!session||method==='none'||method==='password'||isAuthenticatingRef.current)return;const lockAfter=settings?.lock_after_seconds??null;const bgStart=backgroundedAtRef.current;backgroundedAtRef.current=null;if(lockAfter===null||lockAfter<0||bgStart===null)return;const bgSeconds=(Date.now()-bgStart)/1000;const shouldLock=lockAfter===0||bgSeconds>=lockAfter;if(shouldLock){lockApp();const currentRoute=segments[segments.length-1];const safeRoutes=['unlock','transition','weather'];if(!safeRoutes.includes(currentRoute))router.replace('/unlock');}}});return()=>sub.remove();},[session,settings?.login_method,settings?.lock_after_seconds,lockApp,isAuthenticatingRef,refreshCouple]);return null;}
 
-export default function RootLayout(){useFrameworkReady();const[fontsLoaded,fontError]=useFonts({'Inter-Regular':Inter_400Regular,'Inter-Medium':Inter_500Medium,'Inter-SemiBold':Inter_600SemiBold,'Inter-Bold':Inter_700Bold});useEffect(()=>{if(fontsLoaded||fontError)SplashScreen.hideAsync();},[fontsLoaded,fontError]);if(!fontsLoaded&&!fontError)return null;return <ErrorBoundary><GestureHandlerRootView style={styles.root}><NavThemeProvider value={DarkTheme}><ThemeProvider><AuthProvider><Stack screenOptions={{headerShown:false,animation:'fade',contentStyle:{backgroundColor:'#05040A'}}}><Stack.Screen name="index"/><Stack.Screen name="weather"/><Stack.Screen name="transition"/><Stack.Screen name="unlock"/><Stack.Screen name="delete-account"/>{__DEV__&&<><Stack.Screen name="debug"/><Stack.Screen name="debug-access"/><Stack.Screen name="debug-fallback"/></>}<Stack.Screen name="(auth)"/><Stack.Screen name="(app)"/><Stack.Screen name="(admin)"/><Stack.Screen name="+not-found"/></Stack><IncomingSlash/><UploadProgressOverlay/><PrivacyOverlay/><SessionGuard/><BackgroundLockManager/><NotificationHandler/><StatusBar style="light"/></AuthProvider></ThemeProvider></NavThemeProvider></GestureHandlerRootView></ErrorBoundary>}
+export default function RootLayout(){useFrameworkReady();const[fontsLoaded,fontError]=useFonts({'Inter-Regular':Inter_400Regular,'Inter-Medium':Inter_500Medium,'Inter-SemiBold':Inter_600SemiBold,'Inter-Bold':Inter_700Bold});useEffect(()=>{if(fontsLoaded||fontError)SplashScreen.hideAsync();},[fontsLoaded,fontError]);if(!fontsLoaded&&!fontError)return null;return <ErrorBoundary><GestureHandlerRootView style={styles.root}><NavThemeProvider value={DarkTheme}><ThemeProvider><AuthProvider><Stack screenOptions={{headerShown:false,animation:'fade',contentStyle:{backgroundColor:'#05040A'}}}><Stack.Screen name="index"/><Stack.Screen name="weather"/><Stack.Screen name="transition"/><Stack.Screen name="unlock"/><Stack.Screen name="delete-account"/>{__DEV__&&<Stack.Screen name="debug"/>}<Stack.Screen name="(auth)"/><Stack.Screen name="(app)"/><Stack.Screen name="(admin)"/><Stack.Screen name="+not-found"/></Stack><IncomingSlash/><UploadProgressOverlay/><PrivacyOverlay/><SessionGuard/><BackgroundLockManager/><NotificationHandler/><StatusBar style="light"/></AuthProvider></ThemeProvider></NavThemeProvider></GestureHandlerRootView></ErrorBoundary>}
 
 const styles=StyleSheet.create({root:{flex:1,backgroundColor:'#05040A'}});
