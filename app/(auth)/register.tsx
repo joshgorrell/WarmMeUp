@@ -156,14 +156,14 @@ export default function RegisterScreen() {
 
       setCreatedUserId(user.id);
 
-      // Pre-fill name from OAuth metadata so the user doesn't re-enter it
+      // Pre-fill name from the persisted profile first (survives re-authorization),
+      // then fall back to OAuth provider metadata (Apple only provides name on first
+      // authorization — later sign-ins return no name even if it was stored before).
       const meta = user.user_metadata ?? {};
-      if (meta.first_name || meta.given_name) {
-        setFirstName(String(meta.first_name || meta.given_name));
-      }
-      if (meta.last_name || meta.family_name) {
-        setLastName(String(meta.last_name || meta.family_name));
-      }
+      const profFn = prof?.first_name || meta.first_name || meta.given_name || '';
+      const profLn = prof?.last_name || meta.last_name || meta.family_name || '';
+      if (profFn) setFirstName(String(profFn));
+      if (profLn) setLastName(String(profLn));
 
       if (hasName && hasDob && hasTos) {
         // All required registration fields present — go to avatar.
@@ -318,18 +318,6 @@ export default function RegisterScreen() {
           }).catch(() => {});
         }
 
-        // Prefer name from OAuth provider (Apple provides it on first sign-in);
-        // fall back to whatever the user typed in the form.
-        const meta = session.user?.user_metadata ?? {};
-        const providerFn = meta.first_name || meta.given_name || '';
-        const providerLn = meta.last_name || meta.family_name || '';
-        const fn = providerFn || firstName.trim();
-        const ln = providerLn || lastName.trim();
-        const fullName = [fn, ln].filter(Boolean).join(' ');
-
-        const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
-        const nowIso = new Date().toISOString();
-
         // Check the persisted profile to determine if this is a new user or a
         // returning user whose registration is already complete.
         const { data: existingProfile } = await supabase
@@ -351,6 +339,19 @@ export default function RegisterScreen() {
           router.replace('/transition');
           return;
         }
+
+        // Prefer name from the persisted profile (survives re-authorization),
+        // then OAuth provider metadata (Apple only provides name on first sign-in),
+        // then fall back to whatever the user typed in the form.
+        const meta = session.user?.user_metadata ?? {};
+        const providerFn = existingProfile?.first_name || meta.first_name || meta.given_name || '';
+        const providerLn = existingProfile?.last_name || meta.last_name || meta.family_name || '';
+        const fn = providerFn || firstName.trim();
+        const ln = providerLn || lastName.trim();
+        const fullName = [fn, ln].filter(Boolean).join(' ');
+
+        const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
+        const nowIso = new Date().toISOString();
 
         // New or incomplete user — persist all available registration fields.
         // tos_accepted_at is written here because the user affirmatively agreed
@@ -415,7 +416,15 @@ export default function RegisterScreen() {
           .eq('id', createdUserId);
         await refreshProfile();
       }
-      setStep('avatar');
+
+      // After saving the name, check if this OAuth-complete user still needs
+      // DOB or Terms. If so, route to the form — not the avatar step — so those
+      // required fields are collected before the avatar uploader appears.
+      if (oauthComplete === '1' && (!dobValid || !tosAccepted)) {
+        setStep('form');
+      } else {
+        setStep('avatar');
+      }
     } catch (e: unknown) {
       setApiError(friendlyAuthError(e));
     } finally {

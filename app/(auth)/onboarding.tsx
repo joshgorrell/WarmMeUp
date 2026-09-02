@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
@@ -13,6 +13,9 @@ export default function OnboardingScreen() {
 
   const [completing, setCompleting] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  // Preserve the user's selected finish action across a failed save + retry
+  // so "invite partner" doesn't silently become "enter app" on retry.
+  const pendingActionRef = useRef<OnboardingFinishAction | undefined>(undefined);
 
   const finish = useCallback((action?: OnboardingFinishAction) => {
     if (action === 'invite-partner') {
@@ -26,9 +29,32 @@ export default function OnboardingScreen() {
     if (completing) return;
     setCompleting(true);
     setSaveError(false);
+    pendingActionRef.current = action;
 
     if (!user) {
       setCompleting(false);
+      return;
+    }
+
+    // Independently verify that all required registration fields are present
+    // before marking onboarding complete. If any are missing, route the user
+    // back to registration completion instead of writing the timestamp.
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const registrationComplete = !!(
+      prof?.first_name &&
+      prof?.last_name &&
+      prof?.date_of_birth &&
+      prof?.age_verified_at &&
+      prof?.tos_accepted_at
+    );
+
+    if (!registrationComplete) {
+      router.replace({ pathname: '/(auth)/register', params: { oauthComplete: '1' } });
       return;
     }
 
@@ -64,11 +90,11 @@ export default function OnboardingScreen() {
       refreshSettings(),
     ]);
 
-    finish(action);
-  }, [completing, user, refreshProfile, refreshSettings, finish]);
+    finish(pendingActionRef.current);
+  }, [completing, user, refreshProfile, refreshSettings, finish, router]);
 
   const handleRetry = useCallback(() => {
-    handleComplete();
+    handleComplete(pendingActionRef.current);
   }, [handleComplete]);
 
   if (saveError) {
