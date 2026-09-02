@@ -7,7 +7,7 @@ import { logDebugEvent } from '@/lib/debugLog';
 import {
   FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity,
   CircleCheck as CheckCircle2, CircleX as XCircle, Loader as Loader2,
-  Star, UserCog, Bug, ShieldCheck, MessageSquare, TriangleAlert as AlertTriangle,
+  Star, UserCog, Bug, MessageSquare, TriangleAlert as AlertTriangle,
   RefreshCw, X as XIcon, Clock, Bot, Mail, CircleQuestionMark, TrendingUp,
 } from 'lucide-react-native';
 import BottomSheet from '@/components/BottomSheet';
@@ -327,15 +327,6 @@ export default function AdminDashboard() {
       route: '/(admin)/points-config',
     },
 
-    {
-      label: 'Entitlements',
-      sub: 'Grant or revoke free premium access to users',
-      icon: <ShieldCheck color="#33D17A" size={22} strokeWidth={2} />,
-      color: '#33D17A',
-      bg: 'rgba(51,209,122,0.10)',
-      border: 'rgba(51,209,122,0.25)',
-      route: '/(admin)/entitlements',
-    },
     {
       label: 'Greeting Subtitles',
       sub: 'Manage the rotating phrases shown under the home screen greeting',
