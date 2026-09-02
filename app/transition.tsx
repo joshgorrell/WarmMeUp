@@ -131,6 +131,15 @@ export default function TransitionScreen() {
         return;
       }
 
+      // Onboarding guard — if the user has never completed onboarding, send them
+      // through it before anything else. This catches OAuth users (Apple/Google)
+      // whose profile was auto-created on signup and users who restart mid-flow.
+      if (!profile?.onboarding_completed_at) {
+        logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/onboarding [onboarding not completed]`, { elapsedMs: elapsed() });
+        router.replace({ pathname: '/(auth)/onboarding', params: { oauthComplete: '1' } });
+        return;
+      }
+
       if (couple?.active) {
         if (!couple.user_b_id) {
           logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/pair [solo, no partner]`, { elapsedMs: elapsed() });

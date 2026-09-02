@@ -218,6 +218,31 @@ export default function SubscriptionScreen() {
     }
   };
 
+  const handleRedeemCode = async () => {
+    if (Platform.OS !== 'ios') return;
+    setLoading(true);
+    try {
+      const Purchases = await ensureConfigured();
+      if (!Purchases) {
+        Alert.alert('Unavailable', 'Purchases are not available on this device.');
+        return;
+      }
+      await Purchases.presentCodeRedemptionSheet();
+      const info = await Purchases.restorePurchases();
+      const entitlement = info.entitlements.active['premium'];
+      if (entitlement) {
+        await confirmWithServer();
+        await refreshSubscription();
+        router.replace('/(app)/(tabs)');
+      }
+    } catch (e: any) {
+      if (e?.code === '1') return;
+      Alert.alert('Redeem Failed', e?.message ?? 'Could not redeem code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRestore = async () => {
     if (Platform.OS === 'web') {
       Alert.alert('Not Available', 'Purchase restoration is only available on iOS and Android.');
@@ -445,6 +470,17 @@ export default function SubscriptionScreen() {
           <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} style={styles.restoreBtn} disabled={loading}>
             <AppText style={styles.restoreText}>Restore Purchase</AppText>
           </TouchableOpacity>
+
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              onPress={handleRedeemCode}
+              activeOpacity={0.7}
+              style={styles.restoreBtn}
+              disabled={loading}
+            >
+              <AppText style={styles.restoreText}>Redeem Offer Code</AppText>
+            </TouchableOpacity>
+          )}
 
           {canDismiss && (
             <TouchableOpacity
