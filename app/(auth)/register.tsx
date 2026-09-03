@@ -165,6 +165,17 @@ export default function RegisterScreen() {
       if (profFn) setFirstName(String(profFn));
       if (profLn) setLastName(String(profLn));
 
+      // Restore persisted DOB and Terms acceptance so returning OAuth users
+      // do not re-enter or re-accept information unnecessarily.
+      if (prof?.date_of_birth) {
+        const parsed = new Date(prof.date_of_birth);
+        if (!isNaN(parsed.getTime())) {
+          setDobDate(parsed);
+          if (Platform.OS === 'web') setDobText(formatDate(parsed));
+        }
+      }
+      if (hasTos) setTosAccepted(true);
+
       if (hasName && hasDob && hasTos) {
         // All required registration fields present — go to avatar.
         setStep('avatar');
@@ -415,10 +426,14 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       if (createdUserId) {
-        await supabase
+        const { error: nameUpdateError } = await supabase
           .from('profiles')
           .update({ first_name: fn, last_name: ln, display_name: fullName })
           .eq('id', createdUserId);
+        if (nameUpdateError) {
+          setApiError('Could not save your name. Please check your connection and try again.');
+          return;
+        }
         await refreshProfile();
       }
 

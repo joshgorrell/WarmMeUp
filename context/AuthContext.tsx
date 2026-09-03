@@ -10,7 +10,6 @@ import { clearAppBadge } from '@/lib/appBadge';
 import { secureKey } from '@/lib/secureKey';
 import { clearWeatherSessionCache } from '@/hooks/useWeather';
 import { logInRevenueCat, logOutRevenueCat } from '@/lib/purchases';
-import { saveDiagnosticsSnapshot } from '@/lib/diagnosticsSnapshot';
 import { emitIncoming } from '@/lib/incomingEvents';
 import { logger } from '../lib/logger';
 
@@ -402,13 +401,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // false and would never let us prompt the user the first time.
       registerForPushNotifications().then(token => {
         if (token) savePushToken(userId, token);
-        // Save a non-sensitive diagnostic snapshot after every session start.
-        const email = currentSession?.user?.email ?? null;
-        saveDiagnosticsSnapshot(userId, email, {
-          authStatus: 'authenticated',
-          pushTokenStatus: token ? 'registered' : 'not registered',
-          currentRoute: 'app (post-login)',
-        });
       });
 
       // Log the Supabase user ID into RevenueCat so server-side verification can

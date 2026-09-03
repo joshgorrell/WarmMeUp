@@ -260,7 +260,7 @@ export type WishCategory =
   | 'Intimate'
   | 'Someday';
 
-export type SubscriptionSource = 'self' | 'partner' | 'none' | 'admin' | 'super_admin';
+export type SubscriptionSource = 'self' | 'partner' | 'none' | 'admin' | 'super_admin' | 'review_access';
 
 export interface SubscriptionInfo {
   isPremium: boolean;

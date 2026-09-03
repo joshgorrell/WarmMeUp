@@ -27,6 +27,7 @@
       "usesAppleSignIn": true,
       "backgroundColor": "#050507",
       "bundleIdentifier": "app.warmmeup",
+      "buildNumber": "2",
       "infoPlist": {
         "NSCameraUsageDescription": "Warm Me Up uses the camera to take photos and videos in Chat and the Vault.",
         "NSPhotoLibraryUsageDescription": "Warm Me Up accesses your photo library to share media in Chat and the Vault.",

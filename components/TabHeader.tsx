@@ -43,10 +43,6 @@ export default function TabHeader({ rightSlot }: TabHeaderProps) {
             try { router.replace('/'); } catch {}
           }
         }}
-        // Emergency debug access: 5-second hold on logo. Intentionally open to all users
-        // as a support lifeline — the debug screen shows only safe/sanitized content to non-super-admins.
-        onLongPress={() => router.push('/debug')}
-        delayLongPress={5000}
         activeOpacity={0.7}
         style={styles.brand}
       >

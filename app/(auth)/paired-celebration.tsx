@@ -79,10 +79,6 @@ export default function PairedCelebrationScreen() {
     router.replace({ pathname: '/(auth)/onboarding', params: { paired: '1' } });
   };
 
-  const handleSkip = () => {
-    router.replace('/(app)/(tabs)');
-  };
-
   const centerStyle = isTablet
     ? { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const }
     : {};
@@ -96,14 +92,6 @@ export default function PairedCelebrationScreen() {
 
       <View style={[styles.glowTop, { width: width * 0.8, height: width * 0.8 }]} />
       <View style={[styles.glowBottom, { width: width * 0.6, height: width * 0.6 }]} />
-
-      <TouchableOpacity
-        style={[styles.skipBtn, { top: insets.top + 14 }]}
-        onPress={handleSkip}
-        activeOpacity={0.7}
-      >
-        <AppText style={styles.skipText}>Skip</AppText>
-      </TouchableOpacity>
 
       <View style={[styles.container, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }, centerStyle]}>
         {/* Partner avatar or heart graphic cluster */}
@@ -228,18 +216,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     borderRadius: 9999,
     backgroundColor: 'rgba(255,46,138,0.05)',
-  },
-  skipBtn: {
-    position: 'absolute',
-    right: Spacing.xl,
-    zIndex: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-  },
-  skipText: {
-    color: 'rgba(255,255,255,0.42)',
-    fontSize: FontSize.body,
-    fontFamily: 'Inter-Regular',
   },
   container: {
     flex: 1,

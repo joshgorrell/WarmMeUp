@@ -409,17 +409,6 @@ export function ProfileTab({
         </View>
       </View>
 
-      {(isAdmin || isSuperAdmin) && (
-        <TouchableOpacity
-          style={styles.debugRow}
-          onPress={() => router.push('/debug')}
-          activeOpacity={0.7}
-        >
-          <AppText style={styles.debugRowText}>Debug Diagnostics</AppText>
-          <ChevronRight color="#333" size={14} />
-        </TouchableOpacity>
-      )}
-
       {/* Footer logo */}
       <View style={styles.footerLogoWrap}>
         <Image
@@ -553,21 +542,4 @@ const styles = StyleSheet.create({
   emailText: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular', marginTop: 2 },
   footerLogoWrap: { alignItems: 'center', paddingTop: Spacing.xxl, paddingBottom: Spacing.xl, opacity: 0.7 },
   footerLogo: { width: 320, height: 160 },
-  debugRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    marginTop: Spacing.xs,
-    alignSelf: 'center',
-  },
-  debugRowText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#2a2a2f',
-    textDecorationLine: 'underline',
-    textDecorationColor: '#2a2a2f',
-  },
 });
