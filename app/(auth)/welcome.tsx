@@ -71,6 +71,7 @@ export default function WelcomeScreen() {
         {/* Bottom: subtitle + CTAs */}
         <View style={styles.actions}>
           <AppText style={styles.subtitle}>A private app for playful couples.</AppText>
+          <AppText style={styles.trialBadge}>7-day free trial with signup</AppText>
 
           <TouchableOpacity
             style={styles.primaryBtn}
@@ -200,5 +201,12 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     fontFamily: 'Inter-Regular',
     letterSpacing: 0.2,
+  },
+  trialBadge: {
+    color: '#FF7A45',
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-SemiBold',
+    letterSpacing: 0.3,
+    marginTop: 2,
   },
 });

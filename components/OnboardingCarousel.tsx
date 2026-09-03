@@ -449,7 +449,7 @@ const SLIDES: Slide[] = [
     key: 'finish',
     eyebrow: 'STAY PLAYFUL',
     headline: 'Ready to stay playful?',
-    subtext: 'Connect with your partner and start building a space that belongs to just the two of you.',
+    subtext: 'Connect with your partner and start building a space that belongs to just the two of you. Your first 7 days are free — after that, subscribe to keep access.',
     Visual: VisualFinish,
   },
 ];
