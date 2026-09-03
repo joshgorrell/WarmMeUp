@@ -32,6 +32,7 @@ import {
   awardPoints,
   getPointValue,
   incrementMonthlyCounter,
+  isPointsEnabled,
 } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { Interaction } from '@/lib/types';
@@ -250,16 +251,22 @@ export default function DareTab() {
         completed_at: nowIso,
       }).eq('id', incomingDare.id);
       notifyPartner({ event_type: 'dare_accepted', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
-      const pts = await getPointValue('dare_accept');
-      await awardPoints(couple.id, user.id, pts, 'Dare accepted', incomingDare.id);
-      await incrementMonthlyCounter(couple.id, user.id, 'dares_accepted', pts);
+      const ptsEnabled = await isPointsEnabled(couple.id);
+      if (ptsEnabled) {
+        const pts = await getPointValue('dare_accept');
+        await awardPoints(couple.id, user.id, pts, 'Dare accepted', incomingDare.id);
+        await incrementMonthlyCounter(couple.id, user.id, 'dares_accepted', pts);
+      }
       setIncomingDare(null);
     } else {
       const update: Record<string, unknown> = { status: 'rejected', is_active: false };
       if (declineReason) update.decline_reason = declineReason;
       await supabase.from('interactions').update(update).eq('id', incomingDare.id);
       notifyPartner({ event_type: 'dare_rejected', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
-      await incrementMonthlyCounter(couple.id, user.id, 'dares_skipped', 0);
+      const ptsEnabled = await isPointsEnabled(couple.id);
+      if (ptsEnabled) {
+        await incrementMonthlyCounter(couple.id, user.id, 'dares_skipped', 0);
+      }
       if (declineReason) {
         const { data: activityMsg } = await supabase
           .from('chat_messages')
@@ -321,7 +328,9 @@ export default function DareTab() {
         </View>
         <View style={styles.historyMeta}>
           <AppText style={[styles.historyDate, { color: colors.textMuted }]}>{formatDate(dateValue)}</AppText>
-          <AppText style={[styles.historyPoints, { color: isPositive ? '#33D17A' : colors.textMuted }]}>{isPositive ? `+${acceptPts} pts` : '0 pts'}</AppText>
+          {(couple?.points_enabled ?? true) && (
+            <AppText style={[styles.historyPoints, { color: isPositive ? '#33D17A' : colors.textMuted }]}>{isPositive ? `+${acceptPts} pts` : '0 pts'}</AppText>
+          )}
         </View>
       </View>
     );
@@ -334,9 +343,11 @@ export default function DareTab() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {incomingDare && (
             <View style={[styles.incomingSection, highlightDare && styles.incomingHighlight]}>
-              <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}> 
-                <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText></AppText>
-              </View>
+              {(couple?.points_enabled ?? true) && (
+                <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
+                  <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText></AppText>
+                </View>
+              )}
               <ReceivedDareCard text={incomingDare.content_text} status={incomingDare.status} expiresAt={incomingDare.expires_at} totalExpirySeconds={incomingTotalExpirySeconds} coupleId={couple?.id} onAccept={() => handleRespond(true)} onReject={reason => handleRespond(false, reason)} onTimeout={checkStates} />
             </View>
           )}

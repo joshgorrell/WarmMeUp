@@ -12,7 +12,7 @@ import { Image as ImageIcon, Camera, X, Lock, Pencil, Send } from 'lucide-react-
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { awardPoints, getPointValue, incrementMonthlyCounter } from '@/lib/points';
+import { awardPoints, getPointValue, incrementMonthlyCounter, isPointsEnabled } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension, extensionToMime } from '@/lib/uploadMedia';
 import { ChatMessage } from '@/lib/types';
@@ -841,12 +841,15 @@ export default function ChatTab() {
       }
 
       try {
-        const eventKey = capturedMedia ? 'chat_media' : 'chat_message';
-        const pts = await getPointValue(eventKey);
-        const reason = capturedMedia ? 'Chat media' : 'Chat message';
-        await awardPoints(coupleId, userId, pts, reason);
-        const field = capturedMedia ? 'media_sent' : 'chat_messages_sent';
-        await incrementMonthlyCounter(coupleId, userId, field, pts);
+        const ptsEnabled = await isPointsEnabled(coupleId);
+        if (ptsEnabled) {
+          const eventKey = capturedMedia ? 'chat_media' : 'chat_message';
+          const pts = await getPointValue(eventKey);
+          const reason = capturedMedia ? 'Chat media' : 'Chat message';
+          await awardPoints(coupleId, userId, pts, reason);
+          const field = capturedMedia ? 'media_sent' : 'chat_messages_sent';
+          await incrementMonthlyCounter(coupleId, userId, field, pts);
+        }
       } catch {}
     });
 

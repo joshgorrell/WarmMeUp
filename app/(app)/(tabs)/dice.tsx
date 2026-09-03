@@ -27,6 +27,7 @@ import {
   deactivatePreviousEphemeral,
   getPointValue,
   incrementMonthlyCounter,
+  isPointsEnabled,
 } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { Interaction } from '@/lib/types';
@@ -471,9 +472,12 @@ export default function DiceTab() {
         target_route: '/(app)/(tabs)/dice',
         partnerUserId: partnerProfile?.id,
       });
-      const pts = await getPointValue('dice_accept');
-      await awardPoints(couple.id, user.id, pts, 'Dice challenge accepted', incomingChallenge.id);
-      await incrementMonthlyCounter(couple.id, user.id, 'dice_accepted', pts);
+      const ptsEnabled = await isPointsEnabled(couple.id);
+      if (ptsEnabled) {
+        const pts = await getPointValue('dice_accept');
+        await awardPoints(couple.id, user.id, pts, 'Dice challenge accepted', incomingChallenge.id);
+        await incrementMonthlyCounter(couple.id, user.id, 'dice_accepted', pts);
+      }
       setIncomingChallenge(null);
     } else {
       await supabase
@@ -486,8 +490,11 @@ export default function DiceTab() {
         target_route: '/(app)/(tabs)/dice',
         partnerUserId: partnerProfile?.id,
       });
-      await awardPoints(couple.id, user.id, 1, 'Dice — participation', incomingChallenge.id);
-      await incrementMonthlyCounter(couple.id, user.id, 'dice_skipped', 0);
+      const ptsEnabled = await isPointsEnabled(couple.id);
+      if (ptsEnabled) {
+        await awardPoints(couple.id, user.id, 1, 'Dice — participation', incomingChallenge.id);
+        await incrementMonthlyCounter(couple.id, user.id, 'dice_skipped', 0);
+      }
       setIncomingChallenge(null);
     }
 
@@ -607,12 +614,14 @@ export default function DiceTab() {
         </View>
         <View style={styles.historyMeta}>
           <AppText style={[styles.historyDate, { color: colors.textMuted }]}>{formatDate(dateValue)}</AppText>
-          {accepted ? (
-            <AppText style={styles.historyPoints}>+{acceptPts} pts</AppText>
-          ) : declined ? (
-            <AppText style={[styles.historyPoints, { color: colors.textMuted }]}>+1 pt</AppText>
-          ) : (
-            <AppText style={[styles.historyPoints, { color: colors.textMuted }]}>0 pts</AppText>
+          {(couple?.points_enabled ?? true) && (
+            accepted ? (
+              <AppText style={styles.historyPoints}>+{acceptPts} pts</AppText>
+            ) : declined ? (
+              <AppText style={[styles.historyPoints, { color: colors.textMuted }]}>+1 pt</AppText>
+            ) : (
+              <AppText style={[styles.historyPoints, { color: colors.textMuted }]}>0 pts</AppText>
+            )
           )}
         </View>
       </View>
@@ -663,17 +672,19 @@ export default function DiceTab() {
 
         {incomingChallenge && (
           <View style={[styles.challengeSection, highlightChallenge && styles.challengeHighlight]}>
-            <View
-              style={[
-                styles.pointsHint,
-                {
-                  backgroundColor: 'rgba(255,179,71,0.08)',
-                  borderColor: 'rgba(255,179,71,0.25)',
-                },
-              ]}
-            >
-              <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText></AppText>
-            </View>
+            {(couple?.points_enabled ?? true) && (
+              <View
+                style={[
+                  styles.pointsHint,
+                  {
+                    backgroundColor: 'rgba(255,179,71,0.08)',
+                    borderColor: 'rgba(255,179,71,0.25)',
+                  },
+                ]}
+              >
+                <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText></AppText>
+              </View>
+            )}
             <ReceivedDiceChallengeCard
               text={incomingChallenge.content_text}
               status={incomingChallenge.status}

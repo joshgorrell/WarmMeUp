@@ -38,6 +38,15 @@ export function invalidatePointConfigCache() {
   configCachePromise = null;
 }
 
+export async function isPointsEnabled(coupleId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('couples')
+    .select('points_enabled')
+    .eq('id', coupleId)
+    .maybeSingle();
+  return data?.points_enabled ?? true;
+}
+
 export async function getPointValue(eventKey: string): Promise<number> {
   const cfg = await getPointConfig();
   return cfg[eventKey] ?? DEFAULTS[eventKey] ?? 0;

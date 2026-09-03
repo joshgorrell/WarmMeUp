@@ -135,8 +135,8 @@ export function SettingsTab({
       </Section>
 
       <View onLayout={(e) => onPointsSectionLayout(e.nativeEvent.layout.y)}>
-        <Section title="POINTS" note={couple?.id ? "Points are optional for couples who enjoy the game. Turning them off hides scores and Cash In features without affecting your Weekly Streak." : "Connect with a partner to enable Points."}>
-          <SettingsRow label="Points" sub="Show scores, leaderboard, and Cash In features" toggle value={optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)} onChange={onTogglePoints} disabled={!couple?.id} last />
+        <Section title="POINTS" note={couple?.id ? "Points are optional for couples who enjoy the game. Turning them off hides scores without affecting your Weekly Streak." : "Connect with a partner to enable Points."}>
+          <SettingsRow label="Points" sub="Show scores and leaderboard" toggle value={optimisticPointsEnabled !== null ? optimisticPointsEnabled : (couple?.points_enabled ?? true)} onChange={onTogglePoints} disabled={!couple?.id} last />
         </Section>
       </View>
 
