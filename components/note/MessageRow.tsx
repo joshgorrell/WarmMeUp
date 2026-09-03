@@ -37,6 +37,7 @@ function parseActivity(msg: ChatMessage): ChatActivityItem | null {
       title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : 'Something is waiting for you.',
       preview: typeof raw.preview === 'string' ? raw.preview : null,
       expiresAt: typeof raw.expiresAt === 'string' && raw.expiresAt ? raw.expiresAt : null,
+      dareStatus: typeof raw.dareStatus === 'string' ? raw.dareStatus : null,
     };
   } catch {
     return null;
@@ -186,8 +187,8 @@ export const MessageRow = React.memo(function MessageRow({
 
   const activity = parseActivity(item);
   if (activity) {
-    // Hide expired dare activity cards entirely — they should not linger in the feed
-    if (activity.kind === 'dare' && activity.expiresAt && new Date(activity.expiresAt).getTime() <= Date.now()) {
+    // Hide expired dare activity cards — unless the dare was accepted
+    if (activity.kind === 'dare' && activity.expiresAt && new Date(activity.expiresAt).getTime() <= Date.now() && activity.dareStatus !== 'accepted') {
       return null;
     }
 

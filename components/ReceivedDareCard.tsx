@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CircleCheck as CheckCircle, Circle as XCircle, Flame, Clock, ChevronLeft, Send } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, Circle as XCircle, ChevronLeft, Send } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { Gradient, FontSize, Radius, Spacing } from '@/constants/theme';
 import CountdownRing from '@/components/CountdownRing';
 import { supabase } from '@/lib/supabase';
 
-type Stage = 'pending' | 'declining' | 'accepted' | 'waiting';
+type Stage = 'pending' | 'declining';
 
 interface DeclinePrompt {
   id: string;
@@ -23,13 +23,10 @@ interface ReceivedDareCardProps {
   coupleId?: string;
   onAccept: () => Promise<void> | void;
   onReject: (reason: string) => Promise<void> | void;
-  onComplete: () => Promise<void> | void;
   onTimeout?: () => void;
 }
 
 function resolveStage(status?: string | null): Stage {
-  if (status === 'pending_verification') return 'waiting';
-  if (status === 'accepted') return 'accepted';
   return 'pending';
 }
 
@@ -41,7 +38,6 @@ export default function ReceivedDareCard({
   coupleId,
   onAccept,
   onReject,
-  onComplete,
   onTimeout,
 }: ReceivedDareCardProps) {
   const { colors } = useTheme();
@@ -97,7 +93,6 @@ export default function ReceivedDareCard({
 
   const handleAccept = async () => {
     await handle(onAccept);
-    setStage('accepted');
   };
 
   const handleDeclinePress = async () => {
@@ -115,29 +110,20 @@ export default function ReceivedDareCard({
     await handle(() => onReject(trimmed));
   };
 
-  const handleComplete = async () => {
-    await handle(onComplete);
-    setStage('waiting');
-  };
-
-  const isWaiting = stage === 'waiting';
-
   return (
     <View
       style={[
         styles.card,
         {
           backgroundColor: colors.card,
-          borderColor: isWaiting ? 'rgba(51,209,122,0.40)' : 'rgba(255,46,138,0.40)',
-          shadowColor: isWaiting ? '#33D17A' : '#FF2E8A',
+          borderColor: 'rgba(255,46,138,0.40)',
+          shadowColor: '#FF2E8A',
         },
       ]}
     >
       <AppText style={[styles.label, { color: colors.textMuted }]}>
         {stage === 'pending' && 'YOUR PARTNER SENT YOU A DARE'}
         {stage === 'declining' && 'SEND A RESPONSE'}
-        {stage === 'accepted' && 'DARE ACCEPTED — COMPLETE IT!'}
-        {stage === 'waiting' && 'WAITING FOR PARTNER TO CONFIRM'}
       </AppText>
 
       {stage === 'pending' && expiresAt && (
@@ -292,42 +278,6 @@ export default function ReceivedDareCard({
           </TouchableOpacity>
         </View>
       )}
-
-      {stage === 'accepted' && (
-        <View style={styles.row}>
-          <TouchableOpacity
-            onPress={handleComplete}
-            activeOpacity={0.85}
-            style={styles.fullBtn}
-            disabled={busy}
-          >
-            <LinearGradient
-              colors={['#FF6B35', '#FF2E8A']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.actionGrad}
-            >
-              {busy ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Flame color="#fff" size={18} />
-                  <AppText style={styles.actionText}>I Did It!</AppText>
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {stage === 'waiting' && (
-        <View style={[styles.waitingRow, { borderColor: 'rgba(51,209,122,0.25)', backgroundColor: 'rgba(51,209,122,0.07)' }]}>
-          <Clock color="#33D17A" size={16} strokeWidth={2} />
-          <AppText style={[styles.waitingText, { color: '#33D17A' }]}>
-            Waiting for your partner to confirm...
-          </AppText>
-        </View>
-      )}
     </View>
   );
 }
@@ -366,16 +316,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   rejectText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium' },
-  waitingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing.md,
-    marginTop: 4,
-  },
-  waitingText: { fontSize: FontSize.sm, fontFamily: 'Inter-Medium', flex: 1 },
   decliningContainer: { gap: Spacing.md },
   decliningHint: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular' },
   loadingWrap: { alignItems: 'center', paddingVertical: Spacing.lg },

@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Flame, Sparkles, Dice6, ChevronRight, Eye, Clock } from 'lucide-react-native';
+import { Flame, Sparkles, Dice6, ChevronRight, Eye, Clock, CircleCheck as CheckCircle } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 
 export type ChatActivityKind = 'wish' | 'wish_bump' | 'dare' | 'dice';
@@ -14,6 +14,7 @@ export type ChatActivityItem = {
   preview?: string | null;
   sourceId?: string | null;
   expiresAt?: string | null;
+  dareStatus?: string | null;
 };
 
 const META = {
@@ -36,20 +37,25 @@ export default function ActivityCard({
 }) {
   const meta = META[item.kind];
   const Icon = meta.Icon;
-  const isExpired = item.kind === 'dare' && item.expiresAt && new Date(item.expiresAt).getTime() <= Date.now();
+  const isExpired = item.kind === 'dare' && item.expiresAt && new Date(item.expiresAt).getTime() <= Date.now() && item.dareStatus !== 'accepted';
+  const isAccepted = item.kind === 'dare' && item.dareStatus === 'accepted';
   const expiredColor = 'rgba(255,255,255,0.35)';
   const accentColor = isExpired ? expiredColor : meta.color;
+  const acceptedColor = '#33D17A';
+  const displayColor = isAccepted ? acceptedColor : accentColor;
   return (
     <View style={styles.row}>
       <TouchableOpacity style={[styles.card, isExpired && styles.cardExpired]} activeOpacity={0.82} onPress={onPress}>
-        <View style={[styles.iconWrap, { backgroundColor: isExpired ? 'rgba(255,255,255,0.06)' : `${meta.color}1F` }]}>
+        <View style={[styles.iconWrap, { backgroundColor: isExpired ? 'rgba(255,255,255,0.06)' : isAccepted ? 'rgba(51,209,122,0.15)' : `${meta.color}1F` }]}>
           {isExpired
             ? <Clock size={18} color={expiredColor} strokeWidth={2.2} />
-            : <Icon size={18} color={meta.color} strokeWidth={2.2} />}
+            : isAccepted
+              ? <CheckCircle size={18} color={acceptedColor} strokeWidth={2.2} />
+              : <Icon size={18} color={meta.color} strokeWidth={2.2} />}
         </View>
         <View style={styles.copy}>
           <AppText style={styles.eyebrow}>
-            <AppText style={[styles.actor, { color: accentColor }]}>{isMine ? 'You' : actorName}</AppText>
+            <AppText style={[styles.actor, { color: displayColor }]}>{isMine ? 'You' : actorName}</AppText>
             {' '}{isMine ? meta.mine : meta.partner}
           </AppText>
           <AppText style={[styles.title, isExpired && styles.titleExpired]} numberOfLines={2}>{item.title}</AppText>
@@ -57,10 +63,10 @@ export default function ActivityCard({
             <AppText style={styles.preview} numberOfLines={2}>{item.preview}</AppText>
           )}
           <View style={styles.actionRow}>
-            <AppText style={[styles.action, { color: accentColor }]}>
-              {isExpired ? 'Expired' : meta.action}
+            <AppText style={[styles.action, { color: displayColor }]}>
+              {isExpired ? 'Expired' : isAccepted ? 'Accepted' : meta.action}
             </AppText>
-            {!isExpired && <ChevronRight size={13} color={meta.color} strokeWidth={2.4} />}
+            {!isExpired && !isAccepted && <ChevronRight size={13} color={meta.color} strokeWidth={2.4} />}
           </View>
         </View>
       </TouchableOpacity>

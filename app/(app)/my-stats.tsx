@@ -563,7 +563,7 @@ export default function MyStatsScreen() {
               <AppText style={[styles.braveSectionTitle, { color: colors.text }]}>Brave Meter</AppText>
             </View>
             <BraveMeter
-              completed={(myStats?.dares_completed ?? 0)}
+              completed={(myStats?.dares_accepted ?? 0)}
               skipped={(myStats?.dares_skipped ?? 0)}
               label="Dares"
               color="#FF2E8A"
