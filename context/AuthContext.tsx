@@ -261,6 +261,7 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
       trialExpired: data.trialExpired ?? false,
       canInvite: data.canInvite ?? false,
       trialGraceEndsAt: data.trialGraceEndsAt ?? null,
+      purchaseEnvironment: data.purchaseEnvironment ?? 'none',
       loading: false,
     };
   } catch (err: any) {

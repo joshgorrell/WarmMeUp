@@ -261,6 +261,7 @@ export type WishCategory =
   | 'Someday';
 
 export type SubscriptionSource = 'self' | 'partner' | 'none' | 'admin' | 'super_admin' | 'review_access';
+export type PurchaseEnvironment = 'production' | 'sandbox' | 'none';
 
 export interface SubscriptionInfo {
   isPremium: boolean;
@@ -275,6 +276,8 @@ export interface SubscriptionInfo {
   canInvite: boolean;
   /** When the trial grace period ends (trial expires_at + 24h). Null if not applicable. */
   trialGraceEndsAt: string | null;
+  /** Whether the subscription came from a production or sandbox purchase. For diagnostics/admin only. */
+  purchaseEnvironment: PurchaseEnvironment;
   loading: boolean;
 }
 
@@ -288,6 +291,7 @@ export const DEFAULT_SUBSCRIPTION_INFO: SubscriptionInfo = {
   trialExpired: false,
   canInvite: false,
   trialGraceEndsAt: null,
+  purchaseEnvironment: 'none',
   loading: true,
 };
 

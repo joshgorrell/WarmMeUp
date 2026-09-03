@@ -7,10 +7,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+type PurchaseEnvironment = "sandbox" | "production";
+
+interface RCEntitlementResult {
+  active: boolean;
+  plan: "monthly" | "yearly";
+  expiresAt: string | null;
+  environment: PurchaseEnvironment | null;
+}
+
 async function verifyRevenueCatEntitlement(
   rcUserId: string,
   secretKey: string
-): Promise<{ active: boolean; plan: "monthly" | "yearly"; expiresAt: string | null }> {
+): Promise<RCEntitlementResult> {
   const url = `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(rcUserId)}`;
   const res = await fetch(url, {
     headers: {
@@ -22,7 +31,7 @@ async function verifyRevenueCatEntitlement(
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     console.error(`[confirm-subscription] RevenueCat API error status=${res.status}`, body.slice(0, 200));
-    return { active: false, plan: "monthly", expiresAt: null };
+    return { active: false, plan: "monthly", expiresAt: null, environment: null };
   }
 
   const data = await res.json();
@@ -34,20 +43,33 @@ async function verifyRevenueCatEntitlement(
   }));
 
   if (!entitlement?.expires_date) {
-    return { active: false, plan: "monthly", expiresAt: null };
+    return { active: false, plan: "monthly", expiresAt: null, environment: null };
   }
 
   const expiresAt = entitlement.expires_date;
   const isActive = new Date(expiresAt) > new Date();
   const productId: string = entitlement.product_identifier ?? "";
 
-  // Plan detection from product_identifier in the RevenueCat subscriber record.
   const plan: "monthly" | "yearly" =
     productId.includes("annual") || productId.includes("yearly") || productId.includes("year")
       ? "yearly"
       : "monthly";
 
-  return { active: isActive, plan, expiresAt };
+  // Determine sandbox vs production from the underlying subscription object.
+  // RevenueCat's v1 API returns is_sandbox on each subscription entry (keyed
+  // by product identifier). The entitlement itself does not carry is_sandbox,
+  // so we look it up via the entitlement's product_identifier.
+  const subscriptions = data?.subscriber?.subscriptions ?? {};
+  const subEntry = subscriptions[productId];
+
+  let environment: PurchaseEnvironment | null = null;
+  if (subEntry && typeof subEntry.is_sandbox === "boolean") {
+    environment = subEntry.is_sandbox ? "sandbox" : "production";
+  }
+
+  console.log(`[confirm-subscription] RC environment for ${rcUserId}: product=${productId} is_sandbox=${subEntry?.is_sandbox ?? "N/A"} environment=${environment ?? "unknown"}`);
+
+  return { active: isActive, plan, expiresAt, environment };
 }
 
 Deno.serve(async (req: Request) => {
@@ -90,9 +112,7 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[confirm-subscription] Verifying RC entitlement for user=${user.id}`);
 
-    // Server-side verification: fetch the subscriber record from RevenueCat using
-    // the user's Supabase UUID (which matches RC subscriber ID set via Purchases.logIn()).
-    const { active, plan, expiresAt } = await verifyRevenueCatEntitlement(user.id, rcSecretKey);
+    const { active, plan, expiresAt, environment } = await verifyRevenueCatEntitlement(user.id, rcSecretKey);
 
     if (!active) {
       console.warn(`[confirm-subscription] RC premium NOT active for user=${user.id}`);
@@ -102,7 +122,30 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`[confirm-subscription] RC premium ACTIVE user=${user.id} plan=${plan} expiresAt=${expiresAt}`);
+    // Fail safe: if we cannot determine the purchase environment, do NOT
+    // grant production access. A sandbox entitlement must not masquerade
+    // as a real production subscription.
+    if (environment === null) {
+      console.warn(`[confirm-subscription] Cannot determine purchase environment for user=${user.id} — refusing to grant production access`);
+      return new Response(
+        JSON.stringify({ error: "Unable to verify purchase environment. Please try restoring your purchase or contact support." }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (environment === "sandbox") {
+      console.warn(`[confirm-subscription] Sandbox entitlement detected for user=${user.id} — NOT recording as production subscription`);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          environment: "sandbox",
+          error: "Sandbox purchase detected. This purchase is valid for TestFlight testing but is not a production subscription.",
+        }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[confirm-subscription] RC premium ACTIVE user=${user.id} plan=${plan} environment=${environment} expiresAt=${expiresAt}`);
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
@@ -116,6 +159,7 @@ Deno.serve(async (req: Request) => {
           started_at: new Date().toISOString(),
           expires_at: expiresAt,
           trial_started_at: null,
+          purchase_environment: environment,
         },
         { onConflict: "user_id" }
       );
@@ -145,7 +189,7 @@ Deno.serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ ok: true, plan, expiresAt }),
+      JSON.stringify({ ok: true, plan, expiresAt, environment }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {

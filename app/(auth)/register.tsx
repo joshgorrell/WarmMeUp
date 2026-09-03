@@ -16,6 +16,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Lock, Eye, EyeOff, Mail, Check, Calendar, User, Sparkles } from 'lucide-react-native';
+import WarmupLogo from '@/components/WarmupLogo';
 import { supabase } from '@/lib/supabase';
 import { signInWithProvider, isOAuthSupported, assertNoEmailCollision, EmailCollisionError } from '@/lib/oauth';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -81,12 +82,13 @@ export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const { refreshSubscription, refreshProfile } = useAuth();
 
-  const vXs = Math.round(height * 0.012);
-  const vSm = Math.round(height * 0.02);
-  const vMd = Math.round(height * 0.03);
-  const inputPad = Math.max(Math.round(height * 0.016), 12);
-  const headingSize = Math.min(Math.round(width * 0.076), 30);
-  const formGap = Math.max(Math.round(height * 0.018), 14);
+  const vXs = Math.round(height * 0.008);
+  const vSm = Math.round(height * 0.014);
+  const vMd = Math.round(height * 0.022);
+  const inputPad = Math.max(Math.round(height * 0.013), 11);
+  const headingSize = Math.min(Math.round(width * 0.072), 28);
+  const formGap = Math.max(Math.round(height * 0.014), 10);
+  const sectionGap = Math.max(Math.round(height * 0.028), 20);
 
   // Form values
   const [firstName, setFirstName] = useState('');
@@ -225,11 +227,17 @@ export default function RegisterScreen() {
   const showLastNameError = (lastNameTouched || submitAttempted) && !!lastNameError;
   const showEmailError = (emailTouched || submitAttempted) && !!emailError;
   const showPasswordError = (passwordTouched || submitAttempted) && !!passwordError;
-  const showConfirmPasswordError = (confirmPasswordTouched || submitAttempted) && !!confirmPasswordError;
+  const showConfirmPasswordError = (confirmPasswordTouched || submitAttempted) && !!confirmPasswordError && (confirmPassword.length >= 4 || confirmPasswordTouched || submitAttempted);
   const showDobError = (dobTouched || submitAttempted) && !!dobFieldError;
 
   // Password hint (not red) while typing but not yet erroring
   const showPasswordHint = !showPasswordError;
+
+  // --- Derived: real-time validation passed flags (for green checkmarks) ---
+  const emailValid = !emailError;
+  const passwordValid = !passwordError;
+  const confirmPasswordValid = confirmPassword.length > 0 && password === confirmPassword;
+  const dobCheckValid = dobValid;
 
   // --- Derived: is this an OAuth-complete flow (already authenticated, just finishing profile)? ---
   const isOAuthComplete = oauthComplete === '1' && !!createdUserId;
@@ -593,6 +601,12 @@ export default function RegisterScreen() {
   const showGoogle = isOAuthSupported('google');
   const showApple = isOAuthSupported('apple');
 
+  const createBtnStyle = [
+    styles.createBtn,
+    { marginTop: vSm },
+    ...(formReady ? [] : [styles.createBtnDisabled]),
+  ];
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
@@ -858,17 +872,20 @@ export default function RegisterScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Title */}
+            {/* W logo + Title */}
+            <View style={[styles.logoWrap, { marginBottom: vSm }]}>
+              <WarmupLogo size={44} />
+            </View>
             <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>
               {isOAuthComplete ? 'Complete your account' : 'Create your account'}
             </AppText>
-            <AppText style={[styles.sub, { marginBottom: vMd }]}>
+            <AppText style={[styles.sub, { marginBottom: vSm }]}>
               {isOAuthComplete ? 'Just a few details to finish setting up.' : 'Private. Playful. Just for you and your partner.'}
             </AppText>
 
             {/* OAuth buttons — only show for non-OAuth-complete users */}
             {!isOAuthComplete && (showGoogle || showApple) && (
-              <View style={[styles.oauthBlock, { gap: vSm, marginBottom: vMd }]}>
+              <View style={[styles.oauthBlock, { gap: Math.round(height * 0.01), marginBottom: vSm }]}>
                 {showApple && (
                   Platform.OS === 'ios' ? (
                     <AppleAuthentication.AppleAuthenticationButton
@@ -880,7 +897,7 @@ export default function RegisterScreen() {
                     />
                   ) : (
                     <TouchableOpacity
-                      style={[styles.oauthBtn, styles.appleBtn, { paddingVertical: inputPad }]}
+                      style={[styles.oauthBtn, styles.appleBtn, { paddingVertical: Math.max(Math.round(height * 0.014), 12) }]}
                       onPress={() => handleOAuth('apple')}
                       activeOpacity={0.88}
                       disabled={oauthLoading !== null || loading}
@@ -895,7 +912,7 @@ export default function RegisterScreen() {
 
                 {showGoogle && (
                   <TouchableOpacity
-                    style={[styles.oauthBtn, styles.googleBtn, { paddingVertical: inputPad }]}
+                    style={[styles.oauthBtn, styles.googleBtn, { paddingVertical: Math.max(Math.round(height * 0.014), 12) }]}
                     onPress={() => handleOAuth('google')}
                     activeOpacity={0.88}
                     disabled={oauthLoading !== null || loading}
@@ -907,7 +924,7 @@ export default function RegisterScreen() {
                   </TouchableOpacity>
                 )}
 
-                <View style={styles.dividerRow}>
+                <View style={[styles.dividerRow, { marginTop: vXs }]}>
                   <View style={styles.dividerLine} />
                   <AppText style={styles.dividerText}>or</AppText>
                   <View style={styles.dividerLine} />
@@ -967,11 +984,14 @@ export default function RegisterScreen() {
                     onChangeText={(t) => { setEmail(t); if (!emailTouched) setEmailTouched(true); }}
                     onBlur={() => setEmailTouched(true)}
                     placeholder="Email"
-                    placeholderTextColor="rgba(255,255,255,0.24)"
+                    placeholderTextColor="rgba(255,255,255,0.36)"
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoComplete="email"
                   />
+                  {emailValid && email.length > 0 && (
+                    <Check color="#33D17A" size={16} strokeWidth={2.5} style={styles.checkIcon} />
+                  )}
                 </View>
                 {showEmailError && (
                   <AppText style={styles.fieldError}>{emailError}</AppText>
@@ -990,9 +1010,12 @@ export default function RegisterScreen() {
                     onChangeText={(t) => { setPassword(t); if (!passwordTouched) setPasswordTouched(true); }}
                     onBlur={() => setPasswordTouched(true)}
                     placeholder="Password"
-                    placeholderTextColor="rgba(255,255,255,0.24)"
+                    placeholderTextColor="rgba(255,255,255,0.36)"
                     secureTextEntry={!showPassword}
                   />
+                  {passwordValid && (
+                    <Check color="#33D17A" size={16} strokeWidth={2.5} style={styles.checkIcon} />
+                  )}
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
                     {showPassword
                       ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
@@ -1019,9 +1042,12 @@ export default function RegisterScreen() {
                     onChangeText={(t) => { setConfirmPassword(t); if (!confirmPasswordTouched) setConfirmPasswordTouched(true); }}
                     onBlur={() => setConfirmPasswordTouched(true)}
                     placeholder="Confirm Password"
-                    placeholderTextColor="rgba(255,255,255,0.24)"
+                    placeholderTextColor="rgba(255,255,255,0.36)"
                     secureTextEntry={!showConfirm}
                   />
+                  {confirmPasswordValid && (
+                    <Check color="#33D17A" size={16} strokeWidth={2.5} style={styles.checkIcon} />
+                  )}
                   <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeBtn}>
                     {showConfirm
                       ? <EyeOff color="rgba(255,255,255,0.30)" size={16} />
@@ -1035,8 +1061,8 @@ export default function RegisterScreen() {
               </View>
               )}
 
-              {/* Date of Birth */}
-              <View>
+              {/* Date of Birth — slightly larger gap to start eligibility section */}
+              <View style={{ marginTop: sectionGap }}>
                 {Platform.OS === 'web' ? (
                   <View style={[styles.inputWrap, showDobError && styles.inputWrapError]}>
                     <Calendar color="rgba(255,255,255,0.30)" size={16} style={styles.inputIcon} />
@@ -1046,10 +1072,13 @@ export default function RegisterScreen() {
                       onChangeText={handleDobTextChange}
                       onBlur={() => setDobTouched(true)}
                       placeholder="Date of Birth (MM/DD/YYYY)"
-                      placeholderTextColor="rgba(255,255,255,0.24)"
+                      placeholderTextColor="rgba(255,255,255,0.36)"
                       keyboardType="number-pad"
                       maxLength={10}
                     />
+                    {dobCheckValid && (
+                      <Check color="#33D17A" size={16} strokeWidth={2.5} style={styles.checkIcon} />
+                    )}
                   </View>
                 ) : (
                   <TouchableOpacity
@@ -1061,10 +1090,13 @@ export default function RegisterScreen() {
                     <AppText style={[
                       styles.dobText,
                       { paddingVertical: inputPad },
-                      !dobDate && styles.dobPlaceholder,
+                      dobDate ? false : styles.dobPlaceholder,
                     ]}>
                       {dobDate ? formatDate(dobDate) : 'Date of Birth'}
                     </AppText>
+                    {dobCheckValid && (
+                      <Check color="#33D17A" size={16} strokeWidth={2.5} style={styles.checkIcon} />
+                    )}
                     <ChevronLeft
                       color="rgba(255,255,255,0.30)"
                       size={16}
@@ -1084,7 +1116,7 @@ export default function RegisterScreen() {
 
               {/* ToS checkbox — immediately above Create Account */}
               <TouchableOpacity
-                style={[styles.tosRow, { marginTop: formGap }]}
+                style={[styles.tosRow, { marginTop: vSm }]}
                 onPress={() => setTosAccepted(!tosAccepted)}
                 activeOpacity={0.75}
               >
@@ -1120,7 +1152,7 @@ export default function RegisterScreen() {
 
               {/* Create Account / Complete Registration */}
               <TouchableOpacity
-                style={[styles.createBtn, { marginTop: formGap }, !formReady && styles.createBtnDisabled]}
+                style={createBtnStyle}
                 onPress={isOAuthComplete ? handleOAuthCompleteForm : handleRegister}
                 activeOpacity={0.85}
                 disabled={loading || oauthLoading !== null || !formReady}
@@ -1147,7 +1179,7 @@ export default function RegisterScreen() {
 
               {!isOAuthComplete && (
               <TouchableOpacity
-                style={[styles.loginRow, { marginTop: formGap }]}
+                style={[styles.loginRow, { marginTop: vSm }]}
                 onPress={() => router.replace('/(auth)/login')}
                 activeOpacity={0.7}
               >
@@ -1194,7 +1226,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   sub: {
-    color: 'rgba(255,255,255,0.44)',
+    color: 'rgba(255,255,255,0.50)',
     fontSize: FontSize.body,
     fontFamily: 'Inter-Regular',
   },
@@ -1218,7 +1250,7 @@ const styles = StyleSheet.create({
   },
   appleNativeBtn: {
     width: '100%',
-    height: 48,
+    height: 52,
   },
   googleBtn: {
     backgroundColor: 'rgba(255,255,255,0.94)',
@@ -1240,11 +1272,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.10)',
   },
   dividerText: {
-    color: 'rgba(255,255,255,0.28)',
+    color: 'rgba(255,255,255,0.36)',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
   },
   form: {},
+  logoWrap: {
+    alignItems: 'center',
+  },
   nameRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
@@ -1276,6 +1311,9 @@ const styles = StyleSheet.create({
   eyeBtn: {
     padding: 6,
   },
+  checkIcon: {
+    marginRight: 4,
+  },
   dobTrigger: {
     cursor: 'pointer',
   } as any,
@@ -1286,7 +1324,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   dobPlaceholder: {
-    color: 'rgba(255,255,255,0.24)',
+    color: 'rgba(255,255,255,0.36)',
   },
   fieldError: {
     color: '#FF5A5F',
@@ -1296,7 +1334,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   fieldHint: {
-    color: 'rgba(255,255,255,0.28)',
+    color: 'rgba(255,255,255,0.40)',
     fontSize: FontSize.xs,
     fontFamily: 'Inter-Regular',
     marginTop: 4,
@@ -1384,7 +1422,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   loginText: {
-    color: 'rgba(255,255,255,0.36)',
+    color: 'rgba(255,255,255,0.42)',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
   },

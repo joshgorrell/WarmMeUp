@@ -52,7 +52,6 @@ export default function WelcomeScreen() {
       ]}>
         {/* Hero: logo + wordmark + tagline */}
         <View style={styles.hero}>
-          <View style={styles.glow} />
           <TouchableOpacity
             activeOpacity={1}
             style={{ alignItems: 'center' }}
@@ -128,15 +127,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#000000',
-  },
-  glow: {
-    position: 'absolute',
-    alignSelf: 'center',
-    width: 440,
-    height: 440,
-    borderRadius: 220,
-    top: -80,
-    backgroundColor: 'rgba(255, 90, 61, 0.06)',
   },
   container: {
     flex: 1,

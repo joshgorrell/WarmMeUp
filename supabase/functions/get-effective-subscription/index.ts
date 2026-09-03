@@ -7,12 +7,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+type PurchaseEnvironment = "sandbox" | "production";
+
 interface SubscriptionRow {
   user_id: string;
   plan: string;
   status: string;
   expires_at: string | null;
   trial_started_at: string | null;
+  purchase_environment: PurchaseEnvironment | null;
 }
 
 interface AccessResult {
@@ -22,8 +25,8 @@ interface AccessResult {
   plan: string | null;
   expiresAt: string | null;
   canInvite: boolean;
-  /** Trial expiry + grace period, or null if not on trial */
   trialGraceEndsAt: string | null;
+  purchaseEnvironment: PurchaseEnvironment | "none";
 }
 
 const REVIEW_ACCESS_SOURCE = "review_access";
@@ -51,10 +54,21 @@ function isTrialPlan(plan: string): boolean {
   return plan === "trial";
 }
 
+function isProductionEnv(env: PurchaseEnvironment | null): boolean {
+  return env === "production";
+}
+
+interface RCEntitlementResult {
+  active: boolean;
+  plan: "monthly" | "yearly";
+  expiresAt: string | null;
+  environment: PurchaseEnvironment | null;
+}
+
 async function checkRevenueCatEntitlement(
   rcUserId: string,
   secretKey: string
-): Promise<{ active: boolean; plan: "monthly" | "yearly"; expiresAt: string | null }> {
+): Promise<RCEntitlementResult> {
   const url = `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(rcUserId)}`;
   const res = await fetch(url, {
     headers: {
@@ -63,13 +77,13 @@ async function checkRevenueCatEntitlement(
     },
   });
 
-  if (!res.ok) return { active: false, plan: "monthly", expiresAt: null };
+  if (!res.ok) return { active: false, plan: "monthly", expiresAt: null, environment: null };
 
   const data = await res.json();
   const entitlement = data?.subscriber?.entitlements?.premium;
 
   if (!entitlement?.expires_date) {
-    return { active: false, plan: "monthly", expiresAt: null };
+    return { active: false, plan: "monthly", expiresAt: null, environment: null };
   }
 
   const expiresAt = entitlement.expires_date;
@@ -81,7 +95,16 @@ async function checkRevenueCatEntitlement(
       ? "yearly"
       : "monthly";
 
-  return { active: isActive, plan, expiresAt };
+  // Determine sandbox vs production from the underlying subscription object.
+  const subscriptions = data?.subscriber?.subscriptions ?? {};
+  const subEntry = subscriptions[productId];
+
+  let environment: PurchaseEnvironment | null = null;
+  if (subEntry && typeof subEntry.is_sandbox === "boolean") {
+    environment = subEntry.is_sandbox ? "sandbox" : "production";
+  }
+
+  return { active: isActive, plan, expiresAt, environment };
 }
 
 async function userHasPremiumAccess(
@@ -96,7 +119,7 @@ async function userHasPremiumAccess(
     .maybeSingle();
 
   if (reviewAccess) {
-    return { hasPremium: true, isOnTrial: false, source: REVIEW_ACCESS_SOURCE, plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null };
+    return { hasPremium: true, isOnTrial: false, source: REVIEW_ACCESS_SOURCE, plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null, purchaseEnvironment: "none" };
   }
 
   // 2. admin / super_admin profile flags
@@ -107,31 +130,38 @@ async function userHasPremiumAccess(
     .maybeSingle();
 
   if (profile?.is_super_admin === true) {
-    return { hasPremium: true, isOnTrial: false, source: "super_admin", plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null };
+    return { hasPremium: true, isOnTrial: false, source: "super_admin", plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null, purchaseEnvironment: "none" };
   }
   if (profile?.is_admin === true) {
-    return { hasPremium: true, isOnTrial: false, source: "admin", plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null };
+    return { hasPremium: true, isOnTrial: false, source: "admin", plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null, purchaseEnvironment: "none" };
   }
 
-  // 2. Own subscription row — paid plan or active 7-day trial
+  // 3. Own subscription row — paid plan or active 7-day trial
   const { data: sub } = await adminClient
     .from("subscriptions")
-    .select("user_id, plan, status, expires_at, trial_started_at")
+    .select("user_id, plan, status, expires_at, trial_started_at, purchase_environment")
     .eq("user_id", userId)
     .maybeSingle();
 
   if (isSubActive(sub) && isPaidPlan(sub!.plan)) {
-    return { hasPremium: true, isOnTrial: false, source: "self", plan: sub!.plan, expiresAt: sub!.expires_at, canInvite: true, trialGraceEndsAt: null };
+    // Only grant production premium if the subscription row came from a
+    // production App Store purchase. Sandbox rows (from TestFlight) must
+    // not masquerade as real paid subscriptions.
+    if (isProductionEnv(sub!.purchase_environment)) {
+      return { hasPremium: true, isOnTrial: false, source: "self", plan: sub!.plan, expiresAt: sub!.expires_at, canInvite: true, trialGraceEndsAt: null, purchaseEnvironment: "production" };
+    }
+    // Sandbox subscription row — do not grant production premium from DB.
+    // The RC fallback below will check if there's a real production entitlement.
   }
 
   if (isSubActive(sub) && isTrialPlan(sub!.plan)) {
     const graceEndsAt = sub!.expires_at
       ? new Date(new Date(sub!.expires_at).getTime() + TRIAL_GRACE_MS).toISOString()
       : null;
-    return { hasPremium: true, isOnTrial: true, source: "trial", plan: "trial", expiresAt: sub!.expires_at, canInvite: true, trialGraceEndsAt: graceEndsAt };
+    return { hasPremium: true, isOnTrial: true, source: "trial", plan: "trial", expiresAt: sub!.expires_at, canInvite: true, trialGraceEndsAt: graceEndsAt, purchaseEnvironment: "none" };
   }
 
-  return { hasPremium: false, isOnTrial: false, source: "none", plan: null, expiresAt: null, canInvite: false, trialGraceEndsAt: null };
+  return { hasPremium: false, isOnTrial: false, source: "none", plan: null, expiresAt: null, canInvite: false, trialGraceEndsAt: null, purchaseEnvironment: "none" };
 }
 
 Deno.serve(async (req: Request) => {
@@ -179,7 +209,8 @@ Deno.serve(async (req: Request) => {
           trialExpired: false,
           canInvite: ownAccess.canInvite,
           trialGraceEndsAt: ownAccess.trialGraceEndsAt,
-          _v: "2026-07-01",
+          purchaseEnvironment: ownAccess.purchaseEnvironment,
+          _v: "2026-09-03",
           _ts: new Date().toISOString(),
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -189,7 +220,7 @@ Deno.serve(async (req: Request) => {
     // Check own subscription row for trialExpired signal.
     const { data: ownSub } = await adminClient
       .from("subscriptions")
-      .select("user_id, plan, status, expires_at, trial_started_at")
+      .select("user_id, plan, status, expires_at, trial_started_at, purchase_environment")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -217,7 +248,8 @@ Deno.serve(async (req: Request) => {
               trialExpired: false,
               canInvite: false,
               trialGraceEndsAt: null,
-              _v: "2026-07-01",
+              purchaseEnvironment: partnerAccess.purchaseEnvironment,
+              _v: "2026-09-03",
               _ts: new Date().toISOString(),
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -227,12 +259,13 @@ Deno.serve(async (req: Request) => {
         // Partner has no DB subscription — check RevenueCat directly. If the
         // partner purchased but confirm-subscription never completed, we still
         // grant access and backfill their subscription row for future checks.
+        // BUT only if the RC entitlement is from a PRODUCTION environment.
         const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
         if (rcSecretKey) {
           try {
             const partnerRc = await checkRevenueCatEntitlement(partnerId, rcSecretKey);
-            if (partnerRc.active) {
-              console.log(`[get-effective-subscription] RC partner fallback hit for partner=${partnerId} plan=${partnerRc.plan}`);
+            if (partnerRc.active && partnerRc.environment === "production") {
+              console.log(`[get-effective-subscription] RC partner fallback hit for partner=${partnerId} plan=${partnerRc.plan} env=production`);
               await adminClient
                 .from("subscriptions")
                 .upsert(
@@ -243,6 +276,7 @@ Deno.serve(async (req: Request) => {
                     started_at: new Date().toISOString(),
                     expires_at: partnerRc.expiresAt,
                     trial_started_at: null,
+                    purchase_environment: "production",
                   },
                   { onConflict: "user_id" }
                 );
@@ -257,11 +291,15 @@ Deno.serve(async (req: Request) => {
                   trialExpired: false,
                   canInvite: false,
                   trialGraceEndsAt: null,
-                  _v: "2026-07-01",
+                  purchaseEnvironment: "production",
+                  _v: "2026-09-03",
                   _ts: new Date().toISOString(),
                 }),
                 { headers: { ...corsHeaders, "Content-Type": "application/json" } }
               );
+            }
+            if (partnerRc.active && partnerRc.environment === "sandbox") {
+              console.log(`[get-effective-subscription] RC partner sandbox entitlement detected for partner=${partnerId} — NOT granting production premium`);
             }
           } catch (err) {
             console.error(`[get-effective-subscription] RC partner fallback error for partner=${partnerId}:`, String(err));
@@ -273,12 +311,14 @@ Deno.serve(async (req: Request) => {
     // 5. RevenueCat API fallback — if the DB has no active subscription but
     //    RevenueCat shows an active entitlement (e.g. purchase completed but
     //    confirm-subscription never ran), sync the DB and return premium.
+    //    BUT only if the entitlement is from a PRODUCTION environment.
+    //    Sandbox entitlements are NOT granted production premium by the server.
     const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
     if (rcSecretKey) {
       try {
         const rc = await checkRevenueCatEntitlement(user.id, rcSecretKey);
-        if (rc.active) {
-          console.log(`[get-effective-subscription] RC fallback hit for user=${user.id} plan=${rc.plan}`);
+        if (rc.active && rc.environment === "production") {
+          console.log(`[get-effective-subscription] RC fallback hit for user=${user.id} plan=${rc.plan} env=production`);
           await adminClient
             .from("subscriptions")
             .upsert(
@@ -289,6 +329,7 @@ Deno.serve(async (req: Request) => {
                 started_at: new Date().toISOString(),
                 expires_at: rc.expiresAt,
                 trial_started_at: null,
+                purchase_environment: "production",
               },
               { onConflict: "user_id" }
             );
@@ -303,11 +344,15 @@ Deno.serve(async (req: Request) => {
               trialExpired: false,
               canInvite: true,
               trialGraceEndsAt: null,
-              _v: "2026-07-01",
+              purchaseEnvironment: "production",
+              _v: "2026-09-03",
               _ts: new Date().toISOString(),
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
+        }
+        if (rc.active && rc.environment === "sandbox") {
+          console.log(`[get-effective-subscription] RC sandbox entitlement detected for user=${user.id} — NOT granting production premium from server`);
         }
       } catch (err) {
         console.error(`[get-effective-subscription] RC fallback error for user=${user.id}:`, String(err));
@@ -326,6 +371,12 @@ Deno.serve(async (req: Request) => {
       ).toISOString();
     }
 
+    // Determine purchase_environment for the response (for diagnostics).
+    let responseEnv: PurchaseEnvironment | "none" = "none";
+    if (ownSub?.purchase_environment) {
+      responseEnv = ownSub.purchase_environment;
+    }
+
     return new Response(
       JSON.stringify({
         isPremium: false,
@@ -337,7 +388,8 @@ Deno.serve(async (req: Request) => {
         trialExpired,
         canInvite: false,
         trialGraceEndsAt,
-        _v: "2026-07-01",
+        purchaseEnvironment: responseEnv,
+        _v: "2026-09-03",
         _ts: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
