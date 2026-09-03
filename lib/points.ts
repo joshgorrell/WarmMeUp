@@ -3,8 +3,8 @@ import { supabase } from './supabase';
 const DEFAULTS: Record<string, number> = {
   dare_accept: 30,
   dare_complete: 0,
-  dice_accept: 5,
-  dice_complete: 25,
+  dice_accept: 30,
+  dice_complete: 0,
   ask_sent: 5,
   ask_replied: 10,
   wish_sent: 5,

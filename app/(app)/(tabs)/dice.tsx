@@ -26,7 +26,6 @@ import {
   awardPoints,
   deactivatePreviousEphemeral,
   getPointValue,
-  verifyCompletion,
   incrementMonthlyCounter,
 } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
@@ -146,12 +145,9 @@ export default function DiceTab() {
   const [error, setError] = useState('');
   const [holding, setHolding] = useState(false);
   const [incomingChallenge, setIncomingChallenge] = useState<Interaction | null>(null);
-  const [pendingVerification, setPendingVerification] = useState<Interaction | null>(null);
   const [sentDice, setSentDice] = useState<Interaction | null>(null);
   const [recentDice, setRecentDice] = useState<Interaction[]>([]);
-  const [verifying, setVerifying] = useState(false);
-  const [acceptPts, setAcceptPts] = useState(5);
-  const [completePts, setCompletePts] = useState(25);
+  const [acceptPts, setAcceptPts] = useState(30);
   const [showDiceInstructions, setShowDiceInstructions] = useState(false);
   const [ringOffset, setRingOffset] = useState(
     () => 2 * Math.PI * ((RING_SIZE_MAX - STROKE) / 2),
@@ -209,10 +205,7 @@ export default function DiceTab() {
   }, [circumference]);
 
   useEffect(() => {
-    Promise.all([getPointValue('dice_accept'), getPointValue('dice_complete')]).then(([a, c]) => {
-      setAcceptPts(a);
-      setCompletePts(c);
-    });
+    getPointValue('dice_accept').then(a => setAcceptPts(a));
   }, []);
 
   useEffect(() => {
@@ -261,7 +254,7 @@ export default function DiceTab() {
   const checkStates = useCallback(async () => {
     if (!couple?.id || !user?.id) return;
 
-    const [incomingRes, pendingRes, mySentRes] = await Promise.all([
+    const [incomingRes, mySentRes] = await Promise.all([
       supabase
         .from('interactions')
         .select('*')
@@ -269,8 +262,7 @@ export default function DiceTab() {
         .eq('receiver_id', user.id)
         .eq('type', 'dice')
         .eq('rolled_for', 'partner')
-        .in('status', ['sent', 'accepted'])
-        .is('completed_at', null)
+        .in('status', ['sent', 'seen'])
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -282,20 +274,7 @@ export default function DiceTab() {
         .eq('sender_id', user.id)
         .eq('type', 'dice')
         .eq('rolled_for', 'partner')
-        .eq('status', 'pending_verification')
-        .is('completed_at', null)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from('interactions')
-        .select('*')
-        .eq('couple_id', couple.id)
-        .eq('sender_id', user.id)
-        .eq('type', 'dice')
-        .eq('rolled_for', 'partner')
-        .in('status', ['sent', 'accepted'])
+        .in('status', ['sent', 'seen'])
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -308,7 +287,7 @@ export default function DiceTab() {
         .from('interactions')
         .update({ status: 'expired', is_active: false })
         .eq('id', item.id)
-        .in('status', ['sent', 'accepted']);
+        .in('status', ['sent', 'seen']);
       return null;
     };
 
@@ -316,7 +295,6 @@ export default function DiceTab() {
     const mySent = await expireIfOverdue(mySentRes.data);
 
     setIncomingChallenge(incoming);
-    setPendingVerification(pendingRes.data ?? null);
     setSentDice(mySent);
 
     const { data: history } = await supabase
@@ -325,13 +303,13 @@ export default function DiceTab() {
       .eq('couple_id', couple.id)
       .eq('type', 'dice')
       .eq('rolled_for', 'partner')
-      .in('status', ['completed', 'rejected', 'cancelled', 'expired'])
+      .in('status', ['accepted', 'completed', 'rejected', 'cancelled', 'expired'])
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(5);
     setRecentDice(history ?? []);
 
-    if (incoming || pendingRes.data || mySent || (history?.length ?? 0) > 0) {
+    if (incoming || mySent || (history?.length ?? 0) > 0) {
       markDiceUsed();
     }
   }, [couple?.id, user?.id, markDiceUsed]);
@@ -379,15 +357,15 @@ export default function DiceTab() {
         return;
       }
 
-      const activeStatuses = ['sent', 'accepted', 'pending_verification'];
+      const activeStatuses = ['sent', 'seen'];
       const isLoaded =
-        incomingChallenge?.id === deepLinkDiceId || pendingVerification?.id === deepLinkDiceId;
+        incomingChallenge?.id === deepLinkDiceId;
       if (activeStatuses.includes(roll.status) && isLoaded) {
         setHighlightChallenge(true);
         setTimeout(() => setHighlightChallenge(false), 2000);
       }
     })();
-  }, [deepLinkDiceId, couple?.id, incomingChallenge?.id, pendingVerification?.id]);
+  }, [deepLinkDiceId, couple?.id, incomingChallenge?.id]);
 
   const showResult = useCallback(
     (text: string, from: 'you' | 'partner') => {
@@ -481,7 +459,11 @@ export default function DiceTab() {
     if (accepted) {
       await supabase
         .from('interactions')
-        .update({ status: 'accepted', is_active: false })
+        .update({
+          status: 'accepted',
+          is_active: false,
+          completed_at: new Date().toISOString(),
+        })
         .eq('id', incomingChallenge.id);
       notifyPartner({
         event_type: 'dice_accepted',
@@ -492,7 +474,7 @@ export default function DiceTab() {
       const pts = await getPointValue('dice_accept');
       await awardPoints(couple.id, user.id, pts, 'Dice challenge accepted', incomingChallenge.id);
       await incrementMonthlyCounter(couple.id, user.id, 'dice_accepted', pts);
-      setIncomingChallenge({ ...incomingChallenge, status: 'accepted' });
+      setIncomingChallenge(null);
     } else {
       await supabase
         .from('interactions')
@@ -510,59 +492,6 @@ export default function DiceTab() {
     }
 
     await checkStates();
-  };
-
-  const handleDiceComplete = async () => {
-    if (!incomingChallenge || !couple?.id) return;
-    await supabase
-      .from('interactions')
-      .update({
-        status: 'pending_verification',
-        completion_requested_at: new Date().toISOString(),
-        is_active: false,
-      })
-      .eq('id', incomingChallenge.id);
-    notifyPartner({
-      event_type: 'dice_accepted',
-      couple_id: couple.id,
-      target_route: '/(app)/(tabs)/dice',
-      partnerUserId: partnerProfile?.id,
-    });
-    setIncomingChallenge(null);
-    await checkStates();
-  };
-
-  const handleVerifyComplete = async () => {
-    if (!pendingVerification || !couple?.id || !user) return;
-    setVerifying(true);
-
-    try {
-      await verifyCompletion(
-        pendingVerification.id,
-        couple.id,
-        user.id,
-        pendingVerification.receiver_id,
-        'dice_complete',
-      );
-      await incrementMonthlyCounter(
-        couple.id,
-        pendingVerification.receiver_id,
-        'dice_completed',
-        completePts,
-      );
-      notifyPartner({
-        event_type: 'dice_completed',
-        couple_id: couple.id,
-        target_route: '/(app)/(tabs)/dice',
-        partnerUserId: partnerProfile?.id,
-      });
-      setPendingVerification(null);
-      await checkStates();
-    } catch {
-      setError('Could not verify. Please try again.');
-    } finally {
-      setVerifying(false);
-    }
   };
 
   const handleCancelSentRoll = () => {
@@ -642,15 +571,15 @@ export default function DiceTab() {
 
   const renderHistoryRow = (roll: Interaction) => {
     const isMine = roll.sender_id === user?.id;
-    const completed = roll.status === 'completed';
+    const accepted = roll.status === 'accepted' || roll.status === 'completed';
     const declined = roll.status === 'rejected';
     const expired = roll.status === 'expired';
-    const title = completed ? 'Completed' : declined ? 'Declined' : expired ? 'Expired' : 'Cancelled';
+    const title = accepted ? 'Accepted' : declined ? 'Declined' : expired ? 'Expired' : 'Cancelled';
     const relationship = isMine
       ? `You rolled for ${partnerFirstName ?? 'your partner'}`
       : `${partnerFirstName ?? 'Your partner'} rolled for you`;
     const dateValue = roll.completed_at ?? roll.created_at;
-    const statusColor = completed
+    const statusColor = accepted
       ? '#33D17A'
       : declined
         ? '#FF5A5F'
@@ -661,7 +590,7 @@ export default function DiceTab() {
     return (
       <View key={roll.id} style={[styles.historyRow, { borderBottomColor: colors.borderSubtle }]}>
         <View style={[styles.historyIcon, { borderColor: statusColor }]}>
-          {completed ? (
+          {accepted ? (
             <CheckCircle color={statusColor} size={18} strokeWidth={2.2} />
           ) : (
             <XCircle color={statusColor} size={18} strokeWidth={2.2} />
@@ -678,8 +607,8 @@ export default function DiceTab() {
         </View>
         <View style={styles.historyMeta}>
           <AppText style={[styles.historyDate, { color: colors.textMuted }]}>{formatDate(dateValue)}</AppText>
-          {completed ? (
-            <AppText style={styles.historyPoints}>+{completePts} pts</AppText>
+          {accepted ? (
+            <AppText style={styles.historyPoints}>+{acceptPts} pts</AppText>
           ) : declined ? (
             <AppText style={[styles.historyPoints, { color: colors.textMuted }]}>+1 pt</AppText>
           ) : (
@@ -743,7 +672,7 @@ export default function DiceTab() {
                 },
               ]}
             >
-              <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText> — Complete = <AppText style={styles.pts}>+{completePts} ⚡</AppText></AppText>
+              <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText></AppText>
             </View>
             <ReceivedDiceChallengeCard
               text={incomingChallenge.content_text}
@@ -753,42 +682,8 @@ export default function DiceTab() {
               partnerName={partnerFirstName}
               onAccept={() => handleRespond(true)}
               onReject={() => handleRespond(false)}
-              onComplete={handleDiceComplete}
               onTimeout={checkStates}
             />
-          </View>
-        )}
-
-        {pendingVerification && (
-          <View
-            style={[
-              styles.verifyCard,
-              { backgroundColor: colors.card, borderColor: 'rgba(51,209,122,0.35)' },
-            ]}
-          >
-            <View style={styles.verifyHeader}>
-              <CheckCircle color="#33D17A" size={20} strokeWidth={2} />
-              <AppText style={[styles.verifyTitle, { color: colors.text }]}>{partnerFirstName ?? 'Your partner'} completed your roll!</AppText>
-            </View>
-            {pendingVerification.content_text ? (
-              <AppText style={[styles.verifyDareText, { color: colors.textSecondary }]}>“{pendingVerification.content_text}”</AppText>
-            ) : null}
-            <AppText style={[styles.verifySubtitle, { color: colors.textMuted }]}>Confirm it here — they earn <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText></AppText>
-            <TouchableOpacity
-              style={styles.verifyBtn}
-              onPress={handleVerifyComplete}
-              disabled={verifying}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={['#33D17A', '#1A9E57']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.verifyGrad}
-              >
-                <AppText style={styles.verifyBtnText}>{verifying ? 'Verifying…' : 'They Did It!'}</AppText>
-              </LinearGradient>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -1055,49 +950,6 @@ const styles = StyleSheet.create({
   pts: {
     fontFamily: 'Inter-Bold',
     color: '#33D17A',
-  },
-  verifyCard: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.card,
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  verifyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  verifyTitle: {
-    fontSize: FontSize.body,
-    fontFamily: 'Inter-Bold',
-    flex: 1,
-  },
-  verifyDareText: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    fontStyle: 'italic',
-    lineHeight: 20,
-  },
-  verifySubtitle: {
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 20,
-  },
-  verifyBtn: {
-    borderRadius: Radius.pill,
-    overflow: 'hidden',
-    marginTop: Spacing.xs,
-  },
-  verifyGrad: {
-    height: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  verifyBtnText: {
-    color: '#fff',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Bold',
   },
   howItWorksCard: {
     borderRadius: 18,

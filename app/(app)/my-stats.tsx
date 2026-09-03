@@ -570,7 +570,7 @@ export default function MyStatsScreen() {
             />
             <View style={[styles.braveDivider, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
             <BraveMeter
-              completed={(myStats?.dice_completed ?? 0)}
+              completed={(myStats?.dice_accepted ?? 0)}
               skipped={(myStats?.dice_skipped ?? 0)}
               label="Dice Challenges"
               color="#FFB347"
