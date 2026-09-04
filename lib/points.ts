@@ -246,6 +246,40 @@ export async function loadCurrentMonthScores(
   };
 }
 
+/**
+ * Sum ALL point_events for both partners with no date filter.
+ * Since point_events are only ever deleted by the explicit "Delete Points"
+ * action, this represents all-time points since the last reset.
+ */
+export async function loadAllTimeScores(
+  coupleId: string,
+  myUserId: string,
+  partnerId: string | null,
+): Promise<{ myScore: number; partnerScore: number }> {
+  const [myRes, partnerRes] = await Promise.all([
+    supabase
+      .from('point_events')
+      .select('points')
+      .eq('couple_id', coupleId)
+      .eq('user_id', myUserId),
+    partnerId
+      ? supabase
+          .from('point_events')
+          .select('points')
+          .eq('couple_id', coupleId)
+          .eq('user_id', partnerId)
+      : Promise.resolve({ data: [] as Pick<PointEvent, 'points'>[] | null, error: null }),
+  ]);
+
+  const sum = (rows: { points: number | null }[] | null | undefined) =>
+    (rows ?? []).reduce((acc, r) => acc + (r.points ?? 0), 0);
+
+  return {
+    myScore: sum(myRes.data),
+    partnerScore: sum(partnerRes.data),
+  };
+}
+
 export async function deactivatePreviousEphemeral(coupleId: string, senderId?: string) {
   let query = supabase
     .from('interactions')

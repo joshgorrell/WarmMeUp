@@ -23,7 +23,7 @@ import { useGreeting } from '@/hooks/useGreeting';
 import { useTrialExpiryCheck } from '@/hooks/useTrialExpiryCheck';
 import { useLayout } from '@/hooks/useLayout';
 import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
-import { reversePoints, awardPoints, getPointValue, loadCurrentMonthScores } from '@/lib/points';
+import { reversePoints, awardPoints, getPointValue, loadAllTimeScores } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 
 const CHAT_ACTIVITY_PREFIX = '__WMU_ACTIVITY__:';
@@ -203,7 +203,7 @@ export default function HomeScreen() {
   const loadScores = async () => {
     if (!couple?.id || !user) return;
     const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-    const { myScore: myPts, partnerScore: partnerPts } = await loadCurrentMonthScores(couple.id, user.id, partnerId);
+    const { myScore: myPts, partnerScore: partnerPts } = await loadAllTimeScores(couple.id, user.id, partnerId);
     if (isMountedRef.current) {
       setMyScore(myPts);
       setPartnerScore(partnerPts);
