@@ -148,6 +148,28 @@ async function signInWithAppleNative() {
     await supabase.auth.updateUser({ data: userData }).catch(() => {});
   }
 
+  // Exchange the Apple authorization code for a refresh token server-side.
+  // The refresh token is stored securely by the edge function and used later
+  // to revoke the user's Apple authorization if they delete their account.
+  // This is a best-effort background call — failures do not block sign-in.
+  const authorizationCode = credential.authorizationCode;
+  if (authorizationCode) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+    if (session?.access_token && baseUrl.startsWith('https://')) {
+      fetch(`${baseUrl}/functions/v1/apple-token-exchange`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ authorizationCode }),
+      }).catch((exchangeErr) => {
+        logger.warn('[oauth/apple] token exchange failed (non-blocking):', exchangeErr);
+      });
+    }
+  }
+
   return data;
 }
 

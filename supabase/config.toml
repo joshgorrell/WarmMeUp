@@ -6,3 +6,9 @@ verify_jwt = true
 
 [functions.analytics-overview]
 verify_jwt = true
+
+[functions.apple-token-exchange]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true

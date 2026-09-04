@@ -7,6 +7,63 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+function base64UrlEncode(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function parsePemToPkcs8(pem: string): ArrayBuffer {
+  const b64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s/g, "");
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function generateAppleClientSecret(
+  clientId: string,
+  teamId: string,
+  keyId: string,
+  privateKeyPem: string,
+): Promise<string> {
+  const keyData = parsePemToPkcs8(privateKeyPem);
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8",
+    keyData,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"],
+  );
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "ES256", kid: keyId, typ: "JWT" };
+  const payload = {
+    iss: teamId,
+    iat: now,
+    exp: now + 15777000,
+    aud: "https://appleid.apple.com",
+    sub: clientId,
+  };
+
+  const enc = new TextEncoder();
+  const headerB64 = base64UrlEncode(enc.encode(JSON.stringify(header)));
+  const payloadB64 = base64UrlEncode(enc.encode(JSON.stringify(payload)));
+  const signingInput = `${headerB64}.${payloadB64}`;
+
+  const signature = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    cryptoKey,
+    enc.encode(signingInput),
+  );
+
+  const signatureB64 = base64UrlEncode(new Uint8Array(signature));
+  return `${signingInput}.${signatureB64}`;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -92,6 +149,49 @@ Deno.serve(async (req: Request) => {
       } catch (rcErr) {
         console.error("RevenueCat cancellation failed:", rcErr);
       }
+    }
+
+    // ── 1b. Revoke Sign in with Apple authorization (if applicable) ──
+    // Read the stored Apple refresh token and send it to Apple's revoke
+    // endpoint before deleting the user. If revocation fails, log the error
+    // but continue with deletion — the account is still fully removed.
+    try {
+      const { data: settingsRow } = await admin
+        .from("user_settings")
+        .select("apple_refresh_token")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const appleRefreshToken = settingsRow?.apple_refresh_token;
+      if (appleRefreshToken) {
+        const appleClientId = Deno.env.get("APPLE_CLIENT_ID");
+        const appleTeamId = Deno.env.get("APPLE_TEAM_ID");
+        const appleKeyId = Deno.env.get("APPLE_KEY_ID");
+        const applePrivateKey = Deno.env.get("APPLE_PRIVATE_KEY");
+
+        if (appleClientId && appleTeamId && appleKeyId && applePrivateKey) {
+          const clientSecret = await generateAppleClientSecret(appleClientId, appleTeamId, appleKeyId, applePrivateKey);
+          const revokeParams = new URLSearchParams({
+            client_id: appleClientId,
+            client_secret: clientSecret,
+            token: appleRefreshToken,
+            token_type_hint: "refresh_token",
+          });
+          const revokeRes = await fetch("https://appleid.apple.com/auth/revoke", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: revokeParams.toString(),
+          });
+          if (!revokeRes.ok) {
+            const errText = await revokeRes.text();
+            console.error(`[delete-account] Apple token revocation failed (${revokeRes.status}) for user ${userId}:`, errText);
+          }
+        } else {
+          console.warn(`[delete-account] Apple secrets not configured — skipping revocation for user ${userId}`);
+        }
+      }
+    } catch (appleRevokeErr) {
+      console.error(`[delete-account] Apple revocation error for user ${userId}:`, appleRevokeErr);
     }
 
     // ── 2. Hard-delete the auth user ────────────────────────────────
