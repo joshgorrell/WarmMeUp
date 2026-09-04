@@ -366,7 +366,6 @@ export default function MyStatsScreen() {
   // For historical months, comes from monthly_scores.points.
   const myPts = myStats?.points ?? 0;
   const partnerPts = partnerStats?.points ?? 0;
-  const totalPts = myPts + partnerPts;
   const pointsEnabled = couple?.points_enabled ?? true;
   const showPointsBanner = pointsEnabled && !settings?.points_banner_seen && !bannerDismissed;
 
@@ -384,7 +383,7 @@ export default function MyStatsScreen() {
       partnerVal: (partnerStats?.dares_accepted ?? 0) + (partnerStats?.dares_completed ?? 0),
       unit: 'done',
       extra: showPts
-        ? `${myStats?.dares_skipped ?? 0} skipped · ${myCatPts!.pts_dares ?? 0}⚡ earned`
+        ? `${myStats?.dares_skipped ?? 0} skipped · ${myCatPts!.pts_dares ?? 0} points earned`
         : `${myStats?.dares_skipped ?? 0} skipped`,
     },
     {
@@ -395,7 +394,7 @@ export default function MyStatsScreen() {
       partnerVal: (partnerStats?.dice_accepted ?? 0) + (partnerStats?.dice_completed ?? 0),
       unit: 'done',
       extra: showPts
-        ? `${myStats?.dice_skipped ?? 0} skipped · ${myCatPts!.pts_dice ?? 0}⚡ earned`
+        ? `${myStats?.dice_skipped ?? 0} skipped · ${myCatPts!.pts_dice ?? 0} points earned`
         : `${myStats?.dice_skipped ?? 0} skipped`,
     },
     {
@@ -406,7 +405,7 @@ export default function MyStatsScreen() {
       partnerVal: (partnerStats?.wishes_sent ?? 0) + (partnerStats?.wishes_fulfilled ?? 0) + (partnerStats?.asks_sent ?? 0) + (partnerStats?.asks_replied ?? 0),
       unit: 'done',
       extra: showPts
-        ? `${myStats?.wishes_sent ?? 0} wished · ${myStats?.wishes_fulfilled ?? 0} granted · ${myStats?.asks_sent ?? 0} asked · ${myCatPts!.pts_wish ?? 0}⚡`
+        ? `${myStats?.wishes_sent ?? 0} wished · ${myStats?.wishes_fulfilled ?? 0} granted · ${myStats?.asks_sent ?? 0} asked · ${myCatPts!.pts_wish ?? 0} points`
         : `${myStats?.wishes_sent ?? 0} wished · ${myStats?.asks_sent ?? 0} asked`,
     },
     {
@@ -417,7 +416,7 @@ export default function MyStatsScreen() {
       partnerVal: (partnerStats?.chat_messages_sent ?? 0) + (partnerStats?.media_sent ?? 0),
       unit: 'sent',
       extra: showPts
-        ? `${myStats?.chat_messages_sent ?? 0} msgs · ${myStats?.media_sent ?? 0} media · ${myCatPts!.pts_chat ?? 0}⚡ earned`
+        ? `${myStats?.chat_messages_sent ?? 0} msgs · ${myStats?.media_sent ?? 0} media · ${myCatPts!.pts_chat ?? 0} points earned`
         : `${myStats?.media_sent ?? 0} media sent`,
     },
     {
@@ -427,7 +426,7 @@ export default function MyStatsScreen() {
       myVal: (myStats?.vault_uploads ?? 0),
       partnerVal: (partnerStats?.vault_uploads ?? 0),
       unit: 'uploads',
-      extra: showPts ? `${myStats?.vault_uploads ?? 0} uploads · ${myCatPts!.pts_vault ?? 0}⚡ earned` : '',
+      extra: showPts ? `${myStats?.vault_uploads ?? 0} uploads · ${myCatPts!.pts_vault ?? 0} points earned` : '',
     },
   ];
 
@@ -533,8 +532,6 @@ export default function MyStatsScreen() {
                   </View>
                   <View style={styles.vsHeartWrap}>
                     <Heart color="#FF2E8A" size={48} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
-                    <AppText style={styles.vsHeartScore}>{totalPts}</AppText>
-                    <AppText style={styles.vsHeartLabel}>Together Points</AppText>
                   </View>
                   <View style={[styles.vsSide, { alignItems: 'flex-end' }]}>
                     <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="md" />
@@ -542,9 +539,9 @@ export default function MyStatsScreen() {
                     <AppText style={[styles.vsPts, { color: colors.text }]}>{partnerPts}</AppText>
                   </View>
                 </View>
-                {totalPts > 0 && (
+                {myPts + partnerPts > 0 && (
                   <View style={[styles.progressTrack, { backgroundColor: 'rgba(255,255,255,0.10)' }]}>
-                    <View style={[styles.progressFill, { width: `${Math.round((myPts / totalPts) * 100)}%` as any, backgroundColor: '#FF5A3D' }]} />
+                    <View style={[styles.progressFill, { width: `${Math.round((myPts / (myPts + partnerPts)) * 100)}%` as any, backgroundColor: '#FF5A3D' }]} />
                   </View>
                 )}
               </>
@@ -748,9 +745,7 @@ const styles = StyleSheet.create({
   vsSide: { flex: 1, alignItems: 'center', gap: 4 },
   vsName: { fontSize: 11, fontFamily: 'Inter-Medium', letterSpacing: 0.3 },
   vsPts: { fontSize: 36, fontFamily: 'Inter-Bold', lineHeight: 42 },
-  vsHeartWrap: { alignItems: 'center', gap: 2 },
-  vsHeartScore: { fontSize: 22, fontFamily: 'Inter-Bold', color: '#fff', lineHeight: 26 },
-  vsHeartLabel: { fontSize: 10, fontFamily: 'Inter-SemiBold', color: '#FF2E8A', textAlign: 'center' },
+  vsHeartWrap: { alignItems: 'center', gap: 2, justifyContent: 'center' },
   progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
   streakRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingTop: 2 },

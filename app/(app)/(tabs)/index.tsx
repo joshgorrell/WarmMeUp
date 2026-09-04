@@ -7,12 +7,11 @@ import AppText from '@/components/AppText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Zap, Lock, MessageCircle, Dice6, Star, ChevronRight, Heart, Camera, Sparkles, CheckCheck, Flame, Send } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { Interaction } from '@/lib/types';
-import { Spacing, Radius, FontSize, Gradient } from '@/constants/theme';
+import { Spacing, Radius, FontSize } from '@/constants/theme';
 import AppShell from '@/components/AppShell';
 import BrandHeader from '@/components/BrandHeader';
 import CurrentMomentCard from '@/components/CurrentMomentCard';
@@ -24,7 +23,7 @@ import { useGreeting } from '@/hooks/useGreeting';
 import { useTrialExpiryCheck } from '@/hooks/useTrialExpiryCheck';
 import { useLayout } from '@/hooks/useLayout';
 import { markViewed as markViewedUtil, markAllViewed as markAllViewedUtil } from '@/lib/activity';
-import { reversePoints, awardPoints, getPointValue } from '@/lib/points';
+import { reversePoints, awardPoints, getPointValue, loadCurrentMonthScores } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 
 const CHAT_ACTIVITY_PREFIX = '__WMU_ACTIVITY__:';
@@ -132,7 +131,7 @@ export default function HomeScreen() {
       try {
         const channel = supabase
           .channel(`home_${couple.id}_${Date.now()}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'point_events', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_events', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
@@ -203,10 +202,11 @@ export default function HomeScreen() {
 
   const loadScores = async () => {
     if (!couple?.id || !user) return;
-    const { data } = await supabase.from('scores').select('*').eq('couple_id', couple.id);
-    if (data && isMountedRef.current) {
-      setMyScore(data.find(s => s.user_id === user.id)?.points ?? 0);
-      setPartnerScore(data.find(s => s.user_id !== user.id)?.points ?? 0);
+    const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
+    const { myScore: myPts, partnerScore: partnerPts } = await loadCurrentMonthScores(couple.id, user.id, partnerId);
+    if (isMountedRef.current) {
+      setMyScore(myPts);
+      setPartnerScore(partnerPts);
     }
   };
 
@@ -636,8 +636,6 @@ export default function HomeScreen() {
 
   const myName = profile?.first_name || profile?.display_name || 'You';
   const partnerName = partnerProfile?.first_name || partnerProfile?.display_name || 'Partner';
-  const total = myScore + partnerScore;
-  const myPct = total > 0 ? myScore / total : 0.5;
   const pointsEnabled = (couple?.points_enabled ?? true) && hasPartner;
   const streaksEnabled = (couple?.streaks_enabled ?? true) && hasPartner;
   const hPad = contentPadding;
@@ -766,22 +764,13 @@ export default function HomeScreen() {
         <View style={styles.scoreRow}>
           <Avatar name={myName} uri={profile?.avatar_url} size="sm" bgColor="rgba(255,46,138,0.18)" />
           <AppText style={[styles.scoreName, { color: colors.textSecondary }]} numberOfLines={1}>{myName}</AppText>
-          <AppText style={[styles.scorePts, { color: colors.text }]}>{myScore} ⚡</AppText>
+          <AppText style={[styles.scorePts, { color: colors.text }]}>{myScore}</AppText>
           <View style={styles.scoreVs}>
             <Heart color="#FF2E8A" size={20} fill="rgba(255,46,138,0.22)" strokeWidth={1.5} />
-            <AppText style={styles.scoreHeartNum}>{total}</AppText>
           </View>
-          <AppText style={[styles.scorePts, { color: colors.text }]}>{partnerScore} ⚡</AppText>
+          <AppText style={[styles.scorePts, { color: colors.text }]}>{partnerScore}</AppText>
           <AppText style={[styles.scoreName, { color: colors.textSecondary, textAlign: 'right' }]} numberOfLines={1}>{partnerName}</AppText>
           <Avatar name={partnerName} uri={partnerProfile?.avatar_url} size="sm" bgColor="rgba(255,138,61,0.18)" />
-        </View>
-        <View style={[styles.barTrack, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
-          <LinearGradient
-            colors={Gradient.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.barFill, { width: `${myPct * 100}%` }]}
-          />
         </View>
       </TouchableOpacity>
     </View>
@@ -1173,20 +1162,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     alignItems: 'center',
     gap: 1,
-  },
-  scoreHeartNum: {
-    fontSize: 9,
-    fontFamily: 'Inter-Bold',
-    color: '#FF2E8A',
-  },
-  barTrack: {
-    height: 3,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: 2,
   },
   loveCardWrap: {
     flex: 1,

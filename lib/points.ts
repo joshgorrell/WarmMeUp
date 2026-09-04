@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { PointEvent } from './types';
 
 const DEFAULTS: Record<string, number> = {
   dare_accept: 30,
@@ -200,6 +201,49 @@ export async function reversePoints(
     points: -total,
     reason: 'Points reversed — roll deleted',
   });
+}
+
+/**
+ * Sum point_events for the current calendar month for both partners.
+ * This is the authoritative displayed score source — Home and My Stats
+ * both use this so they always agree. If no events exist, returns 0 for
+ * each partner regardless of any stale value in the scores table.
+ *
+ * Month boundaries use the first-of-month to first-of-next-month pattern
+ * (same as my-stats.tsx).
+ */
+export async function loadCurrentMonthScores(
+  coupleId: string,
+  myUserId: string,
+  partnerId: string | null,
+): Promise<{ myScore: number; partnerScore: number }> {
+  const now = new Date();
+  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  const [myRes, partnerRes] = await Promise.all([
+    supabase
+      .from('point_events')
+      .select('points')
+      .eq('couple_id', coupleId)
+      .eq('user_id', myUserId)
+      .gte('created_at', periodStart),
+    partnerId
+      ? supabase
+          .from('point_events')
+          .select('points')
+          .eq('couple_id', coupleId)
+          .eq('user_id', partnerId)
+          .gte('created_at', periodStart)
+      : Promise.resolve({ data: [] as Pick<PointEvent, 'points'>[] | null, error: null }),
+  ]);
+
+  const sum = (rows: { points: number | null }[] | null | undefined) =>
+    (rows ?? []).reduce((acc, r) => acc + (r.points ?? 0), 0);
+
+  return {
+    myScore: sum(myRes.data),
+    partnerScore: sum(partnerRes.data),
+  };
 }
 
 export async function deactivatePreviousEphemeral(coupleId: string, senderId?: string) {
