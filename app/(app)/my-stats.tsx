@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
@@ -159,6 +159,7 @@ export default function MyStatsScreen() {
   const [streak, setStreak] = useState(0);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const loadRequestIdRef = useRef(0);
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
 
   const loadStreak = useCallback(async () => {
@@ -170,6 +171,7 @@ export default function MyStatsScreen() {
 
   const loadAllTime = useCallback(async () => {
     if (!couple?.id || !user) return;
+    const requestId = ++loadRequestIdRef.current;
     setRefreshing(true);
 
     const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
@@ -182,6 +184,8 @@ export default function MyStatsScreen() {
 
     const myEvts = myEventsRes.data ?? [];
     const partnerEvts = (partnerEventsRes as any).data ?? [];
+
+    if (requestId !== loadRequestIdRef.current) return;
 
     const myResult = buildStatsFromEvents(myEvts, user.id, couple.id, now.getFullYear(), now.getMonth() + 1);
     const partnerResult = buildStatsFromEvents(partnerEvts, partnerId ?? '', couple.id, now.getFullYear(), now.getMonth() + 1);
@@ -210,6 +214,7 @@ export default function MyStatsScreen() {
 
   const load = useCallback(async () => {
     if (!couple?.id || !user) return;
+    const requestId = ++loadRequestIdRef.current;
     setRefreshing(true);
 
     const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
@@ -226,6 +231,8 @@ export default function MyStatsScreen() {
 
       const myEvts = myEventsRes.data ?? [];
       const partnerEvts = (partnerEventsRes as any).data ?? [];
+
+      if (requestId !== loadRequestIdRef.current) return;
 
       const myResult = buildStatsFromEvents(myEvts, user.id, couple.id, year, month);
       const partnerResult = buildStatsFromEvents(partnerEvts, partnerId ?? '', couple.id, year, month);
@@ -254,6 +261,7 @@ export default function MyStatsScreen() {
         partnerId ? supabase.from('monthly_scores').select('*').eq('couple_id', couple.id).eq('user_id', partnerId).eq('year', year).eq('month', month).maybeSingle() : Promise.resolve({ data: null }),
         loadStreak(),
       ]);
+      if (requestId !== loadRequestIdRef.current) return;
       setMyStats(myRes.data);
       setPartnerStats((partnerRes as any).data);
       // Historical months: no per-category point sums available (only counts in monthly_scores)
