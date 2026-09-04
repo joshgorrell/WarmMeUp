@@ -70,35 +70,6 @@ const bm = StyleSheet.create({
   pct: { fontSize: 11, fontFamily: 'Inter-Regular', textAlign: 'right' },
 });
 
-function sumMonthlyScores(rows: MonthlyScore[]): MonthlyScore | null {
-  if (rows.length === 0) return null;
-  return rows.reduce<MonthlyScore>((acc, r) => ({
-    ...acc,
-    points: acc.points + r.points,
-    dares_accepted: acc.dares_accepted + r.dares_accepted,
-    dares_completed: acc.dares_completed + r.dares_completed,
-    dares_skipped: acc.dares_skipped + r.dares_skipped,
-    dice_accepted: acc.dice_accepted + r.dice_accepted,
-    dice_completed: acc.dice_completed + r.dice_completed,
-    dice_skipped: acc.dice_skipped + r.dice_skipped,
-    asks_sent: acc.asks_sent + r.asks_sent,
-    asks_replied: acc.asks_replied + r.asks_replied,
-    wishes_sent: acc.wishes_sent + r.wishes_sent,
-    wishes_fulfilled: acc.wishes_fulfilled + r.wishes_fulfilled,
-    chat_messages_sent: acc.chat_messages_sent + r.chat_messages_sent,
-    media_sent: acc.media_sent + r.media_sent,
-    vault_uploads: acc.vault_uploads + r.vault_uploads,
-  }), {
-    ...rows[0],
-    points: 0,
-    dares_accepted: 0, dares_completed: 0, dares_skipped: 0,
-    dice_accepted: 0, dice_completed: 0, dice_skipped: 0,
-    asks_sent: 0, asks_replied: 0,
-    wishes_sent: 0, wishes_fulfilled: 0,
-    chat_messages_sent: 0, media_sent: 0, vault_uploads: 0,
-  });
-}
-
 // Builds a MonthlyScore (counts) AND per-category point sums from raw point_events.
 // This is used for the current month where we have actual event records.
 // The .points field on MonthlyScore is the true sum of all awarded points.
@@ -202,52 +173,35 @@ export default function MyStatsScreen() {
     setRefreshing(true);
 
     const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-    const [myArchiveRes, partnerArchiveRes, myEventsRes, partnerEventsRes] = await Promise.all([
-      supabase.from('monthly_scores').select('*').eq('couple_id', couple.id).eq('user_id', user.id),
-      partnerId ? supabase.from('monthly_scores').select('*').eq('couple_id', couple.id).eq('user_id', partnerId) : Promise.resolve({ data: [] }),
-      supabase.from('point_events').select('reason, points, created_at').eq('couple_id', couple.id).eq('user_id', user.id).gte('created_at', periodStart),
-      partnerId ? supabase.from('point_events').select('reason, points, created_at').eq('couple_id', couple.id).eq('user_id', partnerId).gte('created_at', periodStart) : Promise.resolve({ data: [] }),
+    const [myEventsRes, partnerEventsRes] = await Promise.all([
+      supabase.from('point_events').select('reason, points, created_at').eq('couple_id', couple.id).eq('user_id', user.id),
+      partnerId ? supabase.from('point_events').select('reason, points, created_at').eq('couple_id', couple.id).eq('user_id', partnerId) : Promise.resolve({ data: [] }),
       loadStreak(),
     ]);
 
     const myEvts = myEventsRes.data ?? [];
     const partnerEvts = (partnerEventsRes as any).data ?? [];
 
-    const myCurrent = buildStatsFromEvents(myEvts, user.id, couple.id, now.getFullYear(), now.getMonth() + 1);
-    const partnerCurrent = buildStatsFromEvents(partnerEvts, partnerId ?? '', couple.id, now.getFullYear(), now.getMonth() + 1);
+    const myResult = buildStatsFromEvents(myEvts, user.id, couple.id, now.getFullYear(), now.getMonth() + 1);
+    const partnerResult = buildStatsFromEvents(partnerEvts, partnerId ?? '', couple.id, now.getFullYear(), now.getMonth() + 1);
 
-    const myArchived: MonthlyScore[] = myArchiveRes.data ?? [];
-    const partnerArchived: MonthlyScore[] = (partnerArchiveRes as any).data ?? [];
-
-    // For all-time, exclude the current month's monthly_scores row (if it exists prematurely)
-    // to avoid double-counting — use point_events for current month instead
-    const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
-    const myArchivedPrior = myArchived.filter(r => `${r.year}-${r.month}` !== currentMonthKey);
-    const partnerArchivedPrior = partnerArchived.filter(r => `${r.year}-${r.month}` !== currentMonthKey);
-
-    const myAllRows = [...myArchivedPrior, myCurrent.monthly];
-    const partnerAllRows = [...partnerArchivedPrior, partnerCurrent.monthly];
-
-    setMyStats(sumMonthlyScores(myAllRows));
-    setPartnerStats(sumMonthlyScores(partnerAllRows));
-    // For all-time view, don't show per-category pts (mix of counts and points)
-    setMyCatPts(null);
-    setPartnerCatPts(null);
+    setMyStats(myResult.monthly);
+    setPartnerStats(partnerResult.monthly);
+    setMyCatPts(myResult.catPts);
+    setPartnerCatPts(partnerResult.catPts);
 
     setDebugInfo({
       couple_id: couple.id,
-      points_month_start: periodStart,
-      points_month_end: periodEnd,
-      points_total_source: 'monthly_scores (archived) + point_events (current month)',
+      points_month_start: 'all-time',
+      points_month_end: 'all-time',
+      points_total_source: 'point_events (all-time sum)',
       my_event_count: myEvts.length,
       partner_event_count: partnerEvts.length,
       my_raw_events: myEvts,
       partner_raw_events: partnerEvts,
-      my_cat_pts: myCurrent.catPts,
-      partner_cat_pts: partnerCurrent.catPts,
+      my_cat_pts: myResult.catPts,
+      partner_cat_pts: partnerResult.catPts,
     });
 
     setLoading(false);
