@@ -40,6 +40,12 @@ export function evictCachedUrl(storagePath: string): void {
   delete _urlCache[storagePath];
 }
 
+export function evictAllCachedUrls(): void {
+  for (const key of Object.keys(_urlCache)) {
+    delete _urlCache[key];
+  }
+}
+
 let _items: GalleryItem[] = [];
 
 export function setGalleryItems(items: GalleryItem[]): void {
