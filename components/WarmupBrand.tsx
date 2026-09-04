@@ -9,12 +9,14 @@ interface WarmupBrandProps {
   /** Override the computed slogan width directly (in dp). Takes precedence over sloganScale. */
   sloganWidth?: number;
   showTagline?: boolean;
+  /** Margin between the logo and the tagline image, in dp. Defaults to 12. */
+  taglineMarginTop?: number;
 }
 
 // image_(2).png: "Stay Playful" slogan, natural ratio ~600×300 (2:1)
 const SLOGAN_SOURCE = require('@/assets/images/image_(2).png');
 
-export default function WarmupBrand({ logoSize = 100, sloganScale = 1, sloganWidth: sloganWidthProp, showTagline = true }: WarmupBrandProps) {
+export default function WarmupBrand({ logoSize = 100, sloganScale = 1, sloganWidth: sloganWidthProp, showTagline = true, taglineMarginTop = 12 }: WarmupBrandProps) {
   const { width: screenWidth } = useWindowDimensions();
   const maxSloganWidth = screenWidth - Spacing.xl * 2;
   const rawSloganWidth = sloganWidthProp ?? logoSize * 2.2 * sloganScale;
@@ -27,7 +29,7 @@ export default function WarmupBrand({ logoSize = 100, sloganScale = 1, sloganWid
       {showTagline && (
         <Image
           source={SLOGAN_SOURCE}
-          style={{ width: sloganWidth, height: sloganHeight, resizeMode: 'contain', marginTop: 12 }}
+          style={{ width: sloganWidth, height: sloganHeight, resizeMode: 'contain', marginTop: taglineMarginTop }}
         />
       )}
     </View>

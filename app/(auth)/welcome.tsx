@@ -25,18 +25,28 @@ export default function WelcomeScreen() {
   }, [codeToPreserve]);
 
   const { width, height, isTabletOrLarger } = useLayout();
-  const isLandscape = width > height;
-  const logoSize = Math.min(Math.round(width * 0.38), isTabletOrLarger ? 160 : 180);
+  const isShortScreen = height < 700;
+
+  // Reduce W icon ~22%: from 0.38*width / cap 180 to 0.30*width / cap 140
+  const logoSize = Math.min(Math.round(width * 0.30), isTabletOrLarger ? 128 : 140);
   const wordmarkSize = Math.round(logoSize * 0.16);
   const contentWidth = isTabletOrLarger ? Math.min(width - Spacing.xl * 2, 600) : width;
-  const taglineWidth = Math.min(contentWidth - Spacing.md * 2, isLandscape ? 360 : 440);
+  const taglineWidth = Math.min(contentWidth - Spacing.md * 2, isTabletOrLarger ? 320 : 400);
   const taglineHeight = taglineWidth * (148 / 340);
-  const paddingTop = isTabletOrLarger
-    ? Math.max(24, Math.round(height * 0.06)) + insets.top
-    : Math.max(40, Math.round(height * 0.1)) + insets.top;
-  const paddingBottom = isTabletOrLarger
-    ? Math.max(20, Math.round(height * 0.04)) + insets.bottom
-    : Math.max(28, Math.round(height * 0.07)) + insets.bottom;
+
+  // Responsive vertical spacing between brand group and subtitle
+  const brandGap = isShortScreen
+    ? Math.max(16, Math.round(height * 0.025))
+    : Math.max(24, Math.min(48, Math.round(height * 0.04)));
+
+  // Inter-element gaps tighten on short screens
+  const trialGap = isShortScreen ? 5 : 7;
+  const linkGap = isShortScreen ? 7 : 10;
+  const linkRowGap = isShortScreen ? 6 : 8;
+  const previewGap = isShortScreen ? 10 : 14;
+
+  const safePadTop = insets.top + 8;
+  const safePadBottom = insets.bottom + 8;
 
   return (
     <View style={styles.root}>
@@ -47,34 +57,44 @@ export default function WelcomeScreen() {
 
       <View style={[
         styles.container,
-        { paddingTop, paddingBottom },
+        {
+          paddingTop: safePadTop,
+          paddingBottom: safePadBottom,
+        },
         isTabletOrLarger && { alignSelf: 'center', width: '100%', maxWidth: 600 },
       ]}>
-        {/* Hero: logo + wordmark + tagline */}
-        <View style={styles.hero}>
+        {/* Brand group: W icon + wordmark + Stay Playful tagline */}
+        <View style={styles.brandGroup}>
           <TouchableOpacity
             activeOpacity={1}
-            style={{ alignItems: 'center' }}
+            style={styles.logoWordmark}
           >
             <WarmupLogo size={logoSize} />
             <WarmupWordmark size={wordmarkSize} style={styles.wordmark} />
           </TouchableOpacity>
           <Image
             source={TAGLINE_SOURCE}
-            style={{ width: taglineWidth, height: taglineHeight, marginTop: isTabletOrLarger ? 12 : 20, alignSelf: 'center' }}
+            style={{
+              width: taglineWidth,
+              height: taglineHeight,
+              marginTop: 6,
+              alignSelf: 'center',
+            }}
             resizeMode="contain"
           />
         </View>
 
-        <View style={styles.spacer} />
-
-        {/* Bottom: subtitle + CTAs */}
-        <View style={styles.actions}>
+        {/* Value proposition + trial + CTAs */}
+        <View style={[styles.actions, { marginTop: brandGap }]}>
           <AppText style={styles.subtitle}>A private app for playful couples.</AppText>
-          <AppText style={styles.trialBadge}>7-day free trial with signup</AppText>
+
+          <View style={[styles.trialRow, { marginTop: trialGap }]}>
+            <AppText style={styles.trialPrefix}>Start your </AppText>
+            <AppText style={styles.trialHighlight}>7-day free trial</AppText>
+          </View>
 
           <TouchableOpacity
-            style={styles.primaryBtn}
+            style={[styles.primaryBtn, { marginTop: isShortScreen ? 14 : 18 }]}
             onPress={() => router.push(codeToPreserve
               ? { pathname: '/(auth)/register', params: { pendingCode: codeToPreserve } }
               : '/(auth)/register'
@@ -91,7 +111,7 @@ export default function WelcomeScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          <View style={styles.linkRow}>
+          <View style={[styles.linkRow, { marginTop: linkGap }]}>
             <AppText style={styles.linkText}>Already have a code? </AppText>
             <TouchableOpacity onPress={() => router.push(codeToPreserve
               ? { pathname: '/(auth)/pair', params: { prefilledCode: codeToPreserve } }
@@ -101,7 +121,7 @@ export default function WelcomeScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.linkRow}>
+          <View style={[styles.linkRow, { marginTop: linkRowGap }]}>
             <AppText style={styles.linkText}>Already have an account? </AppText>
             <TouchableOpacity onPress={() => router.push(codeToPreserve
               ? { pathname: '/(auth)/login', params: { pendingCode: codeToPreserve } }
@@ -114,7 +134,7 @@ export default function WelcomeScreen() {
           <TouchableOpacity
             onPress={() => router.push('/(auth)/onboarding-preview')}
             activeOpacity={0.7}
-            style={styles.previewLink}
+            style={[styles.previewLink, { marginTop: previewGap }]}
           >
             <AppText style={styles.previewLinkText}>See how it works →</AppText>
           </TouchableOpacity>
@@ -132,30 +152,43 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
   },
-  hero: {
+  brandGroup: {
     alignItems: 'center',
     alignSelf: 'center',
   },
-  wordmark: {
-    marginTop: 8,
+  logoWordmark: {
+    alignItems: 'center',
   },
-  spacer: {
-    flex: 1,
+  wordmark: {
+    marginTop: 4,
   },
   actions: {
     width: '100%',
     alignItems: 'center',
-    gap: 14,
   },
   subtitle: {
-    color: 'rgba(255,255,255,0.50)',
+    color: 'rgba(255,255,255,0.68)',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 2,
+  },
+  trialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  trialPrefix: {
+    color: 'rgba(255,255,255,0.68)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+  },
+  trialHighlight: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
   },
   primaryBtn: {
     width: '88%',
@@ -183,7 +216,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkText: {
-    color: 'rgba(255,255,255,0.32)',
+    color: 'rgba(255,255,255,0.55)',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
   },
@@ -193,20 +226,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
   },
   previewLink: {
-    marginTop: 4,
     paddingVertical: 4,
   },
   previewLinkText: {
-    color: 'rgba(255,255,255,0.28)',
+    color: 'rgba(255,255,255,0.42)',
     fontSize: FontSize.xs,
     fontFamily: 'Inter-Regular',
     letterSpacing: 0.2,
-  },
-  trialBadge: {
-    color: '#FF7A45',
-    fontSize: FontSize.xs,
-    fontFamily: 'Inter-SemiBold',
-    letterSpacing: 0.3,
-    marginTop: 2,
   },
 });

@@ -15,6 +15,8 @@ interface PrimaryButtonProps {
   style?: ViewStyle;
   textStyle?: TextStyle;
   small?: boolean;
+  height?: number;
+  borderRadius?: number;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
 }
@@ -27,6 +29,8 @@ export default function PrimaryButton({
   style,
   textStyle,
   small,
+  height,
+  borderRadius,
   leftIcon,
   rightIcon,
 }: PrimaryButtonProps) {
@@ -41,7 +45,12 @@ export default function PrimaryButton({
         colors={Gradient.primary}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
-        style={[styles.gradient, small && styles.gradientSmall]}
+        style={[
+          styles.gradient,
+          small && styles.gradientSmall,
+          height !== undefined && { minHeight: height, height },
+          borderRadius !== undefined && { borderRadius },
+        ]}
       >
         {loading ? (
           <ActivityIndicator color="#fff" size="small" />

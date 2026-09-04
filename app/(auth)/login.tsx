@@ -22,15 +22,18 @@ import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { logger } from '@/lib/logger';
 
-const V_SM = 16;
-const V_MD = 24;
-const INPUT_PAD = 14;
+// Shared control geometry — all form controls on this screen use these values
+const CONTROL_HEIGHT = 56;
+const CONTROL_RADIUS = Radius.lg; // 22 — consistent across all controls
+const CONTROL_WIDTH = '100%';
+const PLACEHOLDER_COLOR = 'rgba(255,255,255,0.38)';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { pendingCode, prefilledCode } = useLocalSearchParams<{ pendingCode?: string; prefilledCode?: string }>();
   const codeToPreserve = (pendingCode || prefilledCode || '').toUpperCase().trim();
-  const { width, isTablet, contentMaxWidth } = useLayout();
+  const { width, height, isTablet, contentMaxWidth } = useLayout();
+  const isShortScreen = height < 700;
   const logoSize = Math.min(Math.round(width * 0.18), 72);
   const sloganWidth = Math.min(Math.round(width * 0.52), 210);
 
@@ -83,7 +86,6 @@ export default function LoginScreen() {
     setError('');
     setOauthLoading(provider);
     try {
-      // Persist code before OAuth redirect — app may restart during the flow.
       if (codeToPreserve) await savePendingCode(codeToPreserve);
       const session = await signInWithProvider(provider);
       if (!session) return;
@@ -115,19 +117,14 @@ export default function LoginScreen() {
         );
 
         if (!registrationComplete) {
-          // New/incomplete OAuth user — route through registration completion
-          // so they provide required fields (name, DOB, 18+ verification, Terms)
-          // before seeing the onboarding carousel.
           const redirectParams: Record<string, string> = { oauthComplete: '1' };
           if (codeToPreserve) redirectParams.pendingCode = codeToPreserve;
           router.replace({ pathname: '/(auth)/register', params: redirectParams });
         } else if (!existing?.onboarding_completed_at) {
-          // Registration complete but onboarding not yet finished.
           const redirectParams: Record<string, string> = { oauthComplete: '1' };
           if (codeToPreserve) redirectParams.pendingCode = codeToPreserve;
           router.replace({ pathname: '/(auth)/onboarding', params: redirectParams });
         } else {
-          // Existing user signing in — check for stored or param code to redeem.
           const storedCode = await loadPendingCode();
           const codeToRedeem = codeToPreserve || storedCode || '';
           if (codeToRedeem) {
@@ -157,6 +154,10 @@ export default function LoginScreen() {
   const showGoogle = isOAuthSupported('google');
   const showApple = isOAuthSupported('apple');
 
+  const panelPad = isShortScreen ? 16 : 20;
+  const panelGap = isShortScreen ? 10 : 12;
+  const brandGap = isShortScreen ? 12 : 16;
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
@@ -175,23 +176,23 @@ export default function LoginScreen() {
       >
         <View style={isTablet ? [styles.innerWrap, { maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' }] : styles.innerWrap}>
           <TouchableOpacity
-            style={[styles.brandBlock, { marginBottom: V_MD }]}
+            style={[styles.brandBlock, { marginBottom: brandGap }]}
             activeOpacity={1}
           >
-            <WarmupBrand logoSize={logoSize} sloganWidth={sloganWidth} showTagline />
+            <WarmupBrand logoSize={logoSize} sloganWidth={sloganWidth} showTagline taglineMarginTop={4} />
           </TouchableOpacity>
 
           {/* Sign-in panel */}
-          <View style={[styles.panel, { padding: V_MD, gap: V_SM }]}>
+          <View style={[styles.panel, { padding: panelPad, gap: panelGap }]}>
             {/* Email field */}
             <View style={styles.field}>
               <AppText style={styles.label}>Email</AppText>
               <AppTextInput
-                style={[styles.input, { paddingVertical: INPUT_PAD }]}
+                style={styles.input}
                 value={email}
                 onChangeText={setEmail}
                 placeholder="your@email.com"
-                placeholderTextColor="rgba(255,255,255,0.2)"
+                placeholderTextColor={PLACEHOLDER_COLOR}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
@@ -207,11 +208,11 @@ export default function LoginScreen() {
                 </TouchableOpacity>
               </View>
               <AppTextInput
-                style={[styles.input, { paddingVertical: INPUT_PAD }]}
+                style={styles.input}
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Your password"
-                placeholderTextColor="rgba(255,255,255,0.2)"
+                placeholderTextColor={PLACEHOLDER_COLOR}
                 secureTextEntry
               />
             </View>
@@ -222,6 +223,9 @@ export default function LoginScreen() {
               label="Sign In"
               onPress={handleLogin}
               loading={loading || oauthLoading !== null}
+              style={styles.primaryBtn}
+              height={CONTROL_HEIGHT}
+              borderRadius={CONTROL_RADIUS}
             />
 
             {/* Social sign-in */}
@@ -233,26 +237,26 @@ export default function LoginScreen() {
                   <View style={styles.dividerLine} />
                 </View>
 
-                <View style={styles.socialRow}>
+                <View style={styles.socialCol}>
                   {showApple && (
                     Platform.OS === 'ios' ? (
                       <AppleAuthentication.AppleAuthenticationButton
                         onPress={() => handleOAuth('apple')}
                         buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
                         buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                        cornerRadius={Radius.lg}
+                        cornerRadius={CONTROL_RADIUS}
                         style={styles.appleNativeBtn}
                       />
                     ) : (
                       <TouchableOpacity
-                        style={[styles.socialBtn, styles.appleBtn, { paddingVertical: INPUT_PAD + 2 }]}
+                        style={styles.appleBtn}
                         onPress={() => handleOAuth('apple')}
                         activeOpacity={0.88}
                         disabled={oauthLoading !== null || loading}
                       >
                         <AppleIcon color="#fff" size={18} />
                         <AppText style={styles.appleBtnText}>
-                          {oauthLoading === 'apple' ? 'Signing in…' : 'Apple'}
+                          {oauthLoading === 'apple' ? 'Signing in…' : 'Sign in with Apple'}
                         </AppText>
                       </TouchableOpacity>
                     )
@@ -260,14 +264,14 @@ export default function LoginScreen() {
 
                   {showGoogle && (
                     <TouchableOpacity
-                      style={[styles.socialBtn, styles.googleBtn, { paddingVertical: INPUT_PAD + 2 }]}
+                      style={styles.googleBtn}
                       onPress={() => handleOAuth('google')}
                       activeOpacity={0.88}
                       disabled={oauthLoading !== null || loading}
                     >
                       <GoogleIcon size={18} />
                       <AppText style={styles.googleBtnText}>
-                        {oauthLoading === 'google' ? 'Signing in…' : 'Google'}
+                        {oauthLoading === 'google' ? 'Signing in…' : 'Sign in with Google'}
                       </AppText>
                     </TouchableOpacity>
                   )}
@@ -277,7 +281,7 @@ export default function LoginScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.footerLink, { marginTop: V_SM }]}
+            style={[styles.footerLink, { marginTop: isShortScreen ? 8 : 12 }]}
             onPress={() => setHelpVisible(true)}
             activeOpacity={0.7}
           >
@@ -300,7 +304,7 @@ export default function LoginScreen() {
 
           {/* Footer */}
           <TouchableOpacity
-            style={[styles.footerLink, { marginTop: V_SM }]}
+            style={[styles.footerLink, { marginTop: isShortScreen ? 4 : 8 }]}
             onPress={() => router.replace(codeToPreserve
               ? { pathname: '/(auth)/register', params: { pendingCode: codeToPreserve } }
               : '/(auth)/register'
@@ -327,7 +331,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.xxl,
+    paddingVertical: Spacing.xl,
   },
   innerWrap: {
     width: '100%',
@@ -360,10 +364,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   input: {
+    width: CONTROL_WIDTH,
+    height: CONTROL_HEIGHT,
     backgroundColor: 'rgba(255,255,255,0.055)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.09)',
-    borderRadius: Radius.lg,
+    borderRadius: CONTROL_RADIUS,
     color: '#fff',
     fontSize: FontSize.md,
     fontFamily: 'Inter-Regular',
@@ -373,6 +379,10 @@ const styles = StyleSheet.create({
     color: '#FF5A5F',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
+  },
+  primaryBtn: {
+    width: CONTROL_WIDTH,
+    borderRadius: CONTROL_RADIUS,
   },
   dividerRow: {
     flexDirection: 'row',
@@ -389,20 +399,19 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
   },
-  socialRow: {
+  socialCol: {
     flexDirection: 'column',
     gap: Spacing.sm,
   },
-  socialBtn: {
-    flex: 1,
+  appleBtn: {
+    width: CONTROL_WIDTH,
+    height: CONTROL_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderRadius: Radius.lg,
+    borderRadius: CONTROL_RADIUS,
     borderWidth: 1,
-  },
-  appleBtn: {
     backgroundColor: '#1A1A1A',
     borderColor: 'rgba(255,255,255,0.14)',
   },
@@ -412,10 +421,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
   },
   appleNativeBtn: {
-    flex: 1,
-    height: 48,
+    width: CONTROL_WIDTH,
+    height: CONTROL_HEIGHT,
   },
   googleBtn: {
+    width: CONTROL_WIDTH,
+    height: CONTROL_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: CONTROL_RADIUS,
+    borderWidth: 1,
     backgroundColor: 'rgba(255,255,255,0.94)',
     borderColor: 'rgba(255,255,255,0.12)',
   },
