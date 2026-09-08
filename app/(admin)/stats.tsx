@@ -154,17 +154,10 @@ export default function StatsAdmin() {
       }
     }
 
-    let intQ = supabase.from('interactions').select('couple_id, type, status');
-    if (fromTs) intQ = intQ.gte('created_at', fromTs);
-    if (toTs)   intQ = intQ.lte('created_at', toTs);
-
-    let wishQ = supabase.from('wishes').select('couple_id');
-    if (fromTs) wishQ = wishQ.gte('created_at', fromTs);
-    if (toTs)   wishQ = wishQ.lte('created_at', toTs);
-
-    let chatQ = supabase.from('chat_messages').select('couple_id');
-    if (fromTs) chatQ = chatQ.gte('created_at', fromTs);
-    if (toTs)   chatQ = chatQ.lte('created_at', toTs);
+    const aggregateParams = { p_from: fromTs, p_to: toTs };
+    const intQ = supabase.rpc('admin_interaction_stats', aggregateParams);
+    const wishQ = supabase.rpc('admin_wish_stats', aggregateParams);
+    const chatQ = supabase.rpc('admin_chat_stats', aggregateParams);
 
     let monthlyQ = supabase.from('monthly_scores').select('couple_id, user_id, dares_skipped, dice_skipped, year, month');
     if (range.from) {
@@ -199,31 +192,31 @@ export default function StatsAdmin() {
     const [couplesRes, interactionsRes, scoresRes, profilesRes, chatRes, monthlyRes, wishRes] = settled;
 
     const couples: { id: string; user_a_id: string; user_b_id: string | null }[] = couplesRes.data ?? [];
-    const interactions: { couple_id: string; type: string; status: string }[] = interactionsRes.data ?? [];
+    const interactions: { couple_id: string; type: string; status: string; interaction_count: number }[] = interactionsRes.data ?? [];
     const scores: { user_id: string; points: number }[] = scoresRes.data ?? [];
     const profiles: { id: string; display_name: string }[] = profilesRes.data ?? [];
-    const chatMessages: { couple_id: string }[] = chatRes.data ?? [];
+    const chatMessages: { couple_id: string; message_count: number }[] = chatRes.data ?? [];
     const monthly: { couple_id: string; dares_skipped: number; dice_skipped: number; year: number; month: number }[] = monthlyRes.data ?? [];
-    const wishRows: { couple_id: string }[] = wishRes.data ?? [];
+    const wishRows: { couple_id: string; wish_count: number }[] = wishRes.data ?? [];
 
     const nameMap = Object.fromEntries(profiles.map(p => [p.id, p.display_name]));
 
     const statsMap: Record<string, { dice: number; dare: number; tell_me: number }> = {};
     for (const i of interactions) {
       if (!statsMap[i.couple_id]) statsMap[i.couple_id] = { dice: 0, dare: 0, tell_me: 0 };
-      if (i.type === 'dice')         statsMap[i.couple_id].dice++;
-      else if (i.type === 'dare')    statsMap[i.couple_id].dare++;
-      else if (i.type === 'tell_me') statsMap[i.couple_id].tell_me++;
+      if (i.type === 'dice')         statsMap[i.couple_id].dice += i.interaction_count;
+      else if (i.type === 'dare')    statsMap[i.couple_id].dare += i.interaction_count;
+      else if (i.type === 'tell_me') statsMap[i.couple_id].tell_me += i.interaction_count;
     }
 
     const wishMap: Record<string, number> = {};
     for (const w of wishRows) {
-      wishMap[w.couple_id] = (wishMap[w.couple_id] ?? 0) + 1;
+      wishMap[w.couple_id] = w.wish_count;
     }
 
     const chatMap: Record<string, number> = {};
     for (const m of chatMessages) {
-      chatMap[m.couple_id] = (chatMap[m.couple_id] ?? 0) + 1;
+      chatMap[m.couple_id] = m.message_count;
     }
 
     const skipMap: Record<string, { dare_skipped: number; dice_skipped: number }> = {};
@@ -256,12 +249,19 @@ export default function StatsAdmin() {
 
     const overall = interactions.reduce(
       (acc, i) => {
-        if (i.type === 'dice')         acc.dice++;
-        else if (i.type === 'dare')    acc.dare++;
-        else if (i.type === 'tell_me') acc.tell_me++;
+        if (i.type === 'dice')         acc.dice += i.interaction_count;
+        else if (i.type === 'dare')    acc.dare += i.interaction_count;
+        else if (i.type === 'tell_me') acc.tell_me += i.interaction_count;
         return acc;
       },
-      { dice: 0, dare: 0, tell_me: 0, wish: wishRows.length, chat: chatMessages.length, ...overallSkip },
+      {
+        dice: 0,
+        dare: 0,
+        tell_me: 0,
+        wish: wishRows.reduce((total, row) => total + row.wish_count, 0),
+        chat: chatMessages.reduce((total, row) => total + row.message_count, 0),
+        ...overallSkip,
+      },
     );
 
     const enrichedScores: UserScore[] = scores.map(s => ({

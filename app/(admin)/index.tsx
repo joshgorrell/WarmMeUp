@@ -127,6 +127,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchAggregateCount = async (
+    functionName: 'admin_interaction_stats' | 'admin_wish_stats',
+    type?: string,
+  ): Promise<{ count: number | null; error: any }> => {
+    const { data, error } = await supabase.rpc(functionName, { p_from: null, p_to: null });
+    if (error) return { count: null, error };
+    const rows = Array.isArray(data) ? data : [];
+    const count = rows
+      .filter((row: { type?: string }) => !type || row.type === type)
+      .reduce((total: number, row: { interaction_count?: number; wish_count?: number }) =>
+        total + Number(row.interaction_count ?? row.wish_count ?? 0), 0);
+    return { count, error: null };
+  };
+
   const fetchStats = async () => {
     if (!mountedRef.current) return;
     setStatsError(null);
@@ -138,11 +152,11 @@ export default function AdminDashboard() {
       fetchOneStat('pairedCount', () => supabase.from('couples').select('id', { count: 'exact', head: true }).not('user_b_id', 'is', null)),
       fetchOneStat('soloCount', () => supabase.from('couples').select('id', { count: 'exact', head: true }).is('user_b_id', null)),
       fetchOneStat('userCount', () => supabase.from('profiles').select('id', { count: 'exact', head: true })),
-      fetchOneStat('interactionCount', () => supabase.from('interactions').select('id', { count: 'exact', head: true })),
-      fetchOneStat('diceCount', () => supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dice')),
-      fetchOneStat('dareCount', () => supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'dare')),
-      fetchOneStat('tellMeCount', () => supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', 'tell_me')),
-      fetchOneStat('wishCount', () => supabase.from('wishes').select('id', { count: 'exact', head: true })),
+      fetchOneStat('interactionCount', () => fetchAggregateCount('admin_interaction_stats')),
+      fetchOneStat('diceCount', () => fetchAggregateCount('admin_interaction_stats', 'dice')),
+      fetchOneStat('dareCount', () => fetchAggregateCount('admin_interaction_stats', 'dare')),
+      fetchOneStat('tellMeCount', () => fetchAggregateCount('admin_interaction_stats', 'tell_me')),
+      fetchOneStat('wishCount', () => fetchAggregateCount('admin_wish_stats')),
     ]);
 
     if (mountedRef.current) {
@@ -159,7 +173,7 @@ export default function AdminDashboard() {
       { name: 'Read all profiles', status: 'pending' },
       { name: 'Read all couples', status: 'pending' },
       { name: 'Read all subscriptions', status: 'pending' },
-      { name: 'Read all wishes', status: 'pending' },
+      { name: 'Read aggregate wish stats', status: 'pending' },
       { name: 'Email search RPC', status: 'pending' },
     ];
     setDiag([...checks]);
@@ -219,12 +233,12 @@ export default function AdminDashboard() {
         if (mountedRef.current) setDiag([...checks]);
       }
 
-      // 5. Read all wishes
+      // 5. Read aggregate wish stats
       {
-        const { count, error } = await supabase.from('wishes').select('id', { count: 'exact', head: true });
+        const { count, error } = await fetchAggregateCount('admin_wish_stats');
         checks[5] = error
-          ? { name: 'Read all wishes', status: 'fail', detail: error.message }
-          : { name: 'Read all wishes', status: 'pass', detail: `${count ?? 0} rows` };
+          ? { name: 'Read aggregate wish stats', status: 'fail', detail: error.message }
+          : { name: 'Read aggregate wish stats', status: 'pass', detail: `${count ?? 0} wishes counted` };
         if (mountedRef.current) setDiag([...checks]);
       }
 
@@ -394,7 +408,7 @@ export default function AdminDashboard() {
             { key: 'pairedCount', label: 'Paired', query: () => supabase.from('couples').select('id', { count: 'exact', head: true }).not('user_b_id', 'is', null) },
             { key: 'soloCount', label: 'Solo', query: () => supabase.from('couples').select('id', { count: 'exact', head: true }).is('user_b_id', null) },
             { key: 'userCount', label: 'Users', query: () => supabase.from('profiles').select('id', { count: 'exact', head: true }) },
-            { key: 'interactionCount', label: 'Interactions', query: () => supabase.from('interactions').select('id', { count: 'exact', head: true }) },
+            { key: 'interactionCount', label: 'Interactions', query: () => fetchAggregateCount('admin_interaction_stats') },
           ] as const).map(({ key, label, query }) => {
             const entry = stats[key];
             const hasError = !!entry.error;
@@ -444,8 +458,8 @@ export default function AdminDashboard() {
                     style={styles.breakdownItem}
                     onPress={() => fetchOneStat(key, () =>
                       type
-                        ? supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('type', type)
-                        : supabase.from('wishes').select('id', { count: 'exact', head: true })
+                        ? fetchAggregateCount('admin_interaction_stats', type)
+                        : fetchAggregateCount('admin_wish_stats')
                     )}
                     activeOpacity={entry.error ? 0.7 : 1}
                   >
