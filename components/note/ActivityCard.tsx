@@ -29,11 +29,13 @@ export default function ActivityCard({
   actorName,
   isMine,
   onPress,
+  onLongPress,
 }: {
   item: ChatActivityItem;
   actorName: string;
   isMine: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
 }) {
   const meta = META[item.kind];
   const Icon = meta.Icon;
@@ -45,7 +47,13 @@ export default function ActivityCard({
   const displayColor = isAccepted ? acceptedColor : accentColor;
   return (
     <View style={styles.row}>
-      <TouchableOpacity style={[styles.card, isExpired && styles.cardExpired]} activeOpacity={0.82} onPress={onPress}>
+      <TouchableOpacity
+        style={[styles.card, isExpired && styles.cardExpired]}
+        activeOpacity={0.82}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={400}
+      >
         <View style={[styles.iconWrap, { backgroundColor: isExpired ? 'rgba(255,255,255,0.06)' : isAccepted ? 'rgba(51,209,122,0.15)' : `${meta.color}1F` }]}>
           {isExpired
             ? <Clock size={18} color={expiredColor} strokeWidth={2.2} />

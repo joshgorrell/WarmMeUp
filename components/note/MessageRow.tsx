@@ -106,6 +106,7 @@ export const MessageRow = React.memo(function MessageRow({
   repliedMessage,
   replySenderName,
   onJumpToMessage,
+  onClearActivity,
 }: {
   item: ChatMessage & { __prevCreatedAt?: string | null };
   isMine: boolean;
@@ -134,6 +135,7 @@ export const MessageRow = React.memo(function MessageRow({
   repliedMessage?: ChatMessage | null;
   replySenderName?: string;
   onJumpToMessage?: (id: string) => void;
+  onClearActivity?: (msg: ChatMessage) => void;
 }) {
   const router = useRouter();
   const { isTabletOrLarger, isLargeTablet } = useLayout();
@@ -210,7 +212,13 @@ export const MessageRow = React.memo(function MessageRow({
             <AppText style={[styles.dateText, { color: colors.textMuted }]}>{getDividerLabel(item.created_at)}</AppText>
           </View>
         )}
-        <ActivityCard item={activity} actorName={name} isMine={isMine} onPress={openActivity} />
+        <ActivityCard
+          item={activity}
+          actorName={name}
+          isMine={isMine}
+          onPress={openActivity}
+          onLongPress={onClearActivity ? () => onClearActivity(item) : undefined}
+        />
       </>
     );
   }

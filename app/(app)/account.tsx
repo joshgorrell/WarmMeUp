@@ -9,7 +9,7 @@ import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronRight, ChevronLeft, Shield, Lock, Trash2, RotateCcw, TriangleAlert as AlertTriangle, UserX, Clock, Users, Smartphone, ScanFace, FileSliders as Sliders, X, Check } from 'lucide-react-native';
+import { ChevronRight, ChevronLeft, Shield, Lock, Trash2, RotateCcw, TriangleAlert as AlertTriangle, UserX, Clock, Users, Smartphone, ScanFace, FileSliders as Sliders, X, Check, UserPlus, Camera, Calendar, SlidersHorizontal, Sparkles } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -33,6 +33,7 @@ import { ensureConfigured } from '@/lib/purchases';
 import { logger } from '@/lib/logger';
 import { ProfileTab } from '@/components/account/ProfileTab';
 import { SettingsTab } from '@/components/account/SettingsTab';
+import { SetupChecklist, type SetupStep } from '@/components/account/SetupChecklist';
 import FeedbackSheet from '@/components/FeedbackSheet';
 
 type AccountTab = 'profile' | 'settings';
@@ -100,6 +101,10 @@ export default function AccountScreen() {
   const [momentsToday, setMomentsToday] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
   const [diceRolls, setDiceRolls] = useState(0);
+
+  // Setup checklist state
+  const [hasCustomPrompts, setHasCustomPrompts] = useState(false);
+  const [hasActivity, setHasActivity] = useState(false);
 
   // Settings tab state
   const [optimistic, setOptimistic] = useState<Partial<UserSettings>>({});
@@ -290,6 +295,20 @@ export default function AccountScreen() {
     setDiceRolls(diceRes.count ?? 0);
     setStreak(typeof streakRes.data === 'number' ? streakRes.data : 0);
   };
+
+  // Setup checklist: check for custom prompts and any interaction activity
+  useFocusEffect(useCallback(() => {
+    if (!couple?.id) return;
+    (async () => {
+      const [diceCustom, dareCustom, interactionCount] = await Promise.all([
+        supabase.from('dice_prompts').select('id', { count: 'exact', head: true }).eq('couple_id', couple.id).eq('is_active', true),
+        supabase.from('dare_prompts').select('id', { count: 'exact', head: true }).eq('couple_id', couple.id).eq('is_active', true),
+        supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('couple_id', couple.id),
+      ]);
+      setHasCustomPrompts((diceCustom.count ?? 0) > 0 || (dareCustom.count ?? 0) > 0);
+      setHasActivity((interactionCount.count ?? 0) > 0);
+    })();
+  }, [couple?.id]));
 
   const s = settings ? { ...settings, ...optimistic } : (Object.keys(optimistic).length > 0 ? optimistic as UserSettings : null);
 
@@ -935,6 +954,65 @@ export default function AccountScreen() {
               nameWrapRef={nameWrapRef}
               uploadingAvatar={uploadingAvatar}
               avatarError={avatarError}
+              setupSteps={[
+                {
+                  key: 'partner',
+                  label: 'Invite Your Partner',
+                  desc: couple?.user_b_id
+                    ? 'Partner connected!'
+                    : couple?.invite_code
+                      ? 'Share your code to connect'
+                      : 'Generate your invite code',
+                  done: !!couple?.user_b_id,
+                  onPress: () => handleInviteCardPress(),
+                  icon: <UserPlus color="#FF2E8A" size={16} strokeWidth={2} />,
+                  accentColor: '#FF2E8A',
+                },
+                {
+                  key: 'photo',
+                  label: 'Add a Profile Photo',
+                  desc: 'Help your partner recognize you',
+                  done: !!profile?.avatar_url,
+                  onPress: () => handlePickAvatar(),
+                  icon: <Camera color="#FFB347" size={16} strokeWidth={2} />,
+                  accentColor: '#FFB347',
+                },
+                {
+                  key: 'anniversary',
+                  label: 'Set Your Anniversary',
+                  desc: 'Personalize your shared space',
+                  done: !!couple?.anniversary_date,
+                  onPress: () => {
+                    const existing = couple?.anniversary_date ? new Date(couple.anniversary_date) : null;
+                    setAnniversaryDate(existing);
+                    setAnnivMonth(existing ? String(existing.getMonth() + 1).padStart(2, '0') : '');
+                    setAnnivDay(existing ? String(existing.getDate()).padStart(2, '0') : '');
+                    setAnnivYear(existing ? String(existing.getFullYear()) : '');
+                    setAnniversaryError(null);
+                    setShowAnniversarySheet(true);
+                  },
+                  icon: <Calendar color="#FF5A3D" size={16} strokeWidth={2} />,
+                  accentColor: '#FF5A3D',
+                },
+                {
+                  key: 'prompts',
+                  label: 'Customize Your Prompts',
+                  desc: 'Make dares and dice feel like yours',
+                  done: hasCustomPrompts,
+                  onPress: () => router.push('/(app)/customize-prompts'),
+                  icon: <SlidersHorizontal color="#69A7FF" size={16} strokeWidth={2} />,
+                  accentColor: '#69A7FF',
+                },
+                {
+                  key: 'moment',
+                  label: 'Share Your First Moment',
+                  desc: 'Send a note, wish, dare, or dice roll',
+                  done: hasActivity,
+                  onPress: () => router.push('/(app)/(tabs)/note'),
+                  icon: <Sparkles color="#33D17A" size={16} strokeWidth={2} />,
+                  accentColor: '#33D17A',
+                },
+              ]}
               onCopyCode={handleCopyCode}
               onShareCode={handleShareCode}
               onShareApp={shareApp}

@@ -2,8 +2,8 @@ import { supabase } from './supabase';
 import type { PointEvent } from './types';
 
 const DEFAULTS: Record<string, number> = {
-  dare_accept: 30,
-  dare_complete: 0,
+  dare_accept: 0,
+  dare_complete: 30,
   dice_accept: 30,
   dice_complete: 0,
   ask_sent: 5,

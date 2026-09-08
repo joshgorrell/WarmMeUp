@@ -8,7 +8,7 @@ import { Image as ExpoImage } from 'expo-image';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Image as ImageIcon, Camera, X, Lock, Pencil, Send } from 'lucide-react-native';
+import { Image as ImageIcon, Camera, X, Lock, Pencil, Send, Flame } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -46,7 +46,7 @@ const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
 export default function ChatTab() {
   const router = useRouter();
-  const { message_id: deepLinkMessageId } = useLocalSearchParams<{ message_id?: string }>();
+  const { message_id: deepLinkMessageId, dare_id: deepLinkDareId } = useLocalSearchParams<{ message_id?: string; dare_id?: string }>();
   const { user, couple, profile, partnerProfile, settings } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -64,6 +64,8 @@ export default function ChatTab() {
   const [signedUrls, setSignedUrls] = useState<Record<string, string | null>>({});
   const [editingState, setEditingState] = useState<EditingState | null>(null);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [dareReplyMode, setDareReplyMode] = useState<{ id: string; text: string } | null>(null);
+  const dareReplyHandledRef = useRef<string | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [pillSize, setPillSize] = useState<{ w: number; h: number } | null>(null);
@@ -74,6 +76,7 @@ export default function ChatTab() {
     message?: string;
     actions: ConfirmAction[];
   } | null>(null);
+  const pendingClearRef = useRef<ChatMessage | null>(null);
   const [timerSheetMsg, setTimerSheetMsg] = useState<ChatMessage | null>(null);
   const handledMsgLinkRef = useRef<string | null>(null);
   const listRef = useRef<FlatList>(null);
@@ -102,6 +105,23 @@ export default function ChatTab() {
       initialScrollTimersRef.current = [];
     };
   }, []);
+
+  // Enter Dare-response mode when navigated with dare_id param
+  useEffect(() => {
+    if (!deepLinkDareId || dareReplyHandledRef.current === deepLinkDareId) return;
+    (async () => {
+      const { data: dare } = await supabase
+        .from('interactions')
+        .select('content_text')
+        .eq('id', deepLinkDareId)
+        .maybeSingle();
+      if (dare?.content_text) {
+        setDareReplyMode({ id: deepLinkDareId, text: dare.content_text });
+        dareReplyHandledRef.current = deepLinkDareId;
+        setTimeout(() => inputRef.current?.focus(), 200);
+      }
+    })();
+  }, [deepLinkDareId]);
 
   const partnerFirstName = partnerProfile?.first_name?.trim() || partnerProfile?.display_name?.trim().split(/\s+/)[0] || (hasPartner ? 'Partner' : 'Chat');
   const blurEnabled = settings?.blur_chat_media ?? settings?.blur_media ?? true;
@@ -707,6 +727,7 @@ export default function ChatTab() {
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
       reply_to: replyingTo?.id ?? null,
+      dare_interaction_id: dareReplyMode?.id ?? null,
       burn_after_seconds: null,
       burns_at: null,
       first_viewed_at: null,
@@ -735,6 +756,7 @@ export default function ChatTab() {
       allow_share: settings?.vault_allow_share_default ?? false,
       vault_item_id: null,
       reply_to: replyingTo?.id ?? null,
+      dare_interaction_id: dareReplyMode?.id ?? null,
     };
     logDebugEvent('chat_message_insert_media_field', {
       media_url_present: !!payload.media_url,
@@ -782,10 +804,12 @@ export default function ChatTab() {
     }
 
     const capturedMedia = media;
+    const capturedDareReply = dareReplyMode;
     if (mediaOverride === undefined) {
       setText('');
       setAttachedMedia(null);
       setReplyingTo(null);
+      setDareReplyMode(null);
     }
     setSending(false);
 
@@ -854,6 +878,33 @@ export default function ChatTab() {
     });
 
     notifyPartner({ event_type: 'new_message', couple_id: coupleId, target_route: '/(app)/(tabs)/note', partnerUserId: partnerProfile?.id, message_text: hasText ? caption : undefined });
+
+    // If this message was sent as a Dare response, complete the dare
+    if (capturedDareReply) {
+      try {
+        const { data: dareResult } = await supabase.rpc('complete_dare', {
+          p_interaction_id: capturedDareReply.id,
+          p_completion_type: 'message',
+          p_chat_message_id: messageId,
+        });
+        const alreadyDone = (dareResult as Record<string, unknown>)?.already_completed;
+        if (!alreadyDone) {
+          const ptsEnabled = await isPointsEnabled(coupleId);
+          if (ptsEnabled) {
+            const pts = await getPointValue('dare_complete');
+            await awardPoints(coupleId, userId, pts, 'Dare completed', capturedDareReply.id);
+            await incrementMonthlyCounter(coupleId, userId, 'dares_completed', pts);
+          }
+          notifyPartner({
+            event_type: 'dare_completed',
+            couple_id: coupleId,
+            target_route: `/(app)/(tabs)/note?message_id=${messageId}`,
+            partnerUserId: partnerProfile?.id,
+            item_id: capturedDareReply.id,
+          });
+        }
+      } catch {}
+    }
   };
 
   useFocusEffect(
@@ -1321,6 +1372,38 @@ export default function ChatTab() {
     return map;
   }, [messages]);
 
+  const handleClearActivity = useCallback((msg: ChatMessage) => {
+    pendingClearRef.current = msg;
+    setConfirmSheet({
+      title: 'Clear this notification?',
+      message: 'This removes the card from the chat for both of you. The dare or dice roll itself is not affected.',
+      actions: [
+        { label: 'Clear', style: 'destructive', onPress: () => {
+          const target = pendingClearRef.current;
+          pendingClearRef.current = null;
+          if (!target) return;
+          setMessages(prev => prev.filter(m => m.id !== target.id));
+          const deletedAt = new Date().toISOString();
+          supabase
+            .from('chat_messages')
+            .update({ deleted_at: deletedAt })
+            .eq('id', target.id)
+            .eq('couple_id', couple!.id)
+            .then(({ error }) => {
+              if (error) {
+                setMessages(prev => {
+                  if (prev.some(m => m.id === target.id)) return prev;
+                  return [...prev, target].sort((a, b) => a.created_at.localeCompare(b.created_at));
+                });
+                Alert.alert('Clear Failed', 'Could not remove the notification. Please try again.');
+              }
+            });
+        } },
+        { label: 'Cancel', style: 'cancel', onPress: () => { pendingClearRef.current = null; } },
+      ],
+    });
+  }, [couple]);
+
   const renderItem = useCallback(({ item, index }: { item: ChatMessage & { __prevCreatedAt?: string | null; __nextCreatedAt?: string | null; __prevSenderId?: string | null; __nextSenderId?: string | null }; index: number }) => {
     const isMine = item.sender_id === user?.id;
     const name = isMine ? (profile?.first_name || profile?.display_name?.trim().split(/\s+/)[0] || 'You') : partnerFirstName;
@@ -1363,9 +1446,10 @@ export default function ChatTab() {
         repliedMessage={repliedMessage}
         replySenderName={repliedMessage ? (repliedMessage.sender_id === user?.id ? 'You' : partnerFirstName) : undefined}
         onJumpToMessage={handleJumpToMessage}
+        onClearActivity={handleClearActivity}
       />
     );
-  }, [user?.id, profile?.display_name, partnerProfile?.display_name, partnerProfile?.first_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, handleBurnMessage, mediaBubbleWidth, mediaBubbleHeight, chatFontScale, reactOnMessage, highlightedId, messagesById]);
+  }, [user?.id, profile?.display_name, partnerProfile?.display_name, partnerProfile?.first_name, activeMenuId, reactionsMap, colors, blurEnabled, revealedMedia, signedUrls, handleRevealMedia, handleOpenMedia, handleBurnMessage, mediaBubbleWidth, mediaBubbleHeight, chatFontScale, reactOnMessage, highlightedId, messagesById, handleClearActivity]);
 
   const canSend = editingState
     ? text.trim().length > 0 && !sending
@@ -1514,6 +1598,29 @@ export default function ChatTab() {
               <AppText style={[styles.editBannerText, { color: '#FF8A3D' }]}>Editing message</AppText>
               <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <X color="#FF8A3D" size={15} strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {dareReplyMode && (
+            <View style={[styles.replyBanner, { backgroundColor: 'rgba(255,46,138,0.10)', borderTopColor: 'rgba(255,46,138,0.25)' }]}>
+              <View style={[styles.replyBannerAccent, { backgroundColor: '#FF2E8A' }]} />
+              <View style={styles.replyBannerInfo}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <Flame color="#FF2E8A" size={13} strokeWidth={2.2} />
+                  <AppText style={[styles.replyBannerName, { color: '#FF2E8A' }]}>
+                    Replying to a Dare
+                  </AppText>
+                </View>
+                <AppText style={styles.replyBannerPreview} numberOfLines={1} ellipsizeMode="tail">
+                  {dareReplyMode.text}
+                </AppText>
+              </View>
+              <TouchableOpacity
+                onPress={() => setDareReplyMode(null)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <X color={colors.textMuted} size={15} strokeWidth={2.5} />
               </TouchableOpacity>
             </View>
           )}

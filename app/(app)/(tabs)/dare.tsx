@@ -17,6 +17,11 @@ import {
   Eye,
   EyeOff,
   CircleX as XCircle,
+  Camera,
+  Video,
+  MessageCircle,
+  Check,
+  ChevronRight,
 } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import AppShell from '@/components/AppShell';
@@ -24,6 +29,7 @@ import TabHeader from '@/components/TabHeader';
 import WarmTextInput from '@/components/WarmTextInput';
 import SecondaryButton from '@/components/SecondaryButton';
 import ReceivedDareCard from '@/components/ReceivedDareCard';
+import AcceptedDareCard, { DareActionType } from '@/components/AcceptedDareCard';
 import CustomizePromptsNotice from '@/components/CustomizePromptsNotice';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -36,6 +42,7 @@ import {
 } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
 import { Interaction } from '@/lib/types';
+import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension } from '@/lib/uploadMedia';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useCustomPromptNotice } from '@/hooks/useCustomPromptNotice';
 
@@ -110,9 +117,12 @@ export default function DareTab() {
   ];
   const [dareText, setDareText] = useState('');
   const [selectedTimerSeconds, setSelectedTimerSeconds] = useState(30 * 60);
+  const [selectedActionType, setSelectedActionType] = useState<DareActionType>('action');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [incomingDare, setIncomingDare] = useState<Interaction | null>(null);
+  const [acceptedDare, setAcceptedDare] = useState<Interaction | null>(null);
+  const [completing, setCompleting] = useState(false);
 
   const incomingTotalExpirySeconds = (() => {
     if (!incomingDare?.expires_at || !incomingDare?.created_at) return 86400;
@@ -121,7 +131,8 @@ export default function DareTab() {
   })();
   const [sentDare, setSentDare] = useState<Interaction | null>(null);
   const [recentDares, setRecentDares] = useState<Interaction[]>([]);
-  const [acceptPts, setAcceptPts] = useState(30);
+  const [acceptPts, setAcceptPts] = useState(0);
+  const [completePts, setCompletePts] = useState(30);
   const [highlightDare, setHighlightDare] = useState(false);
   const handledDareLinkRef = useRef<string | null>(null);
 
@@ -129,6 +140,7 @@ export default function DareTab() {
 
   useEffect(() => {
     getPointValue('dare_accept').then(a => setAcceptPts(a));
+    getPointValue('dare_complete').then(c => setCompletePts(c));
   }, []);
 
   const checkStates = useCallback(async () => {
@@ -163,6 +175,21 @@ export default function DareTab() {
       }
     }
 
+    // Check for an accepted dare that still needs completion
+    const { data: accepted } = await supabase
+      .from('interactions')
+      .select('*')
+      .eq('couple_id', couple.id)
+      .eq('receiver_id', user.id)
+      .eq('type', 'dare')
+      .eq('status', 'accepted')
+      .not('action_type', 'is', null)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setAcceptedDare(accepted as Interaction | null);
+
     const { data: mySent } = await supabase
       .from('interactions')
       .select('*')
@@ -185,7 +212,7 @@ export default function DareTab() {
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(5);
-    setRecentDares(history ?? []);
+    setRecentDares((history ?? []) as Interaction[]);
   }, [couple?.id, user]);
 
   useEffect(() => {
@@ -229,6 +256,7 @@ export default function DareTab() {
         p_couple_id: couple.id,
         p_content_text: dareText.trim(),
         p_duration_seconds: selectedTimerSeconds,
+        p_action_type: selectedActionType,
       });
       if (rpcError) throw rpcError;
       if (partnerId) notifyPartner({ event_type: 'new_dare', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
@@ -244,20 +272,25 @@ export default function DareTab() {
   const handleRespond = async (accepted: boolean, declineReason?: string) => {
     if (!incomingDare || !couple?.id || !user) return;
     if (accepted) {
+      const hasActionType = !!incomingDare.action_type;
       const nowIso = new Date().toISOString();
       await supabase.from('interactions').update({
         status: 'accepted',
-        is_active: false,
-        completed_at: nowIso,
+        is_active: hasActionType, // keep active if there's a completion step
+        completed_at: hasActionType ? null : nowIso,
       }).eq('id', incomingDare.id);
       notifyPartner({ event_type: 'dare_accepted', couple_id: couple.id, target_route: '/(app)/(tabs)/dare', partnerUserId: partnerProfile?.id });
       const ptsEnabled = await isPointsEnabled(couple.id);
-      if (ptsEnabled) {
+      if (ptsEnabled && !hasActionType) {
+        // Legacy dare: award full points on accept
         const pts = await getPointValue('dare_accept');
         await awardPoints(couple.id, user.id, pts, 'Dare accepted', incomingDare.id);
         await incrementMonthlyCounter(couple.id, user.id, 'dares_accepted', pts);
       }
       setIncomingDare(null);
+      if (hasActionType) {
+        setAcceptedDare({ ...incomingDare, status: 'accepted', is_active: true, completed_at: null });
+      }
     } else {
       const update: Record<string, unknown> = { status: 'rejected', is_active: false };
       if (declineReason) update.decline_reason = declineReason;
@@ -283,6 +316,99 @@ export default function DareTab() {
       setIncomingDare(null);
     }
     await checkStates();
+  };
+
+  const completeDare = async (
+    actionType: DareActionType,
+    vaultItemId?: string,
+    chatMessageId?: string,
+  ) => {
+    if (!acceptedDare || !couple?.id || !user) return;
+    setCompleting(true);
+    try {
+      const { data: result, error: rpcError } = await supabase.rpc('complete_dare', {
+        p_interaction_id: acceptedDare.id,
+        p_completion_type: actionType,
+        p_vault_item_id: vaultItemId ?? null,
+        p_chat_message_id: chatMessageId ?? null,
+      });
+      if (rpcError) throw rpcError;
+      const alreadyDone = (result as Record<string, unknown>)?.already_completed;
+      if (!alreadyDone) {
+        const ptsEnabled = await isPointsEnabled(couple.id);
+        if (ptsEnabled) {
+          const pts = await getPointValue('dare_complete');
+          await awardPoints(couple.id, user.id, pts, 'Dare completed', acceptedDare.id);
+          await incrementMonthlyCounter(couple.id, user.id, 'dares_completed', pts);
+        }
+        notifyPartner({
+          event_type: 'dare_completed',
+          couple_id: couple.id,
+          target_route: vaultItemId
+            ? `/(app)/vault-viewer?item_id=${vaultItemId}`
+            : chatMessageId
+            ? `/(app)/(tabs)/note?message_id=${chatMessageId}`
+            : '/(app)/(tabs)/dare',
+          partnerUserId: partnerProfile?.id,
+          item_id: vaultItemId ?? chatMessageId ?? acceptedDare.id,
+        });
+      }
+      setAcceptedDare(null);
+      await checkStates();
+    } catch {
+      setError('Could not complete the dare. Please try again.');
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const handleCompleteAction = async (actionType: DareActionType) => {
+    if (actionType === 'action') {
+      await completeDare('action');
+      return;
+    }
+    if (actionType === 'message') {
+      if (!acceptedDare) return;
+      router.push(`/(app)/(tabs)/note?dare_id=${acceptedDare.id}`);
+      return;
+    }
+    // Photo or Video: launch media picker
+    if (!acceptedDare || !couple?.id || !user) return;
+    setCompleting(true);
+    try {
+      const mediaType = actionType === 'photo' ? 'photo' : 'video';
+      const ImagePicker = await import('expo-image-picker');
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) { setCompleting(false); return; }
+      const pickerResult = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
+      if (pickerResult.canceled || !pickerResult.assets?.length) { setCompleting(false); return; }
+      const asset = pickerResult.assets[0];
+      const isVideo = asset.type === 'video';
+      const mimeType = resolveAssetMimeType(asset);
+      const ext = isVideo ? mimeToExtension(mimeType) : 'jpg';
+      const storagePath = `${couple.id}/${user.id}/vault_${Date.now()}.${ext}`;
+      const uploadResult = await uploadMediaFile(asset.uri, 'vault', storagePath, mimeType, undefined, user.id, couple.id);
+      const actualPath = uploadResult.storagePath;
+      const insertPayload = {
+        couple_id: couple.id,
+        uploaded_by_user_id: user.id,
+        media_type: isVideo ? 'video' : 'photo',
+        file_path: actualPath,
+        storage_path: actualPath,
+        storage_bucket: 'vault',
+        blurred_thumbnail_path: uploadResult.thumbnailPath ?? null,
+        allow_screenshot: true,
+        allow_save: true,
+        allow_share: false,
+        chat_message_id: null,
+      };
+      const { data: vaultItem, error: insertError } = await supabase.from('vault_items').insert(insertPayload).select().single();
+      if (insertError || !vaultItem) throw new Error('Vault insert failed');
+      await completeDare(isVideo ? 'video' : 'photo', vaultItem.id);
+    } catch {
+      setError('Could not upload media. Please try again.');
+      setCompleting(false);
+    }
   };
 
   const handleCancelDare = () => {
@@ -312,6 +438,8 @@ export default function DareTab() {
     const relationship = isMine ? `You dared ${partnerName}` : `${partnerName} dared you`;
     const dateValue = dare.completed_at ?? dare.created_at;
     const isPositive = accepted || completed;
+    const actionLabel = dare.action_type ? dare.action_type.charAt(0).toUpperCase() + dare.action_type.slice(1) : null;
+    const showViewLink = completed && isMine && (dare.vault_item_id || dare.dare_chat_message_id);
     return (
       <View key={dare.id} style={[styles.historyRow, { borderBottomColor: colors.borderSubtle }]}>
         <View style={[styles.historyIcon, { borderColor: isPositive ? '#33D17A' : declined ? '#FF5A5F' : colors.textMuted }]}>
@@ -320,6 +448,23 @@ export default function DareTab() {
         <View style={styles.historyMain}>
           <AppText style={[styles.historyTitle, { color: colors.text }]}>{title} <AppText style={[styles.historyRelationship, { color: colors.textMuted }]}>· {relationship}</AppText></AppText>
           <AppText numberOfLines={2} style={[styles.historyText, { color: colors.textSecondary }]}>“{dare.content_text}”</AppText>
+          {actionLabel && (
+            <View style={styles.actionBadge}>
+              <AppText style={[styles.actionBadgeText, { color: colors.textMuted }]}>{actionLabel}</AppText>
+            </View>
+          )}
+          {showViewLink && dare.vault_item_id && (
+            <TouchableOpacity onPress={() => router.push(`/(app)/vault-viewer?item_id=${dare.vault_item_id}`)} style={styles.viewLink} activeOpacity={0.7}>
+              <AppText style={styles.viewLinkText}>View Photo{dare.completion_type === 'video' ? '/Video' : ''}</AppText>
+              <ChevronRight color="#FF2E8A" size={14} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
+          {showViewLink && dare.dare_chat_message_id && !dare.vault_item_id && (
+            <TouchableOpacity onPress={() => router.push(`/(app)/(tabs)/note?message_id=${dare.dare_chat_message_id}`)} style={styles.viewLink} activeOpacity={0.7}>
+              <AppText style={styles.viewLinkText}>View Message</AppText>
+              <ChevronRight color="#FF2E8A" size={14} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
           {declined && dare.decline_reason ? (
             <AppText style={[styles.declineReasonText, { color: colors.textSecondary }]}>
               {isMine ? `${partnerName} said:` : 'You said:'} {dare.decline_reason}
@@ -329,7 +474,7 @@ export default function DareTab() {
         <View style={styles.historyMeta}>
           <AppText style={[styles.historyDate, { color: colors.textMuted }]}>{formatDate(dateValue)}</AppText>
           {(couple?.points_enabled ?? true) && (
-            <AppText style={[styles.historyPoints, { color: isPositive ? '#33D17A' : colors.textMuted }]}>{isPositive ? `+${acceptPts} pts` : '0 pts'}</AppText>
+            <AppText style={[styles.historyPoints, { color: isPositive ? '#33D17A' : colors.textMuted }]}>{isPositive ? `+${completed ? completePts : acceptPts} pts` : '0 pts'}</AppText>
           )}
         </View>
       </View>
@@ -343,12 +488,32 @@ export default function DareTab() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {incomingDare && (
             <View style={[styles.incomingSection, highlightDare && styles.incomingHighlight]}>
-              {(couple?.points_enabled ?? true) && (
+              {(couple?.points_enabled ?? true) && incomingDare.action_type && (
+                <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
+                  <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Complete = <AppText style={styles.pts}>+{completePts} ⚡</AppText></AppText>
+                </View>
+              )}
+              {(couple?.points_enabled ?? true) && !incomingDare.action_type && (
                 <View style={[styles.pointsHint, { backgroundColor: 'rgba(255,46,138,0.08)', borderColor: 'rgba(255,46,138,0.25)' }]}>
                   <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Accept = <AppText style={styles.pts}>+{acceptPts} ⚡</AppText></AppText>
                 </View>
               )}
               <ReceivedDareCard text={incomingDare.content_text} status={incomingDare.status} expiresAt={incomingDare.expires_at} totalExpirySeconds={incomingTotalExpirySeconds} coupleId={couple?.id} onAccept={() => handleRespond(true)} onReject={reason => handleRespond(false, reason)} onTimeout={checkStates} />
+            </View>
+          )}
+
+          {acceptedDare && (
+            <View style={styles.acceptedSection}>
+              {(couple?.points_enabled ?? true) && (
+                <View style={[styles.pointsHint, { backgroundColor: 'rgba(51,209,122,0.08)', borderColor: 'rgba(51,209,122,0.25)' }]}>
+                  <AppText style={[styles.pointsHintText, { color: colors.textSecondary }]}>Complete = <AppText style={[styles.pts, { color: '#33D17A' }]}>+{completePts} ⚡</AppText></AppText>
+                </View>
+              )}
+              <AcceptedDareCard
+                text={acceptedDare.content_text || ''}
+                actionType={acceptedDare.action_type || 'action'}
+                onComplete={handleCompleteAction}
+              />
             </View>
           )}
 
@@ -379,6 +544,20 @@ export default function DareTab() {
                   <View style={styles.timerRow}>
                     <View style={styles.timerLabelRow}><Timer color={colors.textSecondary} size={14} strokeWidth={2} /><AppText style={[styles.timerLabelText, { color: colors.textSecondary }]}>Timer</AppText></View>
                     <View style={styles.timerChips}>{TIMER_PRESETS.map(preset => { const active = selectedTimerSeconds === preset.seconds; return <TouchableOpacity key={preset.seconds} onPress={() => setSelectedTimerSeconds(preset.seconds)} activeOpacity={0.7} style={[styles.timerChip, { backgroundColor: active ? 'rgba(255,46,138,0.15)' : colors.card, borderColor: active ? 'rgba(255,46,138,0.45)' : colors.borderSubtle }]}><AppText style={[styles.timerChipText, { color: active ? '#FF2E8A' : colors.textSecondary }]}>{preset.label}</AppText></TouchableOpacity>; })}</View>
+                  </View>
+                  <View style={styles.actionRow}>
+                    <View style={styles.timerLabelRow}><Flame color={colors.textSecondary} size={14} strokeWidth={2} /><AppText style={[styles.timerLabelText, { color: colors.textSecondary }]}>Response</AppText></View>
+                    <View style={styles.actionChips}>
+                      {([['photo', Camera, 'Photo'], ['video', Video, 'Video'], ['message', MessageCircle, 'Message'], ['action', Check, 'Action']] as const).map(([type, Icon, label]) => {
+                        const active = selectedActionType === type;
+                        return (
+                          <TouchableOpacity key={type} onPress={() => setSelectedActionType(type)} activeOpacity={0.7} style={[styles.actionChip, { backgroundColor: active ? 'rgba(255,46,138,0.15)' : colors.card, borderColor: active ? 'rgba(255,46,138,0.45)' : colors.borderSubtle }]}>
+                            <Icon color={active ? '#FF2E8A' : colors.textSecondary} size={16} strokeWidth={2} />
+                            <AppText style={[styles.actionChipText, { color: active ? '#FF2E8A' : colors.textSecondary }]}>{label}</AppText>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </View>
                   <TouchableOpacity onPress={handleSend} disabled={!dareText.trim() || sending} activeOpacity={0.85} style={styles.sendButtonWrap}><LinearGradient colors={dareText.trim() ? ['#FF8A28', '#FF395C', '#F41477'] : ['#5A3A2A', '#5B303D', '#552039']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sendButton}><Flame color={dareText.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.38)'} size={21} fill={dareText.trim() ? 'rgba(255,255,255,0.18)' : 'transparent'} strokeWidth={2.2} /><AppText style={[styles.sendButtonText, !dareText.trim() && styles.sendButtonTextDisabled]}>{sending ? 'SENDING…' : `DARE ${partnerName.toUpperCase()}`}</AppText></LinearGradient></TouchableOpacity>
                 </View>
@@ -466,4 +645,13 @@ const styles = StyleSheet.create({
   errorText: { color: '#FF5A5F', fontSize: 13, fontFamily: 'Inter-Medium', textAlign: 'center' },
   cancelDareBtn: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, marginTop: Spacing.xs },
   cancelDareBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center' },
+  acceptedSection: { gap: Spacing.sm, marginBottom: Spacing.lg },
+  actionRow: { marginBottom: 14 },
+  actionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  actionChipText: { fontSize: 12, fontFamily: 'Inter-SemiBold' },
+  actionBadge: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  actionBadgeText: { fontSize: 11, fontFamily: 'Inter-Medium', textTransform: 'uppercase', letterSpacing: 0.5 },
+  viewLink: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  viewLinkText: { color: '#FF2E8A', fontSize: 12, fontFamily: 'Inter-SemiBold' },
 });

@@ -17,7 +17,7 @@ import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw, Check, Circle as XCircle, Circle as HelpCircle, Sparkles } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, UserPlus, Lock, X, Copy, RefreshCw, Check, Circle as XCircle, Circle as HelpCircle, Sparkles, Home, Share2 } from 'lucide-react-native';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -839,45 +839,48 @@ export default function PairScreen() {
 
           <View style={styles.cards}>
             <TouchableOpacity
-              style={styles.optionCard}
-              activeOpacity={0.8}
+              style={styles.primaryOptionCard}
+              activeOpacity={0.85}
               onPress={() => setActiveModal('invite')}
             >
-              <View style={styles.optionIconOuter}>
+              <View style={styles.primaryIconOuter}>
                 <LinearGradient
                   colors={['rgba(255,90,60,0.42)', 'rgba(255,46,138,0.30)']}
-                  style={styles.optionIconCircle}
+                  style={styles.primaryIconCircle}
                 >
-                  <UserPlus color="#FF6B3D" size={22} strokeWidth={1.8} />
+                  <UserPlus color="#FF6B3D" size={26} strokeWidth={1.8} />
                 </LinearGradient>
               </View>
               <View style={styles.optionText}>
-                <AppText style={styles.optionTitle}>Invite via code</AppText>
-                <AppText style={styles.optionDesc}>Send them your code{'\n'}to invite.</AppText>
+                <AppText style={styles.primaryOptionTitle}>Invite My Partner</AppText>
+                <AppText style={styles.primaryOptionDesc}>Send them your code to connect.{'\n'}One subscription covers both of you.</AppText>
               </View>
-              <ChevronRight color="rgba(255,255,255,0.28)" size={20} />
+              <ChevronRight color="rgba(255,255,255,0.45)" size={22} />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.optionCard}
+              style={styles.secondaryOptionCard}
               activeOpacity={0.8}
               onPress={() => { setJoinCode(''); setError(''); setActiveModal('join'); }}
             >
-              <View style={styles.optionIconOuter}>
-                <LinearGradient
-                  colors={['rgba(255,90,60,0.42)', 'rgba(255,46,138,0.30)']}
-                  style={styles.optionIconCircle}
-                >
-                  <Lock color="#FF6B3D" size={22} strokeWidth={1.8} />
-                </LinearGradient>
+              <View style={styles.secondaryIconOuter}>
+                <Lock color="rgba(255,255,255,0.5)" size={18} strokeWidth={1.8} />
               </View>
               <View style={styles.optionText}>
-                <AppText style={styles.optionTitle}>I have a code</AppText>
-                <AppText style={styles.optionDesc}>Enter the code they{'\n'}sent you.</AppText>
+                <AppText style={styles.secondaryOptionTitle}>Enter a Code Instead</AppText>
+                <AppText style={styles.secondaryOptionDesc}>Already have your partner's code?</AppText>
               </View>
-              <ChevronRight color="rgba(255,255,255,0.28)" size={20} />
+              <ChevronRight color="rgba(255,255,255,0.22)" size={18} />
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={styles.skipBtn}
+            onPress={() => router.replace('/(app)/(tabs)')}
+            activeOpacity={0.7}
+          >
+            <AppText style={styles.skipBtnText}>Skip — I'll Add Them Later</AppText>
+          </TouchableOpacity>
 
           {!subscriptionInfo.canInvite && !subscriptionInfo.loading && (
             <View style={styles.noSubHint}>
@@ -936,14 +939,6 @@ export default function PairScreen() {
             <Lock color="rgba(255,255,255,0.22)" size={13} strokeWidth={1.5} />
             <AppText style={styles.noteText}>Only one partner connection at a time.</AppText>
           </View>
-
-          <TouchableOpacity
-            style={styles.skipRow}
-            onPress={() => router.replace('/(app)/(tabs)')}
-            activeOpacity={0.6}
-          >
-            <AppText style={styles.skipText}>Skip for now</AppText>
-          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -1012,12 +1007,32 @@ export default function PairScreen() {
                     end={{ x: 1, y: 0 }}
                     style={styles.actionGrad}
                   >
-                    <Copy color="#fff" size={16} />
-                    <AppText style={styles.actionLabel}>{copied ? 'Copied!' : 'Copy & Share Code'}</AppText>
+                    <Share2 color="#fff" size={16} />
+                    <AppText style={styles.actionLabel}>{copied ? 'Copied!' : 'Share My Code'}</AppText>
                   </LinearGradient>
                 </TouchableOpacity>
 
-                <AppText style={styles.waitingText}>Waiting for your partner to join...</AppText>
+                <TouchableOpacity
+                  style={styles.copyOnlyBtn}
+                  onPress={handleCopy}
+                  activeOpacity={0.6}
+                >
+                  <Copy color="rgba(255,255,255,0.4)" size={13} />
+                  <AppText style={styles.copyOnlyText}>Copy code only</AppText>
+                </TouchableOpacity>
+
+                <View style={styles.modalDivider} />
+
+                <TouchableOpacity
+                  style={styles.goHomeBtn}
+                  onPress={() => { setActiveModal(null); router.replace('/(app)/(tabs)'); }}
+                  activeOpacity={0.8}
+                >
+                  <Home color="#FF6B3D" size={18} />
+                  <AppText style={styles.goHomeText}>Go to Home</AppText>
+                </TouchableOpacity>
+
+                <AppText style={styles.waitingText}>Your partner can join anytime — you'll be connected automatically.</AppText>
 
                 {(couple?.pending_partner_status === 'pending' || couple?.pending_partner_status === 'b_accepted') && (
                   <TouchableOpacity
@@ -1275,52 +1290,116 @@ const styles = StyleSheet.create({
     color: 'rgba(255,180,60,0.85)',
   },
   cards: {
-    gap: Spacing.md,
-    marginBottom: Spacing.xl,
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
   },
-  optionCard: {
+  primaryOptionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,90,60,0.08)',
     borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255,80,60,0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,90,60,0.30)',
     padding: Spacing.md,
-    paddingVertical: 20,
+    paddingVertical: 24,
     gap: Spacing.md,
+    shadowColor: '#FF5A3D',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.20,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  optionIconOuter: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+  primaryIconOuter: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     overflow: 'hidden',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,90,60,0.45)',
+    borderColor: 'rgba(255,90,60,0.50)',
     shadowColor: '#FF5A3D',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.50,
-    shadowRadius: 12,
+    shadowRadius: 14,
     elevation: 8,
+    flexShrink: 0,
   },
-  optionIconCircle: {
+  primaryIconCircle: {
     width: '100%',
     height: '100%',
-    borderRadius: 29,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  optionText: { flex: 1 },
-  optionTitle: {
+  primaryOptionTitle: {
     color: '#fff',
-    fontSize: FontSize.body,
-    fontFamily: 'Inter-SemiBold',
-    marginBottom: 3,
+    fontSize: FontSize.lg,
+    fontFamily: 'Inter-Bold',
+    marginBottom: 4,
   },
-  optionDesc: {
-    color: 'rgba(255,255,255,0.42)',
+  primaryOptionDesc: {
+    color: 'rgba(255,255,255,0.52)',
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
-    lineHeight: 19,
+    lineHeight: 20,
+  },
+  secondaryOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: Spacing.md,
+    paddingVertical: 14,
+    gap: Spacing.md,
+  },
+  secondaryIconOuter: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  secondaryOptionTitle: {
+    color: 'rgba(255,255,255,0.70)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 2,
+  },
+  secondaryOptionDesc: {
+    color: 'rgba(255,255,255,0.32)',
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+  },
+  optionText: { flex: 1, minWidth: 0 },
+  skipBtn: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    marginBottom: Spacing.md,
+  },
+  skipBtnText: {
+    color: 'rgba(255,255,255,0.50)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+  },
+  skipRow: {
+    alignItems: 'center',
+    paddingVertical: Spacing.lg,
+    marginTop: Spacing.sm,
+  },
+  skipText: {
+    color: 'rgba(255,255,255,0.30)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textDecorationLine: 'underline',
+    textDecorationColor: 'rgba(255,255,255,0.20)',
   },
   noSubHint: {
     paddingHorizontal: Spacing.md,
@@ -1349,18 +1428,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
   },
-  skipRow: {
-    alignItems: 'center',
-    paddingVertical: Spacing.lg,
-    marginTop: Spacing.sm,
-  },
-  skipText: {
-    color: 'rgba(255,255,255,0.30)',
-    fontSize: FontSize.sm,
-    fontFamily: 'Inter-Regular',
-    textDecorationLine: 'underline',
-    textDecorationColor: 'rgba(255,255,255,0.20)',
-  },
+
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -1454,6 +1522,40 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
+    lineHeight: 20,
+  },
+  copyOnlyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+  },
+  copyOnlyText: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter-Regular',
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginVertical: Spacing.sm,
+  },
+  goHomeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(255,90,60,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,90,60,0.25)',
+  },
+  goHomeText: {
+    color: '#FF6B3D',
+    fontSize: FontSize.body,
+    fontFamily: 'Inter-Bold',
   },
   lockedCodeBox: {
     backgroundColor: 'rgba(255,255,255,0.04)',

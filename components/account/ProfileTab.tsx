@@ -13,6 +13,7 @@ import QuickStatsRow from '@/components/QuickStatsRow';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { ConnectedPartnerCard } from '@/components/account/ConnectedPartnerCard';
+import { SetupChecklist, type SetupStep } from '@/components/account/SetupChecklist';
 import { useRouter } from 'expo-router';
 
 export function ProfileTab({
@@ -44,6 +45,8 @@ export function ProfileTab({
   // Avatar
   uploadingAvatar,
   avatarError,
+  // Setup checklist
+  setupSteps,
   // Handlers
   onCopyCode,
   onShareCode,
@@ -86,6 +89,7 @@ export function ProfileTab({
   nameWrapRef: React.RefObject<View | null>;
   uploadingAvatar: boolean;
   avatarError: string | null;
+  setupSteps: SetupStep[];
   onCopyCode: () => void;
   onShareCode: () => void;
   onShareApp: () => void;
@@ -109,6 +113,9 @@ export function ProfileTab({
 
   return (
     <>
+      {/* Setup checklist — shown until all steps are complete */}
+      {setupSteps.length > 0 && <SetupChecklist steps={setupSteps} />}
+
       {/* Stats row — only shown when no partner; replaced by ConnectedPartnerCard metrics when paired */}
       {!couple?.user_b_id && !coupleLoading && (
         <View style={styles.statsWrap}>

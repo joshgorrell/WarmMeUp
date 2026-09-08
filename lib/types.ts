@@ -91,6 +91,11 @@ export interface Interaction {
   completed_at: string | null;
   completed_verified_by: string | null;
   completion_requested_at: string | null;
+  action_type: 'photo' | 'video' | 'message' | 'action' | null;
+  completion_type: 'photo' | 'video' | 'message' | 'action' | null;
+  completed_by_user_id: string | null;
+  vault_item_id: string | null;
+  dare_chat_message_id: string | null;
   // media fields
   media_url: string | null;
   media_storage_path: string | null;
@@ -121,6 +126,7 @@ export interface ChatMessage {
   burn_after_seconds: number | null;
   burns_at: string | null;
   first_viewed_at: string | null;
+  dare_interaction_id: string | null;
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
