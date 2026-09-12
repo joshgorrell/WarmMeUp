@@ -1,44 +1,126 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
+import { loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
+import { completePendingJoin, isDefinitiveJoinFailure } from '@/lib/coupleJoin';
+import type { Session } from '@supabase/supabase-js';
 
 /**
- * Web-only route: /auth/callback
- *
- * After Google (or Apple) OAuth redirects back to the web app, Supabase
- * appends either a code= query param (PKCE) or access_token= fragment.
- * supabase-js with detectSessionInUrl:true handles the exchange automatically,
- * but we still need a route that exists so the redirect isn't a 404.
- *
- * This screen just waits for the session to be established then routes
- * the user into the normal post-login flow.
+ * Handles both web OAuth callbacks and native email-verification deep links.
+ * Routing is based on authoritative profile data so a freshly verified User B
+ * cannot be bounced back to the signup screen by stale in-memory state.
  */
 export default function AuthCallbackScreen() {
   const router = useRouter();
+  const { refreshProfile, refreshCouple, refreshSubscription } = useAuth();
+  const handledRef = useRef(false);
 
   useEffect(() => {
-    // supabase-js will automatically exchange the code / tokens in the URL.
-    // We just listen for the resulting session.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        subscription.unsubscribe();
-        // Let index.tsx handle routing (stealth mode, lock gate, etc.)
-        router.replace('/');
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const finishSession = async (session: Session) => {
+      if (handledRef.current || cancelled) return;
+      handledRef.current = true;
+
+      const user = session.user;
+      const code = (await loadPendingCode()) || '';
+
+      const { data: prof, error: profileError } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at, onboarding_completed_at')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (profileError) {
+        handledRef.current = false;
+        router.replace('/verify-retry');
+        return;
       }
+
+      const registrationComplete = !!(
+        prof?.first_name &&
+        prof?.last_name &&
+        prof?.date_of_birth &&
+        prof?.age_verified_at &&
+        prof?.tos_accepted_at
+      );
+
+      if (!registrationComplete) {
+        const params: Record<string, string> = { oauthComplete: '1' };
+        if (code) params.pendingCode = code;
+        router.replace({ pathname: '/(auth)/register', params });
+        return;
+      }
+
+      await refreshProfile().catch(() => {});
+
+      if (code) {
+        const result = await completePendingJoin(code);
+        if (cancelled) return;
+        if (result.ok) {
+          await clearPendingCode();
+          await Promise.all([
+            refreshProfile().catch(() => {}),
+            refreshCouple().catch(() => {}),
+            refreshSubscription().catch(() => {}),
+          ]);
+          router.replace({
+            pathname: '/(auth)/paired-celebration',
+            params: {
+              partnerName: result.inviterName || '',
+              partnerAvatar: result.inviterAvatar || '',
+            },
+          });
+          return;
+        }
+
+        if (isDefinitiveJoinFailure(result.reason)) {
+          await clearPendingCode();
+        } else {
+          router.replace({
+            pathname: '/(auth)/verify-email',
+            params: { email: user.email || '', pendingCode: code },
+          });
+          return;
+        }
+      }
+
+      if (!prof?.onboarding_completed_at) {
+        router.replace('/(auth)/onboarding');
+        return;
+      }
+
+      await Promise.all([
+        refreshCouple().catch(() => {}),
+        refreshSubscription().catch(() => {}),
+      ]);
+      router.replace('/transition');
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) void finishSession(session);
     });
 
-    // Safety timeout — if no session arrives within 8 s, bail to welcome screen
-    const timer = setTimeout(() => {
-      subscription.unsubscribe();
-      router.replace('/(auth)/welcome');
+    // The auth event can fire before this screen mounts, especially after the mail app returns.
+    void supabase.auth.getSession().then(({ data }) => {
+      if (data.session) void finishSession(data.session);
+    });
+
+    timer = setTimeout(() => {
+      if (!handledRef.current && !cancelled) router.replace('/(auth)/welcome');
     }, 8000);
 
     return () => {
-      clearTimeout(timer);
+      cancelled = true;
+      if (timer) clearTimeout(timer);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [router, refreshProfile, refreshCouple, refreshSubscription]);
 
   return (
     <View style={styles.root}>

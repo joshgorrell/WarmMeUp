@@ -509,6 +509,7 @@ export default function RegisterScreen() {
             last_name: ln,
             display_name: fullName,
             ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: nowIso } : {}),
+            tos_accepted_at: nowIso,
           })
           .eq('id', data.user.id);
         if (profileError) {
