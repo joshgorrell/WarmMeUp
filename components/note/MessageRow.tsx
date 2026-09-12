@@ -22,23 +22,48 @@ import CountdownRing from '@/components/CountdownRing';
 import { useLayout } from '@/hooks/useLayout';
 
 const ACTIVITY_PREFIX = '__WMU_ACTIVITY__:';
+const EMOJI_SEQUENCE_PATTERN = '(?:\\p{Regional_Indicator}{2}|[#*0-9]\\uFE0F?\\u20E3|\\p{Extended_Pictographic}(?:\\uFE0F|\\p{Emoji_Modifier})?(?:\\u200D\\p{Extended_Pictographic}(?:\\uFE0F|\\p{Emoji_Modifier})?)*)';
+
+function getEmojiRegex() {
+  return new RegExp(EMOJI_SEQUENCE_PATTERN, 'gu');
+}
 
 function getEmojiOnlySize(text: string | null | undefined, scale: number): { fontSize: number; lineHeight: number } | null {
   if (!text) return null;
   const value = text.trim();
   if (!value) return null;
 
-  // Emoji sequences can include variation selectors, skin tones, ZWJ joins,
-  // regional indicators (flags), keycaps and whitespace between emoji.
-  const emojiOnly = /^(?:[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{Regional_Indicator}\p{Emoji_Modifier}\uFE0F\u200D\u20E3\s#*0-9])+$/u.test(value);
-  if (!emojiOnly || !/[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{Regional_Indicator}]/u.test(value)) return null;
+  const emojiMatches = value.match(getEmojiRegex()) ?? [];
+  if (emojiMatches.length === 0) return null;
 
-  const visibleUnits = Array.from(value).filter(char =>
-    !/[\uFE0F\u200D\p{Emoji_Modifier}\s]/u.test(char)
-  ).length;
-  const baseSize = visibleUnits <= 2 ? 52 : visibleUnits <= 4 ? 44 : 34;
+  const remainder = value.replace(getEmojiRegex(), '').replace(/\s/g, '');
+  if (remainder) return null;
+
+  const baseSize = emojiMatches.length === 1 ? 44 : emojiMatches.length <= 3 ? 40 : 34;
   const fontSize = Math.round(baseSize * scale);
   return { fontSize, lineHeight: Math.round(fontSize * 1.16) };
+}
+
+function renderMessageText(text: string, scale: number, emojiOnly: boolean) {
+  if (emojiOnly) return text;
+
+  const regex = getEmojiRegex();
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    parts.push(
+      <AppText key={`emoji-${match.index}`} style={{ fontSize: Math.round(21 * scale) }}>
+        {match[0]}
+      </AppText>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts.length ? parts : text;
 }
 
 function parseActivity(msg: ChatMessage): ChatActivityItem | null {
@@ -253,9 +278,10 @@ export const MessageRow = React.memo(function MessageRow({
   const radii = getBubbleRadii(isMine, groupPos);
   const mediaOnly = hasMedia && !item.content_text;
   const emojiOnlyStyle = !hasMedia ? getEmojiOnlySize(item.content_text, chatFontScale) : null;
+  const hasInlineEmoji = !!item.content_text && !emojiOnlyStyle && getEmojiRegex().test(item.content_text);
   const messageTextStyle = emojiOnlyStyle ?? {
     fontSize: Math.round(15 * chatFontScale),
-    lineHeight: Math.round(15 * chatFontScale * 1.45),
+    lineHeight: Math.round((hasInlineEmoji ? 24 : 15 * 1.45) * chatFontScale),
   };
 
   return (
@@ -327,7 +353,7 @@ export const MessageRow = React.memo(function MessageRow({
                           color: '#fff',
                           ...messageTextStyle,
                         }]}>
-                          {item.content_text}
+                          {renderMessageText(item.content_text, chatFontScale, !!emojiOnlyStyle)}
                         </AppText>
                       ) : null}
                       {item.edited_at ? (
@@ -390,7 +416,7 @@ export const MessageRow = React.memo(function MessageRow({
                           color: '#fff',
                           ...messageTextStyle,
                         }]}>
-                          {item.content_text}
+                          {renderMessageText(item.content_text, chatFontScale, !!emojiOnlyStyle)}
                         </AppText>
                       ) : null}
                       {item.edited_at ? (
