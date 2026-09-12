@@ -1715,7 +1715,7 @@ export default function ChatTab() {
                   )}
                 </>
               )}
-              <TextInputWrapper onPaste={handlePastedMedia}>
+              <TextInputWrapper onPaste={handlePastedMedia} style={{ flex: 1 }}>
                 <AppTextInput
                   ref={inputRef}
                 style={[styles.input, { color: colors.text }]}
