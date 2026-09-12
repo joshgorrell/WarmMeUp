@@ -34,6 +34,8 @@ async function uploadToStorage(
 
 async function compressImage(uri: string, mimeType: string): Promise<{ uri: string; mimeType: string }> {
   if (Platform.OS === 'web') return { uri, mimeType };
+  // Preserve animated formats exactly as provided. Converting them to JPEG would flatten the animation.
+  if (mimeType === 'image/gif' || mimeType === 'image/webp') return { uri, mimeType };
   const needsConversion = mimeType === 'image/heic' || mimeType === 'image/heif' || mimeType === 'image/heif-sequence';
   if (!needsConversion && !mimeType.startsWith('image/')) return { uri, mimeType };
   try {
@@ -142,6 +144,7 @@ export async function uploadMediaFile(
 
     const isPhoto = normalizedMime.startsWith('image/');
     const isVideo = normalizedMime.startsWith('video/');
+    const preserveAnimatedImage = normalizedMime === 'image/gif' || normalizedMime === 'image/webp';
     let uploadUri = localUri;
     let uploadMime = normalizedMime;
     let uploadStoragePath = storagePath;
@@ -205,8 +208,9 @@ export async function uploadMediaFile(
     }
 
     // Now that the main body is fully loaded, generate + upload the thumbnail in parallel
-    // with the main network upload.
-    if (isPhoto) {
+    // with the main network upload. Animated images must use the original file in Chat,
+    // otherwise a JPEG thumbnail would replace the animation.
+    if (isPhoto && !preserveAnimatedImage) {
       const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
       pendingThumbPromise = (async () => {
         const thumbUri = await generatePhotoThumbnail(uploadUri);
