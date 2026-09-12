@@ -2,6 +2,12 @@ from pathlib import Path
 
 p = Path('app/(auth)/register.tsx')
 s = p.read_text()
+old_import = "import { savePendingCode, clearPendingCode } from '@/lib/inviteCode';"
+new_import = "import { savePendingCode, loadPendingCode, clearPendingCode } from '@/lib/inviteCode';"
+if old_import not in s:
+    raise SystemExit('inviteCode import not found')
+s = s.replace(old_import, new_import, 1)
+
 old = """        if (registrationComplete) {
           // Returning user — go through normal transition routing.
           router.replace('/transition');
