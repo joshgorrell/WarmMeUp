@@ -1,13 +1,7 @@
-name: Fix OAuth existing-user invite
-
-on:
-  push:
-    branches: [fix/oauth-existing-user-invite]
-    paths: ['.github/workflows/fix-oauth-existing-user-invite.yml']
-
+name: Fix OAuth invite redemption
+on: push
 permissions:
   contents: write
-
 jobs:
   fix:
     runs-on: ubuntu-latest
@@ -21,62 +15,16 @@ jobs:
           node-version: '20.18.0'
           cache: npm
       - run: npm ci
-      - name: Patch returning OAuth invite redemption
+      - name: Apply patch
         run: |
-          python3 <<'PY'
-          from pathlib import Path
-          p = Path('app/(auth)/register.tsx')
-          s = p.read_text()
-          old = """        if (registrationComplete) {
-          // Returning user — go through normal transition routing.
-          router.replace('/transition');
-          return;
-        }
-"""
-          new = """        if (registrationComplete) {
-          // Returning users may still be arriving from a partner invite. Redeem
-          // that invite before normal transition routing so an existing account
-          // can pair without being asked for the code a second time.
-          const storedCode = await loadPendingCode();
-          const codeToRedeem = pendingCode || storedCode || '';
-          if (codeToRedeem) {
-            const result = await completePendingJoin(codeToRedeem);
-            if (result.ok) {
-              await clearPendingCode();
-              router.replace({
-                pathname: '/(auth)/paired-celebration',
-                params: {
-                  partnerName: result.inviterName || '',
-                  partnerAvatar: result.inviterAvatar || '',
-                },
-              });
-              return;
-            }
-            if (isDefinitiveJoinFailure(result.reason)) {
-              await clearPendingCode();
-            }
-          }
-
-          router.replace('/transition');
-          return;
-        }
-"""
-          if old not in s:
-              raise SystemExit('registrationComplete return block not found')
-          s = s.replace(old, new, 1)
-          p.write_text(s)
-          PY
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Verify targeted behavior
-        run: |
-          grep -q "const codeToRedeem = pendingCode || storedCode || ''" 'app/(auth)/register.tsx'
-          grep -q "pathname: '/(auth)/paired-celebration'" 'app/(auth)/register.tsx'
-      - name: Commit fix and remove workflow
+          python3 .github/scripts/fix_oauth_invite.py
+      - run: npm run typecheck
+      - name: Commit
         run: |
           rm .github/workflows/fix-oauth-existing-user-invite.yml
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm .github/scripts/fix_oauth_invite.py
+          git config user.name github-actions
+          git config user.email actions@github.com
           git add -A
-          git commit -m 'Redeem invites for returning OAuth users'
+          git commit -m "Redeem invites for returning OAuth users"
           git push origin fix/oauth-existing-user-invite
