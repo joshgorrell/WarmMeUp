@@ -1,0 +1,110 @@
+name: Implement keyboard GIF support
+
+on:
+  push:
+    branches:
+      - feat/keyboard-gif-support
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/keyboard-gif-support
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install native paste support
+        run: npm install --save-exact expo-paste-input@0.2.2
+      - name: Patch chat GIF handling
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          function replaceRequired(text, from, to, label) {
+            if (!text.includes(from)) throw new Error(`Could not find patch target: ${label}`);
+            return text.replace(from, to);
+          }
+
+          const notePath = 'app/(app)/(tabs)/note.tsx';
+          let note = fs.readFileSync(notePath, 'utf8');
+
+          note = replaceRequired(
+            note,
+            "import AppTextInput from '@/components/AppTextInput';\n",
+            "import AppTextInput from '@/components/AppTextInput';\nimport { TextInputWrapper } from 'expo-paste-input';\n",
+            'paste-input import',
+          );
+
+          note = replaceRequired(
+            note,
+            "const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';\n",
+            `const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';\n\nfunction pastedImageMimeType(uri: string): string {\n  const clean = uri.split('?')[0].toLowerCase();\n  if (clean.endsWith('.gif')) return 'image/gif';\n  if (clean.endsWith('.webp')) return 'image/webp';\n  if (clean.endsWith('.png')) return 'image/png';\n  if (clean.endsWith('.heic') || clean.endsWith('.heif')) return 'image/heic';\n  return 'image/jpeg';\n}\n`,
+            'pasted image MIME helper',
+          );
+
+          const handleSendMarker = "  const handleSend = async () => {\n";
+          const pastedHandler = `  const handlePastedMedia = useCallback((payload: any) => {\n    if (payload?.type !== 'images' || !Array.isArray(payload.uris) || payload.uris.length === 0) return;\n    if (editingState) {\n      Alert.alert('Finish editing first', 'GIFs and pasted media can be sent after you finish editing this message.');\n      return;\n    }\n\n    const uri = payload.uris[0];\n    const mimeType = pastedImageMimeType(uri);\n    const media: AttachedMedia = {\n      uri,\n      type: 'photo',\n      mimeType,\n      fileName: \`chat_\${Date.now()}.\${mimeToExtension(mimeType)}\`,\n    };\n\n    if (text.trim().length === 0) {\n      void sendMediaMessage(media, '');\n    } else {\n      setAttachedMedia(media);\n    }\n  }, [editingState, text, couple?.id, user?.id, hasPartner]);\n\n`;
+          note = replaceRequired(note, handleSendMarker, pastedHandler + handleSendMarker, 'pasted media handler');
+
+          note = replaceRequired(
+            note,
+            "        const ext = capturedMedia.type === 'video' ? videoExt : 'jpg';\n",
+            "        const ext = capturedMedia.type === 'video' ? videoExt : mimeToExtension(capturedMedia.mimeType);\n",
+            'vault extension preservation',
+          );
+
+          const inputBlockStart = "              <AppTextInput\n                ref={inputRef}\n";
+          const inputBlockEnd = "                onFocus={handleDismissMenu}\n              />\n";
+          note = replaceRequired(
+            note,
+            inputBlockStart,
+            "              <TextInputWrapper onPaste={handlePastedMedia}>\n                <AppTextInput\n                  ref={inputRef}\n",
+            'chat input wrapper start',
+          );
+          note = replaceRequired(
+            note,
+            inputBlockEnd,
+            "                  onFocus={handleDismissMenu}\n                />\n              </TextInputWrapper>\n",
+            'chat input wrapper end',
+          );
+          fs.writeFileSync(notePath, note);
+
+          const uploadPath = 'lib/uploadMedia.ts';
+          let upload = fs.readFileSync(uploadPath, 'utf8');
+          upload = replaceRequired(
+            upload,
+            "  if (Platform.OS === 'web') return { uri, mimeType };\n  const needsConversion =",
+            "  if (Platform.OS === 'web') return { uri, mimeType };\n  // Preserve animated formats exactly as provided. Converting them to JPEG would flatten the animation.\n  if (mimeType === 'image/gif' || mimeType === 'image/webp') return { uri, mimeType };\n  const needsConversion =",
+            'animated image compression bypass',
+          );
+          upload = replaceRequired(
+            upload,
+            "    const isPhoto = normalizedMime.startsWith('image/');\n    const isVideo = normalizedMime.startsWith('video/');\n",
+            "    const isPhoto = normalizedMime.startsWith('image/');\n    const isVideo = normalizedMime.startsWith('video/');\n    const preserveAnimatedImage = normalizedMime === 'image/gif' || normalizedMime === 'image/webp';\n",
+            'animated image flag',
+          );
+          upload = replaceRequired(
+            upload,
+            "    // Now that the main body is fully loaded, generate + upload the thumbnail in parallel\n    // with the main network upload.\n    if (isPhoto) {\n",
+            "    // Now that the main body is fully loaded, generate + upload the thumbnail in parallel\n    // with the main network upload. Animated images must use the original file in Chat,\n    // otherwise a JPEG thumbnail would replace the animation.\n    if (isPhoto && !preserveAnimatedImage) {\n",
+            'animated image thumbnail bypass',
+          );
+          fs.writeFileSync(uploadPath, upload);
+          NODE
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Commit implementation and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/keyboard-gif-support.yml
+          git add package.json package-lock.json 'app/(app)/(tabs)/note.tsx' lib/uploadMedia.ts
+          git commit -m "Add keyboard GIF paste support"
+          git push origin HEAD:feat/keyboard-gif-support
