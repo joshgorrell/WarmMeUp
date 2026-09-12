@@ -2,8 +2,10 @@ name: Fix signup and pairing flow
 
 on:
   push:
-    branches: [fix/signup-pairing-flow]
-    paths: ['.github/workflows/fix-signup-pairing-flow.yml']
+    branches:
+      - fix/signup-pairing-flow
+    paths:
+      - .github/workflows/fix-signup-pairing-flow.yml
 
 permissions:
   contents: write
@@ -21,209 +23,19 @@ jobs:
           node-version: '20.18.0'
           cache: npm
       - run: npm ci
-      - name: Patch signup, verification, callback, and Apple auth handling
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-
-          # 1) Registration: explicitly persist every field transition.tsx requires.
-          p = Path('app/(auth)/register.tsx')
-          s = p.read_text()
-          old = """          .update({\n            first_name: fn,\n            last_name: ln,\n            display_name: fullName,\n            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: nowIso } : {}),\n          })"""
-          new = """          .update({\n            first_name: fn,\n            last_name: ln,\n            display_name: fullName,\n            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: nowIso } : {}),\n            tos_accepted_at: nowIso,\n          })"""
-          if old not in s:
-              raise SystemExit('register profile fallback block not found')
-          s = s.replace(old, new, 1)
-          p.write_text(s)
-
-          # 2) Verification screen: refresh context and guard against stale/incomplete profile.
-          p = Path('app/(auth)/verify-email.tsx')
-          s = p.read_text()
-          s = s.replace(
-              "const { refreshSubscription } = useAuth();",
-              "const { refreshProfile, refreshCouple, refreshSubscription } = useAuth();"
-          )
-          marker = """      if (!user.email_confirmed_at) {\n        setError('Email not verified yet. Please check your inbox and click the link, then try again.');\n        return;\n      }\n\n      // Email is confirmed — handle pending invite code before routing\n"""
-          replacement = """      if (!user.email_confirmed_at) {\n        setError('Email not verified yet. Please check your inbox and click the link, then try again.');\n        return;\n      }\n\n      // Verify registration from the database, not potentially stale AuthContext state.\n      // A verified user should never bounce through transition and land back on signup.\n      const { data: prof, error: profileError } = await supabase\n        .from('profiles')\n        .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at')\n        .eq('id', user.id)\n        .maybeSingle();\n      if (profileError) {\n        setError('Could not finish setting up your account. Please try again.');\n        return;\n      }\n      const registrationComplete = !!(\n        prof?.first_name && prof?.last_name && prof?.date_of_birth &&\n        prof?.age_verified_at && prof?.tos_accepted_at\n      );\n      const code = pendingCode || (await loadPendingCode()) || '';\n      if (!registrationComplete) {\n        const params: Record<string, string> = { oauthComplete: '1' };\n        if (code) params.pendingCode = code;\n        router.replace({ pathname: '/(auth)/register', params });\n        return;\n      }\n\n      await refreshProfile();\n\n      // Email is confirmed — handle pending invite code before routing\n"""
-          if marker not in s:
-              raise SystemExit('verify-email confirmation marker not found')
-          s = s.replace(marker, replacement, 1)
-          s = s.replace(
-              "      const code = pendingCode || (await loadPendingCode()) || '';\n      if (code) {",
-              "      if (code) {",
-              1,
-          )
-          old_success = """        if (result.ok) {\n          await clearPendingCode();\n          router.replace({\n            pathname: '/(auth)/paired-celebration',\n            params: { partnerName: result.inviterName || '', partnerAvatar: result.inviterAvatar || '' },\n          });\n          return;\n        }"""
-          new_success = """        if (result.ok) {\n          await clearPendingCode();\n          await Promise.all([\n            refreshProfile(),\n            refreshCouple(),\n            refreshSubscription(),\n          ]);\n          router.replace({\n            pathname: '/(auth)/paired-celebration',\n            params: { partnerName: result.inviterName || '', partnerAvatar: result.inviterAvatar || '' },\n          });\n          return;\n        }"""
-          if old_success not in s:
-              raise SystemExit('verify-email success block not found')
-          s = s.replace(old_success, new_success, 1)
-          p.write_text(s)
-
-          # 3) Auth callback: make native email verification and OAuth callbacks deterministic.
-          Path('app/auth/callback.tsx').write_text(r'''import { useEffect, useRef } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
-import { loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
-import { completePendingJoin, isDefinitiveJoinFailure } from '@/lib/coupleJoin';
-import type { Session } from '@supabase/supabase-js';
-
-/**
- * Handles both web OAuth callbacks and native email-verification deep links.
- * Routing is based on authoritative profile data so a freshly verified User B
- * cannot be bounced back to the signup screen by stale in-memory state.
- */
-export default function AuthCallbackScreen() {
-  const router = useRouter();
-  const { refreshProfile, refreshCouple, refreshSubscription } = useAuth();
-  const handledRef = useRef(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const finishSession = async (session: Session) => {
-      if (handledRef.current || cancelled) return;
-      handledRef.current = true;
-
-      const user = session.user;
-      const code = (await loadPendingCode()) || '';
-
-      const { data: prof, error: profileError } = await supabase
-        .from('profiles')
-        .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at, onboarding_completed_at')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (cancelled) return;
-
-      if (profileError) {
-        handledRef.current = false;
-        router.replace('/verify-retry');
-        return;
-      }
-
-      const registrationComplete = !!(
-        prof?.first_name &&
-        prof?.last_name &&
-        prof?.date_of_birth &&
-        prof?.age_verified_at &&
-        prof?.tos_accepted_at
-      );
-
-      if (!registrationComplete) {
-        const params: Record<string, string> = { oauthComplete: '1' };
-        if (code) params.pendingCode = code;
-        router.replace({ pathname: '/(auth)/register', params });
-        return;
-      }
-
-      await refreshProfile().catch(() => {});
-
-      // An invited User B has already completed registration before email
-      // verification. Finish the pair here rather than routing through `/` and
-      // letting transition make a decision from stale state.
-      if (code) {
-        const result = await completePendingJoin(code);
-        if (cancelled) return;
-        if (result.ok) {
-          await clearPendingCode();
-          await Promise.all([
-            refreshProfile().catch(() => {}),
-            refreshCouple().catch(() => {}),
-            refreshSubscription().catch(() => {}),
-          ]);
-          router.replace({
-            pathname: '/(auth)/paired-celebration',
-            params: {
-              partnerName: result.inviterName || '',
-              partnerAvatar: result.inviterAvatar || '',
-            },
-          });
-          return;
-        }
-
-        if (isDefinitiveJoinFailure(result.reason)) {
-          await clearPendingCode();
-        } else {
-          // Keep the pending code and give the verified user a retry path.
-          router.replace({
-            pathname: '/(auth)/verify-email',
-            params: { email: user.email || '', pendingCode: code },
-          });
-          return;
-        }
-      }
-
-      if (!prof?.onboarding_completed_at) {
-        router.replace('/(auth)/onboarding');
-        return;
-      }
-
-      await Promise.all([
-        refreshCouple().catch(() => {}),
-        refreshSubscription().catch(() => {}),
-      ]);
-      router.replace('/transition');
-    };
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) void finishSession(session);
-    });
-
-    // The callback can mount after the auth event has already fired, especially
-    // when returning from the mail app. Always inspect the current session too.
-    void supabase.auth.getSession().then(({ data }) => {
-      if (data.session) void finishSession(data.session);
-    });
-
-    timer = setTimeout(() => {
-      if (!handledRef.current && !cancelled) router.replace('/(auth)/welcome');
-    }, 8000);
-
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-      subscription.unsubscribe();
-    };
-  }, [router, refreshProfile, refreshCouple, refreshSubscription]);
-
-  return (
-    <View style={styles.root}>
-      <ActivityIndicator color="#FF5A3D" size="large" />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#07070A', alignItems: 'center', justifyContent: 'center' },
-});
-''')
-
-          # 4) Apple auth: keep the secure nonce flow, but turn common provider/config
-          # failures into a useful message instead of a raw Supabase error.
-          p = Path('lib/oauth.ts')
-          s = p.read_text()
-          old = """  if (error) {\n    logger.warn('[oauth/apple] signInWithIdToken error:', error.message);\n    throw error;\n  }"""
-          new = """  if (error) {\n    logger.warn('[oauth/apple] signInWithIdToken error:', error.message);\n    const message = error.message ?? '';\n    if (/audience|client.?id|apple.*provider|provider.*apple|invalid.*token/i.test(message)) {\n      throw new Error('Sign in with Apple could not verify this app. Please try again after updating Warm Me Up.');\n    }\n    throw error;\n  }"""
-          if old not in s:
-              raise SystemExit('Apple signInWithIdToken error block not found')
-          s = s.replace(old, new, 1)
-          p.write_text(s)
-          PY
+      - name: Apply signup flow fixes
+        run: python3 scripts/fix_signup_pairing_flow.py
       - name: Typecheck
         run: npm run typecheck
-      - name: Verify targeted changes
+      - name: Verify changes
         run: |
           grep -q "tos_accepted_at: nowIso" 'app/(auth)/register.tsx'
           grep -q "refreshCouple" 'app/(auth)/verify-email.tsx'
           grep -q "native email-verification deep links" app/auth/callback.tsx
           grep -q "Sign in with Apple could not verify this app" lib/oauth.ts
-      - name: Commit fixes and remove one-time workflow
+      - name: Commit fixes and remove temporary files
         run: |
-          rm .github/workflows/fix-signup-pairing-flow.yml
+          rm .github/workflows/fix-signup-pairing-flow.yml scripts/fix_signup_pairing_flow.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
