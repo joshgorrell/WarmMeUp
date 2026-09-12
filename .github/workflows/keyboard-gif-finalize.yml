@@ -1,0 +1,50 @@
+name: Finalize keyboard GIF support
+
+on:
+  push:
+    branches:
+      - feat/keyboard-gif-support
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/keyboard-gif-support
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Finalize layout and runtime boundary
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const notePath = 'app/(app)/(tabs)/note.tsx';
+          let note = fs.readFileSync(notePath, 'utf8');
+          const from = '<TextInputWrapper onPaste={handlePastedMedia}>';
+          const to = '<TextInputWrapper onPaste={handlePastedMedia} style={{ flex: 1 }}>';
+          if (!note.includes(from)) throw new Error('TextInputWrapper target not found');
+          note = note.replace(from, to);
+          fs.writeFileSync(notePath, note);
+
+          const appPath = 'app.json';
+          const app = JSON.parse(fs.readFileSync(appPath, 'utf8'));
+          app.expo.runtimeVersion = '1.1.0';
+          fs.writeFileSync(appPath, JSON.stringify(app, null, 2) + '\n');
+          NODE
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Commit finalization and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/keyboard-gif-finalize.yml
+          git add 'app/(app)/(tabs)/note.tsx' app.json
+          git commit -m "Finalize keyboard GIF support runtime"
+          git push origin HEAD:feat/keyboard-gif-support
