@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
@@ -9,21 +9,27 @@ import PrimaryButton from '@/components/PrimaryButton';
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { user, refreshProfile, refreshSettings } = useAuth();
+  const { user, couple, refreshCouple, refreshProfile, refreshSettings } = useAuth();
 
   const [completing, setCompleting] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const alreadyPaired = !!(couple?.active && couple?.user_b_id);
+
+  useEffect(() => {
+    if (user) refreshCouple().catch(() => {});
+  }, [user?.id, refreshCouple]);
+
   // Preserve the user's selected finish action across a failed save + retry
   // so "invite partner" doesn't silently become "enter app" on retry.
   const pendingActionRef = useRef<OnboardingFinishAction | undefined>(undefined);
 
-  const finish = useCallback((action?: OnboardingFinishAction) => {
-    if (action === 'invite-partner') {
+  const finish = useCallback((action?: OnboardingFinishAction, paired = alreadyPaired) => {
+    if (action === 'invite-partner' && !paired) {
       router.replace('/(auth)/pair');
     } else {
       router.replace('/(app)/(tabs)');
     }
-  }, [router]);
+  }, [router, alreadyPaired]);
 
   const handleComplete = useCallback(async (action?: OnboardingFinishAction) => {
     if (completing) return;
@@ -84,14 +90,29 @@ export default function OnboardingScreen() {
       return;
     }
 
-    // Refresh in-memory state so routing uses current data
+    // Refresh in-memory state so routing uses current data.
     await Promise.all([
       refreshProfile(),
       refreshSettings(),
+      refreshCouple(),
     ]);
 
-    finish(pendingActionRef.current);
-  }, [completing, user, refreshProfile, refreshSettings, finish, router]);
+    // Pairing and account creation are separate flows. A user who already accepted
+    // an invite must never be sent back to Pair and asked for an invite code again.
+    // Check the database directly here so this decision does not depend on stale
+    // React context immediately after User B completes a join.
+    const { data: activeCouple } = await supabase
+      .from('couples')
+      .select('id, user_b_id, active')
+      .eq('active', true)
+      .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+      .not('user_b_id', 'is', null)
+      .limit(1)
+      .maybeSingle();
+
+    const pairedNow = !!activeCouple?.user_b_id || alreadyPaired;
+    finish(pendingActionRef.current, pairedNow);
+  }, [completing, user, alreadyPaired, refreshCouple, refreshProfile, refreshSettings, finish, router]);
 
   const handleRetry = useCallback(() => {
     handleComplete(pendingActionRef.current);
@@ -111,7 +132,7 @@ export default function OnboardingScreen() {
     );
   }
 
-  return <OnboardingCarousel mode="post-auth" onComplete={handleComplete} />;
+  return <OnboardingCarousel mode="post-auth" alreadyPaired={alreadyPaired} onComplete={handleComplete} />;
 }
 
 const styles = StyleSheet.create({

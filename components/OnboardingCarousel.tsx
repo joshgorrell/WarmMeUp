@@ -35,6 +35,7 @@ export type OnboardingFinishAction = 'get-started' | 'invite-partner';
 
 interface Props {
   mode: OnboardingMode;
+  alreadyPaired?: boolean;
   onComplete: (action?: OnboardingFinishAction) => void;
 }
 
@@ -365,7 +366,7 @@ function VisualStealth() {
 
 // ─── Slide 7: Finish ─────────────────────────────────────────────────────────
 
-function VisualFinish() {
+function VisualFinish({ alreadyPaired = false }: { alreadyPaired?: boolean }) {
   return (
     <Shell>
       <View style={styles.finishConnection}>
@@ -392,7 +393,7 @@ function VisualFinish() {
         <View style={{ flex: 1 }}>
           <AppText style={styles.finishInviteTitle}>One subscription. Both of you.</AppText>
           <AppText style={styles.finishInviteSub}>
-            Invite your partner and make the space yours.
+            {alreadyPaired ? 'You’re connected. Your private space is ready.' : 'Invite your partner and make the space yours.'}
           </AppText>
         </View>
       </View>
@@ -456,7 +457,7 @@ const SLIDES: Slide[] = [
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export default function OnboardingCarousel({ mode, onComplete }: Props) {
+export default function OnboardingCarousel({ mode, alreadyPaired = false, onComplete }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isShort = height < 760;
@@ -479,8 +480,8 @@ export default function OnboardingCarousel({ mode, onComplete }: Props) {
   ).current;
 
   const finish = useCallback(
-    () => onComplete(mode === 'preview' ? 'get-started' : 'invite-partner'),
-    [mode, onComplete],
+    () => onComplete(mode === 'preview' || alreadyPaired ? 'get-started' : 'invite-partner'),
+    [mode, alreadyPaired, onComplete],
   );
 
   const handleNext = useCallback(() => {
@@ -537,7 +538,7 @@ export default function OnboardingCarousel({ mode, onComplete }: Props) {
               >
                 <View style={[styles.visualArea, isShort && styles.visualAreaShort]}>
                   <View style={isTablet ? { transform: [{ scale: visualScale }] } : undefined}>
-                    <Visual />
+                    {item.key === 'finish' ? <VisualFinish alreadyPaired={alreadyPaired} /> : <Visual />}
                   </View>
                 </View>
                 <View style={styles.copy}>
@@ -545,7 +546,11 @@ export default function OnboardingCarousel({ mode, onComplete }: Props) {
                   <AppText style={[styles.headline, isShort && styles.headlineShort]}>
                     {item.headline}
                   </AppText>
-                  <AppText style={styles.subtext}>{item.subtext}</AppText>
+                  <AppText style={styles.subtext}>
+                    {item.key === 'finish' && alreadyPaired
+                      ? 'You and your partner are connected. Your private space is ready — jump in and start exploring together.'
+                      : item.subtext}
+                  </AppText>
                 </View>
               </Animated.View>
             </View>
@@ -580,7 +585,7 @@ export default function OnboardingCarousel({ mode, onComplete }: Props) {
               {currentIndex === SLIDES.length - 1
                 ? mode === 'preview'
                   ? 'Get Started'
-                  : 'Connect My Partner'
+                  : alreadyPaired ? 'Enter Warm Me Up' : 'Connect My Partner'
                 : 'Continue'}
             </AppText>
             <ChevronRight size={19} color="#fff" />
