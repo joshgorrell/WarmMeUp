@@ -7,6 +7,7 @@ import {
 import { Image as ExpoImage } from 'expo-image';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
+import { TextInputWrapper } from 'expo-paste-input';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Image as ImageIcon, Camera, X, Lock, Pencil, Send, Flame } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
@@ -43,6 +44,15 @@ import {
 } from '@/components/note/noteHelpers';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+
+function pastedImageMimeType(uri: string): string {
+  const clean = uri.split('?')[0].toLowerCase();
+  if (clean.endsWith('.gif')) return 'image/gif';
+  if (clean.endsWith('.webp')) return 'image/webp';
+  if (clean.endsWith('.png')) return 'image/png';
+  if (clean.endsWith('.heic') || clean.endsWith('.heif')) return 'image/heic';
+  return 'image/jpeg';
+}
 
 export default function ChatTab() {
   const router = useRouter();
@@ -820,7 +830,7 @@ export default function ChatTab() {
     Promise.resolve().then(async () => {
       if (capturedMedia && chatStoragePath && (settings?.chat_auto_save_to_vault ?? true)) {
         const videoExt = Platform.OS === 'ios' ? 'mov' : 'mp4';
-        const ext = capturedMedia.type === 'video' ? videoExt : 'jpg';
+        const ext = capturedMedia.type === 'video' ? videoExt : mimeToExtension(capturedMedia.mimeType);
         const vaultPath = `${coupleId}/${userId}/vault_${Date.now()}.${ext}`;
         const anonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim();
 
@@ -934,6 +944,29 @@ export default function ChatTab() {
       }
     }, [text, editingState, couple?.id, user?.id, hasPartner])
   );
+
+  const handlePastedMedia = useCallback((payload: any) => {
+    if (payload?.type !== 'images' || !Array.isArray(payload.uris) || payload.uris.length === 0) return;
+    if (editingState) {
+      Alert.alert('Finish editing first', 'GIFs and pasted media can be sent after you finish editing this message.');
+      return;
+    }
+
+    const uri = payload.uris[0];
+    const mimeType = pastedImageMimeType(uri);
+    const media: AttachedMedia = {
+      uri,
+      type: 'photo',
+      mimeType,
+      fileName: `chat_${Date.now()}.${mimeToExtension(mimeType)}`,
+    };
+
+    if (text.trim().length === 0) {
+      void sendMediaMessage(media, '');
+    } else {
+      setAttachedMedia(media);
+    }
+  }, [editingState, text, couple?.id, user?.id, hasPartner]);
 
   const handleSend = async () => {
     if (editingState) {
@@ -1682,8 +1715,9 @@ export default function ChatTab() {
                   )}
                 </>
               )}
-              <AppTextInput
-                ref={inputRef}
+              <TextInputWrapper onPaste={handlePastedMedia} style={{ flex: 1 }}>
+                <AppTextInput
+                  ref={inputRef}
                 style={[styles.input, { color: colors.text }]}
                 value={text}
                 onChangeText={setText}
@@ -1694,8 +1728,9 @@ export default function ChatTab() {
                 returnKeyType="send"
                 blurOnSubmit={false}
                 onSubmitEditing={handleSend}
-                onFocus={handleDismissMenu}
-              />
+                  onFocus={handleDismissMenu}
+                />
+              </TextInputWrapper>
               <TouchableOpacity
                 onPress={handleSend}
                 disabled={!canSend}
