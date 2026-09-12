@@ -24,7 +24,7 @@ export default function VerifyEmailScreen() {
   const { pendingCode, email } = useLocalSearchParams<{ pendingCode?: string; email?: string }>();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
-  const { refreshSubscription } = useAuth();
+  const { refreshProfile, refreshCouple, refreshSubscription } = useAuth();
 
   const [checking, setChecking] = useState(false);
   const [resending, setResending] = useState(false);
@@ -50,12 +50,41 @@ export default function VerifyEmailScreen() {
         return;
       }
 
-      // Email is confirmed — handle pending invite code before routing
+      // Verify registration from the database, not potentially stale AuthContext state.
+      // A verified user should never bounce through transition and land back on signup.
+      const { data: prof, error: profileError } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (profileError) {
+        setError('Could not finish setting up your account. Please try again.');
+        return;
+      }
+      const registrationComplete = !!(
+        prof?.first_name && prof?.last_name && prof?.date_of_birth &&
+        prof?.age_verified_at && prof?.tos_accepted_at
+      );
       const code = pendingCode || (await loadPendingCode()) || '';
+      if (!registrationComplete) {
+        const params: Record<string, string> = { oauthComplete: '1' };
+        if (code) params.pendingCode = code;
+        router.replace({ pathname: '/(auth)/register', params });
+        return;
+      }
+
+      await refreshProfile();
+
+      // Email is confirmed — handle pending invite code before routing
       if (code) {
         const result = await completePendingJoin(code);
         if (result.ok) {
           await clearPendingCode();
+          await Promise.all([
+            refreshProfile(),
+            refreshCouple(),
+            refreshSubscription(),
+          ]);
           router.replace({
             pathname: '/(auth)/paired-celebration',
             params: { partnerName: result.inviterName || '', partnerAvatar: result.inviterAvatar || '' },

@@ -138,6 +138,10 @@ async function signInWithAppleNative() {
 
   if (error) {
     logger.warn('[oauth/apple] signInWithIdToken error:', error.message);
+    const message = error.message ?? '';
+    if (/audience|client.?id|apple.*provider|provider.*apple|invalid.*token/i.test(message)) {
+      throw new Error('Sign in with Apple could not verify this app. Please try again after updating Warm Me Up.');
+    }
     throw error;
   }
 
