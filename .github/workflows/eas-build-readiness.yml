@@ -20,6 +20,8 @@ jobs:
         with:
           node-version: '22.13.0'
           cache: npm
+      - name: Bootstrap dependencies
+        run: npm install --ignore-scripts
       - name: Align Expo SDK 54 dependencies
         run: npx expo install --fix
       - name: Clean install
