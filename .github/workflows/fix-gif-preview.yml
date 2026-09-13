@@ -1,0 +1,65 @@
+name: Fix GIF preview before send
+
+on:
+  push:
+    branches:
+      - fix/gif-preview-before-send
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/gif-preview-before-send
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply GIF preview flow
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/(app)/(tabs)/note.tsx')
+          s = p.read_text()
+          old = """    if (text.trim().length === 0) {\n      inputRef.current?.blur();\n      Keyboard.dismiss();\n      setTimeout(() => Keyboard.dismiss(), 150);\n      void sendMediaMessage(media, '');\n    } else {\n      setAttachedMedia(media);\n    }\n"""
+          new = """    inputRef.current?.blur();\n    Keyboard.dismiss();\n    setTimeout(() => Keyboard.dismiss(), 150);\n    setAttachedMedia(media);\n"""
+          if old not in s:
+              raise SystemExit('Expected pasted GIF auto-send block not found')
+          s = s.replace(old, new, 1)
+          old_label = """                    {attachedMedia.type === 'video' ? 'Video' : 'Photo'} — vault privacy\n"""
+          new_label = """                    {attachedMedia.type === 'video' ? 'Video' : attachedMedia.mimeType === 'image/gif' ? 'GIF' : 'Photo'} — vault privacy\n"""
+          if old_label not in s:
+              raise SystemExit('Expected preview label not found')
+          s = s.replace(old_label, new_label, 1)
+          p.write_text(s)
+          PY
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Verify Expo iOS export
+        env:
+          CI: 1
+          EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npx expo export --platform ios --output-dir /tmp/wmu-export
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          rm .github/workflows/fix-gif-preview.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/(app)/(tabs)/note.tsx .github/workflows/fix-gif-preview.yml
+          git commit -m "Preview pasted GIF before sending"
+          git push origin fix/gif-preview-before-send
