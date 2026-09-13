@@ -32,8 +32,8 @@ jobs:
           from pathlib import Path
           p = Path('app/(app)/(tabs)/note.tsx')
           s = p.read_text()
-          old = """    if (text.trim().length === 0) {\n      inputRef.current?.blur();\n      Keyboard.dismiss();\n      setTimeout(() => Keyboard.dismiss(), 150);\n      void sendMediaMessage(media, '');\n    } else {\n      setAttachedMedia(media);\n    }\n"""
-          new = """    inputRef.current?.blur();\n    Keyboard.dismiss();\n    setTimeout(() => Keyboard.dismiss(), 150);\n    setAttachedMedia(media);\n"""
+          old = """    if (text.trim().length === 0) {\n      // GIF/sticker keyboards paste into the focused composer. Once the media is\n      // accepted for immediate send, release first responder so iOS dismisses\n      // the third-party keyboard instead of leaving it covering the chat.\n      inputRef.current?.blur();\n      Keyboard.dismiss();\n      setTimeout(() => Keyboard.dismiss(), 100);\n      void sendMediaMessage(media, '');\n    } else {\n      setAttachedMedia(media);\n    }\n"""
+          new = """    // Pasted GIFs/stickers should behave like other attachments: close the\n    // third-party keyboard, show a preview, and wait for the user to tap Send.\n    inputRef.current?.blur();\n    Keyboard.dismiss();\n    setTimeout(() => Keyboard.dismiss(), 100);\n    setAttachedMedia(media);\n"""
           if old not in s:
               raise SystemExit('Expected pasted GIF auto-send block not found')
           s = s.replace(old, new, 1)
@@ -60,6 +60,6 @@ jobs:
           rm .github/workflows/fix-gif-preview.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/(app)/(tabs)/note.tsx .github/workflows/fix-gif-preview.yml
+          git add 'app/(app)/(tabs)/note.tsx' .github/workflows/fix-gif-preview.yml
           git commit -m "Preview pasted GIF before sending"
           git push origin fix/gif-preview-before-send
