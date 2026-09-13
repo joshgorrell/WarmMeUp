@@ -961,17 +961,12 @@ export default function ChatTab() {
       fileName: `chat_${Date.now()}.${mimeToExtension(mimeType)}`,
     };
 
-    if (text.trim().length === 0) {
-      // GIF/sticker keyboards paste into the focused composer. Once the media is
-      // accepted for immediate send, release first responder so iOS dismisses
-      // the third-party keyboard instead of leaving it covering the chat.
-      inputRef.current?.blur();
-      Keyboard.dismiss();
-      setTimeout(() => Keyboard.dismiss(), 100);
-      void sendMediaMessage(media, '');
-    } else {
-      setAttachedMedia(media);
-    }
+    // Pasted GIFs/stickers should behave like other attachments: close the
+    // third-party keyboard, show a preview, and wait for the user to tap Send.
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+    setTimeout(() => Keyboard.dismiss(), 100);
+    setAttachedMedia(media);
   }, [editingState, text, couple?.id, user?.id, hasPartner]);
 
   const handleSend = async () => {
@@ -1692,7 +1687,7 @@ export default function ChatTab() {
                 <View style={styles.previewInfo}>
                   <Lock color="#FF8A3D" size={11} />
                   <AppText style={[styles.previewLabel, { color: colors.textMuted }]}>
-                    {attachedMedia.type === 'video' ? 'Video' : 'Photo'} — vault privacy
+                    {attachedMedia.type === 'video' ? 'Video' : attachedMedia.mimeType === 'image/gif' ? 'GIF' : 'Photo'} — vault privacy
                   </AppText>
                 </View>
                 {uploadProgress && (
