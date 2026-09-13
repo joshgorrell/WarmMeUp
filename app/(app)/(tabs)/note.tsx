@@ -962,6 +962,12 @@ export default function ChatTab() {
     };
 
     if (text.trim().length === 0) {
+      // GIF/sticker keyboards paste into the focused composer. Once the media is
+      // accepted for immediate send, release first responder so iOS dismisses
+      // the third-party keyboard instead of leaving it covering the chat.
+      inputRef.current?.blur();
+      Keyboard.dismiss();
+      setTimeout(() => Keyboard.dismiss(), 100);
       void sendMediaMessage(media, '');
     } else {
       setAttachedMedia(media);
