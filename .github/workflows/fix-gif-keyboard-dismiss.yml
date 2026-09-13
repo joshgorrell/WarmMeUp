@@ -1,0 +1,59 @@
+name: Fix GIF keyboard dismiss
+
+on:
+  push:
+    branches:
+      - fix/gif-keyboard-dismiss
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/gif-keyboard-dismiss
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply GIF keyboard dismiss fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/(app)/(tabs)/note.tsx')
+          s = p.read_text()
+          old = """    if (text.trim().length === 0) {\n      void sendMediaMessage(media, '');\n    } else {\n      setAttachedMedia(media);\n    }\n"""
+          new = """    if (text.trim().length === 0) {\n      // GIF/sticker keyboards paste into the focused composer. Once the media is\n      // accepted for immediate send, release first responder so iOS dismisses\n      // the third-party keyboard instead of leaving it covering the chat.\n      inputRef.current?.blur();\n      Keyboard.dismiss();\n      setTimeout(() => Keyboard.dismiss(), 100);\n      void sendMediaMessage(media, '');\n    } else {\n      setAttachedMedia(media);\n    }\n"""
+          if old not in s:
+              raise SystemExit('Target snippet not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Verify Expo iOS export
+        env:
+          CI: 1
+          EXPO_PUBLIC_SUPABASE_URL: https://vdhrcbaggplcktjamwcj.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npx expo export --platform ios --output-dir /tmp/wmu-export
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          rm .github/workflows/fix-gif-keyboard-dismiss.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 'app/(app)/(tabs)/note.tsx' .github/workflows/fix-gif-keyboard-dismiss.yml
+          git commit -m "Dismiss keyboard after auto-sending pasted GIF"
+          git push origin fix/gif-keyboard-dismiss
