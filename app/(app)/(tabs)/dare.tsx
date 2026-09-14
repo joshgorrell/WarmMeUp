@@ -438,7 +438,7 @@ export default function DareTab() {
     const relationship = isMine ? `You dared ${partnerName}` : `${partnerName} dared you`;
     const dateValue = dare.completed_at ?? dare.created_at;
     const isPositive = accepted || completed;
-    const actionLabel = dare.action_type ? dare.action_type.charAt(0).toUpperCase() + dare.action_type.slice(1) : null;
+    const actionLabel = dare.action_type ? (dare.action_type === 'action' ? 'Task' : dare.action_type === 'message' ? 'Chat' : dare.action_type === 'photo' ? 'Pic' : 'Video') : null;
     const showViewLink = completed && isMine && (dare.vault_item_id || dare.dare_chat_message_id);
     return (
       <View key={dare.id} style={[styles.historyRow, { borderBottomColor: colors.borderSubtle }]}>
@@ -548,7 +548,7 @@ export default function DareTab() {
                   <View style={styles.actionRow}>
                     <View style={styles.timerLabelRow}><Flame color={colors.textSecondary} size={14} strokeWidth={2} /><AppText style={[styles.timerLabelText, { color: colors.textSecondary }]}>Response</AppText></View>
                     <View style={styles.actionChips}>
-                      {([['photo', Camera, 'Photo'], ['video', Video, 'Video'], ['message', MessageCircle, 'Message'], ['action', Check, 'Action']] as const).map(([type, Icon, label]) => {
+                      {([['photo', Camera, 'Pic'], ['video', Video, 'Video'], ['message', MessageCircle, 'Chat'], ['action', Check, 'Task']] as const).map(([type, Icon, label]) => {
                         const active = selectedActionType === type;
                         return (
                           <TouchableOpacity key={type} onPress={() => setSelectedActionType(type)} activeOpacity={0.7} style={[styles.actionChip, { backgroundColor: active ? 'rgba(255,46,138,0.15)' : colors.card, borderColor: active ? 'rgba(255,46,138,0.45)' : colors.borderSubtle }]}>
@@ -647,8 +647,8 @@ const styles = StyleSheet.create({
   cancelDareBtnText: { fontSize: FontSize.sm, fontFamily: 'Inter-Regular', textAlign: 'center' },
   acceptedSection: { gap: Spacing.sm, marginBottom: Spacing.lg },
   actionRow: { marginBottom: 14 },
-  actionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  actionChips: { flexDirection: 'row', gap: 7 },
+  actionChip: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 16, borderWidth: 1, paddingHorizontal: 5, paddingVertical: 8 },
   actionChipText: { fontSize: 12, fontFamily: 'Inter-SemiBold' },
   actionBadge: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 4 },
   actionBadgeText: { fontSize: 11, fontFamily: 'Inter-Medium', textTransform: 'uppercase', letterSpacing: 0.5 },
