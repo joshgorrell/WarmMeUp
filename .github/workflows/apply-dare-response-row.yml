@@ -1,0 +1,50 @@
+name: Apply dare response row cleanup
+on:
+  push:
+    branches: [fix/dare-response-row]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/dare-response-row
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - name: Update Dare response selector
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/(app)/(tabs)/dare.tsx')
+          s=p.read_text()
+          old="{([['photo', Camera, 'Photo'], ['video', Video, 'Video'], ['message', MessageCircle, 'Message'], ['action', Check, 'Action']] as const).map(([type, Icon, label]) => {"
+          new="{([['photo', Camera, 'Pic'], ['video', Video, 'Video'], ['message', MessageCircle, 'Chat'], ['action', Check, 'Task']] as const).map(([type, Icon, label]) => {"
+          if old not in s: raise SystemExit('response labels pattern not found')
+          s=s.replace(old,new,1)
+          old_style="actionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },\n  actionChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },"
+          new_style="actionChips: { flexDirection: 'row', gap: 7 },\n  actionChip: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 16, borderWidth: 1, paddingHorizontal: 5, paddingVertical: 8 },"
+          if old_style not in s: raise SystemExit('response styles pattern not found')
+          s=s.replace(old_style,new_style,1)
+          # User-facing history should say Task rather than internal Action.
+          old_hist="const actionLabel = dare.action_type ? dare.action_type.charAt(0).toUpperCase() + dare.action_type.slice(1) : null;"
+          new_hist="const actionLabel = dare.action_type ? (dare.action_type === 'action' ? 'Task' : dare.action_type === 'message' ? 'Chat' : dare.action_type === 'photo' ? 'Pic' : 'Video') : null;"
+          if old_hist not in s: raise SystemExit('history label pattern not found')
+          s=s.replace(old_hist,new_hist,1)
+          p.write_text(s)
+          PY
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx expo export --platform ios --output-dir /tmp/wmu-export
+      - name: Commit change and remove workflow
+        run: |
+          rm .github/workflows/apply-dare-response-row.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add 'app/(app)/(tabs)/dare.tsx' .github/workflows/apply-dare-response-row.yml
+          git commit -m 'Clean up Dare response selector'
+          git push origin fix/dare-response-row
