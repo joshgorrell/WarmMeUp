@@ -1,1 +1,0 @@
-Discreet ON: Warm Me Up — New Activity. Discreet OFF examples: Warm Me Up — New Message; New Picture; New Video; New GIF; New Dare; New Wish.
