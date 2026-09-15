@@ -1,1 +1,0 @@
-Review `supabase/functions/notify-partner/index.ts` for the implementation. Other files in this branch document the approved behavior and deployment/test follow-up.
