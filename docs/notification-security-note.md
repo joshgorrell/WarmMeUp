@@ -1,0 +1,1 @@
+Private partner content is intentionally excluded from push copy. The server does not use client-provided message text or emoji when composing non-system notifications.
