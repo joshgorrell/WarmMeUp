@@ -1,1 +1,0 @@
-Any private partner event without an approved activity-specific label falls back to New Activity.
