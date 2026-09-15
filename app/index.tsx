@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import { useAuth, computeIsUnlockRequired, computeShouldShowPrivacyCover } from '@/context/AuthContext';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import OfflineScreen from '@/components/OfflineScreen';
 import { logDebugEvent } from '@/lib/debugLog';
 import { logger } from '@/lib/logger';
 
@@ -12,12 +14,16 @@ const SETTINGS_WAIT_MS = 300;
 export default function IndexScreen() {
   const router = useRouter();
   const { session, loading, settings, unlockedAtMs, unlockApp } = useAuth();
+  const { isOffline, checking, checkConnection } = useOnlineStatus();
   const settingsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routedRef = useRef(false);
   const mountMs = useRef(Date.now());
 
   useEffect(() => {
-    if (loading) return;
+    // Do not make startup routing decisions while the device is offline. This
+    // keeps the cold-launch offline screen mounted instead of racing auth/session
+    // hydration and navigating away from it.
+    if (isOffline || loading) return;
 
     const bootElapsedMs = Date.now() - mountMs.current;
 
@@ -114,7 +120,6 @@ export default function IndexScreen() {
     const goNext = async () => {
       if (routedRef.current) return;
       routedRef.current = true;
-      const userId = session.user?.id;
       const loginMethod = settings.login_method ?? 'none';
 
       logger.log('[INDEX ROUTE DECISION] gate', {
@@ -179,13 +184,17 @@ export default function IndexScreen() {
     });
     logger.log('[INDEX ROUTE DECISION] → /weather (stealth active, no bypass)');
     router.replace('/weather');
-  }, [loading, session, settings, unlockedAtMs]);
+  }, [loading, session, settings, unlockedAtMs, isOffline]);
 
   useEffect(() => {
     return () => {
       if (settingsTimeoutRef.current) clearTimeout(settingsTimeoutRef.current);
     };
   }, []);
+
+  if (isOffline) {
+    return <OfflineScreen checking={checking} onTryAgain={() => { void checkConnection(); }} />;
+  }
 
   return <View style={styles.bg} />;
 }
