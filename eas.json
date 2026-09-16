@@ -11,6 +11,9 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      },
       "ios": {
         "autoIncrement": true,
         "simulator": false
@@ -29,6 +32,10 @@
       "cache": {
         "disabled": true
       },
+      "android": {
+        "autoIncrement": true,
+        "buildType": "app-bundle"
+      },
       "ios": {
         "autoIncrement": true
       }
@@ -36,6 +43,9 @@
   },
   "submit": {
     "production": {
+      "android": {
+        "track": "internal"
+      },
       "ios": {
         "appleId": "josh@ksav.com",
         "ascAppId": "6768346143"
