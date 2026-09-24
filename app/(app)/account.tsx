@@ -148,6 +148,7 @@ export default function AccountScreen() {
 
   // Leave partner sheet
   const [showLeaveSheet, setShowLeaveSheet] = useState(false);
+  const leaveFromGuidelines = useRef(false);
 
   // Sign out confirmation
   const [showSignOutSheet, setShowSignOutSheet] = useState(false);
@@ -1234,6 +1235,25 @@ export default function AccountScreen() {
       <CommunityGuidelinesModal
         visible={showCommunityGuidelines}
         onClose={() => setShowCommunityGuidelines(false)}
+        onEndPartnerConnection={() => {
+          leaveFromGuidelines.current = true;
+          setShowCommunityGuidelines(false);
+          // Android does not call Modal.onDismiss; allow its closing animation to finish.
+          if (Platform.OS !== 'ios') {
+            setTimeout(() => {
+              if (leaveFromGuidelines.current) {
+                leaveFromGuidelines.current = false;
+                setShowLeaveSheet(true);
+              }
+            }, 350);
+          }
+        }}
+        onDismiss={() => {
+          if (leaveFromGuidelines.current) {
+            leaveFromGuidelines.current = false;
+            setShowLeaveSheet(true);
+          }
+        }}
       />
       <LeavePartnerSheet
         visible={showLeaveSheet}
