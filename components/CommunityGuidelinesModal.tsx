@@ -8,9 +8,8 @@ import { X, ShieldAlert, UserX } from 'lucide-react-native';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { clearLocalImageCache } from '@/lib/mediaCache';
 
-interface Props { visible: boolean; onClose: () => void; }
+interface Props { visible: boolean; onClose: () => void; onEndPartnerConnection: () => void; onDismiss?: () => void; }
 
 const REPORT_REASONS = [
   ['harassment', 'Harassment or threatening behavior'],
@@ -30,21 +29,19 @@ const SECTIONS = [
   { title: '6. No Guarantee of Privacy or Security', body: `Warm Me Up includes privacy-focused tools such as Vault, Privacy Mode, biometric authentication, and screenshot notifications. These features help users manage privacy but cannot guarantee absolute privacy or security. Content displayed on a device may still be captured by screenshots, recordings, another device, compromised hardware, or other means outside Warm Me Up's control.` },
   { title: '7. Prohibited Content', body: `Content involving minors, exploitation or abuse, non-consensual intimate imagery, criminal activity, violent threats, trafficking, harassment, stalking, malicious software, scams, fraud, or impersonation is prohibited. Violations may result in suspension or permanent account removal.` },
   { title: '8. Safety & Responsibility', body: `Users are responsible for the content they create, the dares they send or accept, the decisions they make, and interactions with their partner. Never pressure another user into participating in anything that makes them uncomfortable.` },
-  { title: '9. Reporting Abuse', body: `Use the in-app Report Partner control below if you believe your partner is abusing the platform, violating these Guidelines, sharing non-consensual content, or engaging in harmful or illegal behavior. Reports are reviewed by Warm Me Up. Private messages and media are not automatically copied into a report.` },
+  { title: '9. Reporting Abuse', body: `Use Report a Safety Concern if you believe your partner is abusing the platform, violating these Guidelines, sharing non-consensual content, or engaging in harmful or illegal behavior. Reports are reviewed by Warm Me Up. Private messages and media are not automatically copied into a report. You can end your connection separately at any time.` },
   { title: '10. Enforcement', body: `Warm Me Up may investigate reports and may suspend or terminate accounts that violate these Guidelines, our Terms of Service, or applicable law. Where required by law, violations may be reported to law enforcement.` },
   { title: '11. Final Thoughts', body: `Warm Me Up was created for couples who want a fun, private space to connect and stay playful together. Use the app responsibly. Respect each other. Protect each other's trust.\n\nStay Playful.` },
 ];
 
-export default function CommunityGuidelinesModal({ visible, onClose }: Props) {
+export default function CommunityGuidelinesModal({ visible, onClose, onEndPartnerConnection, onDismiss }: Props) {
   const insets = useSafeAreaInsets();
-  const { user, couple, partnerProfile, refreshCouple, refreshSubscription } = useAuth();
+  const { user, couple } = useAuth();
   const [reportOpen, setReportOpen] = useState(false);
   const [reason, setReason] = useState<string>('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [blocking, setBlocking] = useState(false);
   const partnerId = couple && user ? (couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id) : null;
-  const partnerName = partnerProfile?.display_name || partnerProfile?.first_name || 'your partner';
 
   const submitReport = async () => {
     if (!user?.id || !partnerId || !couple?.id || !reason) return;
@@ -56,32 +53,8 @@ export default function CommunityGuidelinesModal({ visible, onClose }: Props) {
     Alert.alert('Report received', 'Thank you. Your report was submitted to the Warm Me Up safety queue.');
   };
 
-  const disconnectAndBlock = () => {
-    if (!user?.id || !partnerId || !couple?.id) return;
-    Alert.alert('Disconnect & Block Partner?', `This will block ${partnerName}, end your connection, and permanently remove shared couple data. They will not be able to reconnect with you unless you later remove the block.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Disconnect & Block', style: 'destructive', onPress: async () => {
-        setBlocking(true);
-        try {
-          const { error: blockError } = await supabase.from('blocked_users').upsert({ blocker_user_id: user.id, blocked_user_id: partnerId });
-          if (blockError) throw blockError;
-          const { data: { session } } = await supabase.auth.getSession();
-          const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-          const res = await fetch(`${baseUrl}/functions/v1/disconnect-couple`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}`, Apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '' } });
-          if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error ?? 'Failed to disconnect'); }
-          await clearLocalImageCache();
-          await refreshCouple(); await refreshSubscription();
-          onClose();
-          Alert.alert('Partner blocked', 'The connection has ended and this partner is blocked from reconnecting with you.');
-        } catch (e: any) {
-          Alert.alert('Unable to block partner', e?.message ?? 'Please try again.');
-        } finally { setBlocking(false); }
-      }},
-    ]);
-  };
-
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onDismiss={onDismiss}>
       <LinearGradient colors={['#060406', '#0A060A', '#0E080E']} style={styles.root}>
         <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? Spacing.md : insets.top + Spacing.sm }]}>
           <View style={styles.headerTextBlock}><AppText style={styles.headerTitle}>Safety & Community Guidelines</AppText><AppText style={styles.headerSub}>Respect, consent, privacy and control</AppText></View>
@@ -90,9 +63,9 @@ export default function CommunityGuidelinesModal({ visible, onClose }: Props) {
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing.xxl }]} showsVerticalScrollIndicator={false}>
           {!!partnerId && <View style={styles.safetyCard}>
             <AppText style={styles.safetyTitle}>Safety controls</AppText>
-            <AppText style={styles.safetyBody}>You can report a concern or immediately disconnect and block your connected partner. Neither action requires your partner's approval.</AppText>
-            <TouchableOpacity style={styles.safetyButton} onPress={() => setReportOpen(true)}><ShieldAlert color="#FF8A3D" size={18} /><AppText style={styles.safetyButtonText}>Report Partner</AppText></TouchableOpacity>
-            <TouchableOpacity style={[styles.safetyButton, styles.blockButton]} onPress={disconnectAndBlock} disabled={blocking}><UserX color="#FF666B" size={18} /><AppText style={[styles.safetyButtonText, { color: '#FF777B' }]}>{blocking ? 'Disconnecting…' : 'Disconnect & Block Partner'}</AppText></TouchableOpacity>
+            <AppText style={styles.safetyBody}>End your connection to remove shared content and stop contact. Report a serious concern separately so the Warm Me Up team can review it. Neither action needs your partner’s approval.</AppText>
+            <TouchableOpacity style={styles.safetyButton} onPress={() => setReportOpen(true)}><ShieldAlert color="#FF8A3D" size={18} /><AppText style={styles.safetyButtonText}>Report a Safety Concern</AppText></TouchableOpacity>
+            <TouchableOpacity style={[styles.safetyButton, styles.blockButton]} onPress={onEndPartnerConnection}><UserX color="#FF666B" size={18} /><AppText style={[styles.safetyButtonText, { color: '#FF777B' }]}>End Partner Connection</AppText></TouchableOpacity>
           </View>}
           {SECTIONS.map(section => <View key={section.title} style={styles.section}><AppText style={styles.sectionTitle}>{section.title}</AppText><AppText style={styles.sectionBody}>{section.body}</AppText></View>)}
         </ScrollView>
@@ -101,7 +74,7 @@ export default function CommunityGuidelinesModal({ visible, onClose }: Props) {
 
       <Modal visible={reportOpen} transparent animationType="fade" onRequestClose={() => setReportOpen(false)}>
         <View style={styles.reportOverlay}><View style={styles.reportCard}>
-          <View style={styles.reportHeader}><AppText style={styles.reportTitle}>Report Partner</AppText><TouchableOpacity onPress={() => setReportOpen(false)}><X color="#fff" size={20} /></TouchableOpacity></View>
+          <View style={styles.reportHeader}><AppText style={styles.reportTitle}>Report a Safety Concern</AppText><TouchableOpacity onPress={() => setReportOpen(false)}><X color="#fff" size={20} /></TouchableOpacity></View>
           <AppText style={styles.safetyBody}>Choose the reason that best describes your concern. Private messages and media are not attached automatically.</AppText>
           {REPORT_REASONS.map(([value, label]) => <TouchableOpacity key={value} style={[styles.reasonRow, reason === value && styles.reasonSelected]} onPress={() => setReason(value)}><View style={[styles.radio, reason === value && styles.radioSelected]} /><AppText style={styles.reasonText}>{label}</AppText></TouchableOpacity>)}
           <AppTextInput value={notes} onChangeText={setNotes} placeholder="Optional details" placeholderTextColor="rgba(255,255,255,0.3)" multiline maxLength={1000} style={styles.notes} />
