@@ -1,7 +1,7 @@
 /* eslint-disable import/no-unresolved -- Deno resolves jsr/npm specifiers at deployment. */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { processBurnJob, processAccountBurn } from '../_shared/contentBurn.ts';
+import { processBurnJob, processAccountBurn } from "../_shared/contentBurn.ts";
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return new Response(null,{status:405});
   const admin = createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);

@@ -1,3 +1,12 @@
+[functions.copy-to-vault]
+verify_jwt = true
+
+[functions.notify-screenshot]
+verify_jwt = true
+
+[functions.disconnect-couple]
+verify_jwt = true
+
 [functions.get-effective-subscription]
 verify_jwt = true
 
