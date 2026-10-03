@@ -269,7 +269,7 @@ function VisualBurn() {
           <AppText style={styles.burnTimerLabel}>LEFT</AppText>
         </View>
       </View>
-      <AppText style={styles.burnMicroCopy}>When the timer ends, it's gone.</AppText>
+      <AppText style={styles.burnMicroCopy}>Timers remove it for both partners.</AppText>
     </Shell>
   );
 }

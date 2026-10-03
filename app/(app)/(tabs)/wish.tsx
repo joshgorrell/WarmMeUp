@@ -1,3 +1,5 @@
+import { useContentBurnUpdates } from '@/hooks/useContentBurnUpdates';
+import { burnContent } from '@/lib/contentBurn';
 import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
@@ -418,7 +420,7 @@ function WishForm({
       setThumbPath(initial?.thumbnail_path ?? null);
       setError('');
       if (initial?.image_storage_path && initial?.image_storage_bucket) {
-        supabase.storage.from(initial.image_storage_bucket).createSignedUrl(initial.image_storage_path, 3600)
+        supabase.storage.from(initial.image_storage_bucket).createSignedUrl(initial.image_storage_path, 5 * 60)
           .then(({ data, error }) => {
             if (error) {
               logDebugEvent('WISH IMAGE SIGN ERROR', { path: initial.image_storage_path, error: error.message });
@@ -460,7 +462,7 @@ function WishForm({
     // Generate a signed URL immediately so the preview survives a restart
     const { data: signedData, error: signError } = await supabase.storage
       .from('chat_media')
-      .createSignedUrl(storagePath, 3600);
+      .createSignedUrl(storagePath, 5 * 60);
 
     if (signError || !signedData?.signedUrl) {
       logDebugEvent('WISH IMAGE SIGN ERROR', { storagePath, error: signError?.message ?? 'no signedUrl' });
@@ -868,7 +870,7 @@ function FulfillSheet({
       await uploadMediaFile(asset.uri, 'vault', path, 'image/jpeg', undefined, user.id, couple.id);
 
       // Use signed URL for the preview so it survives memory flush
-      const { data: signedData, error: signErr } = await supabase.storage.from('vault').createSignedUrl(path, 3600);
+      const { data: signedData, error: signErr } = await supabase.storage.from('vault').createSignedUrl(path, 5 * 60);
       if (signErr || !signedData?.signedUrl) {
         logDebugEvent('WISH MEMORY IMAGE SIGN ERROR', { path, error: signErr?.message ?? 'no signedUrl' });
         setMemImgPath(path);
@@ -1081,7 +1083,7 @@ export default function WishTab() {
       // Pre-generated thumbnails (thumbnail_path) are stored at upload time,
       // so we can batch-sign them with createSignedUrls (plural) — no per-image
       // server-side transforms needed. This cuts N+1 API calls down to 1 per bucket.
-      const SIGNED_TTL = 12 * 60 * 60; // 12 hours — matches vault screen
+      const SIGNED_TTL = 5 * 60; // Short-lived bearer URLs; cache expires sooner.
 
       type PathEntry = { wishId: string; path: string; bucket: string; kind: 'image' | 'thumb' | 'memory' };
       const entries: PathEntry[] = [];
@@ -1209,6 +1211,8 @@ export default function WishTab() {
     setDetailWish(target);
   }, [deepLinkWishId, wishes]);
 
+  useContentBurnUpdates(couple?.id, loadWishes);
+
   const handleTabPress = useCallback((key: TabKey, idx: number) => {
     setActiveTab(key);
     Animated.spring(tabIndicator, { toValue: idx, friction: 8, tension: 80, useNativeDriver: false }).start();
@@ -1234,15 +1238,10 @@ export default function WishTab() {
   }, []);
 
   const handleDelete = useCallback(async (wish: WishWithReactions) => {
-    await supabase.from('activity_events').delete().eq('wish_id', wish.id);
-    await supabase.from('chat_messages')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('couple_id', wish.couple_id)
-      .is('deleted_at', null)
-      .like('content_text', '__WMU_ACTIVITY__:%')
-      .like('content_text', `%${wish.id}%`);
-    await supabase.from('wishes').delete().eq('id', wish.id);
-    setWishes(prev => prev.filter(w => w.id !== wish.id));
+    try {
+      await burnContent(wish.couple_id, 'wish', [wish.id]);
+      setWishes(prev => prev.filter(w => w.id !== wish.id));
+    } catch (error: any) { Alert.alert('Deletion not confirmed', error.message); }
   }, []);
 
   const handleBump = useCallback(async (wish: WishWithReactions) => {

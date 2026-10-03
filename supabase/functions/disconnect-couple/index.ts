@@ -1,6 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+import { prepareBurn, processBurnJob } from '../_shared/contentBurn.ts';
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -11,6 +13,8 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
+
+  if (req.method !== "POST") return new Response(null, { status: 405, headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -77,69 +81,11 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── 2. Delete storage files for this couple (chat_media + vault) ──
-    // Must happen before the DB rows are wiped since we need the couple_id path.
-    const PAGE = 100;
-
-    async function deleteStorageFolder(bucket: string, prefix: string) {
-      let offset = 0;
-      while (true) {
-        const { data: entries, error } = await admin.storage
-          .from(bucket)
-          .list(prefix, { limit: PAGE, offset });
-        if (error || !entries?.length) break;
-
-        const files = entries.filter((e) => e.id != null);
-        const folders = entries.filter((e) => e.id == null);
-
-        if (files.length) {
-          const paths = files.map((f) => `${prefix}/${f.name}`);
-          await admin.storage.from(bucket).remove(paths);
-        }
-
-        for (const folder of folders) {
-          await deleteStorageFolder(bucket, `${prefix}/${folder.name}`);
-        }
-
-        if (entries.length < PAGE) break;
-        if (files.length === 0) offset += PAGE;
-      }
-    }
-
-    try {
-      await deleteStorageFolder("chat_media", couple.id);
-    } catch (err) {
-      console.error("[disconnect-couple] chat_media cleanup failed:", String(err));
-    }
-
-    try {
-      await deleteStorageFolder("vault", couple.id);
-    } catch (err) {
-      console.error("[disconnect-couple] vault cleanup failed:", String(err));
-    }
-
-    // ── 3. Call the server-side wipe function ──
-    const { data: wipeResult, error: wipeError } = await admin
-      .rpc("wipe_couple_data", {
-        p_couple_id: couple.id,
-        p_user_id: user.id,
-      });
-
-    if (wipeError) {
-      console.error("[disconnect-couple] wipe_couple_data failed:", wipeError);
-      return new Response(JSON.stringify({ error: "Failed to wipe couple data" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({
-      ok: true,
-      couple_id: couple.id,
-      wiped: wipeResult,
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const jobId = await prepareBurn(admin,couple.id,user.id,'disconnect');
+    let complete = false;
+    try { complete = await processBurnJob(admin,jobId); } catch { /* durable retry worker owns cleanup */ }
+    return new Response(JSON.stringify({ ok: complete, disconnected: true, pending: !complete, job_id: jobId, couple_id: couple.id }), {
+      status: complete ? 200 : 202, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     });
   } catch (err: any) {
     console.error("[disconnect-couple] Unhandled error:", err?.message ?? String(err));

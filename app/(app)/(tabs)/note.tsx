@@ -1,3 +1,5 @@
+import { useContentBurnUpdates } from '@/hooks/useContentBurnUpdates';
+import { burnContent } from '@/lib/contentBurn';
 import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
@@ -254,7 +256,7 @@ export default function ChatTab() {
       Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
         try {
           const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
-          const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+          const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, 5 * 60);
           if (error) logDebugEvent('chat_signed_url_batch_error', { bucket, error: error.message });
           const pathToUrl = new Map(data?.map(d => [d.path, d.signedUrl]) ?? []);
           for (const m of bucketMsgs) {
@@ -311,46 +313,7 @@ export default function ChatTab() {
         const now = Date.now();
         const expired = sorted.filter(m => m.burns_at && new Date(m.burns_at).getTime() < now);
         if (expired.length > 0) {
-          const deletedAt = new Date().toISOString();
-          for (const m of expired) {
-            if (m.media_storage_path) {
-              const bucket = m.media_storage_bucket ?? 'chat_media';
-              supabase.storage.from(bucket).remove([m.media_storage_path]).catch(() => {});
-            }
-          }
-          if (expired.some(m => m.media_storage_path)) {
-            clearLocalImageCache().catch(() => {});
-          }
-          Promise.resolve(
-            supabase
-              .from('chat_messages')
-              .update({ deleted_at: deletedAt })
-              .in('id', expired.map(m => m.id))
-              .eq('couple_id', couple.id)
-          ).catch(() => {});
-          const expiredVaultIds = expired.map(m => m.vault_item_id).filter((id): id is string => !!id);
-          if (expiredVaultIds.length > 0) {
-            supabase
-              .from('vault_items')
-              .select('id, storage_path, storage_bucket')
-              .in('id', expiredVaultIds)
-              .then(({ data: vis }) => {
-                supabase
-                  .from('vault_items')
-                  .update({ deleted_at: deletedAt })
-                  .in('id', expiredVaultIds)
-                  .then(({ error }) => {
-                    if (error) logDebugEvent('chat_burn_vault_cleanup_failed', { error: error.message });
-                  });
-                if (vis) {
-                  for (const vi of vis) {
-                    if (vi.storage_path) {
-                      supabase.storage.from(vi.storage_bucket ?? 'vault').remove([vi.storage_path]).catch(() => {});
-                    }
-                  }
-                }
-              });
-          }
+          burnContent(couple.id, 'chat', expired.map(m => m.id)).catch(() => {});
         }
         const visible = expired.length > 0 ? sorted.filter(m => !expired.some(e => e.id === m.id)) : sorted;
         const urlMap: Record<string, string | null> = {};
@@ -377,7 +340,7 @@ export default function ChatTab() {
             Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
               try {
                 const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
-                const { data: urlData, error: urlErr } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+                const { data: urlData, error: urlErr } = await supabase.storage.from(bucket).createSignedUrls(paths, 5 * 60);
                 if (urlErr) logDebugEvent('chat_load_signed_url_error', { bucket, error: urlErr.message });
                 const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
                 for (const m of bucketMsgs) {
@@ -410,6 +373,8 @@ export default function ChatTab() {
       setChatLoading(false);
     }
   }, [couple?.id]);
+
+  useContentBurnUpdates(couple?.id, loadMessages);
 
   const loadOlderMessages = useCallback(async () => {
     if (!couple?.id || loadingOlder || !hasMore || !oldestCreatedAtRef.current) return;
@@ -449,7 +414,7 @@ export default function ChatTab() {
             Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
               try {
                 const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
-                const { data: urlData, error: urlErr } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+                const { data: urlData, error: urlErr } = await supabase.storage.from(bucket).createSignedUrls(paths, 5 * 60);
                 if (urlErr) logDebugEvent('chat_load_older_signed_url_error', { bucket, error: urlErr.message });
                 const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
                 for (const m of bucketMsgs) {
@@ -515,12 +480,6 @@ export default function ChatTab() {
     const ch = supabase.channel(uniqueRealtimeTopic(`chat_tab_${couple.id}`))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
         (payload) => handleInsert(payload.new as ChatMessage)
-      )
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
-        (payload) => {
-          const deletedId = (payload.old as { id: string }).id;
-          setMessages(prev => prev.filter(m => m.id !== deletedId));
-        }
       )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
         (payload) => {
@@ -712,7 +671,7 @@ export default function ChatTab() {
     if (chatStoragePath) {
       const { data: signedData, error: signError } = await supabase.storage
         .from('chat_media')
-        .createSignedUrl(chatStoragePath, 24 * 3600);
+        .createSignedUrl(chatStoragePath, 5 * 60);
       preSignedMediaUrl = signedData?.signedUrl ?? null;
       logDebugEvent('chat_photo_presigned_url', {
         present: !!preSignedMediaUrl,
@@ -1054,141 +1013,17 @@ export default function ChatTab() {
 
   const handleDeleteMessage = (msg: ChatMessage) => {
     handleDismissMenu();
-    const hasMedia = !!msg.media_storage_path;
-    const autoSaveOn = settings?.chat_auto_save_to_vault ?? true;
-
-    const softDeleteChat = async () => {
-      const deletedAt = new Date().toISOString();
-      const { error } = await supabase
-        .from('chat_messages')
-        .update({ deleted_at: deletedAt })
-        .eq('id', msg.id)
-        .eq('couple_id', couple!.id);
-      return error;
-    };
-
-    const deleteVaultItem = async (): Promise<string | null> => {
-      if (!msg.vault_item_id) return null;
-      const { data: vi, error: fetchErr } = await supabase
-        .from('vault_items')
-        .select('storage_path, storage_bucket')
-        .eq('id', msg.vault_item_id)
-        .maybeSingle();
-      if (fetchErr) return fetchErr.message;
-      const deletedAt = new Date().toISOString();
-      const { error: updateErr } = await supabase
-        .from('vault_items')
-        .update({ deleted_at: deletedAt })
-        .eq('id', msg.vault_item_id);
-      if (updateErr) return updateErr.message;
-      if (vi?.storage_path) {
-        supabase.storage.from(vi.storage_bucket ?? 'vault').remove([vi.storage_path]).catch(() => {});
-      }
-      return null;
-    };
-
-    if (!hasMedia) {
-      const doDelete = async () => {
+    const doDelete = async () => {
+      try {
+        await burnContent(couple!.id, 'chat', [msg.id]);
         setMessages(prev => prev.filter(m => m.id !== msg.id));
-        await softDeleteChat();
-      };
-      if (Platform.OS === 'web') {
-        if (window.confirm('Delete this message? This cannot be undone.')) doDelete();
-      } else {
-        setConfirmSheet({
-          title: 'Delete message',
-          message: 'This will permanently remove the message.',
-          actions: [
-            { label: 'Delete', style: 'destructive', onPress: doDelete },
-            { label: 'Cancel', style: 'cancel', onPress: () => {} },
-          ],
-        });
-      }
-      return;
-    }
-
-    if (!autoSaveOn || !msg.vault_item_id) {
-      const doDelete = async () => {
-        setMessages(prev => prev.filter(m => m.id !== msg.id));
-        const chatErr = await softDeleteChat();
-        if (chatErr) {
-          Alert.alert('Delete Failed', 'Could not remove the message. Please try again.');
-          return;
-        }
-        if (msg.media_storage_path) {
-          const bucket = msg.media_storage_bucket ?? 'chat_media';
-          supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
-        }
-        clearLocalImageCache().catch(() => {});
-      };
-      if (Platform.OS === 'web') {
-        if (window.confirm('Delete from chat? This will remove the photo/video from this chat.')) doDelete();
-      } else {
-        setConfirmSheet({
-          title: 'Delete from chat?',
-          message: 'This will remove the photo/video from this chat.',
-          actions: [
-            { label: 'Delete', style: 'destructive', onPress: doDelete },
-            { label: 'Cancel', style: 'cancel', onPress: () => {} },
-          ],
-        });
-      }
-      return;
-    }
-
-    const doChatOnly = async () => {
-      setMessages(prev => prev.filter(m => m.id !== msg.id));
-      const chatErr = await softDeleteChat();
-      if (chatErr) {
-        setMessages(prev => {
-          if (prev.some(m => m.id === msg.id)) return prev;
-          return [...prev, msg].sort((a, b) => a.created_at.localeCompare(b.created_at));
-        });
-        Alert.alert('Delete Failed', 'Could not remove the message. Please try again.');
-      }
+      } catch (error: any) { Alert.alert('Deletion not confirmed', error.message); }
     };
-
-    const doChatAndVault = async () => {
-      const vaultErr = await deleteVaultItem();
-      if (vaultErr) {
-        Alert.alert('Delete Failed', `Could not remove from Vault: ${vaultErr}\n\nNo changes were made.`);
-        return;
-      }
-      setMessages(prev => prev.filter(m => m.id !== msg.id));
-      const chatErr = await softDeleteChat();
-      if (chatErr) {
-        Alert.alert('Partial Delete', 'Removed from Vault but could not remove from Chat. Pull to refresh.');
-        return;
-      }
-      if (msg.media_storage_path) {
-        const bucket = msg.media_storage_bucket ?? 'chat_media';
-        supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
-      }
-      clearLocalImageCache().catch(() => {});
-    };
-
-    if (Platform.OS === 'web') {
-      const choice = window.confirm('Delete media?\n\nOK = Delete from Chat and Vault\nCancel = keep in Vault');
-      if (choice) {
-        doChatAndVault();
-      } else {
-        if (window.confirm('Delete from Chat only? (Vault copy will be kept)')) {
-          doChatOnly();
-        }
-      }
-    } else {
-      setConfirmSheet({
-        title: 'Delete media?',
-        message: msg.vault_item_id
-          ? 'This photo/video is saved in your Vault. Choose what to delete.'
-          : 'Remove this media from the chat.',
-        actions: [
-          { label: 'Delete from Chat only', style: 'default', onPress: doChatOnly },
-          { label: 'Delete from Chat and Vault', style: 'destructive', onPress: doChatAndVault },
-          { label: 'Cancel', style: 'cancel', onPress: () => {} },
-        ],
-      });
-    }
+    setConfirmSheet({ title: 'Delete message',
+      message: 'Remove this message and every linked Vault copy for both partners? This cannot be undone.',
+      actions: [{ label: 'Delete', style: 'destructive', onPress: doDelete },
+        { label: 'Cancel', style: 'cancel', onPress: () => {} }],
+    });
   };
 
   const handleOpenMedia = useCallback((msg: ChatMessage) => {
@@ -1351,43 +1186,14 @@ export default function ChatTab() {
   }, [user?.id, couple?.id, messages]);
 
   const handleBurnMessage = useCallback((msg: ChatMessage) => {
+    if (!couple) return;
+    // Hide expired content locally at its deadline; the server scheduler also
+    // burns it while both devices are closed. Never show a success on failure.
     setMessages(prev => prev.filter(m => m.id !== msg.id));
-    const deletedAt = new Date().toISOString();
-    supabase
-      .from('chat_messages')
-      .update({ deleted_at: deletedAt })
-      .eq('id', msg.id)
-      .eq('couple_id', couple!.id)
-      .then(({ error }) => {
-        if (error) {
-          logDebugEvent('chat_burn_delete_failed', { messageId: msg.id, error: error.message });
-        }
-      });
-    if (msg.media_storage_path) {
-      const bucket = msg.media_storage_bucket ?? 'chat_media';
-      supabase.storage.from(bucket).remove([msg.media_storage_path]).catch(() => {});
-    }
-    if (msg.media_storage_path) evictCachedUrl(msg.media_storage_path);
-    if (msg.media_storage_path) clearLocalImageCache().catch(() => {});
-    if (msg.vault_item_id) {
-      supabase
-        .from('vault_items')
-        .select('storage_path, storage_bucket')
-        .eq('id', msg.vault_item_id)
-        .maybeSingle()
-        .then(({ data: vi }) => {
-          supabase
-            .from('vault_items')
-            .update({ deleted_at: deletedAt })
-            .eq('id', msg.vault_item_id)
-            .then(({ error }) => {
-              if (error) logDebugEvent('chat_burn_vault_delete_failed', { vaultItemId: msg.vault_item_id, error: error.message });
-            });
-          if (vi?.storage_path) {
-            supabase.storage.from(vi.storage_bucket ?? 'vault').remove([vi.storage_path]).catch(() => {});
-          }
-        });
-    }
+    burnContent(couple.id, 'chat', [msg.id]).catch((error) => {
+      logDebugEvent('chat_burn_pending');
+      Alert.alert('Deletion not confirmed', error.message);
+    });
   }, [couple]);
 
   const messagesWithPrev = useMemo(() =>
@@ -1413,26 +1219,14 @@ export default function ChatTab() {
       title: 'Clear this notification?',
       message: 'This removes the card from the chat for both of you. The dare or dice roll itself is not affected.',
       actions: [
-        { label: 'Clear', style: 'destructive', onPress: () => {
+        { label: 'Clear', style: 'destructive', onPress: async () => {
           const target = pendingClearRef.current;
           pendingClearRef.current = null;
-          if (!target) return;
-          setMessages(prev => prev.filter(m => m.id !== target.id));
-          const deletedAt = new Date().toISOString();
-          supabase
-            .from('chat_messages')
-            .update({ deleted_at: deletedAt })
-            .eq('id', target.id)
-            .eq('couple_id', couple!.id)
-            .then(({ error }) => {
-              if (error) {
-                setMessages(prev => {
-                  if (prev.some(m => m.id === target.id)) return prev;
-                  return [...prev, target].sort((a, b) => a.created_at.localeCompare(b.created_at));
-                });
-                Alert.alert('Clear Failed', 'Could not remove the notification. Please try again.');
-              }
-            });
+          if (!target || !couple) return;
+          try {
+            await burnContent(couple.id, 'chat', [target.id]);
+            setMessages(prev => prev.filter(m => m.id !== target.id));
+          } catch (error: any) { Alert.alert('Deletion not confirmed', error.message); }
         } },
         { label: 'Cancel', style: 'cancel', onPress: () => { pendingClearRef.current = null; } },
       ],

@@ -1,3 +1,4 @@
+import { useContentBurnUpdates } from '@/hooks/useContentBurnUpdates';
 import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
@@ -382,6 +383,8 @@ export default function DiceTab() {
     },
     [sentOpacity, sentTranslate],
   );
+
+  useContentBurnUpdates(couple?.id, checkStates);
 
   const triggerRoll = async () => {
     if (rolling || sendingRoll) return;

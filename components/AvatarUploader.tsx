@@ -1,3 +1,6 @@
+import { cleanupTempFile } from '@/lib/mediaCache';
+import { Image as PrivateImage } from 'expo-image';
+import { usePrivateAvatar } from '@/hooks/usePrivateAvatar';
 import React, { useCallback, useState } from 'react';
 import {
   View,
@@ -41,12 +44,14 @@ export default function AvatarUploader({
   bare = false,
 }: AvatarUploaderProps) {
   const [avatarUri, setAvatarUri] = useState<string | null>(initialUri ?? null);
+  const privateAvatarUri = usePrivateAvatar(avatarUri);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const initial = displayName?.[0]?.toUpperCase() ?? '?';
 
   const uploadAvatarUri = useCallback(async (uri: string) => {
+    const tempFiles = new Set<string>([uri]);
     setUploading(true);
     setError(null);
     onUploadStart?.();
@@ -57,7 +62,7 @@ export default function AvatarUploader({
         try {
           const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
           const result = await manipulateAsync(uri, [{ resize: { width: 800 } }], { compress: 0.8, format: SaveFormat.JPEG });
-          uploadUri = result.uri;
+          uploadUri = result.uri; tempFiles.add(uploadUri);
         } catch {}
       }
 
@@ -125,6 +130,7 @@ export default function AvatarUploader({
       setError(msg);
       onError?.(msg);
     } finally {
+      await Promise.all([...tempFiles].map(cleanupTempFile));
       setUploading(false);
     }
   }, [userId, onUploaded, onError, onUploadStart]);
@@ -220,7 +226,7 @@ export default function AvatarUploader({
         {bare ? (
           <View style={[styles.bareCircle, { width: size, height: size, borderRadius: size / 2 }]}>
             {avatarUri ? (
-              <RNImage source={{ uri: avatarUri }} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="cover" />
+              <PrivateImage cachePolicy="none" source={privateAvatarUri ? { uri: privateAvatarUri } : null} style={{ width: size, height: size, borderRadius: size / 2 }} contentFit="cover" />
             ) : (
               <AppText style={[styles.initial, { fontSize: size * 0.36 }]}>{initial}</AppText>
             )}
@@ -234,7 +240,7 @@ export default function AvatarUploader({
           >
             <View style={[styles.avatarInner, { width: size, height: size, borderRadius: size / 2 }]}>
               {avatarUri ? (
-                <RNImage source={{ uri: avatarUri }} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="cover" />
+                <PrivateImage cachePolicy="none" source={privateAvatarUri ? { uri: privateAvatarUri } : null} style={{ width: size, height: size, borderRadius: size / 2 }} contentFit="cover" />
               ) : (
                 <AppText style={[styles.initial, { fontSize: size * 0.36 }]}>{initial}</AppText>
               )}

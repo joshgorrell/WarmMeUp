@@ -1,6 +1,7 @@
+import { clearGalleryItems, evictAllCachedUrls } from '@/lib/mediaGalleryStore';
 import React, { useState, useCallback } from 'react';
 import {
-  View, Modal, TouchableOpacity, StyleSheet, ActivityIndicator,
+  Alert, View, Modal, TouchableOpacity, StyleSheet, ActivityIndicator,
   KeyboardAvoidingView, Platform, ScrollView, Keyboard,
 } from 'react-native';
 import AppText from '@/components/AppText';
@@ -46,11 +47,7 @@ export default function LeavePartnerSheet({ visible, onClose, partnerName }: Lea
     setLeaving(true);
     setError(null);
     try {
-      // Call the server-side disconnect function which:
-      // 1. Sends partner a push notification
-      // 2. Deletes all storage files (chat_media + vault) for this couple
-      // 3. Wipes all shared DB data atomically via wipe_couple_data()
-      // 4. Deactivates the couple and resets celebration flags
+      // Transactionally disconnect and hard-delete shared rows, then process the durable file manifest.
       const { data: { session } } = await supabase.auth.getSession();
       const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
       const res = await fetch(`${baseUrl}/functions/v1/disconnect-couple`, {
@@ -67,7 +64,10 @@ export default function LeavePartnerSheet({ visible, onClose, partnerName }: Lea
         throw new Error(errBody.error ?? 'Failed to disconnect');
       }
 
-      // Purge local image cache so previously-viewed photos can't be recovered
+      const result = await res.json();
+      if (result.pending) Alert.alert('Disconnected; cleanup pending', 'Shared content has been removed from the app. Server file cleanup will retry automatically.');
+      clearGalleryItems(); evictAllCachedUrls();
+      // Clear app-managed caches
       await clearLocalImageCache();
 
       await refreshCouple();
@@ -195,7 +195,7 @@ function Step1({
       </View>
 
       <AppText style={[styles.bodyNote, { color: colors.textMuted }]}>
-        This action affects both partners. All shared data is permanently destroyed and cannot be recovered.
+        This action affects both partners. Shared content is removed from the live app. Server file cleanup is retried until confirmed. This cannot be undone in the app.
       </AppText>
 
       <View style={styles.buttonRow}>

@@ -24,6 +24,7 @@ async function invokeEdge(file, body, original = false, caller = 'a') {
     profiles: [], user_settings: [],
   };
   const admin = {
+    async rpc(name) { return {data:name==='begin_media_copy'?'lease':null,error:null}; },
     from(table) {
       const filters = [];
       let inserted;
@@ -133,7 +134,7 @@ async function databaseTests() {
   await db.query("INSERT INTO activity_events(couple_id,actor_user_id,target_user_id,event_type) VALUES ($1,$2,$3,'send_love')",[one,a,b]);
   await db.query('UPDATE chat_messages SET deleted_at=now() WHERE couple_id=$1',[one]);
   assert.equal((await db.query('SELECT * FROM chat_messages')).rows.length,1,'audit gap: soft deletion still retains readable own-couple content');
-  console.log('CONFIRMED REMAINING GAP: soft-deleted rows remain stored/readable within their couple; verified server purge is required');
+  console.log('CONFIRMED PRE-BURN-MIGRATION GAP: soft-deleted rows remain stored/readable within their couple; verified server purge is required');
   await db.exec('RESET ROLE');
   await db.query('UPDATE couples SET active=false WHERE id=$1',[one]);
   await db.exec('SET ROLE authenticated');

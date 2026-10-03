@@ -155,7 +155,7 @@ Your content is shared only with your single connected partner. It is not:
 \u2022 used to train machine learning or AI models
 \u2022 sold or licensed to any external party
 
-You may delete any content you have uploaded at any time from within the app. If you delete your account, all user-generated content associated with your account is permanently deleted from our servers.
+Either connected partner may delete shared content from within the app. Accepted deletion requests remove the selected content and linked copies from the live app database. Server files are deleted through a retryable cleanup process; the app distinguishes confirmed completion from pending cleanup.
 
 We do not moderate private content between consenting partners unless a safety report is submitted or we are required to act by law.`,
   },
@@ -165,19 +165,19 @@ We do not moderate private content between consenting partners unless a safety r
 
 You may delete your account at any time from Settings > Account > Delete My Account.
 
-When you delete your account, the following is permanently deleted:
+Account deletion disconnects both partners and removes their shared relationship content. Your account is removed after server file cleanup is confirmed. This includes:
 \u2022 your profile, display name, and avatar
 \u2022 your account settings and preferences
 \u2022 all messages, interactions, dares, and notes
-\u2022 all vault media you uploaded
+\u2022 all shared vault media in the relationship
 \u2022 your partner connection record
 \u2022 your gamification data (points, scores, streaks)
 
 Some anonymized, non-personal operational data (such as security and access logs) may be retained for up to 90 days for fraud prevention and legal compliance purposes. This data cannot be linked back to your identity after deletion.
 
-If your partner deletes their account, their uploaded content is permanently deleted from our servers. However, any content that you originally uploaded remains in your account and under your control. You are not notified when your partner deletes their account, but you will no longer be able to communicate with them through the Services.
+If either partner deletes their account or disconnects, shared relationship content is removed for both partners. You can no longer communicate through that relationship. Server cleanup can remain pending during a service outage and is retried automatically.
 
-Deleted accounts cannot be recovered.`,
+Deleted accounts cannot be recovered through the app. Older database backups may retain deleted records until the configured backup retention period expires. Copies outside the app, including screenshots, exported files and device backups, are outside these deletion controls.`,
   },
   {
     title: '12. Security',
@@ -223,7 +223,7 @@ If we discover that a user under 18 has created an account, we will terminate th
 \u2022 the right to data portability
 \u2022 the right to object to certain processing of your data
 
-Account Deletion: You can delete your account and all personal data at any time from within the app. Go to Settings > Account > Delete My Account. Deletion is immediate and permanent for your personal data. Some anonymized operational records may be retained for up to 90 days as described in Section 11.
+Account Deletion: You can delete your account and all personal data at any time from within the app. Go to Settings > Account > Delete My Account. Shared content is removed from the live app database when deletion is accepted; file cleanup and account removal may remain pending until verified. Some anonymized operational records may be retained for up to 90 days as described in Section 11.
 
 To exercise any other rights, or if you have questions about your data, contact us at support@warmmeup.app.`,
   },

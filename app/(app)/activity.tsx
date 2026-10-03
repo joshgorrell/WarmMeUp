@@ -1,3 +1,4 @@
+import { useContentBurnUpdates } from '@/hooks/useContentBurnUpdates';
 import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
@@ -378,7 +379,7 @@ export default function ActivityScreen() {
     if (screenshotThumbRefs.length) {
       const results = await Promise.all(
         screenshotThumbRefs.map(ref =>
-          supabase.storage.from(ref.bucket).createSignedUrl(ref.path, 60 * 60),
+          supabase.storage.from(ref.bucket).createSignedUrl(ref.path, 5 * 60),
         ),
       );
       results.forEach((res, i) => {
@@ -392,6 +393,8 @@ export default function ActivityScreen() {
     mapped.sort((a, b) => b._rawTime.localeCompare(a._rawTime));
     if (isMountedRef.current) setAllItems(mapped);
   };
+
+  useContentBurnUpdates(couple?.id, load);
 
   const handleItemPress = async (item: ActivityItem) => {
     if (!couple?.id || !user?.id) return;
@@ -417,7 +420,7 @@ export default function ActivityScreen() {
       const bucket = vaultItem.storage_bucket ?? 'vault';
       const path = vaultItem.storage_path ?? vaultItem.file_path;
       if (!path) return;
-      const { data: urlData } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60);
+      const { data: urlData } = await supabase.storage.from(bucket).createSignedUrl(path, 5 * 60);
       if (!urlData?.signedUrl) return;
       const uploaderName = vaultItem.uploaded_by_user_id === user.id
         ? (profile?.display_name ?? 'You')

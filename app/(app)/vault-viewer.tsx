@@ -1,3 +1,4 @@
+import { burnContent } from '@/lib/contentBurn';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -69,7 +70,7 @@ function MediaPage({
   const mountedRef = useRef(true);
   const appStateRef = useRef(AppState.currentState);
   const lastInactiveAt = useRef<number | null>(null);
-  const player = useVideoPlayer(isVideo && mediaUri ? { uri: mediaUri } : null, (p) => {
+  const player = useVideoPlayer(isVideo && mediaUri ? { uri: mediaUri, useCaching: false } : null, (p) => {
     p.loop = false;
   });
 
@@ -95,7 +96,7 @@ function MediaPage({
 
     supabase.storage
       .from(item.storageBucket ?? 'vault')
-      .createSignedUrl(item.storagePath, 12 * 60 * 60)
+      .createSignedUrl(item.storagePath, 5 * 60)
       .then(({ data, error }) => {
         if (cancelled || !mountedRef.current) return;
         if (error || !data?.signedUrl) {
@@ -120,7 +121,7 @@ function MediaPage({
 
   useEffect(() => {
     if (!isVideo || !mediaUri || Platform.OS === 'web') return;
-    player.replaceAsync({ uri: mediaUri });
+    player.replaceAsync({ uri: mediaUri, useCaching: false });
   }, [isVideo, mediaUri, player]);
 
   useEffect(() => {
@@ -323,7 +324,7 @@ function MediaPage({
               if (item.storagePath) evictCachedUrl(item.storagePath);
               supabase.storage
                 .from(item.storageBucket ?? 'vault')
-                .createSignedUrl(item.storagePath, 12 * 60 * 60)
+                .createSignedUrl(item.storagePath, 5 * 60)
                 .then(({ data }) => {
                   if (!mountedRef.current) return;
                   if (data?.signedUrl) {
@@ -517,6 +518,26 @@ export default function VaultViewerScreen() {
   const activeItem = items[activeIndex] ?? null;
   const canDeleteFromVault = !!activeItem?.id && (activeItem.storageBucket ?? 'vault') === 'vault';
 
+  useEffect(() => {
+    let cancelled = false;
+    const verify = async () => {
+      if (!activeItem?.id || !couple?.id || activeItem.coupleId !== couple.id) {
+        setItems([]); router.back(); return;
+      }
+      const table = activeItem.interactionId ? 'interactions' : activeItem.storageBucket === 'chat_media' ? 'chat_messages' : 'vault_items';
+      const id = table === 'interactions' ? activeItem.interactionId : table === 'chat_messages' ? (activeItem.chatMessageId ?? activeItem.id) : activeItem.id;
+      const { data, error } = await supabase.from(table).select('id').eq('id',id).eq('couple_id',couple.id).maybeSingle();
+      if (!cancelled && (error || !data)) {
+        if (activeItem.storagePath) evictCachedUrl(activeItem.storagePath);
+        setItems([]); clearLocalImageCache().catch(() => {}); router.back();
+      }
+    };
+    verify();
+    const timer = setInterval(verify,5000);
+    const appState = AppState.addEventListener('change', state => { if (state === 'active') verify(); });
+    return () => { cancelled=true; clearInterval(timer); appState.remove(); };
+  }, [activeItem?.id, couple?.id, router]);
+
   const toggleControls = useCallback(() => {
     setControlsVisible(prev => !prev);
   }, []);
@@ -536,34 +557,7 @@ export default function VaultViewerScreen() {
       if (fetchError) throw fetchError;
       if (!row) throw new Error('This item is no longer available in the Vault.');
 
-      const deletedAt = new Date().toISOString();
-      let deleteQuery = supabase.from('vault_items').update({ deleted_at: deletedAt }).eq('id', item.id);
-      if (row.couple_id) deleteQuery = deleteQuery.eq('couple_id', row.couple_id);
-      const { error: deleteError } = await deleteQuery;
-      if (deleteError) throw deleteError;
-
-      const bucket = row.storage_bucket ?? 'vault';
-      const paths = [row.storage_path ?? row.file_path, row.blurred_thumbnail_path].filter(Boolean) as string[];
-      if (paths.length > 0) {
-        await supabase.storage.from(bucket).remove(paths).catch(() => {});
-        paths.forEach(evictCachedUrl);
-        clearLocalImageCache().catch(() => {});
-      }
-
-      if (item.chatMessageId) {
-        const { data: chatMsg } = await supabase
-          .from('chat_messages')
-          .select('media_storage_path, media_storage_bucket')
-          .eq('id', item.chatMessageId)
-          .maybeSingle();
-        await supabase
-          .from('chat_messages')
-          .update({ deleted_at: deletedAt })
-          .eq('id', item.chatMessageId);
-        if (chatMsg?.media_storage_path) {
-          supabase.storage.from(chatMsg.media_storage_bucket ?? 'chat_media').remove([chatMsg.media_storage_path]).catch(() => {});
-        }
-      }
+      await burnContent(row.couple_id, 'vault', [item.id]);
 
       const nextItems = items.filter((_, index) => index !== activeIndex);
       if (nextItems.length === 0) {

@@ -123,7 +123,7 @@ By using Warm Me Up, you grant us a limited, non-exclusive license to store, pro
 
 Content shared through Warm Me Up is visible only to you and your single connected partner. It is not shared with other users, third parties, advertisers, or used for machine learning or model training.
 
-You may delete your own content at any time from within the app. When you delete your account, all content associated with that account is permanently deleted from our systems.
+Either partner may delete shared content and linked copies. Disconnecting or deleting an account removes shared relationship content for both partners. Server file cleanup is retried until confirmed; backup retention and copies outside the app are subject to the limits described in our Privacy Policy.
 
 Users are solely responsible for all uploaded messages, photos, videos, prompts, dares, and custom content.`,
   },
