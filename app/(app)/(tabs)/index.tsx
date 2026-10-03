@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert,
@@ -130,7 +131,7 @@ export default function HomeScreen() {
     const setupChannel = (attempt: number) => {
       try {
         const channel = supabase
-          .channel(`home_${couple.id}_${Date.now()}`)
+          .channel(uniqueRealtimeTopic(`home_${couple.id}_${Date.now()}`))
           .on('postgres_changes', { event: '*', schema: 'public', table: 'point_events', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)

@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
@@ -48,7 +49,7 @@ export function useMediaReactions(
   useEffect(() => {
     if (!coupleId) return;
     const channel = supabase
-      .channel(`media_reactions_${coupleId}_${sourceTable}`)
+      .channel(uniqueRealtimeTopic(`media_reactions_${coupleId}_${sourceTable}`))
       .on(
         'postgres_changes',
         {

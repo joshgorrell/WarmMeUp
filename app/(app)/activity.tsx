@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
@@ -82,7 +83,7 @@ export default function ActivityScreen() {
   useEffect(() => {
     if (!couple?.id || !user?.id) return;
     load();
-    const ch = supabase.channel(`activity_screen_${couple.id}`)
+    const ch = supabase.channel(uniqueRealtimeTopic(`activity_screen_${couple.id}`))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, debouncedReload)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` }, debouncedReload)

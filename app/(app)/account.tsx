@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
@@ -104,7 +105,6 @@ export default function AccountScreen() {
 
   // Setup checklist state
   const [hasCustomPrompts, setHasCustomPrompts] = useState(false);
-  const [hasActivity, setHasActivity] = useState(false);
 
   // Settings tab state
   const [optimistic, setOptimistic] = useState<Partial<UserSettings>>({});
@@ -197,7 +197,7 @@ export default function AccountScreen() {
     loadStats();
 
     const channel = supabase
-      .channel(`account_scores_${couple.id}`)
+      .channel(uniqueRealtimeTopic(`account_scores_${couple.id}`))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `couple_id=eq.${couple.id}` }, () => {
         loadStats();
       })
@@ -297,17 +297,15 @@ export default function AccountScreen() {
     setStreak(typeof streakRes.data === 'number' ? streakRes.data : 0);
   };
 
-  // Setup checklist: check for custom prompts and any interaction activity
+  // The first moment is a permanent couple milestone; only prompts need a query.
   useFocusEffect(useCallback(() => {
     if (!couple?.id) return;
     (async () => {
-      const [diceCustom, dareCustom, interactionCount] = await Promise.all([
+      const [diceCustom, dareCustom] = await Promise.all([
         supabase.from('dice_prompts').select('id', { count: 'exact', head: true }).eq('couple_id', couple.id).eq('is_active', true),
         supabase.from('dare_prompts').select('id', { count: 'exact', head: true }).eq('couple_id', couple.id).eq('is_active', true),
-        supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('couple_id', couple.id),
       ]);
       setHasCustomPrompts((diceCustom.count ?? 0) > 0 || (dareCustom.count ?? 0) > 0);
-      setHasActivity((interactionCount.count ?? 0) > 0);
     })();
   }, [couple?.id]));
 
@@ -1008,7 +1006,7 @@ export default function AccountScreen() {
                   key: 'moment',
                   label: 'Share Your First Moment',
                   desc: 'Send a note, wish, dare, or dice roll',
-                  done: hasActivity,
+                  done: !!couple?.first_moment_completed_at,
                   onPress: () => router.push('/(app)/(tabs)/note'),
                   icon: <Sparkles color="#33D17A" size={16} strokeWidth={2} />,
                   accentColor: '#33D17A',

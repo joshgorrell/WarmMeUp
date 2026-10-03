@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, StyleSheet, FlatList, KeyboardAvoidingView, Platform,
@@ -511,7 +512,7 @@ export default function ChatTab() {
       }
     };
 
-    const ch = supabase.channel(`chat_tab_${couple.id}`)
+    const ch = supabase.channel(uniqueRealtimeTopic(`chat_tab_${couple.id}`))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
         (payload) => handleInsert(payload.new as ChatMessage)
       )

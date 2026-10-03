@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
@@ -320,7 +321,7 @@ export default function DiceTab() {
     checkStates();
 
     const ch = supabase
-      .channel(`dice_tab_${couple.id}`)
+      .channel(uniqueRealtimeTopic(`dice_tab_${couple.id}`))
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` },

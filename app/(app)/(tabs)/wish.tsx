@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, ScrollView,
@@ -1189,7 +1190,7 @@ export default function WishTab() {
   useEffect(() => {
     if (!couple?.id) return;
     loadWishes();
-    const ch = supabase.channel(`wish_tab_${couple.id}`)
+    const ch = supabase.channel(uniqueRealtimeTopic(`wish_tab_${couple.id}`))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wishes', filter: `couple_id=eq.${couple.id}` }, loadWishes)
       // wish_reactions has no couple_id column; RLS enforces couple isolation
       // so only this couple's reactions arrive here.

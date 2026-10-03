@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Platform, AppState } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
@@ -537,7 +538,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!couple?.id) return;
     const channel = supabase
-      .channel(`couple:${couple.id}`)
+      .channel(uniqueRealtimeTopic(`couple:${couple.id}`))
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'couples', filter: `id=eq.${couple.id}` },
@@ -583,7 +584,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const partnerId = couple.user_a_id === user?.id ? couple.user_b_id : couple.user_a_id;
     const profileChannel = partnerId
       ? supabase
-          .channel(`partner_profile:${partnerId}`)
+          .channel(uniqueRealtimeTopic(`partner_profile:${partnerId}`))
           .on(
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${partnerId}` },
@@ -617,7 +618,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const isForeground = () => AppState.currentState === 'active';
 
     const incomingChannel = supabase
-      .channel(`incoming:${couple.id}`)
+      .channel(uniqueRealtimeTopic(`incoming:${couple.id}`))
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `couple_id=eq.${couple.id}` },
         (payload: any) => {
