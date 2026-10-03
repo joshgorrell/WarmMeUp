@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -208,7 +209,7 @@ export default function PairScreen() {
     let channel: ReturnType<typeof supabase.channel> | null = null;
     try {
       channel = supabase
-        .channel(channelName)
+        .channel(uniqueRealtimeTopic(channelName))
         .on(
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'couples', filter: `id=eq.${couple.id}` },

@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
@@ -116,7 +117,7 @@ export default function VaultScreen() {
   useEffect(() => {
     if (!couple?.id) return;
     load();
-    const ch = supabase.channel(`vault_${couple.id}`)
+    const ch = supabase.channel(uniqueRealtimeTopic(`vault_${couple.id}`))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault_items', filter: `couple_id=eq.${couple.id}` }, async (payload) => {
         const newItem = payload.new as VaultItem;
         if (!newItem?.id || newItem.deleted_at) return;

@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity,
@@ -96,7 +97,7 @@ export default function CustomizePromptsScreen() {
 
     const channelName = `customize-prompts-${couple.id}-${activeTab}`;
     const channel = supabase
-      .channel(channelName)
+      .channel(uniqueRealtimeTopic(channelName))
       .on(
         'postgres_changes',
         {

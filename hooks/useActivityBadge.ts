@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -23,7 +24,7 @@ export function useActivityBadge(): number {
     if (!couple?.id || !user?.id) return;
     fetch();
     const ch = supabase
-      .channel(`activity_badge_${couple.id}_${user.id}`)
+      .channel(uniqueRealtimeTopic(`activity_badge_${couple.id}_${user.id}`))
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',

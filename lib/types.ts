@@ -16,6 +16,7 @@ export interface Profile {
 }
 
 export interface Couple {
+  first_moment_completed_at?: string | null;
   id: string;
   user_a_id: string;
   user_b_id: string | null;

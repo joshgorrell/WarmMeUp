@@ -1,3 +1,4 @@
+import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -219,7 +220,7 @@ export default function DareTab() {
     if (!couple?.id || !user) return;
     checkStates();
     const ch = supabase
-      .channel(`dare_tab_${couple.id}`)
+      .channel(uniqueRealtimeTopic(`dare_tab_${couple.id}`))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions', filter: `couple_id=eq.${couple.id}` }, checkStates)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
