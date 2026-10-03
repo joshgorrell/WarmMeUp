@@ -1,3 +1,6 @@
+import { clearLocalImageCache } from '@/lib/mediaCache';
+import { clearGalleryItems, evictAllCachedUrls } from '@/lib/mediaGalleryStore';
+import { clearDebugEvents } from '@/lib/debugLog';
 import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Platform, AppState } from 'react-native';
@@ -305,6 +308,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // a separate getSession() call, which was causing a double-load race.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
+        if (loadedUserIdRef.current !== session.user.id) {
+          clearGalleryItems();
+          evictAllCachedUrls();
+          clearDebugEvents();
+          clearLocalImageCache().catch(() => {});
+          setProfile(null);
+          setCouple(null);
+          setPartnerProfile(null);
+          setSettings(null);
+        }
         // On INITIAL_SESSION (cold start / restored keychain / iOS reinstall), validate
         // the token is still recognised by the backend before trusting it.
         // iOS Keychain survives app deletion, so a stale session may be restored even
@@ -358,6 +371,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })();
         }
       } else {
+        clearGalleryItems();
+        evictAllCachedUrls();
+        clearDebugEvents();
+        clearLocalImageCache().catch(() => {});
         setSession(null);
         setUser(null);
         loadedUserIdRef.current = null;
@@ -684,6 +701,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
     unlockedAtRef.current = null;
     clearWeatherSessionCache();
+    clearGalleryItems();
+    evictAllCachedUrls();
+    clearDebugEvents();
+    clearLocalImageCache().catch(() => {});
 
     // Fire side-effects and the Supabase signOut without blocking the caller.
     if (userId) {

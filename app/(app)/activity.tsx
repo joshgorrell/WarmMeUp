@@ -563,7 +563,7 @@ export default function ActivityScreen() {
                     source={{ uri: item.thumbUri }}
                     style={styles.thumbWrap}
                     contentFit="cover"
-                    cachePolicy="memory-disk"
+                    cachePolicy="none"
                     transition={150}
                   />
                 ) : (

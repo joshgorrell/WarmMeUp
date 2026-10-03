@@ -269,13 +269,13 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
       style={[styles.mediaTap, { width: bubbleWidth, height: cappedHeight }, radii]}>
       {!effectiveLoaded ? <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View> : mediaUrl && !imgError ? <>
         {isVideo ? <>
-          {posterUrl && !videoPlaying && <ExpoImage source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />}
+          {posterUrl && !videoPlaying && <ExpoImage source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="none" />}
           {!posterUrl && !posterChecked && <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View>}
           {Platform.OS === 'web'
             ? <WebVideoPlayer mediaUrl={mediaUrl!} posterUrl={posterUrl} videoPlaying={videoPlaying} setVideoPlaying={setVideoPlaying} setVideoError={setVideoError} messageId={msg.id} />
             : <NativeVideoPlayer mediaUrl={mediaUrl!} videoPlaying={videoPlaying} setVideoPlaying={setVideoPlaying} setVideoError={setVideoError} messageId={msg.id} />}
         </> : <ExpoImage key={mediaUrl} source={{ uri: mediaUrl }} style={[StyleSheet.absoluteFill, isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.1)' } as any : undefined]}
-          contentFit="cover" cachePolicy="memory-disk" onError={() => {
+          contentFit="cover" cachePolicy="none" onError={() => {
             if (retryAttempted.current) { logDebugEvent('chat_message_image_load_error_hard', { messageId: msg.id }); setImgError(true); return; }
             retryAttempted.current = true;
             if (msg.media_storage_path) {

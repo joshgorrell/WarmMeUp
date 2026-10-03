@@ -234,7 +234,7 @@ export function ZoomablePhoto({
               source={{ uri }}
               style={{ width, height }}
               contentFit="contain"
-              cachePolicy="memory-disk"
+              cachePolicy="none"
               transition={120}
               recyclingKey={uri}
               onLoad={(event) => {

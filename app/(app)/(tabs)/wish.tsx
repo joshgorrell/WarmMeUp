@@ -109,7 +109,7 @@ function WishCard({
               source={{ uri: thumbUri }}
               style={StyleSheet.absoluteFill as any}
               contentFit="cover"
-              cachePolicy="memory-disk"
+              cachePolicy="none"
               transition={0}
               recyclingKey={wish.id}
             />
@@ -193,7 +193,7 @@ function GrantedCard({
         ) : null}
       </View>
       {memImgUri && (
-        <Image source={{ uri: memImgUri }} style={styles.grantedMemImg} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+        <Image source={{ uri: memImgUri }} style={styles.grantedMemImg} contentFit="cover" cachePolicy="none" transition={150} />
       )}
       {wish.fulfilled_note ? (
         <AppText style={[styles.grantedNote, { color: colors.textSecondary }]} numberOfLines={2}>"{wish.fulfilled_note}"</AppText>
@@ -246,7 +246,7 @@ function WishDetailSheet({
       scrollable
     >
       {imgUri && (
-        <Image source={{ uri: imgUri }} style={styles.detailImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+        <Image source={{ uri: imgUri }} style={styles.detailImage} contentFit="cover" cachePolicy="none" transition={150} />
       )}
 
       <AppText style={[styles.detailMeta, { color: colors.textMuted }]}>
@@ -277,7 +277,7 @@ function WishDetailSheet({
       {isGranted && (
         <View style={styles.detailGrantedSection}>
           {memImgUri && (
-            <Image source={{ uri: memImgUri }} style={styles.detailMemImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+            <Image source={{ uri: memImgUri }} style={styles.detailMemImage} contentFit="cover" cachePolicy="none" transition={150} />
           )}
           {wish.fulfilled_note && (
             <AppText style={[styles.detailFulfilledNote, { color: colors.textSecondary }]}>
@@ -732,7 +732,7 @@ function WishForm({
               {uploading ? (
                 <ActivityIndicator color={WISH_ACCENT} />
               ) : imgUri ? (
-                <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill as any} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill as any} contentFit="cover" cachePolicy="none" transition={150} />
               ) : (
                 <>
                   <ImageIcon color="rgba(255,255,255,0.35)" size={22} strokeWidth={1.5} />
@@ -985,7 +985,7 @@ function FulfillSheet({
                   {uploading ? <ActivityIndicator color={WISH_GOLD} size="small" /> :
                     memImgUri ? (
                       <>
-                        <Image source={{ uri: memImgUri }} style={StyleSheet.absoluteFill as any} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                        <Image source={{ uri: memImgUri }} style={StyleSheet.absoluteFill as any} contentFit="cover" cachePolicy="none" transition={150} />
                         <View style={styles.imgPickerOverlay}><AppText style={styles.imgPickerChange}>Tap to change</AppText></View>
                       </>
                     ) : (

@@ -48,7 +48,8 @@ Deno.serve(async (req: Request) => {
       thumbnail_path,
     } = body;
 
-    if (!source_bucket || !source_path || !vault_path || !couple_id || !chat_message_id) {
+    if (![source_bucket, source_path, vault_path, couple_id, chat_message_id].every(value => typeof value === 'string' && value.length > 0)
+      || (thumbnail_path != null && typeof thumbnail_path !== 'string')) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -57,6 +58,17 @@ Deno.serve(async (req: Request) => {
 
     // The uploader is always the authenticated caller — never trust a client-supplied user_id
     const user_id = user.id;
+
+    // A service-role copy bypasses Storage RLS. Never accept an arbitrary
+    // thumbnail, even one in the same couple: it must be this source's sidecar.
+    const expectedThumbnail = /\.\w+$/.test(source_path)
+      ? source_path.replace(/\.\w+$/, '_thumb.jpg')
+      : `${source_path}_thumb.jpg`;
+    if (thumbnail_path && thumbnail_path !== expectedThumbnail) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
