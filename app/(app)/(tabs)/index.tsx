@@ -1,3 +1,4 @@
+import { useContentBurnUpdates } from '@/hooks/useContentBurnUpdates';
 import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
@@ -192,6 +193,8 @@ export default function HomeScreen() {
     lastLoadedAtRef.current = Date.now();
     await Promise.all([loadScores(), loadActiveInteraction(), loadRecentActivity(), loadStreak()]);
   };
+
+  useContentBurnUpdates(couple?.id, loadAll);
 
   const loadStreak = async () => {
     if (!couple?.id) return;

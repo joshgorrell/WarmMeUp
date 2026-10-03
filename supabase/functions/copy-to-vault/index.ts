@@ -12,6 +12,8 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  let copyLease: string | null = null;
+  let leaseClient: any = null;
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
@@ -48,7 +50,8 @@ Deno.serve(async (req: Request) => {
       thumbnail_path,
     } = body;
 
-    if (!source_bucket || !source_path || !vault_path || !couple_id || !chat_message_id) {
+    if (![source_bucket, source_path, vault_path, couple_id, chat_message_id].every(value => typeof value === 'string' && value.length > 0)
+      || (thumbnail_path != null && typeof thumbnail_path !== 'string')) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -57,6 +60,17 @@ Deno.serve(async (req: Request) => {
 
     // The uploader is always the authenticated caller — never trust a client-supplied user_id
     const user_id = user.id;
+
+    // A service-role copy bypasses Storage RLS. Never accept an arbitrary
+    // thumbnail, even one in the same couple: it must be this source's sidecar.
+    const expectedThumbnail = /\.\w+$/.test(source_path)
+      ? source_path.replace(/\.\w+$/, '_thumb.jpg')
+      : `${source_path}_thumb.jpg`;
+    if (thumbnail_path && thumbnail_path !== expectedThumbnail) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
@@ -134,6 +148,17 @@ Deno.serve(async (req: Request) => {
     const allow_screenshot = !(userSettings?.screenshot_notify_partner ?? true);
     const verifiedMediaType = chatMessage.media_type ?? media_type;
 
+    const reservedPaths = [vault_path];
+    if (thumbnail_path) reservedPaths.push(vault_path.replace(/\.\w+$/, "_thumb.jpg"));
+    leaseClient = adminClient;
+    const { data: lease, error: leaseError } = await adminClient.rpc('begin_media_copy', {
+      p_couple: couple_id, p_actor: user.id, p_chat: chat_message_id, p_paths: reservedPaths,
+    });
+    if (leaseError || !lease) return new Response(JSON.stringify({ error: 'Source unavailable' }), {
+      status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+    copyLease = lease;
+
     // Copy the file server-side: source bucket -> vault bucket
     const { error: copyError } = await adminClient.storage
       .from(source_bucket)
@@ -141,7 +166,7 @@ Deno.serve(async (req: Request) => {
 
     if (copyError) {
       return new Response(
-        JSON.stringify({ error: "Copy failed", details: copyError.message }),
+        JSON.stringify({ error: "Copy failed" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -180,9 +205,12 @@ Deno.serve(async (req: Request) => {
 
     if (insertError || !vaultItem) {
       // Clean up the copied file since we couldn't create the DB row
-      adminClient.storage.from("vault").remove([vault_path]).catch(() => {});
+      const paths = [vault_path, actualThumbnailPath].filter((path): path is string => !!path);
+      // Preserve both file paths for durable cleanup if either API removal fails.
+      await adminClient.rpc('queue_failed_media_copy', { p_couple: couple_id, p_actor: user.id, p_paths: paths });
+      await adminClient.storage.from("vault").remove(paths);
       return new Response(
-        JSON.stringify({ error: "Failed to create vault item", details: insertError?.message }),
+        JSON.stringify({ error: "Failed to create vault item" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -204,5 +232,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+  } finally {
+    if (copyLease && leaseClient) await leaseClient.rpc('end_media_copy', { p_lease: copyLease });
   }
 });

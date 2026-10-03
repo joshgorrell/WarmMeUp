@@ -16,8 +16,8 @@ export type GalleryItem = {
 };
 
 // Cross-navigation signed URL cache — keyed by storage path.
-// Entries expire 11.5 hours after they were fetched (Supabase TTL is 12h).
-const URL_CACHE_TTL_MS = 11.5 * 60 * 60 * 1000;
+// Entries expire before the five-minute Storage signature.
+const URL_CACHE_TTL_MS = 4 * 60 * 1000;
 
 type CacheEntry = { url: string; fetchedAt: number };
 const _urlCache: Record<string, CacheEntry> = {};

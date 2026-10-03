@@ -123,6 +123,8 @@ export async function uploadMediaFile(
     if (showGlobalProgress) setUploadProgressPct(pct);
   };
 
+  const tempFiles = new Set<string>([localUri]);
+  let pendingThumbPromise: Promise<string | null> | null = null;
   let stopPulse: (() => void) | null = null;
 
   try {
@@ -150,12 +152,12 @@ export async function uploadMediaFile(
     let uploadStoragePath = storagePath;
     let thumbnailPath: string | undefined;
     let thumbnailLocalUri: string | null = null;
-    let pendingThumbPromise: Promise<string | null> | null = null;
+
 
     if (isPhoto) {
       reportProgress(5);
       const compressed = await compressImage(localUri, normalizedMime);
-      uploadUri = compressed.uri;
+      uploadUri = compressed.uri; tempFiles.add(uploadUri);
       uploadMime = compressed.mimeType;
       if (uploadMime !== normalizedMime) uploadStoragePath = storagePath.replace(/\.\w+$/, '.jpg');
     }
@@ -169,7 +171,7 @@ export async function uploadMediaFile(
       reportProgress(5);
       const thumbUri = await extractVideoThumbnail(localUri);
       if (thumbUri) {
-        thumbnailLocalUri = thumbUri;
+        thumbnailLocalUri = thumbUri; tempFiles.add(thumbUri);
         const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
         try {
           const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
@@ -215,7 +217,7 @@ export async function uploadMediaFile(
       pendingThumbPromise = (async () => {
         const thumbUri = await generatePhotoThumbnail(uploadUri);
         if (!thumbUri) return null;
-        thumbnailLocalUri = thumbUri;
+        thumbnailLocalUri = thumbUri; tempFiles.add(thumbUri);
         try {
           const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
           const thumbResponse = await uploadToStorage(
@@ -276,9 +278,8 @@ export async function uploadMediaFile(
       coupleId: coupleId ?? null,
     });
 
-    if (isPhoto && uploadUri !== localUri) cleanupTempFile(uploadUri).catch(() => {});
-    if (isPhoto && thumbnailLocalUri) cleanupTempFile(thumbnailLocalUri).catch(() => {});
-    if (isVideo && thumbnailLocalUri) cleanupTempFile(thumbnailLocalUri).catch(() => {});
+    if (uploadUri !== localUri) tempFiles.add(uploadUri);
+    if (thumbnailLocalUri) tempFiles.add(thumbnailLocalUri);
 
     reportProgress(100);
     if (showGlobalProgress) finishUploadProgress();
@@ -287,6 +288,9 @@ export async function uploadMediaFile(
     stopPulse?.();
     if (showGlobalProgress) cancelUploadProgress();
     throw error;
+  } finally {
+    await pendingThumbPromise?.catch(() => null);
+    await Promise.all([...tempFiles].map(cleanupTempFile));
   }
 }
 

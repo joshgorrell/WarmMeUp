@@ -95,12 +95,41 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Privileged reads must bind the item ID to this verified couple before
+    // examining permissions or writing any metadata into their activity feed.
+    if (vault_item_id || chat_message_id) {
+      const table = vault_item_id ? 'vault_items' : 'chat_messages';
+      const id = vault_item_id ?? chat_message_id;
+      const { data: item, error: itemError } = await adminClient
+        .from(table).select('id').eq('id', id).eq('couple_id', couple_id)
+        .is('deleted_at', null).maybeSingle();
+      if (itemError || !item) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Reject ambiguous requests, which could otherwise bind a vault item
+      // to metadata for an unrelated chat message.
+      if (vault_item_id && chat_message_id) {
+        const { data: message, error: messageError } = await adminClient
+          .from('chat_messages').select('id').eq('id', chat_message_id)
+          .eq('couple_id', couple_id).is('deleted_at', null).maybeSingle();
+        if (messageError || !message) {
+          return new Response(JSON.stringify({ error: 'Forbidden' }), {
+            status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+    }
+
     // Check if screenshots are allowed on this item — if so, skip entirely
     if (vault_item_id) {
       const { data: vaultItem } = await adminClient
         .from("vault_items")
         .select("allow_screenshot")
         .eq("id", vault_item_id)
+        .eq("couple_id", couple_id)
+        .is("deleted_at", null)
         .maybeSingle();
       if (vaultItem?.allow_screenshot) {
         return new Response(JSON.stringify({ ok: true, skipped: true }), {
@@ -113,6 +142,8 @@ Deno.serve(async (req: Request) => {
         .from("chat_messages")
         .select("allow_screenshot")
         .eq("id", chat_message_id)
+        .eq("couple_id", couple_id)
+        .is("deleted_at", null)
         .maybeSingle();
       if (chatMsg?.allow_screenshot) {
         return new Response(JSON.stringify({ ok: true, skipped: true }), {
@@ -141,6 +172,8 @@ Deno.serve(async (req: Request) => {
         .from("vault_items")
         .select("storage_path, storage_bucket, blurred_thumbnail_path, media_type, deleted_at")
         .eq("id", vault_item_id)
+        .eq("couple_id", couple_id)
+        .is("deleted_at", null)
         .maybeSingle();
 
       if (vaultItem && !vaultItem.deleted_at) {
@@ -156,6 +189,8 @@ Deno.serve(async (req: Request) => {
         .from("chat_messages")
         .select("media_storage_path, media_storage_bucket, media_type, deleted_at")
         .eq("id", chat_message_id)
+        .eq("couple_id", couple_id)
+        .is("deleted_at", null)
         .maybeSingle();
 
       if (chatMsg && !chatMsg.deleted_at && chatMsg.media_storage_path) {

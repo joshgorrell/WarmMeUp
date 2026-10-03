@@ -157,8 +157,10 @@ export default function UsersDashboard() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated. Please sign in again.');
-      const { error: deleteErrorResult } = await supabase.functions.invoke('delete-account', { headers: { Authorization: `Bearer ${session.access_token}` }, body: { targetUserId } });
+      const { data: deleteResult, error: deleteErrorResult } = await supabase.functions.invoke('delete-account', { headers: { Authorization: `Bearer ${session.access_token}` }, body: { targetUserId } });
       if (deleteErrorResult) throw new Error(deleteErrorResult.message ?? 'Could not delete user. Please try again.');
+      if (deleteResult?.pending) throw new Error('Account locked. File cleanup is pending and will retry automatically.');
+      if (!deleteResult?.deleted) throw new Error('Account deletion was not confirmed.');
       setDeleteModalOpen(false); setDeleteStep(1); setSelectedUser(null); await loadData(true);
     } catch (err: any) { setDeleteError(err?.message ?? 'Something went wrong. Please try again.'); }
     finally { setDeleting(false); }

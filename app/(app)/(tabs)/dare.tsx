@@ -1,3 +1,4 @@
+import { useContentBurnUpdates } from '@/hooks/useContentBurnUpdates';
 import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -246,6 +247,8 @@ export default function DareTab() {
       }
     })();
   }, [deepLinkDareId, couple?.id, incomingDare?.id]);
+
+  useContentBurnUpdates(couple?.id, checkStates);
 
   const handleSend = async () => {
     if (!couple?.id || !user || !dareText.trim()) return;

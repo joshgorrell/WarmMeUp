@@ -1,3 +1,4 @@
+import { cleanupTempFile } from '@/lib/mediaCache';
 import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -627,6 +628,7 @@ export default function AccountScreen() {
   }, [user, refreshProfile]);
 
   const uploadAvatarUri = useCallback(async (uri: string) => {
+    const tempFiles = new Set<string>([uri]);
     if (!user) return;
     setUploadingAvatar(true);
     setAvatarError(null);
@@ -638,7 +640,7 @@ export default function AccountScreen() {
         try {
           const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
           const result = await manipulateAsync(uri, [{ resize: { width: 800 } }], { compress: 0.80, format: SaveFormat.JPEG });
-          uploadUri = result.uri;
+          uploadUri = result.uri; tempFiles.add(uploadUri);
         } catch {}
       }
 
@@ -690,7 +692,7 @@ export default function AccountScreen() {
       if (!updated) { setAvatarError('Update was blocked. Please sign in again.'); return; }
       await refreshProfile();
     } catch (err: any) { setAvatarError(err?.message ?? 'Upload failed.'); }
-    finally { setUploadingAvatar(false); }
+    finally { await Promise.all([...tempFiles].map(cleanupTempFile)); setUploadingAvatar(false); }
   }, [user, refreshProfile]);
 
   const handlePickAvatar = useCallback(async () => {
@@ -835,11 +837,14 @@ export default function AccountScreen() {
       const token = session?.access_token;
       if (!token) throw new Error('Not authenticated. Please sign in again.');
 
-      const { error } = await supabase.functions.invoke('delete-account', {
+      const { data, error } = await supabase.functions.invoke('delete-account', {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (error) throw new Error(error.message ?? 'Could not delete account. Please try again.');
+
+      if (data?.pending) Alert.alert('Account deletion pending', 'Your account is locked and shared content has been removed from the app. File cleanup will retry automatically.');
+      else if (!data?.deleted) throw new Error('Account deletion was not confirmed.');
 
       // Sign out locally and navigate away
       await supabase.auth.signOut();
@@ -1445,7 +1450,7 @@ export default function AccountScreen() {
                 </View>
                 <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Delete My Account?</AppText>
                 <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
-                  This will permanently delete your account, profile, partner connection, messages, vault items, and all app data. This cannot be undone.
+                  This disconnects both partners and deletes shared relationship content for both of you. Your account is removed after server file cleanup is confirmed. This cannot be undone in the app.
                 </AppText>
                 <View style={styles.dataModalBtns}>
                   <TouchableOpacity

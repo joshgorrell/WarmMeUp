@@ -95,7 +95,7 @@ function NativeVideoPlayer({
   setVideoError: (v: boolean) => void;
   messageId: string;
 }) {
-  const player = useVideoPlayer({ uri: mediaUrl }, (p) => {
+  const player = useVideoPlayer({ uri: mediaUrl, useCaching: false }, (p) => {
     p.loop = false;
   });
 
@@ -186,7 +186,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
       for (const path of tryPaths) {
         if (cancelled) return;
         try {
-          const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 12 * 3600);
+          const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 5 * 60);
           if (cancelled) return;
           if (!error && data?.signedUrl) {
             setSelfFetchedUrl(data.signedUrl);
@@ -211,7 +211,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
     }
     const bucket = msg.media_storage_bucket ?? 'chat_media';
     const thumbPath = videoThumbnailPath(msg.media_storage_path);
-    supabase.storage.from(bucket).createSignedUrl(thumbPath, 12 * 3600)
+    supabase.storage.from(bucket).createSignedUrl(thumbPath, 5 * 60)
       .then(({ data, error }) => {
         if (cancelled) return;
         if (!error && data?.signedUrl) setPosterUrl(data.signedUrl);
@@ -269,18 +269,18 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
       style={[styles.mediaTap, { width: bubbleWidth, height: cappedHeight }, radii]}>
       {!effectiveLoaded ? <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View> : mediaUrl && !imgError ? <>
         {isVideo ? <>
-          {posterUrl && !videoPlaying && <ExpoImage source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />}
+          {posterUrl && !videoPlaying && <ExpoImage source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="none" />}
           {!posterUrl && !posterChecked && <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View>}
           {Platform.OS === 'web'
             ? <WebVideoPlayer mediaUrl={mediaUrl!} posterUrl={posterUrl} videoPlaying={videoPlaying} setVideoPlaying={setVideoPlaying} setVideoError={setVideoError} messageId={msg.id} />
             : <NativeVideoPlayer mediaUrl={mediaUrl!} videoPlaying={videoPlaying} setVideoPlaying={setVideoPlaying} setVideoError={setVideoError} messageId={msg.id} />}
         </> : <ExpoImage key={mediaUrl} source={{ uri: mediaUrl }} style={[StyleSheet.absoluteFill, isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.1)' } as any : undefined]}
-          contentFit="cover" cachePolicy="memory-disk" onError={() => {
+          contentFit="cover" cachePolicy="none" onError={() => {
             if (retryAttempted.current) { logDebugEvent('chat_message_image_load_error_hard', { messageId: msg.id }); setImgError(true); return; }
             retryAttempted.current = true;
             if (msg.media_storage_path) {
               const bucket = msg.media_storage_bucket ?? 'chat_media';
-              supabase.storage.from(bucket).createSignedUrl(msg.media_storage_path, 12 * 3600).then(({ data }) => data?.signedUrl ? setRetryUrl(data.signedUrl) : setImgError(true)).catch(() => setImgError(true));
+              supabase.storage.from(bucket).createSignedUrl(msg.media_storage_path, 5 * 60).then(({ data }) => data?.signedUrl ? setRetryUrl(data.signedUrl) : setImgError(true)).catch(() => setImgError(true));
             } else setImgError(true);
           }} />}
         {isBlurred && Platform.OS !== 'web' && <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />}

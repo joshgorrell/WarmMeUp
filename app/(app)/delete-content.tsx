@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput,
+  Alert, View, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput,
   ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -12,7 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
-import { clearLocalImageCache } from '@/lib/mediaCache';
+import { burnContent } from '@/lib/contentBurn';
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -27,21 +27,6 @@ const CATEGORY_LABELS: Record<CategoryKey, string> = {
   activity: 'Activity Feed',
   points: 'Points',
 };
-
-async function notifyPartnerOfDeletion(
-  coupleId: string,
-  actorUserId: string,
-  partnerUserId: string,
-  categories: string[],
-) {
-  await supabase.from('activity_events').insert({
-    couple_id: coupleId,
-    actor_user_id: actorUserId,
-    target_user_id: partnerUserId,
-    event_type: 'content_deleted',
-    metadata: { categories },
-  });
-}
 
 interface Category {
   key: CategoryKey;
@@ -59,102 +44,6 @@ interface Counts {
   vault: number;
   activity: number;
   points: number;
-}
-
-// ─── Storage folder deletion helper ──────────────────────────────
-
-async function deleteStorageFolder(bucket: string, coupleId: string) {
-  const PAGE = 100;
-
-  async function deleteAllInPath(prefix: string) {
-    let offset = 0;
-    while (true) {
-      const { data: entries, error } = await supabase.storage
-        .from(bucket)
-        .list(prefix, { limit: PAGE, offset });
-      if (error || !entries?.length) break;
-
-      // Separate files from sub-folders.  Supabase returns id === null for
-      // folders and a non-null id for actual file objects.
-      const files = entries.filter(e => e.id != null);
-      const folders = entries.filter(e => e.id == null);
-
-      if (files.length) {
-        const paths = files.map(f => `${prefix}/${f.name}`);
-        await supabase.storage.from(bucket).remove(paths);
-      }
-
-      // Recurse into sub-folders so deeply nested files are also cleared.
-      for (const folder of folders) {
-        await deleteAllInPath(`${prefix}/${folder.name}`);
-      }
-
-      // Do NOT advance offset after deleting — deletion shifts remaining
-      // entries down, so always re-list from 0 until fewer than PAGE remain.
-      if (entries.length < PAGE) break;
-      // If everything we listed was a folder (no files deleted), advance to
-      // avoid an infinite loop on folders we can't delete via the API.
-      if (files.length === 0) offset += PAGE;
-    }
-  }
-
-  try {
-    await deleteAllInPath(coupleId);
-  } catch {}
-}
-
-// ─── Individual deletion functions ───────────────────────────────
-
-async function deleteChatHistory(coupleId: string) {
-  await supabase.from('chat_messages').delete().eq('couple_id', coupleId);
-  await supabase.from('media_reactions').delete().eq('couple_id', coupleId);
-  await deleteStorageFolder('chat_media', coupleId);
-}
-
-async function deleteDiceHistory(coupleId: string) {
-  await supabase.from('interactions').delete().eq('couple_id', coupleId).eq('type', 'dice');
-}
-
-async function deleteDareHistory(coupleId: string) {
-  await supabase.from('interactions').delete().eq('couple_id', coupleId).in('type', ['dare', 'tell_me']);
-}
-
-async function deleteWishHistory(coupleId: string) {
-  await supabase.from('wishes').delete().eq('couple_id', coupleId);
-  await supabase.from('interactions').delete().eq('couple_id', coupleId).eq('type', 'wish');
-}
-
-async function deleteVaultHistory(coupleId: string) {
-  await supabase.from('vault_items').delete().eq('couple_id', coupleId);
-  await deleteStorageFolder('vault', coupleId);
-}
-
-async function deleteActivityHistory(coupleId: string) {
-  await supabase.from('activity_events').delete().eq('couple_id', coupleId);
-  await supabase.from('activity_views').delete().eq('couple_id', coupleId);
-}
-
-async function deletePoints(coupleId: string) {
-  await supabase.from('cash_in_events').delete().eq('couple_id', coupleId);
-  await supabase.from('point_events').delete().eq('couple_id', coupleId);
-  await supabase.from('monthly_scores').delete().eq('couple_id', coupleId);
-  await supabase.from('scores').update({ points: 0 }).eq('couple_id', coupleId);
-}
-
-async function burnItAll(coupleId: string) {
-  await supabase.from('chat_messages').delete().eq('couple_id', coupleId);
-  await supabase.from('media_reactions').delete().eq('couple_id', coupleId);
-  await supabase.from('interactions').delete().eq('couple_id', coupleId);
-  await supabase.from('wishes').delete().eq('couple_id', coupleId);
-  await supabase.from('vault_items').delete().eq('couple_id', coupleId);
-  await supabase.from('activity_events').delete().eq('couple_id', coupleId);
-  await supabase.from('activity_views').delete().eq('couple_id', coupleId);
-  await supabase.from('cash_in_events').delete().eq('couple_id', coupleId);
-  await supabase.from('point_events').delete().eq('couple_id', coupleId);
-  await supabase.from('monthly_scores').delete().eq('couple_id', coupleId);
-  await supabase.from('scores').update({ points: 0 }).eq('couple_id', coupleId);
-  await deleteStorageFolder('chat_media', coupleId);
-  await deleteStorageFolder('vault', coupleId);
 }
 
 // ─── Main screen ─────────────────────────────────────────────────
@@ -289,26 +178,14 @@ export default function DeleteContentScreen() {
     if (!couple?.id || selected.size === 0) return;
     setDeleting(true);
     try {
-      if (selected.has('chat')) await deleteChatHistory(couple.id);
-      if (selected.has('dice')) await deleteDiceHistory(couple.id);
-      if (selected.has('dare')) await deleteDareHistory(couple.id);
-      if (selected.has('wish')) await deleteWishHistory(couple.id);
-      if (selected.has('vault')) await deleteVaultHistory(couple.id);
-      if (selected.has('activity')) await deleteActivityHistory(couple.id);
-      if (selected.has('points')) await deletePoints(couple.id);
-      // If any media-bearing category was deleted, purge local image cache so
-      // previously-viewed photos can't be recovered from the device.
-      if (selected.has('chat') || selected.has('vault')) {
-        await clearLocalImageCache();
-      }
-      if (user?.id && partnerProfile?.id) {
-        await notifyPartnerOfDeletion(couple.id, user.id, partnerProfile.id, [...selected]);
-      }
+      await burnContent(couple.id, 'categories', [], [...selected]);
       setSelected(new Set());
       setDeleteDone(true);
       animateSuccess();
       redirectHome();
       await loadCounts();
+    } catch (error: any) {
+      Alert.alert('Deletion not confirmed', error.message);
     } finally {
       setDeleting(false);
     }
@@ -318,16 +195,14 @@ export default function DeleteContentScreen() {
     if (!couple?.id) return;
     setBurning(true);
     try {
-      await burnItAll(couple.id);
-      await clearLocalImageCache();
-      if (user?.id && partnerProfile?.id) {
-        await notifyPartnerOfDeletion(couple.id, user.id, partnerProfile.id, ['all']);
-      }
+      await burnContent(couple.id, 'categories', [], ['all']);
       setBurnDone(true);
       animateSuccess();
       redirectHome();
       setCounts({ chat: 0, dice: 0, dare: 0, wish: 0, vault: 0, activity: 0, points: 0 });
       setSelected(new Set());
+    } catch (error: any) {
+      Alert.alert('Deletion not confirmed', error.message);
     } finally {
       setBurning(false);
     }

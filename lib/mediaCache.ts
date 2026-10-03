@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
 
 /**
- * Clear expo-image's local caches so that previously-viewed media (chat photos,
- * vault thumbnails) cannot be recovered from the device after content deletion.
+ * Clear expo-image's managed caches after deletion and session changes.
+ * This is app-level cleanup, not a guarantee of forensic erasure or remote-device cleanup.
  *
  * On web this is a no-op — the browser manages its own image cache and it is
  * not safe to clear it from JS.
@@ -33,7 +33,9 @@ export async function cleanupTempFile(uri: string): Promise<void> {
   if (uri.startsWith('ph://') || uri.startsWith('content://')) return;
   if (!uri.startsWith('file://')) return;
   try {
-    const FileSystem = await import('expo-file-system');
+    const FileSystem = await import('expo-file-system/legacy');
+    const cacheRoot = FileSystem.cacheDirectory;
+    if (!cacheRoot || !uri.startsWith(cacheRoot) || /(?:^|\/)\.\.(?:\/|$)|%2e|%2f/i.test(uri)) return;
     const info = await FileSystem.getInfoAsync(uri);
     if (info.exists) {
       await FileSystem.deleteAsync(uri, { idempotent: true });

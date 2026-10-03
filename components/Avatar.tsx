@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
+import { usePrivateAvatar } from '@/hooks/usePrivateAvatar';
 import AppText from '@/components/AppText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Gradient, FontSize } from '@/constants/theme';
@@ -18,6 +20,7 @@ interface AvatarProps {
 }
 
 export default function Avatar({ name, uri, size = 'md', bgColor }: AvatarProps) {
+  const privateUri = usePrivateAvatar(uri);
   const dim = SIZE_MAP[size];
   const fontSize = FONT_MAP[size];
   const initial = name?.[0]?.toUpperCase() ?? '?';
@@ -38,8 +41,8 @@ export default function Avatar({ name, uri, size = 'md', bgColor }: AvatarProps)
           backgroundColor: bgColor ?? 'rgba(255,46,138,0.18)',
         },
       ]}>
-        {uri ? (
-          <Image source={{ uri }} style={{ width: dim, height: dim, borderRadius: dim / 2 }} resizeMode="cover" />
+        {privateUri ? (
+          <Image source={{ uri: privateUri }} style={{ width: dim, height: dim, borderRadius: dim / 2 }} contentFit="cover" cachePolicy="none" />
         ) : (
           <AppText style={[styles.initial, { fontSize }]}>{initial}</AppText>
         )}

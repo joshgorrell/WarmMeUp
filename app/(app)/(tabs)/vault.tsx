@@ -1,3 +1,5 @@
+import { useContentBurnUpdates } from '@/hooks/useContentBurnUpdates';
+import { burnContent } from '@/lib/contentBurn';
 import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -57,7 +59,7 @@ export default function VaultScreen() {
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const urlFetchedAtRef = useRef<Record<string, number>>({});
-  const URL_TTL_MS = 11.5 * 60 * 60 * 1000;
+  const URL_TTL_MS = 4 * 60 * 1000;
   const [vaultAuthError, setVaultAuthError] = useState('');
   const unlockingRef = useRef(false);
   const vaultFaceIdRequired = (settings?.vault_face_id_required ?? false) && Platform.OS !== 'web';
@@ -191,7 +193,7 @@ export default function VaultScreen() {
     await Promise.all([
       ...Object.entries(thumbByBucket).map(async ([bucket, bucketItems]) => {
         const paths = bucketItems.map(i => i.blurred_thumbnail_path!);
-        const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+        const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, 5 * 60);
         if (!data) return;
         const pathToUrl = new Map(data.map(d => [d.path, d.signedUrl]));
         const next: Record<string, string> = {};
@@ -204,7 +206,7 @@ export default function VaultScreen() {
       }),
       ...Object.entries(fallbackByBucket).map(async ([bucket, bucketItems]) => {
         const paths = bucketItems.map(i => (i.storage_path ?? i.file_path)!);
-        const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, 12 * 60 * 60);
+        const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, 5 * 60);
         if (!data) return;
         const pathToUrl = new Map(data.map(d => [d.path, d.signedUrl]));
         const next: Record<string, string> = {};
@@ -230,6 +232,8 @@ export default function VaultScreen() {
       fetchGridUrlsForItems(data).catch(() => {});
     }
   };
+
+  useContentBurnUpdates(couple?.id, load);
 
   const loadMore = async () => {
     if (!couple?.id || loadingMore || !hasMore) return;
@@ -286,25 +290,13 @@ export default function VaultScreen() {
   };
 
   const handleDeleteItem = (item: VaultItem) => {
-    const linkedChatNote = item.chat_message_id ? '\n\nThis item was sent from Chat — it will also be hidden from your Chat history.' : '';
+    const linkedChatNote = item.chat_message_id ? '\n\nThis item was sent from Chat — every linked Chat and Vault copy will also be deleted.' : '';
     const doDelete = async () => {
-      const deletedAt = new Date().toISOString();
-      const { error: dbError } = await supabase.from('vault_items').update({ deleted_at: deletedAt }).eq('id', item.id);
-      if (dbError) { Alert.alert('Delete Failed', 'Could not delete this item. Please try again.'); return; }
-      setItems(prev => prev.filter(i => i.id !== item.id));
-      setSignedUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
-      setThumbUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
-      const path = item.storage_path ?? item.file_path;
-      if (path) evictCachedUrl(path);
-      if (item.blurred_thumbnail_path) evictCachedUrl(item.blurred_thumbnail_path);
-      const bucket = item.storage_bucket ?? 'vault';
-      if (path) supabase.storage.from(bucket).remove([path]).catch(() => {});
-      clearLocalImageCache().catch(() => {});
-      if (item.chat_message_id) {
-        const { data: chatMsg } = await supabase.from('chat_messages').select('media_storage_path, media_storage_bucket').eq('id', item.chat_message_id).maybeSingle();
-        await supabase.from('chat_messages').update({ deleted_at: deletedAt }).eq('id', item.chat_message_id);
-        if (chatMsg?.media_storage_path) supabase.storage.from(chatMsg.media_storage_bucket ?? 'chat_media').remove([chatMsg.media_storage_path]).catch(() => {});
-      }
+      try {
+        await burnContent(item.couple_id, 'vault', [item.id]);
+        setItems(prev => prev.filter(i => i.id !== item.id));
+        setSignedUrls({}); setThumbUrls({});
+      } catch (error: any) { Alert.alert('Deletion not confirmed', error.message); }
     };
     setConfirmSheet({ title: 'Delete from Vault', message: `This will permanently remove this item for both you and your partner.${linkedChatNote}`, actions: [{ label: 'Delete', style: 'destructive', onPress: doDelete }, { label: 'Cancel', style: 'cancel', onPress: () => {} }] });
   };
@@ -319,21 +311,13 @@ export default function VaultScreen() {
   const handleBulkDelete = () => {
     const ids = [...selectedIds]; if (!ids.length) return; const count = ids.length;
     const doBulkDelete = async () => {
-      const deletedAt = new Date().toISOString(); const idSet = new Set(ids); const targets = items.filter(i => idSet.has(i.id));
-      await Promise.all(targets.map(async item => {
-        await supabase.from('vault_items').update({ deleted_at: deletedAt }).eq('id', item.id);
-        const path = item.storage_path ?? item.file_path; const bucket = item.storage_bucket ?? 'vault';
-        if (path) { evictCachedUrl(path); if (item.blurred_thumbnail_path) evictCachedUrl(item.blurred_thumbnail_path); supabase.storage.from(bucket).remove([path]).catch(() => {}); }
-        if (item.chat_message_id) {
-          const { data: chatMsg } = await supabase.from('chat_messages').select('media_storage_path, media_storage_bucket').eq('id', item.chat_message_id).maybeSingle();
-          await supabase.from('chat_messages').update({ deleted_at: deletedAt }).eq('id', item.chat_message_id);
-          if (chatMsg?.media_storage_path) supabase.storage.from(chatMsg.media_storage_bucket ?? 'chat_media').remove([chatMsg.media_storage_path]).catch(() => {});
-        }
-      }));
-      setItems(prev => prev.filter(i => !idSet.has(i.id)));
-      setSignedUrls(prev => { const n = { ...prev }; ids.forEach(id => delete n[id]); return n; });
-      setThumbUrls(prev => { const n = { ...prev }; ids.forEach(id => delete n[id]); return n; });
-      setSelectedIds(new Set()); setSelectMode(false);
+      try {
+        await burnContent(couple!.id, 'vault', ids);
+        const idSet = new Set(ids);
+        setItems(prev => prev.filter(i => !idSet.has(i.id)));
+        setSignedUrls({}); setThumbUrls({});
+        setSelectedIds(new Set()); setSelectMode(false);
+      } catch (error: any) { Alert.alert('Deletion not confirmed', error.message); }
     };
     setConfirmSheet({ title: `Delete ${count} ${count === 1 ? 'item' : 'items'}`, message: `This will permanently remove ${count} ${count === 1 ? 'item' : 'items'} for both you and your partner.`, actions: [{ label: 'Delete', style: 'destructive', onPress: doBulkDelete }, { label: 'Cancel', style: 'cancel', onPress: () => {} }] });
   };
@@ -419,7 +403,7 @@ export default function VaultScreen() {
           <View style={styles.grid}>{items.map(item => {
             const isNew = item.uploaded_by_user_id !== user?.id && !item.viewed_by_partner; const url = thumbUrls[item.id] ?? signedUrls[item.id]; const uniqueEmojis = [...new Set((vaultReactionsMap[item.id] ?? []).map(r => r.emoji))].slice(0, 2);
             return <View key={item.id} style={{ position: 'relative' }}><TouchableOpacity ref={ref => { tileRefs.current[item.id] = ref as any; }} style={[styles.gridItem, { width: ITEM_SIZE, height: ITEM_SIZE }]} onPress={() => selectMode ? toggleSelection(item.id) : handleTilePress(item)} onLongPress={() => selectMode ? undefined : handleVaultLongPress(item)} delayLongPress={400} activeOpacity={0.85}>
-              {url ? <Image source={{ uri: url }} style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]} contentFit="cover" cachePolicy="memory-disk" transition={0} recyclingKey={item.id} /> : <View style={[StyleSheet.absoluteFill, styles.gridPlaceholder]}><ActivityIndicator color="rgba(255,255,255,0.25)" size="small" /></View>}
+              {url ? <Image source={{ uri: url }} style={[StyleSheet.absoluteFill, { borderRadius: Radius.sm }]} contentFit="cover" cachePolicy="none" transition={0} recyclingKey={item.id} /> : <View style={[StyleSheet.absoluteFill, styles.gridPlaceholder]}><ActivityIndicator color="rgba(255,255,255,0.25)" size="small" /></View>}
               {!thumbnailsVisible && <BlurView intensity={80} tint="dark" style={[StyleSheet.absoluteFill, styles.blurOverlay]}><EyeOff color="rgba(255,255,255,0.7)" size={20} /></BlurView>}
               {thumbnailsVisible && item.media_type === 'video' && <View style={styles.videoBadge}><Play color="#fff" size={10} fill="#fff" /></View>}
               {isNew && <View style={styles.newDot} />}{!item.allow_screenshot && <View style={styles.shieldBadge}><Shield color="rgba(255,255,255,0.8)" size={10} /></View>}

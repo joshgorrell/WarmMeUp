@@ -12,3 +12,10 @@ verify_jwt = true
 
 [functions.delete-account]
 verify_jwt = true
+
+[functions.burn-content]
+verify_jwt = true
+
+# Cron sends a dedicated Vault secret; the handler rejects every other caller.
+[functions.process-content-burns]
+verify_jwt = false
