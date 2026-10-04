@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
   FlatList,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -36,6 +37,7 @@ export type OnboardingFinishAction = 'get-started' | 'invite-partner';
 interface Props {
   mode: OnboardingMode;
   alreadyPaired?: boolean;
+  busy?: boolean;
   onComplete: (action?: OnboardingFinishAction) => void;
 }
 
@@ -457,7 +459,7 @@ const SLIDES: Slide[] = [
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export default function OnboardingCarousel({ mode, alreadyPaired = false, onComplete }: Props) {
+export default function OnboardingCarousel({ mode, alreadyPaired = false, busy = false, onComplete }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isShort = height < 760;
@@ -509,12 +511,15 @@ export default function OnboardingCarousel({ mode, alreadyPaired = false, onComp
           <WarmupLogo size={24} />
           <WarmupWordmark size={12} />
         </View>
-        <TouchableOpacity onPress={finish} hitSlop={12} style={styles.skip}>
+        <TouchableOpacity disabled={busy} onPress={finish} hitSlop={12} style={styles.skip}>
           <AppText style={styles.skipText}>Skip</AppText>
         </TouchableOpacity>
       </View>
       <FlatList
+        key={width}
         ref={flatRef}
+        initialScrollIndex={currentIndex}
+        getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
         data={SLIDES}
         keyExtractor={(item) => item.key}
         horizontal
@@ -527,6 +532,7 @@ export default function OnboardingCarousel({ mode, alreadyPaired = false, onComp
           const Visual = item.Visual;
           return (
             <View style={[styles.slide, { width }]}>
+              <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
               <Animated.View
                 style={[
                   styles.slideInner,
@@ -553,6 +559,7 @@ export default function OnboardingCarousel({ mode, alreadyPaired = false, onComp
                   </AppText>
                 </View>
               </Animated.View>
+              </ScrollView>
             </View>
           );
         }}
@@ -572,7 +579,7 @@ export default function OnboardingCarousel({ mode, alreadyPaired = false, onComp
         </View>
         <TouchableOpacity
           style={styles.continueButton}
-          onPress={handleNext}
+          disabled={busy} onPress={handleNext}
           activeOpacity={0.85}
         >
           <LinearGradient

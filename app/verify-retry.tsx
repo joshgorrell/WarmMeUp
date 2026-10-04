@@ -19,7 +19,8 @@ export default function VerifyRetryScreen() {
     setRetrying(true);
     logger.log('[VERIFY-RETRY] retry triggered');
     try {
-      await Promise.all([refreshProfile(), refreshCouple(), refreshSubscription()]);
+      const results = await Promise.all([refreshProfile(), refreshCouple(), refreshSubscription()]);
+      if (results[2].loading) throw new Error('Subscription verification unavailable');
       // Only return to transition after the refresh itself succeeds. This avoids
       // looping between transition and this screen during a genuine outage.
       router.replace('/transition');
@@ -40,7 +41,9 @@ export default function VerifyRetryScreen() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [handleRetry]);
+  // Retry once on mount; subsequent failures wait for an explicit retry.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <View style={styles.root}>

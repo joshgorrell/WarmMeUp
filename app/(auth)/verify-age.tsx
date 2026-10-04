@@ -1,3 +1,4 @@
+import { useAuth } from '@/context/AuthContext';
 import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Platform, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -36,6 +37,7 @@ function isoDate(date: Date) {
 
 export default function VerifyAgeScreen() {
   const router = useRouter();
+  const { refreshProfile } = useAuth();
   const insets = useSafeAreaInsets();
   const { contentMaxWidth, contentPadding } = useLayout();
   const [dob, setDob] = useState<Date | null>(null);
@@ -68,8 +70,9 @@ export default function VerifyAgeScreen() {
       const { error: updateError } = await supabase.from('profiles').update({
         date_of_birth: isoDate(selected),
         age_verified_at: new Date().toISOString(),
-      }).eq('id', user.id);
+      }).eq('id', user.id).select('id').single();
       if (updateError) throw updateError;
+      await refreshProfile();
       router.replace('/transition');
     } catch (e: any) {
       setError(e?.message ?? 'Unable to verify your age. Please try again.');

@@ -62,12 +62,11 @@ export async function ensureAndroidNotificationChannel(): Promise<void> {
  * Request push permission and return the Expo push token string,
  * or null if permission is denied or we're on web.
  *
- * Always call this on app load (not gated on push_notifications_enabled).
- * The OS only shows the permission prompt once; subsequent calls return the
- * cached token immediately. The EAS projectId is required in production —
+ * Pass false at app startup to refresh an already-granted token without a prompt.
+ * Request permission after onboarding has completed. The EAS projectId is required in production —
  * without it getExpoPushTokenAsync silently fails in TestFlight/release builds.
  */
-export async function registerForPushNotifications(): Promise<string | null> {
+export async function registerForPushNotifications(requestPermission = true): Promise<string | null> {
   if (Platform.OS === 'web') return null;
 
   await ensureAndroidNotificationChannel();
@@ -75,7 +74,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
   const { status: existing } = await Notifications.getPermissionsAsync();
   let finalStatus = existing;
 
-  if (existing !== 'granted') {
+  if (existing !== 'granted' && requestPermission) {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
@@ -91,16 +90,12 @@ export async function registerForPushNotifications(): Promise<string | null> {
 }
 
 /**
- * Save the push token to the user's profile row and mark notifications enabled.
- * Call after registration and on each app open (tokens can rotate).
+ * Save the push token. Pass enable=false at startup to preserve preferences.
  */
-export async function savePushToken(userId: string, token: string) {
+export async function savePushToken(userId: string, token: string, enable = true) {
   await Promise.all([
     supabase.from('profiles').update({ push_token: token }).eq('id', userId),
-    supabase
-      .from('user_settings')
-      .update({ push_notifications_enabled: true, updated_at: new Date().toISOString() })
-      .eq('user_id', userId),
+    ...(enable ? [supabase.from('user_settings').update({ push_notifications_enabled: true, updated_at: new Date().toISOString() }).eq('user_id', userId)] : []),
   ]);
 }
 
@@ -108,13 +103,10 @@ export async function savePushToken(userId: string, token: string) {
  * Clear the push token and mark notifications disabled.
  * Call on sign-out or when the user disables notifications.
  */
-export async function clearPushToken(userId: string) {
+export async function clearPushToken(userId: string, disable = true) {
   await Promise.all([
     supabase.from('profiles').update({ push_token: null }).eq('id', userId),
-    supabase
-      .from('user_settings')
-      .update({ push_notifications_enabled: false, updated_at: new Date().toISOString() })
-      .eq('user_id', userId),
+    ...(disable ? [supabase.from('user_settings').update({ push_notifications_enabled: false, updated_at: new Date().toISOString() }).eq('user_id', userId)] : []),
   ]);
 }
 

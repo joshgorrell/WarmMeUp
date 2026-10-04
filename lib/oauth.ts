@@ -30,10 +30,11 @@ export async function signInWithProvider(provider: 'google' | 'apple') {
   // Web (all providers) and native Google: browser redirect flow
   if (Platform.OS === 'web') {
     const redirectTo = window.location.origin + '/auth/callback';
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo },
     });
+    if (error) throw error;
     return null;
   }
 

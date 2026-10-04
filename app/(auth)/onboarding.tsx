@@ -1,14 +1,19 @@
+import { registerForPushNotifications, savePushToken } from '@/lib/notifications';
+import { registrationComplete as isRegistrationComplete } from '@/lib/registration';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import OnboardingCarousel, { OnboardingFinishAction } from '@/components/OnboardingCarousel';
 import AppText from '@/components/AppText';
+import { loadPendingCode, savePendingCode, clearPendingCode } from '@/lib/inviteCode';
+import { completePendingJoin, isDefinitiveJoinFailure } from '@/lib/coupleJoin';
 import PrimaryButton from '@/components/PrimaryButton';
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { pendingCode } = useLocalSearchParams<{ pendingCode?: string }>();
   const { user, couple, refreshCouple, refreshProfile, refreshSettings } = useAuth();
 
   const [completing, setCompleting] = useState(false);
@@ -23,96 +28,60 @@ export default function OnboardingScreen() {
   // so "invite partner" doesn't silently become "enter app" on retry.
   const pendingActionRef = useRef<OnboardingFinishAction | undefined>(undefined);
 
-  const finish = useCallback((action?: OnboardingFinishAction, paired = alreadyPaired) => {
-    if (action === 'invite-partner' && !paired) {
-      router.replace('/(auth)/pair');
-    } else {
-      router.replace('/(app)/(tabs)');
-    }
-  }, [router, alreadyPaired]);
-
+  const savingRef = useRef(false);
   const handleComplete = useCallback(async (action?: OnboardingFinishAction) => {
-    if (completing) return;
-    setCompleting(true);
-    setSaveError(false);
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setCompleting(true); setSaveError(false);
     pendingActionRef.current = action;
-
-    if (!user) {
-      setCompleting(false);
-      return;
-    }
-
-    // Independently verify that all required registration fields are present
-    // before marking onboarding complete. If any are missing, route the user
-    // back to registration completion instead of writing the timestamp.
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    const registrationComplete = !!(
-      prof?.first_name &&
-      prof?.last_name &&
-      prof?.date_of_birth &&
-      prof?.age_verified_at &&
-      prof?.tos_accepted_at
-    );
-
-    if (!registrationComplete) {
-      router.replace({ pathname: '/(auth)/register', params: { oauthComplete: '1' } });
-      return;
-    }
-
-    const nowIso = new Date().toISOString();
-
-    // Mark onboarding_seen on user_settings — checked write
-    const { error: settingsError } = await supabase
-      .from('user_settings')
-      .update({ onboarding_seen: true, updated_at: nowIso })
-      .eq('user_id', user.id);
-
-    if (settingsError) {
-      setSaveError(true);
-      setCompleting(false);
-      return;
-    }
-
-    // Mark onboarding_completed_at on profiles — checked write
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({ onboarding_completed_at: nowIso })
-      .eq('id', user.id);
-
-    if (profileError) {
-      setSaveError(true);
-      setCompleting(false);
-      return;
-    }
-
-    // Refresh in-memory state so routing uses current data.
-    await Promise.all([
-      refreshProfile(),
-      refreshSettings(),
-      refreshCouple(),
-    ]);
-
-    // Pairing and account creation are separate flows. A user who already accepted
-    // an invite must never be sent back to Pair and asked for an invite code again.
-    // Check the database directly here so this decision does not depend on stale
-    // React context immediately after User B completes a join.
-    const { data: activeCouple } = await supabase
-      .from('couples')
-      .select('id, user_b_id, active')
-      .eq('active', true)
-      .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-      .not('user_b_id', 'is', null)
-      .limit(1)
-      .maybeSingle();
-
-    const pairedNow = !!activeCouple?.user_b_id || alreadyPaired;
-    finish(pendingActionRef.current, pairedNow);
-  }, [completing, user, alreadyPaired, refreshCouple, refreshProfile, refreshSettings, finish, router]);
+    try {
+      if (!user) { router.replace('/(auth)/login'); return; }
+      const code = pendingCode || (await loadPendingCode()) || '';
+      if (code) await savePendingCode(code);
+      const { data: prof, error: readError } = await supabase.from('profiles')
+        .select('first_name,last_name,date_of_birth,age_verified_at,tos_accepted_at,onboarding_completed_at')
+        .eq('id', user.id).single();
+      if (readError) throw readError;
+      if (!isRegistrationComplete(prof)) {
+        router.replace({ pathname: '/(auth)/register', params: { oauthComplete: '1', ...(code ? { pendingCode: code } : {}) } });
+        return;
+      }
+      const nowIso = new Date().toISOString();
+      const { data: savedSettings, error: settingsError } = await supabase.from('user_settings')
+        .update({ onboarding_seen: true, updated_at: nowIso }).eq('user_id', user.id).select('user_id').single();
+      if (settingsError || !savedSettings) throw settingsError || new Error('Settings missing');
+      const { data: savedProfile, error: profileError } = await supabase.from('profiles')
+        .update({ onboarding_completed_at: nowIso }).eq('id', user.id).select('id').single();
+      if (profileError || !savedProfile) throw profileError || new Error('Profile missing');
+      await Promise.all([refreshProfile(), refreshSettings(), refreshCouple()]);
+      if (!prof.onboarding_completed_at) {
+        // Ask after registration is finished, once for a new account. Denial never blocks setup.
+        void registerForPushNotifications().then(async token => {
+          const { data } = await supabase.auth.getSession();
+          if (token && data.session?.user.id === user.id) { await savePushToken(user.id, token); await refreshSettings(); }
+        }).catch(() => {});
+      }
+      const { data: activeCouple, error: coupleError } = await supabase.from('couples')
+        .select('id,user_b_id,active').eq('active', true)
+        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`).not('user_b_id', 'is', null).limit(1).maybeSingle();
+      if (coupleError) throw coupleError;
+      if (!activeCouple && code) {
+        const result = await completePendingJoin(code);
+        if (result.ok) {
+          await clearPendingCode();
+          await refreshCouple();
+          router.replace({ pathname: '/(auth)/paired-celebration', params: { partnerName: result.inviterName || '', partnerAvatar: result.inviterAvatar || '' } });
+          return;
+        }
+        if (isDefinitiveJoinFailure(result.reason)) await clearPendingCode();
+        router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: code } });
+        return;
+      }
+      if (activeCouple) { if (code) await clearPendingCode(); router.replace('/transition'); }
+      else router.replace('/(auth)/pair');
+    } catch { setSaveError(true); }
+    finally { savingRef.current = false; setCompleting(false); }
+  }, [user, pendingCode, refreshCouple, refreshProfile, refreshSettings, router]);
 
   const handleRetry = useCallback(() => {
     handleComplete(pendingActionRef.current);
@@ -132,7 +101,7 @@ export default function OnboardingScreen() {
     );
   }
 
-  return <OnboardingCarousel mode="post-auth" alreadyPaired={alreadyPaired} onComplete={handleComplete} />;
+  return <OnboardingCarousel mode="post-auth" alreadyPaired={alreadyPaired} busy={completing} onComplete={handleComplete} />;
 }
 
 const styles = StyleSheet.create({

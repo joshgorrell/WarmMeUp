@@ -1,3 +1,4 @@
+import { registrationComplete as isRegistrationComplete } from '@/lib/registration';
 import { uniqueRealtimeTopic } from '@/lib/realtimeTopic';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -146,11 +147,12 @@ export default function PairScreen() {
     // Refresh subscription first so admin grants / trial status is current
     // before loadOrCreateCouple checks premium access.
     (async () => {
-      await refreshSubscription();
+      const subscription = await refreshSubscription();
+      if (subscription.loading) { setInviteError('Could not verify your subscription. Please try again.'); setResumeChecked(true); return; }
       // Before loading the couple, check whether the user has a pending join request
       // from a previous session. If so, resume straight into the waiting state.
       const pending = await getMyPendingJoin();
-      if (pending.ok && (pending.status === 'accepted' || pending.status === 'b_accepted' || pending.status === 'pending')) {
+      if (pending.ok && pending.status === 'accepted') {
         // request_join auto-finalizes pairing immediately. Any of these statuses
         // means the connection is already complete — navigate to the app.
         // Stale 'b_accepted' or 'pending' (from before the auto-finalize migration)
@@ -163,7 +165,7 @@ export default function PairScreen() {
             params: { partnerName: pending.inviterName || '', partnerAvatar: pending.inviterAvatar || '' },
           });
         } else {
-          router.replace('/(app)/(tabs)');
+          router.replace('/transition');
         }
         setResumeChecked(true);
         return;
@@ -193,10 +195,10 @@ export default function PairScreen() {
   }, [couple?.pending_partner_id, couple?.pending_partner_status]);
 
   useEffect(() => {
-    if (couple?.user_b_id) {
-      router.replace('/(app)/(tabs)');
+    if (couple?.active && couple?.user_b_id && !loading) {
+      router.replace('/transition');
     }
-  }, [couple?.user_b_id]);
+  }, [couple?.active, couple?.user_b_id, loading]);
 
   // User A: subscribe to the couple row so pending partner requests appear
   // immediately without needing to close and reopen the screen.
@@ -317,7 +319,7 @@ export default function PairScreen() {
       const { data: result, error: rpcError } = await supabase.rpc('generate_invite_code');
       if (rpcError) {
         if ((rpcError as any)?.message === 'already_paired') {
-          router.replace('/(app)/(tabs)');
+          router.replace('/transition');
           return;
         }
         setSubscribeError('Purchase succeeded but code generation failed. Tap refresh.');
@@ -367,7 +369,7 @@ export default function PairScreen() {
         .eq('active', true)
         .maybeSingle();
       if (paired) {
-        router.replace('/(app)/(tabs)');
+        router.replace('/transition');
         return;
       }
 
@@ -377,7 +379,7 @@ export default function PairScreen() {
       if (rpcError) {
         // RPC refuses when the user is already paired — redirect to app instead of showing an error.
         if ((rpcError as any)?.message === 'already_paired') {
-          router.replace('/(app)/(tabs)');
+          router.replace('/transition');
           return;
         }
         logDebugEvent('INVITE CREATE ERROR', {
@@ -462,18 +464,9 @@ export default function PairScreen() {
     // Wait for subscription info to load before gating on canInvite — otherwise
     // a brand-new trial user whose info hasn't loaded yet gets wrongly sent to
     // the paywall.
-    if (subscriptionInfo.loading) {
-      await new Promise<void>(resolve => {
-        const unsub = setInterval(() => {
-          if (!subscriptionInfo.loading) { clearInterval(unsub); resolve(); }
-        }, 200);
-        setTimeout(() => { clearInterval(unsub); resolve(); }, 3000);
-      });
-    }
-    if (!subscriptionInfo.canInvite && !subscriptionInfo.loading) {
-      router.push('/(auth)/subscription');
-      return;
-    }
+    const fresh = await refreshSubscription();
+    if (fresh.loading) { setInviteError('Could not verify your subscription. Please try again.'); return; }
+    if (!fresh.canInvite) { router.push('/(auth)/subscription'); return; }
     setRefreshing(true);
     setInviteError('');
     logDebugEvent('INVITE CREATE START', { source: 'handleRefreshCode', userId: user?.id ?? null });
@@ -481,7 +474,7 @@ export default function PairScreen() {
     if (rpcError) {
       // RPC refuses when the user is already paired — redirect rather than surface an error.
       if ((rpcError as any)?.message === 'already_paired') {
-        router.replace('/(app)/(tabs)');
+        router.replace('/transition');
         setRefreshing(false);
         return;
       }
@@ -528,6 +521,11 @@ export default function PairScreen() {
     setError('');
     setLoading(true);
     try {
+      if (!isRegistrationComplete(profile)) {
+        await savePendingCode(normalized);
+        router.replace({ pathname: '/(auth)/register', params: { oauthComplete: '1', pendingCode: normalized } });
+        return;
+      }
       // Preview inviter name first so we can show it in the celebration overlay.
       // If preview fails, still attempt the join — request_join has its own
       // validation and cleanup, and a stale pending request shouldn't block a
@@ -597,7 +595,7 @@ export default function PairScreen() {
           params: { partnerName, partnerAvatar },
         });
       } else {
-        router.replace('/(app)/(tabs)');
+        router.replace('/transition');
       }
     } catch (e: any) {
       logger.warn('[pair] error:', e?.message);
@@ -1026,7 +1024,7 @@ export default function PairScreen() {
 
                 <TouchableOpacity
                   style={styles.goHomeBtn}
-                  onPress={() => { setActiveModal(null); router.replace('/(app)/(tabs)'); }}
+                  onPress={() => { setActiveModal(null); router.replace('/transition'); }}
                   activeOpacity={0.8}
                 >
                   <Home color="#FF6B3D" size={18} />

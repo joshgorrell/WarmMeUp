@@ -1,3 +1,4 @@
+import { registrationComplete } from './registration';
 import { supabase } from '@/lib/supabase';
 import { logDebugEvent } from '@/lib/debugLog';
 
@@ -122,6 +123,11 @@ export async function getPendingPartnerProfile(): Promise<
 export async function completePendingJoin(
   code: string,
 ): Promise<JoinResult> {
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user?.email_confirmed_at) return { ok: false, reason: 'error' };
+  const { data: profile, error: profileError } = await supabase.from('profiles')
+    .select('first_name,last_name,date_of_birth,age_verified_at,tos_accepted_at').eq('id', user.id).single();
+  if (profileError || !registrationComplete(profile)) return { ok: false, reason: 'error' };
   const { data: result, error: joinError } = await supabase
     .rpc('request_join', { invite_code: code.toUpperCase().trim() }) as { data: any; error: any };
 
