@@ -99,7 +99,7 @@ export default function SubscriptionScreen() {
   useEffect(() => {
     if (subscriptionInfo.isPremium) {
       logger.log('[Subscription] premium detected while on paywall — auto-dismissing');
-      router.replace('/(app)/(tabs)');
+      router.replace('/transition');
     }
   }, [subscriptionInfo.isPremium, router]);
 
@@ -171,9 +171,10 @@ export default function SubscriptionScreen() {
       // mounted, abort the purchase to avoid a double-charge. Read the fresh
       // result directly instead of subscriptionInfo (stale render closure).
       const freshSubscription = await refreshSubscription();
+      if (freshSubscription.loading) { Alert.alert('Could not verify access', 'Please check your connection and try again before purchasing.'); return; }
       if (freshSubscription?.isPremium) {
         logger.log('[Subscription] pre-purchase check: already premium — skipping purchase');
-        router.replace('/(app)/(tabs)');
+        router.replace('/transition');
         return;
       }
 
@@ -209,7 +210,7 @@ export default function SubscriptionScreen() {
         }
       }
       await refreshSubscription();
-      router.replace('/(app)/(tabs)');
+      router.replace('/transition');
     } catch (e: any) {
       if (e?.code === '1') return; // user cancelled
       Alert.alert('Purchase Failed', e?.message ?? 'Something went wrong. Please try again.');
@@ -233,7 +234,7 @@ export default function SubscriptionScreen() {
       if (entitlement) {
         await confirmWithServer();
         await refreshSubscription();
-        router.replace('/(app)/(tabs)');
+        router.replace('/transition');
       }
     } catch (e: any) {
       if (e?.code === '1') return;
@@ -267,7 +268,7 @@ export default function SubscriptionScreen() {
         const confirmed = await confirmWithServer();
         logger.log('[Subscription] server confirm after restore:', confirmed);
         await refreshSubscription();
-        router.replace('/(app)/(tabs)');
+        router.replace('/transition');
       } else {
         Alert.alert('No Purchases Found', 'No active subscription found for your account.');
       }

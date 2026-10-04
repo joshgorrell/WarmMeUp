@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { registrationComplete as isRegistrationComplete } from '@/lib/registration';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -30,6 +31,7 @@ import { savePendingCode, loadPendingCode, clearPendingCode } from '@/lib/invite
 import { friendlyAuthError } from '@/lib/authError';
 import { logger } from '@/lib/logger';
 import { completePendingJoin, isDefinitiveJoinFailure } from '@/lib/coupleJoin';
+import { authRedirectUrl } from '@/lib/authRedirect';
 import { useAuth } from '@/context/AuthContext';
 
 // Only loaded on native — web falls back to text input
@@ -71,7 +73,7 @@ function parseDateInput(value: string): Date | null {
   const [mm, dd, yyyy] = parts.map(Number);
   if (!mm || !dd || !yyyy || yyyy < 1900) return null;
   const d = new Date(yyyy, mm - 1, dd);
-  if (d.getMonth() !== mm - 1) return null;
+  if (d.getFullYear() !== yyyy || d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
   return d;
 }
 
@@ -170,7 +172,8 @@ export default function RegisterScreen() {
       // Restore persisted DOB and Terms acceptance so returning OAuth users
       // do not re-enter or re-accept information unnecessarily.
       if (prof?.date_of_birth) {
-        const parsed = new Date(prof.date_of_birth);
+        const [year, month, day] = prof.date_of_birth.split('-').map(Number);
+        const parsed = new Date(year, month - 1, day);
         if (!isNaN(parsed.getTime())) {
           setDobDate(parsed);
           if (Platform.OS === 'web') setDobText(formatDate(parsed));
@@ -240,7 +243,7 @@ export default function RegisterScreen() {
   const dobCheckValid = dobValid;
 
   // --- Derived: is this an OAuth-complete flow (already authenticated, just finishing profile)? ---
-  const isOAuthComplete = oauthComplete === '1' && !!createdUserId;
+  const isOAuthComplete = !!createdUserId;
 
   // --- Create Account disabled until all fields valid ---
   // For OAuth-complete users, email/password are not required (already authenticated)
@@ -268,43 +271,48 @@ export default function RegisterScreen() {
   };
 
   // --- Route after avatar step (or skip) ---
-  const proceedFromAvatarStep = useCallback(() => {
-    if (!createdUserId) return;
-    const uid = createdUserId;
-
-    // Refresh the in-memory profile so the avatar and name are immediately
-    // available throughout the app without requiring a re-login.
-    refreshProfile().catch(() => {});
-
-    // If email was already confirmed (OAuth or auto-confirm), go straight to onboarding/pair.
-    // Otherwise go to verify-email.
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user?.email_confirmed_at) {
-        if (pendingCode) {
-          completePendingJoin(pendingCode).then(async (result) => {
-            if (result.ok) {
-              await clearPendingCode();
-              router.replace({
-                pathname: '/(auth)/paired-celebration',
-                params: { partnerName: result.inviterName || '', partnerAvatar: result.inviterAvatar || '' },
-              });
-              return;
-            }
-            if (isDefinitiveJoinFailure(result.reason)) {
-              await clearPendingCode();
-            }
-            router.replace('/(auth)/onboarding');
-          });
-        } else {
-          router.replace('/(auth)/onboarding');
-        }
-      } else {
-        const params: Record<string, string> = { email: email || user?.email || '' };
-        if (pendingCode) params.pendingCode = pendingCode;
-        router.replace({ pathname: '/(auth)/verify-email', params });
+  const proceedingRef = useRef(false);
+  const proceedFromAvatarStep = useCallback(async () => {
+    if (!createdUserId || proceedingRef.current) return;
+    proceedingRef.current = true;
+    setApiError('');
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      const code = pendingCode || (await loadPendingCode()) || '';
+      if (!user) {
+        router.replace({ pathname: '/(auth)/verify-email', params: { email, ...(code ? { pendingCode: code } : {}) } });
+        return;
       }
-    });
-  }, [createdUserId, pendingCode, email, router]);
+      if (error) throw error;
+      if (!user.email_confirmed_at) {
+        router.replace({ pathname: '/(auth)/verify-email', params: { email: user.email || email, ...(code ? { pendingCode: code } : {}) } });
+        return;
+      }
+      await refreshProfile();
+      // Profile and age requirements are checked before any join request.
+      const { data: prof, error: profileError } = await supabase.from('profiles')
+        .select('first_name,last_name,date_of_birth,age_verified_at,tos_accepted_at').eq('id', user.id).single();
+      if (profileError) throw profileError;
+      if (!isRegistrationComplete(prof)) {
+        setStep('form');
+        return;
+      }
+      if (code) {
+        const result = await completePendingJoin(code);
+        if (result.ok) {
+          await clearPendingCode();
+          router.replace({ pathname: '/(auth)/paired-celebration', params: { partnerName: result.inviterName || '', partnerAvatar: result.inviterAvatar || '' } });
+          return;
+        }
+        if (isDefinitiveJoinFailure(result.reason)) await clearPendingCode();
+      }
+      router.replace({ pathname: '/(auth)/onboarding', params: code ? { pendingCode: code } : {} });
+    } catch {
+      setApiError('Could not finish setting up your account. Please try again.');
+    } finally {
+      proceedingRef.current = false;
+    }
+  }, [createdUserId, pendingCode, email, router, refreshProfile]);
 
   // --- Shared OAuth body (called after consent guaranteed) ---
   const runOAuth = async (provider: 'apple' | 'google') => {
@@ -339,19 +347,14 @@ export default function RegisterScreen() {
 
         // Check the persisted profile to determine if this is a new user or a
         // returning user whose registration is already complete.
-        const { data: existingProfile } = await supabase
+        const { data: existingProfile, error: existingProfileError } = await supabase
           .from('profiles')
           .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at')
           .eq('id', userId)
           .maybeSingle();
 
-        const registrationComplete = !!(
-          existingProfile?.first_name &&
-          existingProfile?.last_name &&
-          existingProfile?.date_of_birth &&
-          existingProfile?.age_verified_at &&
-          existingProfile?.tos_accepted_at
-        );
+        if (existingProfileError) throw existingProfileError;
+        const registrationComplete = isRegistrationComplete(existingProfile);
 
         if (registrationComplete) {
           // Returning users may still be arriving from a partner invite. Redeem
@@ -390,6 +393,8 @@ export default function RegisterScreen() {
         const fn = providerFn || firstName.trim();
         const ln = providerLn || lastName.trim();
         const fullName = [fn, ln].filter(Boolean).join(' ');
+        if (fn) setFirstName(fn);
+        if (ln) setLastName(ln);
 
         const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
         const nowIso = new Date().toISOString();
@@ -404,10 +409,10 @@ export default function RegisterScreen() {
             ...(fn ? { first_name: fn } : {}),
             ...(ln ? { last_name: ln } : {}),
             ...(fullName ? { display_name: fullName } : {}),
-            ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: nowIso } : {}),
+            ...(dob && dobValid ? { date_of_birth: isoDate(dob), age_verified_at: nowIso } : {}),
             tos_accepted_at: nowIso,
           })
-          .eq('id', userId);
+          .eq('id', userId).select('id').single();
 
         if (updateError) {
           setApiError('Could not save your profile. Please check your connection and try again.');
@@ -419,8 +424,10 @@ export default function RegisterScreen() {
 
         // If we got a name from the provider or the form, go to avatar.
         // Otherwise prompt for name first.
-        if (fn) {
+        if (fn && ln && dobValid) {
           setStep('avatar');
+        } else if (fn && ln) {
+          setStep('form');
         } else {
           setStep('name');
         }
@@ -459,7 +466,7 @@ export default function RegisterScreen() {
         const { error: nameUpdateError } = await supabase
           .from('profiles')
           .update({ first_name: fn, last_name: ln, display_name: fullName })
-          .eq('id', createdUserId);
+          .eq('id', createdUserId).select('id').single();
         if (nameUpdateError) {
           setApiError('Could not save your name. Please check your connection and try again.');
           return;
@@ -470,7 +477,7 @@ export default function RegisterScreen() {
       // After saving the name, check if this OAuth-complete user still needs
       // DOB or Terms. If so, route to the form — not the avatar step — so those
       // required fields are collected before the avatar uploader appears.
-      if (oauthComplete === '1' && (!dobValid || !tosAccepted)) {
+      if (!dobValid || !tosAccepted) {
         setStep('form');
       } else {
         setStep('avatar');
@@ -497,9 +504,8 @@ export default function RegisterScreen() {
     const fullName = `${fn} ${ln}`;
     setLoading(true);
     try {
-      const redirectTo = Platform.OS === 'web'
-        ? (typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined)
-        : 'warmup://auth/callback';
+      const redirectTo = authRedirectUrl();
+      if (pendingCode) await savePendingCode(pendingCode);
 
       const dob = Platform.OS === 'web' ? parseDateInput(dobText) : dobDate;
       const nowIso = new Date().toISOString();
@@ -523,6 +529,10 @@ export default function RegisterScreen() {
         options: { emailRedirectTo: redirectTo, data: signUpData },
       });
       if (signUpError) throw signUpError;
+      if (!data.session) {
+        router.replace({ pathname: '/(auth)/verify-email', params: { email: email.trim(), ...(pendingCode ? { pendingCode } : {}) } });
+        return;
+      }
       if (data.user) {
         const { error: profileError } = await supabase
           .from('profiles')
@@ -533,7 +543,7 @@ export default function RegisterScreen() {
             ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: nowIso } : {}),
             tos_accepted_at: nowIso,
           })
-          .eq('id', data.user.id);
+          .eq('id', data.user.id).select('id').single();
         if (profileError) {
           logger.warn('[register] profile update fallback failed (trigger should have handled it):', profileError.message);
         }
@@ -593,7 +603,7 @@ export default function RegisterScreen() {
           ...(dob ? { date_of_birth: isoDate(dob), age_verified_at: nowIso } : {}),
           tos_accepted_at: nowIso,
         })
-        .eq('id', userId);
+        .eq('id', userId).select('id').single();
 
       if (updateError) {
         setApiError('Could not save your profile. Please check your connection and try again.');
@@ -1203,7 +1213,7 @@ export default function RegisterScreen() {
               {!isOAuthComplete && (
               <TouchableOpacity
                 style={[styles.loginRow, { marginTop: vSm }]}
-                onPress={() => router.replace('/(auth)/login')}
+                onPress={() => router.replace(pendingCode ? { pathname: '/(auth)/login', params: { pendingCode } } : '/(auth)/login')}
                 activeOpacity={0.7}
               >
                 <AppText style={styles.loginText}>

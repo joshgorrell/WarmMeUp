@@ -1,8 +1,8 @@
+import { registrationComplete as isRegistrationComplete } from '@/lib/registration';
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Animated, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
 import WarmupLogo from '@/components/WarmupLogo';
 import WarmupWordmark from '@/components/WarmupWordmark';
 
@@ -134,13 +134,7 @@ export default function TransitionScreen() {
       // Registration guard — check all required profile fields. If any are
       // missing, route to the registration-completion screen (not onboarding)
       // so the user provides required info before seeing the carousel.
-      const registrationComplete = !!(
-        profile?.first_name &&
-        profile?.last_name &&
-        profile?.date_of_birth &&
-        profile?.age_verified_at &&
-        profile?.tos_accepted_at
-      );
+      const registrationComplete = isRegistrationComplete(profile);
 
       if (!registrationComplete) {
         logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/register [registration incomplete]`, { elapsedMs: elapsed() });
@@ -172,10 +166,6 @@ export default function TransitionScreen() {
 
         const needsCelebration = !!couple.user_b_id && settings && !settings.celebration_seen;
         if (needsCelebration && user) {
-          await supabase
-            .from('user_settings')
-            .update({ celebration_seen: true, updated_at: new Date().toISOString() })
-            .eq('user_id', user.id);
           logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → paired-celebration`, { elapsedMs: elapsed() });
           router.replace({
             pathname: '/(auth)/paired-celebration',

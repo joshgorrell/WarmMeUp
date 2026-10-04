@@ -22,7 +22,7 @@ import Avatar from '@/components/Avatar';
 
 export default function PairedCelebrationScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile, refreshSettings } = useAuth();
   const { partnerName, partnerAvatar } = useLocalSearchParams<{ partnerName?: string; partnerAvatar?: string }>();
   const insets = useSafeAreaInsets();
   const { width, isTablet, contentMaxWidth } = useLayout();
@@ -51,7 +51,7 @@ export default function PairedCelebrationScreen() {
         .from('user_settings')
         .update({ celebration_seen: true, updated_at: new Date().toISOString() })
         .eq('user_id', user.id)
-        .then(() => {});
+        .then(({ error }) => { if (!error) void refreshSettings(); });
     }
   }, [user?.id]);
 
@@ -76,7 +76,7 @@ export default function PairedCelebrationScreen() {
   const heartMainSize = Math.min(Math.round(width * 0.32), 140);
 
   const handleContinue = () => {
-    router.replace({ pathname: '/(auth)/onboarding', params: { paired: '1' } });
+    router.replace(profile?.onboarding_completed_at ? '/transition' : '/(auth)/onboarding');
   };
 
   const centerStyle = isTablet

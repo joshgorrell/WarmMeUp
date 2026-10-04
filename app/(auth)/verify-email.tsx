@@ -1,3 +1,5 @@
+import { authRedirectUrl } from '@/lib/authRedirect';
+import { registrationComplete as isRegistrationComplete } from '@/lib/registration';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -61,10 +63,7 @@ export default function VerifyEmailScreen() {
         setError('Could not finish setting up your account. Please try again.');
         return;
       }
-      const registrationComplete = !!(
-        prof?.first_name && prof?.last_name && prof?.date_of_birth &&
-        prof?.age_verified_at && prof?.tos_accepted_at
-      );
+      const registrationComplete = isRegistrationComplete(prof);
       const code = pendingCode || (await loadPendingCode()) || '';
       if (!registrationComplete) {
         const params: Record<string, string> = { oauthComplete: '1' };
@@ -104,7 +103,7 @@ export default function VerifyEmailScreen() {
           result.reason === 'trial_expired' ? "Your partner's free trial has ended. They can subscribe and try again." :
           'Something went wrong connecting you. You can pair from the app later.';
         setError(msg);
-        setTimeout(() => router.replace('/(auth)/onboarding'), 3000);
+        router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: code } });
         return;
       }
 
@@ -123,7 +122,7 @@ export default function VerifyEmailScreen() {
       if (autoCheckedRef.current) return;
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
         autoCheckedRef.current = true;
-        handleContinue();
+        setTimeout(() => { void handleContinue(); }, 0);
       }
     });
     return () => sub.subscription.unsubscribe();
@@ -136,7 +135,7 @@ export default function VerifyEmailScreen() {
     setResent(false);
     setError('');
     try {
-      const { error: resendError } = await supabase.auth.resend({ type: 'signup', email });
+      const { error: resendError } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: authRedirectUrl() } });
       if (resendError) {
         setError('Could not resend. Please try again shortly.');
       } else {

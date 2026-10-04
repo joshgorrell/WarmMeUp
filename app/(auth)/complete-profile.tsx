@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,12 +17,10 @@ import { supabase } from '@/lib/supabase';
 import { Radius, Spacing, FontSize } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 
-const SUB_WAIT_MS = 600;
-
 export default function CompleteProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, profile, settings, subscriptionInfo, refreshSubscription, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { contentMaxWidth, contentPadding } = useLayout();
 
   const [firstName, setFirstName] = useState(profile?.first_name ?? '');
@@ -30,7 +28,7 @@ export default function CompleteProfileScreen() {
   const [avatarUri, setAvatarUri] = useState<string | null>(profile?.avatar_url ?? null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [pendingComplete, setPendingComplete] = useState(false);
+  const [error, setError] = useState('');
 
   const email = user?.email ?? '';
 
@@ -39,41 +37,10 @@ export default function CompleteProfileScreen() {
     lastName.trim() !== (profile?.last_name ?? '');
   const avatarChanged = avatarUri !== (profile?.avatar_url);
 
-  const finish = useCallback(() => {
-    router.replace('/(app)/(tabs)');
-  }, [router]);
-
-  const completeOnboarding = useCallback(async () => {
-    if (user) {
-      await supabase
-        .from('user_settings')
-        .update({ onboarding_seen: true, updated_at: new Date().toISOString() })
-        .eq('user_id', user.id);
-    }
-    if (!subscriptionInfo.loading) {
-      finish();
-      return;
-    }
-    refreshSubscription().catch(() => {});
-    setPendingComplete(true);
-    setTimeout(() => {
-      setPendingComplete(prev => {
-        if (prev) finish();
-        return false;
-      });
-    }, SUB_WAIT_MS);
-  }, [user, subscriptionInfo.loading, refreshSubscription, finish]);
-
-  useEffect(() => {
-    if (!pendingComplete) return;
-    if (subscriptionInfo.loading) return;
-    setPendingComplete(false);
-    finish();
-  }, [pendingComplete, subscriptionInfo.loading]);
-
   const handleContinue = useCallback(async () => {
     if (saving) return;
-    setSaving(true);
+    setSaving(true); setError('');
+    if (!firstName.trim() || !lastName.trim()) { setError('Please enter your first and last name.'); setSaving(false); return; }
     try {
       if (user && (nameChanged || avatarChanged)) {
         const fn = firstName.trim();
@@ -88,14 +55,15 @@ export default function CompleteProfileScreen() {
         if (avatarChanged) {
           patch.avatar_url = avatarUri;
         }
-        await supabase.from('profiles').update(patch).eq('id', user.id);
+        const { data, error: writeError } = await supabase.from('profiles').update(patch).eq('id', user.id).select('id').single();
+        if (writeError || !data) throw writeError || new Error('Profile missing');
         await refreshProfile();
       }
-      await completeOnboarding();
-    } finally {
+      router.replace('/transition');
+    } catch { setError('Could not save your profile. Please try again.'); } finally {
       setSaving(false);
     }
-  }, [saving, user, nameChanged, avatarChanged, firstName, lastName, profile, avatarUri, refreshProfile, completeOnboarding]);
+  }, [saving, user, nameChanged, avatarChanged, firstName, lastName, profile, avatarUri, refreshProfile, router]);
 
   const displayName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ').trim() || profile?.display_name || '';
 
@@ -162,6 +130,7 @@ export default function CompleteProfileScreen() {
           </View>
         </View>
 
+        {!!error && <AppText style={{ color: '#ff7777' }}>{error}</AppText>}
         {/* Continue button */}
         <TouchableOpacity style={styles.continueBtn} onPress={handleContinue} activeOpacity={0.87} disabled={saving || uploadingAvatar}>
           <LinearGradient

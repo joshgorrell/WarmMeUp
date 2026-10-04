@@ -1,3 +1,4 @@
+import { authRedirectUrl } from '@/lib/authRedirect';
 import React, { useState } from 'react';
 import {
   View, StyleSheet, TouchableOpacity,
@@ -34,7 +35,7 @@ export default function ForgotPasswordScreen() {
     setError('');
     setLoading(true);
     try {
-      const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim());
+      const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: authRedirectUrl(true) });
       if (err) throw err;
       setSent(true);
     } catch (e: any) {

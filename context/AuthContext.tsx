@@ -232,7 +232,7 @@ async function applyAdminOverrideAsync(info: SubscriptionInfo, userId: string): 
 async function fetchEffectiveSubscription(accessToken: string): Promise<SubscriptionInfo> {
   try {
     const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-    if (!baseUrl.startsWith('https://')) return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
+    if (!baseUrl.startsWith('https://')) return { ...DEFAULT_SUBSCRIPTION_INFO, loading: true };
     const url = `${baseUrl}/functions/v1/get-effective-subscription`;
     logger.log('[Subscription] fetching:', url);
     const res = await fetch(url, {
@@ -247,13 +247,14 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
     const rawText = await res.text();
     if (!res.ok) {
       logger.log('[Subscription] non-OK response body:', rawText.slice(0, 500));
-      return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
+      return { ...DEFAULT_SUBSCRIPTION_INFO, loading: true };
     }
     let data: any;
     try { data = JSON.parse(rawText); } catch {
       logger.log('[Subscription] JSON parse failed. Raw:', rawText.slice(0, 500));
-      return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
+      return { ...DEFAULT_SUBSCRIPTION_INFO, loading: true };
     }
+    if (typeof data?.isPremium !== 'boolean' || typeof data?.canInvite !== 'boolean') return { ...DEFAULT_SUBSCRIPTION_INFO, loading: true };
     logger.log('[Subscription] parsed:', JSON.stringify({ isPremium: data.isPremium, source: data.source, canInvite: data.canInvite, trialExpired: data.trialExpired }));
     return {
       isPremium: data.isPremium ?? false,
@@ -270,7 +271,7 @@ async function fetchEffectiveSubscription(accessToken: string): Promise<Subscrip
     };
   } catch (err: any) {
     console.error('[Subscription] fetch error:', err?.message);
-    return { ...DEFAULT_SUBSCRIPTION_INFO, loading: false };
+    return { ...DEFAULT_SUBSCRIPTION_INFO, loading: true };
   }
 }
 
@@ -306,89 +307,98 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // onAuthStateChange is the single source of truth for session state.
     // It fires immediately with INITIAL_SESSION on mount, so we don't need
     // a separate getSession() call, which was causing a double-load race.
+    let active = true;
+    let generation = 0;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        if (loadedUserIdRef.current !== session.user.id) {
+      const eventGeneration = ++generation;
+      setTimeout(() => {
+        if (!active || eventGeneration !== generation) return;
+        if (session?.user) {
+          if (loadedUserIdRef.current !== session.user.id) {
+            clearGalleryItems();
+            evictAllCachedUrls();
+            clearDebugEvents();
+            clearLocalImageCache().catch(() => {});
+            setProfile(null);
+            setCouple(null);
+            setPartnerProfile(null);
+            setSettings(null);
+          }
+          // On INITIAL_SESSION (cold start / restored keychain / iOS reinstall), validate
+          // the token is still recognised by the backend before trusting it.
+          // iOS Keychain survives app deletion, so a stale session may be restored even
+          // after a fresh install. Only an explicit invalid-session response clears
+          // the saved session; a network outage must not sign out a valid account.
+          if (event === 'INITIAL_SESSION') {
+            (async () => {
+              const { error } = await supabase.auth.getUser();
+              if (!active || eventGeneration !== generation) return;
+              if (error && ((error as any).status === 401 || (error as any).status === 403 || error.name === 'AuthSessionMissingError')) {
+                // Persist the cleared-session diagnostics BEFORE signOut wipes SecureStore,
+                // so the debug screen can tell us exactly why and when the session was cleared.
+                if (Platform.OS !== 'web') {
+                  const clearedAt = new Date().toISOString();
+                  const reason = `INITIAL_SESSION getUser failed: ${error.message} (status=${(error as any).status ?? 'n/a'})`;
+                  await Promise.all([
+                    SecureStore.setItemAsync('debug_session_cleared_at', clearedAt).catch(() => {}),
+                    SecureStore.setItemAsync('debug_session_cleared_reason', reason).catch(() => {}),
+                  ]);
+                }
+                await clearUnlockedAt(session.user.id);
+                // signOut flushes the stale token from Keychain/SecureStore and fires
+                // a SIGNED_OUT event which clears React state via the else branch below.
+                await supabase.auth.signOut();
+                return;
+              }
+              // Keep the session through temporary outages. Protected routes wait for
+              // profile and couple verification before rendering.
+              setSession(session);
+              setUser(session.user);
+              if (loadedUserIdRef.current !== session.user.id) {
+                loadedUserIdRef.current = session.user.id;
+                await loadUserData(session.user.id);
+              }
+            })();
+            return;
+          }
+
+          // For SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED etc — trust the session directly.
+          setSession(session);
+          setUser(session.user);
+
+          // Reload on SIGNED_IN or user switch. Skip TOKEN_REFRESHED / USER_UPDATED
+          // to avoid thrashing the DB on routine token refreshes.
+          const shouldLoad =
+            event === 'SIGNED_IN' ||
+            loadedUserIdRef.current !== session.user.id;
+          if (shouldLoad) {
+            loadedUserIdRef.current = session.user.id;
+            setLoading(true);
+            (async () => {
+              await loadUserData(session.user.id);
+            })();
+          }
+        } else {
           clearGalleryItems();
           evictAllCachedUrls();
           clearDebugEvents();
           clearLocalImageCache().catch(() => {});
+          setSession(null);
+          setUser(null);
+          loadedUserIdRef.current = null;
           setProfile(null);
           setCouple(null);
+          setCoupleLoading(true);
           setPartnerProfile(null);
           setSettings(null);
+          setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
+          setLoading(false);
         }
-        // On INITIAL_SESSION (cold start / restored keychain / iOS reinstall), validate
-        // the token is still recognised by the backend before trusting it.
-        // iOS Keychain survives app deletion, so a stale session may be restored even
-        // after a fresh install. getUser() hits the network; an error means the token
-        // is dead — clear all local state and treat as signed-out.
-        if (event === 'INITIAL_SESSION') {
-          (async () => {
-            const { error } = await supabase.auth.getUser();
-            if (error) {
-              // Persist the cleared-session diagnostics BEFORE signOut wipes SecureStore,
-              // so the debug screen can tell us exactly why and when the session was cleared.
-              if (Platform.OS !== 'web') {
-                const clearedAt = new Date().toISOString();
-                const reason = `INITIAL_SESSION getUser failed: ${error.message} (status=${(error as any).status ?? 'n/a'})`;
-                await Promise.all([
-                  SecureStore.setItemAsync('debug_session_cleared_at', clearedAt).catch(() => {}),
-                  SecureStore.setItemAsync('debug_session_cleared_reason', reason).catch(() => {}),
-                ]);
-              }
-              await clearUnlockedAt(session.user.id);
-              // signOut flushes the stale token from Keychain/SecureStore and fires
-              // a SIGNED_OUT event which clears React state via the else branch below.
-              await supabase.auth.signOut();
-              return;
-            }
-            // Token is valid — proceed with normal startup load.
-            setSession(session);
-            setUser(session.user);
-            if (loadedUserIdRef.current !== session.user.id) {
-              loadedUserIdRef.current = session.user.id;
-              await loadUserData(session.user.id);
-            }
-          })();
-          return;
-        }
-
-        // For SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED etc — trust the session directly.
-        setSession(session);
-        setUser(session.user);
-
-        // Reload on SIGNED_IN or user switch. Skip TOKEN_REFRESHED / USER_UPDATED
-        // to avoid thrashing the DB on routine token refreshes.
-        const shouldLoad =
-          event === 'SIGNED_IN' ||
-          loadedUserIdRef.current !== session.user.id;
-        if (shouldLoad) {
-          loadedUserIdRef.current = session.user.id;
-          setLoading(true);
-          (async () => {
-            await loadUserData(session.user.id);
-          })();
-        }
-      } else {
-        clearGalleryItems();
-        evictAllCachedUrls();
-        clearDebugEvents();
-        clearLocalImageCache().catch(() => {});
-        setSession(null);
-        setUser(null);
-        loadedUserIdRef.current = null;
-        setProfile(null);
-        setCouple(null);
-        setCoupleLoading(true);
-        setPartnerProfile(null);
-        setSettings(null);
-        setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
-        setLoading(false);
-      }
+      }, 0);
     });
 
     return () => {
+      active = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -407,6 +417,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetchSettings(userId),
       ]);
 
+      if (loadedUserIdRef.current !== userId) return;
+
       // Restore persisted unlock timestamp so lockIfNeeded() respects the grace period
       // across full app restarts, not just background/foreground transitions.
       const persistedTs = await readUnlockedAt(userId);
@@ -414,13 +426,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUnlockedAtMs(persistedTs);
       logger.log('[Auth] unlockedAt restored:', persistedTs);
 
-      // Always attempt push token registration on load — the OS prompt only appears
-      // once, and subsequent calls return the cached token immediately.
-      // We do NOT gate this on push_notifications_enabled because that flag starts
-      // false and would never let us prompt the user the first time.
-      registerForPushNotifications().then(token => {
-        if (token) savePushToken(userId, token);
-      });
+      // Refresh an already-granted token without presenting permission prompts
+      // or changing the preference. Onboarding asks once after setup completes.
+      registerForPushNotifications(false).then(token => {
+        if (token && loadedUserIdRef.current === userId) void savePushToken(userId, token, false);
+      }).catch(() => {});
 
       // Log the Supabase user ID into RevenueCat so server-side verification can
       // look up this subscriber by their Supabase UUID.
@@ -440,23 +450,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             logger.log('[Auth] admin override applied — canInvite forced true');
             result = adminOverride;
           }
-          setSubscriptionInfo(result);
+          if (loadedUserIdRef.current === userId) setSubscriptionInfo(result);
           if (__DEV__) logger.log('[STARTUP] entitlement ready');
         } catch (err: any) {
           logger.log('[Auth] subscription fetch failed:', err?.message ?? String(err));
-          setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
+          if (loadedUserIdRef.current === userId) setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: true });
         }
       } else {
         logger.log('[Auth] no accessToken — subscription set to default (not loading)');
-        setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
+        if (loadedUserIdRef.current === userId) setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: true });
       }
     } catch (err) {
       console.warn('[Auth] loadUserData error:', err);
       // Network or unexpected error — don't wipe already-loaded state.
-      setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: false });
+      if (loadedUserIdRef.current === userId) setSubscriptionInfo({ ...DEFAULT_SUBSCRIPTION_INFO, loading: true });
     } finally {
       if (__DEV__) logger.log(`[STARTUP] loadUserData complete +${Date.now() - startupStart}ms`);
-      setLoading(false);
+      if (loadedUserIdRef.current === userId) setLoading(false);
     }
   }
 
@@ -466,7 +476,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('*')
       .eq('id', userId)
       .maybeSingle();
-    if (!error) setProfile(data);
+    if (error) throw error;
+    if (loadedUserIdRef.current === userId) setProfile(data);
     return error ? null : data;
   }
 
@@ -497,20 +508,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle(),
     ]);
 
-    const error = errA && errB;
+    const error = errA || errB;
     if (error) {
-      // Both queries failed — keep whatever is already in state.
-      setCoupleLoading(false);
+      // An unresolved membership query cannot prove that this user is solo.
       coupleInitialLoadDoneRef.current = true;
-      return null;
+      throw error;
     }
 
     // Prefer a paired (user_b_id != null) active row; otherwise fall back to
     // whichever query returned a row.
     const aPaired = asA?.user_b_id != null;
-    const bPaired = asB != null;
-    const data = aPaired ? asA : (asB ?? asA ?? null);
+    const data = asA?.active && aPaired ? asA : asB?.active ? asB : asA?.active ? asA : null;
 
+    if (loadedUserIdRef.current !== userId) return null;
     setCouple(data);
     coupleInitialLoadDoneRef.current = true;
 
@@ -522,7 +532,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select('*')
           .eq('id', partnerId)
           .maybeSingle();
-        if (!partnerError) setPartnerProfile(partnerData);
+        if (!partnerError && loadedUserIdRef.current === userId) setPartnerProfile(partnerData);
       } else {
         setPartnerProfile(null);
       }
@@ -541,7 +551,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
-    if (!error) setSettings(data);
+    if (error) throw error;
+    if (loadedUserIdRef.current === userId) setSettings(data);
     return error ? null : data;
   }
 
@@ -678,11 +689,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearJustPaired = useCallback(() => setJustPairedPartnerName(null), []);
 
   const refreshSettings = useCallback(async () => {
-    if (user) await fetchSettings(user.id);
+    if (user && !await fetchSettings(user.id)) throw new Error('Settings unavailable');
   }, [user]);
 
   const refreshProfile = useCallback(async () => {
-    if (user) await fetchProfile(user.id);
+    if (user && !await fetchProfile(user.id)) throw new Error('Profile unavailable');
   }, [user]);
 
   const signOut = useCallback(() => {
@@ -708,7 +719,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Fire side-effects and the Supabase signOut without blocking the caller.
     if (userId) {
-      clearPushToken(userId).catch(() => {});
+      clearPushToken(userId, false).catch(() => {});
       clearUnlockedAt(userId).catch(() => {});
       logOutRevenueCat().catch(() => {});
     }
@@ -751,7 +762,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let result = info;
     const adminOverride = await applyAdminOverrideAsync(result, userId);
     if (adminOverride !== result) result = adminOverride;
-    setSubscriptionInfo(result);
+    if (loadedUserIdRef.current === userId) setSubscriptionInfo(result);
     return result;
   }, []);
 

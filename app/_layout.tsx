@@ -78,7 +78,7 @@ function SessionGuard() {
     // this guard, SessionGuard races with the register screen's OAuth flow:
     // Apple sign-in creates a session before the register screen has saved the
     // DOB, causing SessionGuard to push verify-age and derail the registration.
-    const authRoutes = ['welcome', 'login', 'register', 'verify-age', 'verify-email', 'onboarding', 'onboarding-preview', 'pair', 'paired-celebration', 'subscription', 'complete-profile', 'forgot-password', 'callback'];
+    const authRoutes = ['welcome', 'login', 'register', 'verify-age', 'verify-email', 'onboarding', 'onboarding-preview', 'pair', 'paired-celebration', 'subscription', 'complete-profile', 'forgot-password', 'reset-password', 'callback'];
     const onAuthScreen = first === '(auth)' || authRoutes.includes(current);
     if (!needsOAuthAgeGate || current === 'verify-age' || onAuthScreen || ageCheckFor.current === session.user.id) return;
 

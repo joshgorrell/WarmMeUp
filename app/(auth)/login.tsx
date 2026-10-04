@@ -1,3 +1,4 @@
+import { registrationComplete as isRegistrationComplete } from '@/lib/registration';
 import React, { useState } from 'react';
 import {
   View, StyleSheet, TouchableOpacity,
@@ -102,19 +103,14 @@ export default function LoginScreen() {
           throw e;
         }
 
-        const { data: existing } = await supabase
+        const { data: existing, error: existingError } = await supabase
           .from('profiles')
           .select('first_name, last_name, date_of_birth, age_verified_at, tos_accepted_at, onboarding_completed_at')
           .eq('id', userId)
           .maybeSingle();
 
-        const registrationComplete = !!(
-          existing?.first_name &&
-          existing?.last_name &&
-          existing?.date_of_birth &&
-          existing?.age_verified_at &&
-          existing?.tos_accepted_at
-        );
+        if (existingError) throw existingError;
+        const registrationComplete = isRegistrationComplete(existing);
 
         if (!registrationComplete) {
           const redirectParams: Record<string, string> = { oauthComplete: '1' };
