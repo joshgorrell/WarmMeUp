@@ -7,7 +7,7 @@ import OfflineScreen from '@/components/OfflineScreen';
 import { clearGalleryItems, evictAllCachedUrls } from '@/lib/mediaGalleryStore';
 
 export default function AppLayout() {
-  const { session, loading, profile } = useAuth();
+  const { session, loading, profile, couple, coupleLoading } = useAuth();
   const router = useRouter();
   const { isOffline, checking, checkConnection } = useOnlineStatus();
   // Key changes on each offline→online transition to force a full remount of
@@ -21,9 +21,9 @@ export default function AppLayout() {
     } else if (!loading && session) {
       if (!profile) router.replace('/transition');
       else if (!registrationComplete(profile)) router.replace({ pathname: '/(auth)/register', params: { oauthComplete: '1' } });
-      else if (!profile.onboarding_completed_at) router.replace('/(auth)/onboarding');
+      else if (!profile.onboarding_completed_at && !coupleLoading && !(couple?.active && couple.user_b_id)) router.replace('/(auth)/onboarding');
     }
-  }, [session, loading, profile, router]);
+  }, [session, loading, profile, couple, coupleLoading, router]);
 
   // When entering the offline state, flush all in-memory gallery caches so
   // stale Vault items cannot repopulate after reconnect.
@@ -43,7 +43,8 @@ export default function AppLayout() {
     return <OfflineScreen checking={checking} onTryAgain={checkConnection} />;
   }
 
-  if (loading || !session || !profile || !registrationComplete(profile) || !profile.onboarding_completed_at) return null;
+  const establishedPair = !!couple?.active && !!couple.user_b_id;
+  if (loading || coupleLoading || !session || !profile || !registrationComplete(profile) || (!profile.onboarding_completed_at && !establishedPair)) return null;
 
   return (
     <Stack key={stackKey} screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: '#05040A' } }}>

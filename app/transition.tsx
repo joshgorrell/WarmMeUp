@@ -142,9 +142,12 @@ export default function TransitionScreen() {
         return;
       }
 
-      // Onboarding guard — registration complete but onboarding carousel not finished.
-      if (!profile?.onboarding_completed_at) {
-        logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/onboarding [onboarding not completed]`, { elapsedMs: elapsed() });
+      // The onboarding carousel is a new-account experience. An active pairing is
+      // authoritative evidence that this is an established account, even when a
+      // newer onboarding_completed_at field was never backfilled for that legacy user.
+      const establishedPair = !!couple?.active && !!couple.user_b_id;
+      if (!profile?.onboarding_completed_at && !establishedPair) {
+        logger.log(`[TRANSITION ROUTED] +${elapsed()}ms → /(auth)/onboarding [new account onboarding not completed]`, { elapsedMs: elapsed() });
         router.replace({ pathname: '/(auth)/onboarding', params: { oauthComplete: '1' } });
         return;
       }

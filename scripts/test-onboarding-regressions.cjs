@@ -32,14 +32,20 @@ async function main() {
   const aggregates = await couple();
   await db.query('INSERT INTO monthly_scores(couple_id,user_id,year,month,chat_messages_sent) VALUES ($1,$2,2026,6,10)', [aggregates,a]);
   const untouched = await couple();
+  // This pairing predates the First Moment feature but has no retained content
+  // evidence. It must still be treated as established, not newly onboarded.
+  await db.query("UPDATE couples SET created_at='2026-09-01T00:00:00Z' WHERE id=$1", [untouched]);
   const deletionOnly = await couple();
   await db.query("INSERT INTO activity_events(couple_id,actor_user_id,target_user_id,event_type) VALUES ($1,$2,$3,'content_deleted')", [deletionOnly,a,b]);
   const migration = fs.readdirSync('supabase/migrations').find(f => f.endsWith('_persist_first_moment.sql'));
   await db.exec(fs.readFileSync(path.join('supabase/migrations', migration), 'utf8'));
   assert.equal(new Date(await milestone(historical)).toISOString(), '2026-06-01T00:00:00.000Z');
   assert.ok(await milestone(aggregates), 'retained aggregates restore burned history');
-  assert.equal(await milestone(untouched), null, 'new couple stays incomplete');
+  assert.equal(await milestone(untouched), null, 'original evidence migration does not guess from pair age');
   assert.equal(await milestone(deletionOnly), null, 'deletion alone is not proof of a moment');
+  const grandfather = fs.readdirSync('supabase/migrations').find(f => f.endsWith('_grandfather_legacy_first_moment.sql'));
+  await db.exec(fs.readFileSync(path.join('supabase/migrations', grandfather), 'utf8'));
+  assert.equal(new Date(await milestone(untouched)).toISOString(), '2026-09-01T00:00:00.000Z', 'pre-feature established pair is grandfathered');
 
   const inserts = {
     interactions: "INSERT INTO interactions(couple_id,sender_id,receiver_id,type) VALUES ($1,$2,$3,'dice')",
@@ -66,15 +72,16 @@ async function main() {
   const solo = await couple(false);
   await db.query(inserts.chat_messages, [solo,a]);
   assert.equal(await milestone(solo), null, 'solo content does not complete a couple milestone');
-  await db.query('UPDATE couples SET first_moment_completed_at=now() WHERE id=$1', [untouched]);
-  assert.equal(await milestone(untouched), null, 'clients cannot invent the milestone');
+  const postFeature = await couple();
+  await db.query('UPDATE couples SET first_moment_completed_at=now() WHERE id=$1', [postFeature]);
+  assert.equal(await milestone(postFeature), null, 'clients cannot invent the milestone');
   await db.query('BEGIN');
-  await db.query(inserts.chat_messages, [untouched,a]);
+  await db.query(inserts.chat_messages, [postFeature,a]);
   await db.query('ROLLBACK');
-  assert.equal(await milestone(untouched), null, 'failed/rolled-back send does not complete it');
-  await db.query(inserts.chat_messages, [untouched,a]);
-  await db.query('UPDATE couples SET user_b_id=$2 WHERE id=$1', [untouched,other]);
-  assert.equal(await milestone(untouched), null, 'new partner starts fresh');
+  assert.equal(await milestone(postFeature), null, 'failed/rolled-back send does not complete it');
+  await db.query(inserts.chat_messages, [postFeature,a]);
+  await db.query('UPDATE couples SET user_b_id=$2 WHERE id=$1', [postFeature,other]);
+  assert.equal(await milestone(postFeature), null, 'new partner starts fresh');
   const exposed = (await db.query("SELECT has_function_privilege('authenticated', 'public.record_first_moment()', 'execute') AS allowed")).rows[0];
   assert.equal(exposed.allowed, false, 'trigger function cannot be called by clients');
   const unauthorized = await couple();
