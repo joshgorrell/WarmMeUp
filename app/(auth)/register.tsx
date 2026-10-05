@@ -297,6 +297,16 @@ export default function RegisterScreen() {
         setStep('form');
         return;
       }
+      // Returning partners may only be filling in newer compliance fields.
+      // Resolve their pairing before replaying onboarding or redeeming an invite.
+      const { data: establishedPair, error: coupleError } = await supabase.from('couples')
+        .select('id').eq('active', true).not('user_b_id', 'is', null)
+        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`).limit(1).maybeSingle();
+      if (coupleError) throw coupleError;
+      if (establishedPair) {
+        router.replace('/transition');
+        return;
+      }
       if (code) {
         const result = await completePendingJoin(code);
         if (result.ok) {

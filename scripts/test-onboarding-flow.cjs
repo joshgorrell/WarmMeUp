@@ -66,6 +66,24 @@ async function testCallback(recovery=false, warm=false) {
   await new Promise(resolve=>setTimeout(resolve,20));
   cleanup();assert.deepEqual(calls,['setSession']);assert.equal(h.routes.at(-1),recovery?'/(auth)/reset-password':'/transition');
 }
+async function testRegistrationReturn(paired, lookupFails=false) {
+  // Execute the actual avatar completion callback, including compliance checks.
+  const source=fs.readFileSync('app/(auth)/register.tsx','utf8');
+  const start=source.indexOf('const proceedFromAvatarStep = useCallback(async () => {');
+  const end=source.indexOf('}, [createdUserId, pendingCode, email, router, refreshProfile]);',start);
+  assert.ok(start>=0 && end>start);
+  const body=source.slice(start,end)+'});';
+  const routes=[],errors=[];let joins=0;
+  const query={select(){return this;},eq(){return this;},not(){return this;},or(){return this;},limit(){return this;},
+    single:async()=>({data:profile,error:null}),maybeSingle:async()=>({data:paired?{id:'existing-pair'}:null,error:lookupFails?Error('network'):null})};
+  const supabase={auth:{getUser:async()=>({data:{user:{id:'test-user',email_confirmed_at:'2026-01-01'}},error:null})},from:()=>query};
+  const run=new Function('useCallback','createdUserId','proceedingRef','setApiError','supabase','pendingCode','loadPendingCode','router','email','refreshProfile','isRegistrationComplete','setStep','completePendingJoin','clearPendingCode','isDefinitiveJoinFailure',body+'return proceedFromAvatarStep;');
+  const callback=run(f=>f,'test-user',{current:false},x=>errors.push(x),supabase,'INVITE',async()=>null,{replace:x=>routes.push(x)},'test@example.com',async()=>{},registration.registrationComplete,()=>{},async()=>{joins++;return {ok:false,reason:'error'};},async()=>{},()=>false);
+  await callback();
+  if(lookupFails){assert.equal(routes.length,0);assert.ok(errors.at(-1));assert.equal(joins,0);}
+  else if(paired){assert.equal(routes.at(-1),'/transition');assert.equal(joins,0);}
+  else {assert.equal(routes.at(-1).pathname,'/(auth)/onboarding');assert.equal(joins,1);assert.equal(routes.at(-1).params.pendingCode,'INVITE');}
+}
 async function subscriptionTests() {
   const source=fs.readFileSync('context/AuthContext.tsx','utf8');
   const fn=source.slice(source.indexOf('async function fetchEffectiveSubscription'),source.indexOf('export function AuthProvider'));
@@ -136,6 +154,7 @@ async function databaseTests() {
   await db.close();
 }
 (async()=>{
+ await testRegistrationReturn(true);await testRegistrationReturn(false);await testRegistrationReturn(false,true);
  await testOnboarding();await testOnboarding({code:'ACDEFG'});await testOnboarding({code:'ACDEFG',joinFails:true});await testOnboarding({paired:true,code:'ACDEFG'});await testOnboarding({zeroWrite:true});
  await testCallback();await testCallback(true);await testCallback(false,true);await testCallback(true,true);await subscriptionTests();await notificationTests();await databaseTests();
  console.log('PASS: registration/age validation, callback token exchange/recovery, invite preservation, returning pairs, failed writes, real SQL pairing/consent/expiry/cleanup guards and RPC privileges');
