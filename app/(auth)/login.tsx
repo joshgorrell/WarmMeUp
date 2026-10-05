@@ -117,9 +117,9 @@ export default function LoginScreen() {
           if (codeToPreserve) redirectParams.pendingCode = codeToPreserve;
           router.replace({ pathname: '/(auth)/register', params: redirectParams });
         } else if (!existing?.onboarding_completed_at) {
-          const redirectParams: Record<string, string> = { oauthComplete: '1' };
-          if (codeToPreserve) redirectParams.pendingCode = codeToPreserve;
-          router.replace({ pathname: '/(auth)/onboarding', params: redirectParams });
+          // Transition has couple context and can distinguish a genuinely new
+          // account from a legacy established pair whose marker was never backfilled.
+          router.replace('/transition');
         } else {
           const storedCode = await loadPendingCode();
           const codeToRedeem = codeToPreserve || storedCode || '';
