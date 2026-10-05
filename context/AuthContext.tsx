@@ -481,8 +481,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return error ? null : data;
   }
 
-  async function fetchCouple(userId: string) {
-    setCoupleLoading(true);
+  async function fetchCouple(userId: string, silent = false) {
+    if (!silent) setCoupleLoading(true);
     // Two direct queries instead of a single .or() — .or() with .maybeSingle()
     // can silently return null on certain PostgREST edge cases, causing paired
     // users to see the "invite your partner" screen. Querying each column
@@ -557,7 +557,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const refreshCouple = useCallback(async () => {
-    if (user) await fetchCouple(user.id);
+    if (user) await fetchCouple(user.id, true);
   }, [user]);
 
   // Live-sync: whenever the couple row changes in the DB (e.g. invite_code refreshed,
@@ -585,7 +585,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isUserA &&
             !wasAlreadyPaired &&
             !!newUserBId;
-          await fetchCouple(user.id);
+          await fetchCouple(user.id, true);
           if (partnerJustJoined) {
             const { data: partnerProf } = await supabase
               .from('profiles')
