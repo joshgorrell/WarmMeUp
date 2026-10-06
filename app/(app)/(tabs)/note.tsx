@@ -12,7 +12,7 @@ import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { TextInputWrapper } from 'expo-paste-input';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Image as ImageIcon, Camera, X, Lock, Pencil, Send, Flame } from 'lucide-react-native';
+import { Image as ImageIcon, Video as VideoIcon, Camera, X, Lock, Pencil, Send, Flame } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
@@ -604,11 +604,7 @@ export default function ChatTab() {
         mimeType: resolvedMime,
         fileName: `chat_${Date.now()}.${mimeToExtension(resolvedMime)}`,
       };
-      if (text.trim().length === 0 && !editingState) {
-        await sendMediaMessage(media, '');
-      } else {
-        setAttachedMedia(media);
-      }
+      setAttachedMedia(media);
     } catch (e: any) {
       Alert.alert('Media Error', e?.message ?? 'Could not open media picker.');
     }
@@ -897,12 +893,9 @@ export default function ChatTab() {
         uriPrefix: captured.uri.substring(0, 12),
       });
 
-      if (text.trim().length === 0 && !editingState) {
-        sendMediaMessage(media, '');
-      } else {
-        setAttachedMedia(media);
-      }
-    }, [text, editingState, couple?.id, user?.id, hasPartner])
+      // Accepting a capture only stages it. Send is the sharing boundary.
+      setAttachedMedia(media);
+    }, [])
   );
 
   const handlePastedMedia = useCallback((payload: any) => {
@@ -1478,7 +1471,9 @@ export default function ChatTab() {
           ]}>
             {attachedMedia && !editingState && (
               <View style={styles.previewRow}>
-                <ExpoImage source={{ uri: attachedMedia.uri }} style={styles.previewThumb} contentFit="cover" />
+                {attachedMedia.type === 'video'
+                  ? <View style={[styles.previewThumb, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#222' }]}><VideoIcon color="#fff" size={24} /></View>
+                  : <ExpoImage source={{ uri: attachedMedia.uri }} style={styles.previewThumb} contentFit="cover" cachePolicy="none" />}
                 <View style={styles.previewInfo}>
                   <Lock color="#FF8A3D" size={11} />
                   <AppText style={[styles.previewLabel, { color: colors.textMuted }]}>
