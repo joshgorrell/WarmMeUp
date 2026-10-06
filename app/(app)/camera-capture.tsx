@@ -1,15 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { Image as ExpoImage } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Flashlight, RefreshCcw, Video as VideoIcon, X } from 'lucide-react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useEvent } from 'expo';
+import { VideoView, useVideoPlayer, type VideoPlayer } from 'expo-video';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Flashlight, RefreshCcw, X } from 'lucide-react-native';
 import AppText from '@/components/AppText';
 import { clearCameraCaptureResult, setCameraCaptureResult } from '@/lib/cameraCaptureStore';
 import { cleanupTempFile } from '@/lib/mediaCache';
 
 type Mode = 'photo' | 'video';
-type PendingCapture = { uri: string; mediaType: Mode; mimeType: string; thumbnailUri?: string | null };
+type PendingCapture = { uri: string; mediaType: Mode; mimeType: string };
 
 function videoMimeFromUri(uri: string): string {
   const clean = uri.split('?')[0].toLowerCase();
@@ -23,23 +26,43 @@ function formatRecordingTime(seconds: number): string {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-async function generateVideoThumbnail(uri: string): Promise<string | null> {
-  try {
-    const { getThumbnailAsync } = await import('expo-video-thumbnails');
-    try {
-      const result = await getThumbnailAsync(uri, { time: 200, quality: 0.85 });
-      return result.uri;
-    } catch {
-      const result = await getThumbnailAsync(uri, { time: 0, quality: 0.85 });
-      return result.uri;
-    }
-  } catch {
-    return null;
-  }
+function CapturedVideoPreview({ uri, playerRef }: {
+  uri: string;
+  playerRef: React.RefObject<VideoPlayer | null>;
+}) {
+  // Review the local capture; no upload, caching, or automatic playback.
+  const player = useVideoPlayer({ uri, useCaching: false }, p => {
+    p.loop = false;
+    p.staysActiveInBackground = false;
+  });
+  const { status } = useEvent(player, 'statusChange', { status: player.status });
+
+  useEffect(() => {
+    playerRef.current = player;
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active') player.pause();
+    });
+    return () => { playerRef.current = null; subscription.remove(); };
+  }, [player, playerRef]);
+  useFocusEffect(useCallback(() => () => {
+    // useVideoPlayer owns disposal when this preview unmounts.
+    try { player.pause(); } catch {}
+  }, [player]));
+
+  return <View style={styles.previewVideo}>
+    <VideoView style={StyleSheet.absoluteFill} player={player} contentFit="contain"
+      nativeControls allowsFullscreen={false} allowsPictureInPicture={false} />
+    {status === 'loading' && <ActivityIndicator style={StyleSheet.absoluteFill} pointerEvents="none" color="#fff" size="large" />}
+    {status === 'error' && <View style={styles.previewVideoFallback}>
+      <AppText style={styles.previewVideoFallbackText}>Could not play this recording. Retake it or use it without playback.</AppText>
+    </View>}
+  </View>;
 }
 
 export default function CameraCaptureScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const previewPlayerRef = useRef<VideoPlayer | null>(null);
   const params = useLocalSearchParams<{ mode?: string }>();
   const [mode, setMode] = useState<Mode>(params.mode === 'video' ? 'video' : 'photo');
   const cameraRef = useRef<CameraView>(null);
@@ -65,9 +88,10 @@ export default function CameraCaptureScreen() {
 
   const remountCamera = () => setCameraGeneration(v => v + 1);
   const close = () => {
+    if (finalizing) return;
+    previewPlayerRef.current?.pause();
     if (recording) cameraRef.current?.stopRecording();
     if (pendingCapture?.uri) cleanupTempFile(pendingCapture.uri).catch(() => {});
-    if (pendingCapture?.thumbnailUri) cleanupTempFile(pendingCapture.thumbnailUri).catch(() => {});
     clearCameraCaptureResult(); router.back();
   };
   const switchMode = (next: Mode) => {
@@ -93,8 +117,7 @@ export default function CameraCaptureScreen() {
         const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
         setRecording(false);
         if (result?.uri) {
-          const thumbnailUri = await generateVideoThumbnail(result.uri);
-          setPendingCapture({ uri: result.uri, mediaType: 'video', mimeType: videoMimeFromUri(result.uri), thumbnailUri });
+          setPendingCapture({ uri: result.uri, mediaType: 'video', mimeType: videoMimeFromUri(result.uri) });
         }
       } else {
         setBusy(true);
@@ -112,14 +135,14 @@ export default function CameraCaptureScreen() {
   const retake = async () => {
     if (!pendingCapture || finalizing) return;
     setFinalizing(true);
-    if (pendingCapture.thumbnailUri) await cleanupTempFile(pendingCapture.thumbnailUri).catch(() => {});
+    previewPlayerRef.current?.pause();
     await cleanupTempFile(pendingCapture.uri).catch(() => {});
     setPendingCapture(null); setFlashEnabled(false); setFinalizing(false); remountCamera();
   };
   const useCapture = async () => {
     if (!pendingCapture || finalizing) return;
     setFinalizing(true);
-    if (pendingCapture.thumbnailUri) await cleanupTempFile(pendingCapture.thumbnailUri).catch(() => {});
+    previewPlayerRef.current?.pause();
     setCameraCaptureResult(pendingCapture); setPendingCapture(null); router.back();
   };
 
@@ -130,14 +153,11 @@ export default function CameraCaptureScreen() {
     <View style={styles.previewRoot}>
       {pendingCapture.mediaType === 'photo'
         ? <ExpoImage source={{ uri: pendingCapture.uri }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="none" />
-        : <>
-          {pendingCapture.thumbnailUri
-            ? <ExpoImage source={{ uri: pendingCapture.thumbnailUri }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="none" />
-            : <View style={styles.previewVideoFallback}><VideoIcon color="#fff" size={48} /><AppText style={styles.previewVideoFallbackText}>Video ready to send</AppText></View>}
-          <View style={styles.previewVideoBadge}><VideoIcon color="#fff" size={14} /><AppText style={styles.previewVideoBadgeText}>Video</AppText></View>
-        </>}
-      <TouchableOpacity style={styles.previewClose} onPress={close}><X color="#fff" size={26} /></TouchableOpacity>
-      <View style={styles.previewActions}>
+        : <View style={[styles.previewVideoArea, { top: insets.top + 70, bottom: Math.max(insets.bottom, 16) + 72 }]}>
+          <CapturedVideoPreview key={pendingCapture.uri} uri={pendingCapture.uri} playerRef={previewPlayerRef} />
+        </View>}
+      <TouchableOpacity style={[styles.previewClose, { top: insets.top + 12 }]} onPress={close} disabled={finalizing} accessibilityLabel="Discard capture" accessibilityRole="button"><X color="#fff" size={26} /></TouchableOpacity>
+      <View style={[styles.previewActions, { bottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity style={styles.retakeButton} onPress={retake} disabled={finalizing}><AppText style={styles.retakeText}>Retake</AppText></TouchableOpacity>
         <TouchableOpacity style={styles.useButton} onPress={useCapture} disabled={finalizing}><AppText style={styles.useText}>{finalizing ? 'Saving…' : pendingCapture.mediaType === 'video' ? 'Use Video' : 'Use Photo'}</AppText></TouchableOpacity>
       </View>
@@ -160,10 +180,10 @@ export default function CameraCaptureScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   previewRoot: { flex: 1, backgroundColor: '#000' },
+  previewVideoArea: { position: 'absolute', left: 0, right: 0 },
+  previewVideo: { flex: 1 },
   previewVideoFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
-  previewVideoFallbackText: { color: 'rgba(255,255,255,0.7)', fontSize: 16 },
-  previewVideoBadge: { position: 'absolute', top: 54, right: 18, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
-  previewVideoBadgeText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  previewVideoFallbackText: { color: '#fff', fontSize: 16, textAlign: 'center', paddingHorizontal: 24 },
   previewClose: { position: 'absolute', top: 54, left: 18, width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(0,0,0,0.48)', alignItems: 'center', justifyContent: 'center' },
   previewActions: { position: 'absolute', left: 24, right: 24, bottom: 34, flexDirection: 'row', gap: 12 },
   retakeButton: { flex: 1, minHeight: 52, borderRadius: 26, backgroundColor: 'rgba(32,32,38,0.94)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' },
