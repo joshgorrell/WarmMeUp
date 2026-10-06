@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect , useRouter } from 'expo-router';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
 import { logDebugEvent } from '@/lib/debugLog';
 import {
   FileSliders as Sliders, Users, ChartBar as BarChart2, ChevronRight, Activity,

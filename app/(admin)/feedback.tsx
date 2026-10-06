@@ -186,7 +186,7 @@ export default function FeedbackAdminScreen() {
             <View style={{ flex: 1 }}>
               <AppText style={[styles.configLabel, { color: colors.text }]}>Feedback Feature</AppText>
               <AppText style={[styles.configSub, { color: colors.textMuted }]}>
-                Show a "Send Feedback" option in user Settings
+                Show a &quot;Send Feedback&quot; option in user Settings
               </AppText>
             </View>
             {enabledLoading ? (

@@ -145,7 +145,7 @@ export default function PairedCelebrationScreen() {
 
         {/* Content */}
         <Animated.View style={[styles.content, contentAnimStyle]}>
-          <AppText style={styles.heading}>You're connected!</AppText>
+          <AppText style={styles.heading}>You&apos;re connected!</AppText>
           {partnerName ? (
             <AppText style={styles.sub}>
               You and <AppText style={styles.partnerName} numberOfLines={1} ellipsizeMode="tail">{partnerName}</AppText> are now paired.{'\n'}
@@ -180,7 +180,7 @@ export default function PairedCelebrationScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.ctaGrad}
             >
-              <AppText style={styles.ctaLabel}>Let's go</AppText>
+              <AppText style={styles.ctaLabel}>Let&apos;s go</AppText>
             </LinearGradient>
           </TouchableOpacity>
 

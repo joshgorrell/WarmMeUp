@@ -348,7 +348,7 @@ export default function WeatherScreen() {
       }
     })();
   // weather is intentionally excluded — we only want to run this when settings loads.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [settings]);
 
   const handleCoastIsClear = async () => {

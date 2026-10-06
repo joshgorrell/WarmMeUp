@@ -108,7 +108,7 @@ export default function CancellationSurveySheet({ visible, onClose, surveyType, 
       <View style={styles.content}>
         {/* Primary reason */}
         <AppText style={[styles.question, { color: colors.text }]}>
-          What's the biggest reason you're leaving?
+          What&apos;s the biggest reason you&apos;re leaving?
         </AppText>
         <View style={styles.chipGrid}>
           {REASONS.map((reason) => {

@@ -509,7 +509,7 @@ export default function SubscriptionScreen() {
             >
               <UserPlus color="rgba(255,90,60,0.7)" size={15} strokeWidth={2} />
               <AppText style={styles.partnerCodeText}>
-                Have a partner's code? Connect instead
+                Have a partner&apos;s code? Connect instead
               </AppText>
             </TouchableOpacity>
           )}

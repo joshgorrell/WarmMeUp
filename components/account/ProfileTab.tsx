@@ -291,7 +291,7 @@ export function ProfileTab({
           <View style={[styles.enterCodeIcon, { backgroundColor: 'rgba(255,122,69,0.10)' }]}>
             <UserPlus color="#FF7A45" size={16} strokeWidth={2} />
           </View>
-          <AppText style={[styles.enterCodeText, { color: colors.textSecondary }]}>Have a partner's code? Enter it here</AppText>
+          <AppText style={[styles.enterCodeText, { color: colors.textSecondary }]}>Have a partner&apos;s code? Enter it here</AppText>
           <ChevronRight color={colors.textMuted} size={15} strokeWidth={2} />
         </TouchableOpacity>
       )}

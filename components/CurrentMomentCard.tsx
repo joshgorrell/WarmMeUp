@@ -59,7 +59,7 @@ export default function CurrentMomentCard({ interaction, currentUserId, partnerN
             </AppText>
             {interaction.status === 'rejected' && interaction.decline_reason && (
               <AppText style={[styles.declineReason, { color: colors.textSecondary }]}>
-                "{interaction.decline_reason}"
+                &quot;{interaction.decline_reason}&quot;
               </AppText>
             )}
           </View>

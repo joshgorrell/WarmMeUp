@@ -1108,7 +1108,7 @@ export default function AccountScreen() {
                 </View>
                 <AppText style={[styles.dataModalTitle, { color: colors.text }]}>Reset All Points?</AppText>
                 <AppText style={[styles.dataModalBody, { color: colors.textSecondary }]}>
-                  This will reset all points back to zero — including all-time history. It's like starting the game over fresh!{'\n\n'}Your content, vault, settings, and Weekly Streak are not affected. This cannot be undone.
+                  This will reset all points back to zero — including all-time history. It&apos;s like starting the game over fresh!{'\n\n'}Your content, vault, settings, and Weekly Streak are not affected. This cannot be undone.
                 </AppText>
                 <View style={styles.dataModalBtns}>
                   <TouchableOpacity style={[styles.dataModalCancelBtn, { borderColor: colors.borderSubtle }]} onPress={() => setResetPointsOpen(false)} activeOpacity={0.7} disabled={resetting}>
@@ -1283,7 +1283,7 @@ export default function AccountScreen() {
           </View>
           <AppText style={[styles.cancelInviteSheetTitle, { color: colors.text }]}>Cancel invite?</AppText>
           <AppText style={[styles.cancelInviteSheetBody, { color: colors.textSecondary }]}>
-            Your partner won't be able to use this code. You can generate a new one any time.
+            Your partner won&apos;t be able to use this code. You can generate a new one any time.
           </AppText>
           <TouchableOpacity
             style={[styles.cancelInviteConfirmBtn, cancellingInvite && { opacity: 0.6 }]}
