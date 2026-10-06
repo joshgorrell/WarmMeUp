@@ -198,7 +198,7 @@ function GrantedCard({
         <Image source={{ uri: memImgUri }} style={styles.grantedMemImg} contentFit="cover" cachePolicy="none" transition={150} />
       )}
       {wish.fulfilled_note ? (
-        <AppText style={[styles.grantedNote, { color: colors.textSecondary }]} numberOfLines={2}>"{wish.fulfilled_note}"</AppText>
+        <AppText style={[styles.grantedNote, { color: colors.textSecondary }]} numberOfLines={2}>&quot;{wish.fulfilled_note}&quot;</AppText>
       ) : null}
       <AppText style={[styles.grantedDate, { color: colors.textMuted }]}>
         {isMine ? 'Your wish' : "Partner's wish"} · {wish.fulfilled_at ? timeAgo(wish.fulfilled_at) : ''}
@@ -283,7 +283,7 @@ function WishDetailSheet({
           )}
           {wish.fulfilled_note && (
             <AppText style={[styles.detailFulfilledNote, { color: colors.textSecondary }]}>
-              "{wish.fulfilled_note}"
+              &quot;{wish.fulfilled_note}&quot;
             </AppText>
           )}
           <AppText style={[styles.detailFulfilledDate, { color: colors.textMuted }]}>
@@ -965,7 +965,7 @@ function FulfillSheet({
                   <AppText style={styles.sheetTitle}>Grant this Wish</AppText>
                 </View>
                 {wish && (
-                  <AppText style={styles.sheetWishTitle}>"{wish.title}"</AppText>
+                  <AppText style={styles.sheetWishTitle}>&quot;{wish.title}&quot;</AppText>
                 )}
 
                 {error ? <AppText style={styles.sheetError}>{error}</AppText> : null}

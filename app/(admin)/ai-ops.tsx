@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect , useRouter } from 'expo-router';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
 import {
   Bot, CircleCheck as CheckCircle2, CircleX as XCircle, TriangleAlert as AlertTriangle,
   RefreshCw, ChevronDown, ChevronUp, Play, CircleDot as Circle, ShieldCheck,

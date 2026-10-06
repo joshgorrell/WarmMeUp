@@ -277,7 +277,7 @@ export default function HomeScreen() {
       i.expires_at &&
       new Date(i.expires_at) > new Date();
 
-    const items: Array<ActivityItem & { _rawTime: string }> = [];
+    const items: (ActivityItem & { _rawTime: string })[] = [];
 
     (interactions ?? []).forEach((i: Interaction) => {
       const isActionable = isActiveInteraction(i);
@@ -837,7 +837,7 @@ export default function HomeScreen() {
         </View>
       ) : !activeInteraction ? (
         <View style={[styles.activityEmpty, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-          <AppText style={[styles.activityEmptyTitle, { color: colors.text }]}>You're all caught up!</AppText>
+          <AppText style={[styles.activityEmptyTitle, { color: colors.text }]}>You&apos;re all caught up!</AppText>
           <AppText style={[styles.activityEmptyText, { color: colors.textMuted }]}>Send a chat, roll the dice, send a dare, or create a wish.</AppText>
         </View>
       ) : null}

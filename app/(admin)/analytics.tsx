@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect , useRouter } from 'expo-router';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -51,7 +50,7 @@ interface TrialData {
 
 interface CancellationData {
   totalSurveys: number;
-  topReasons: Array<{ reason: string; count: number }>;
+  topReasons: { reason: string; count: number }[];
 }
 
 const EMPTY_OVERVIEW: OverviewData = {

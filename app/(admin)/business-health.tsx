@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect , useRouter } from 'expo-router';
 import {
   View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import AppText from '@/components/AppText';
-import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
@@ -50,7 +49,7 @@ interface BusinessHealthData {
   ltv: number;
   coupleActivationRate: number;
   inviteAcceptanceRate: number;
-  monthlyHistory: Array<{
+  monthlyHistory: {
     month: string;
     mrr: number;
     payingCouples: number;
@@ -58,7 +57,7 @@ interface BusinessHealthData {
     cancellations: number;
     trialsStarted: number;
     trialsConverted: number;
-  }>;
+  }[];
   funnel: {
     signups: number;
     partnerInvited: number;
@@ -73,11 +72,11 @@ interface BusinessHealthData {
 }
 
 interface CohortData {
-  cohorts: Array<{
+  cohorts: {
     cohortMonth: string;
     cohortSize: number;
     retention: { [key: string]: { retained: number; rate: number } };
-  }>;
+  }[];
   checkpoints: string[];
 }
 
@@ -116,7 +115,7 @@ interface ChurnData {
     monthlyCount: number;
     annualCount: number;
     wouldReturnCount: number;
-    topReasons: Array<{ reason: string; count: number }>;
+    topReasons: { reason: string; count: number }[];
   };
 }
 

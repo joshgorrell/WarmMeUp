@@ -171,7 +171,7 @@ function VisualVault() {
         <View style={styles.vaultHeader}>
           <View>
             <AppText style={styles.vaultTitle}>Vault</AppText>
-            <AppText style={styles.vaultSubtitle}>just yours + your partner's</AppText>
+            <AppText style={styles.vaultSubtitle}>just yours + your partner&apos;s</AppText>
           </View>
           <Lock size={18} color={ACCENT} />
         </View>

@@ -702,7 +702,7 @@ export default function PairScreen() {
               </View>
 
               <View style={[styles.headerRow, { marginBottom: Spacing.sm }]}>
-                <AppText style={[styles.heading, { fontSize: headingSize }]}>Enter your{'\n'}partner's code</AppText>
+                <AppText style={[styles.heading, { fontSize: headingSize }]}>Enter your{'\n'}partner&apos;s code</AppText>
                 <TouchableOpacity
                   style={styles.helpBtn}
                   onPress={() => { setHelpVariant('joiner'); setHelpVisible(true); }}
@@ -720,12 +720,12 @@ export default function PairScreen() {
                       <HeartOutline size={28} gradientId="previewHeart" colorA="#FF7B00" colorB="#FF2E8A" />
                     </View>
                     <View style={styles.previewTextWrap}>
-                      <AppText style={styles.previewLabel}>You're connecting with</AppText>
+                      <AppText style={styles.previewLabel}>You&apos;re connecting with</AppText>
                       <AppText style={styles.previewName} numberOfLines={1} ellipsizeMode="tail">{preAuthPreview.name}</AppText>
                     </View>
                   </View>
                   <AppText style={styles.previewNote}>
-                    Tap Continue to create your account. You'll be connected instantly.
+                    Tap Continue to create your account. You&apos;ll be connected instantly.
                   </AppText>
                 </View>
               ) : null}
@@ -867,7 +867,7 @@ export default function PairScreen() {
               </View>
               <View style={styles.optionText}>
                 <AppText style={styles.secondaryOptionTitle}>Enter a Code Instead</AppText>
-                <AppText style={styles.secondaryOptionDesc}>Already have your partner's code?</AppText>
+                <AppText style={styles.secondaryOptionDesc}>Already have your partner&apos;s code?</AppText>
               </View>
               <ChevronRight color="rgba(255,255,255,0.22)" size={18} />
             </TouchableOpacity>
@@ -878,13 +878,13 @@ export default function PairScreen() {
             onPress={() => router.replace('/(app)/(tabs)')}
             activeOpacity={0.7}
           >
-            <AppText style={styles.skipBtnText}>Skip — I'll Add Them Later</AppText>
+            <AppText style={styles.skipBtnText}>Skip — I&apos;ll Add Them Later</AppText>
           </TouchableOpacity>
 
           {!subscriptionInfo.canInvite && !subscriptionInfo.loading && (
             <View style={styles.noSubHint}>
               <AppText style={styles.noSubHintText}>
-                Don't have a subscription? No problem — tap "I have a code" to enter your partner's invite code and join them for free.
+                Don&apos;t have a subscription? No problem — tap &quot;I have a code&quot; to enter your partner&apos;s invite code and join them for free.
               </AppText>
             </View>
           )}
@@ -1031,7 +1031,7 @@ export default function PairScreen() {
                   <AppText style={styles.goHomeText}>Go to Home</AppText>
                 </TouchableOpacity>
 
-                <AppText style={styles.waitingText}>Your partner can join anytime — you'll be connected automatically.</AppText>
+                <AppText style={styles.waitingText}>Your partner can join anytime — you&apos;ll be connected automatically.</AppText>
 
                 {(couple?.pending_partner_status === 'pending' || couple?.pending_partner_status === 'b_accepted') && (
                   <TouchableOpacity
@@ -1145,7 +1145,7 @@ export default function PairScreen() {
               >
                 <X color="rgba(255,255,255,0.80)" size={20} />
               </TouchableOpacity>
-              <AppText style={styles.modalTitle}>Enter partner's code</AppText>
+              <AppText style={styles.modalTitle}>Enter partner&apos;s code</AppText>
               <AppText style={styles.modalSub}>Ask your partner for their 6-character invite code.</AppText>
 
               <AppTextInput

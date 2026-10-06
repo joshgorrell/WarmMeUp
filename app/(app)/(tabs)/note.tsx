@@ -207,7 +207,7 @@ export default function ChatTab() {
       const ch = supabase.channel(`presence:couple_${couple.id}`)
         .on('presence', { event: 'sync' }, () => {
           const state = ch.presenceState<{ user_id: string }>();
-          const allPresences = (Object.values(state) as Array<Array<{ user_id: string }>>).flat();
+          const allPresences = (Object.values(state) as { user_id: string }[][]).flat();
           setPartnerIsOnline(allPresences.some(p => p.user_id === partnerProfile.id));
         })
         .subscribe(async (status) => {
@@ -1282,7 +1282,7 @@ export default function ChatTab() {
     [activeMenuId, messages],
   );
 
-  const handleViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<{ item: ChatMessage }> }) => {
+  const handleViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: { item: ChatMessage }[] }) => {
     const mediaItems = viewableItems.filter(viewable => viewable.item.media_storage_path).map(viewable => viewable.item);
     lastVisibleMediaMsgRef.current = mediaItems.length > 0
       ? mediaItems[mediaItems.length - 1]

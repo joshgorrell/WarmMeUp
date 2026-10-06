@@ -37,7 +37,7 @@ import { useAuth } from '@/context/AuthContext';
 // Only loaded on native — web falls back to text input
 let DateTimePicker: React.ComponentType<any> | null = null;
 if (Platform.OS !== 'web') {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+
   DateTimePicker = require('@react-native-community/datetimepicker').default;
 }
 
@@ -195,7 +195,7 @@ export default function RegisterScreen() {
         setStep('name');
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [oauthComplete]);
 
   // --- Derived: DOB validity ---
@@ -836,7 +836,7 @@ export default function RegisterScreen() {
             </View>
 
             {/* Title */}
-            <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>What's your name?</AppText>
+            <AppText style={[styles.heading, { fontSize: headingSize, marginBottom: vXs }]}>What&apos;s your name?</AppText>
             <AppText style={[styles.sub, { marginBottom: vMd }]}>Your partner will see it in chat and throughout the app.</AppText>
 
             {/* Name inputs */}

@@ -76,7 +76,7 @@ export default function ForgotPasswordScreen() {
             <View style={styles.card}>
               <AppText style={styles.cardTitle}>Reset Password</AppText>
               <AppText style={styles.cardSub}>
-                Enter the email for your account and we'll send a reset link.
+                Enter the email for your account and we&apos;ll send a reset link.
               </AppText>
 
               <View style={styles.inputWrap}>
