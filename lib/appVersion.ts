@@ -1,5 +1,5 @@
-export const APP_CODE_VERSION = 'chat-fixes-v2-2026-06-21';
-export const OTA_MARKER = 'OTA CHAT FIXES V2 2026-06-21';
+export const APP_CODE_VERSION = 'security-presence-private-2026-10-06';
+export const OTA_MARKER = 'SECURITY: private presence channel + notify-partner vault leak fix';
 
 // Injected by EAS at build time via EXPO_PUBLIC_GIT_SHA env var.
 // Will be null in dev / older builds that predate this change.
