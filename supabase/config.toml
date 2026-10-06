@@ -4,6 +4,9 @@ verify_jwt = true
 [functions.notify-screenshot]
 verify_jwt = true
 
+[functions.notify-partner]
+verify_jwt = true
+
 [functions.disconnect-couple]
 verify_jwt = true
 

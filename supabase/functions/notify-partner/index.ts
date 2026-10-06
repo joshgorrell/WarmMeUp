@@ -65,6 +65,24 @@ Deno.serve(async (req: Request) => {
     const partnerId = isPendingEvent ? couple.user_a_id : (couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id);
     if (!partnerId) return new Response(JSON.stringify({ ok: true, skipped: "no_partner" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    // Validate item_id against the caller's own couple BEFORE checking notification
+    // settings. This prevents a foreign couple's vault item metadata from leaking
+    // into the push notification body when notifications are enabled.
+    let validatedVaultItem: { media_type?: string | null; storage_path?: string | null } | null = null;
+    if (event_type === "new_vault_item" && item_id) {
+      const { data: vaultItem, error: vaultError } = await adminClient
+        .from("vault_items")
+        .select("media_type, storage_path")
+        .eq("id", item_id)
+        .eq("couple_id", couple_id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (vaultError || !vaultItem) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      validatedVaultItem = vaultItem;
+    }
+
     const [{ data: partnerProfile }, { data: partnerSettings }] = await Promise.all([
       adminClient.from("profiles").select("push_token").eq("id", partnerId).maybeSingle(),
       adminClient.from("user_settings").select("push_notifications_enabled, discreet_notifications").eq("user_id", partnerId).maybeSingle(),
@@ -94,12 +112,7 @@ Deno.serve(async (req: Request) => {
           ? mediaActivityLabel(latestMessage.media_type, latestMessage.media_storage_path)
           : "New Message";
       } else if (event_type === "new_vault_item") {
-        let vaultItem: { media_type?: string | null; storage_path?: string | null } | null = null;
-        if (item_id) {
-          const result = await adminClient.from("vault_items").select("media_type, storage_path").eq("id", item_id).maybeSingle();
-          vaultItem = result.data;
-        }
-        activityLabel = vaultItem ? mediaActivityLabel(vaultItem.media_type, vaultItem.storage_path) : "New Activity";
+        activityLabel = validatedVaultItem ? mediaActivityLabel(validatedVaultItem.media_type, validatedVaultItem.storage_path) : "New Activity";
       } else if (event_type === "new_dare") {
         activityLabel = "New Dare";
       } else if (event_type === "new_wish") {
@@ -118,7 +131,7 @@ Deno.serve(async (req: Request) => {
       to: partnerProfile.push_token,
       title,
       body: bodyText,
-      data: { event_type, couple_id, target_route: target_route ?? null, item_id: item_id ?? null },
+      data: { event_type, target_route: target_route ?? null, item_id: item_id ?? null },
       sound: "default",
     };
 

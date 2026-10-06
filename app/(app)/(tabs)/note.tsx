@@ -204,7 +204,7 @@ export default function ChatTab() {
   useFocusEffect(
     useCallback(() => {
       if (!couple?.id || !user?.id || !hasPartner || !partnerProfile?.id) return;
-      const ch = supabase.channel(`presence:couple_${couple.id}`)
+      const ch = supabase.channel(`presence:couple_${couple.id}`, { config: { private: true } })
         .on('presence', { event: 'sync' }, () => {
           const state = ch.presenceState<{ user_id: string }>();
           const allPresences = (Object.values(state) as { user_id: string }[][]).flat();
