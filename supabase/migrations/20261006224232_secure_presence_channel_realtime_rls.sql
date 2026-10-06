@@ -10,34 +10,51 @@ presence read/write to active couple members only.
 
 ## How It Works
 Supabase Realtime checks RLS policies on `realtime.messages` when a client
-connects to a channel with `{ config: { private: true } }`. The `topic` column
-stores the channel name (e.g. `presence:couple_<uuid>`). The policies below:
-
-1. SELECT policy: Allow authenticated users to read presence messages only if
-   they are an active member of the couple whose UUID is embedded in the topic.
-2. INSERT policy: Allow authenticated users to track presence only if they are
-   an active member of that couple.
+connects to a channel with `{ config: { private: true } }`. Realtime performs
+a probe query on the table and rolls it back; the RLS policy must return a row
+for the client to be authorized.
 
 ## Couple Membership Check
 A user is an active member of a couple if:
 - `couples.user_a_id = auth.uid()` OR `couples.user_b_id = auth.uid()`
 - AND `couples.active = true`
 
-The topic format is `presence:couple_<uuid>`. The policy extracts the UUID
-suffix and looks up the couple by ID.
+The topic is `presence:couple_<uuid>`. The policy matches it with
+`realtime.topic() LIKE '%presence:couple_' || c.id::text` so the couple
+UUID is extracted from the topic suffix and compared against the couples
+the caller belongs to.
 
-## Important Note
-For these policies to take effect, the "Allow public access" setting must be
-disabled in the Supabase Dashboard under Realtime Settings. Until that setting
-is disabled, the policies exist but are not enforced because public access
-bypasses them. This is a manual dashboard step -- it cannot be done via SQL.
+## Why No `extension` Filter
+The Supabase docs show `realtime.messages.extension = 'presence'` inside
+RLS policies. However, during Realtime's authorization probe the probe row
+does not have `extension = 'presence'`, so any policy that filters on this
+value rejects even legitimate members. The topic-based check alone is
+sufficient -- the topic name `presence:couple_<uuid>` already scopes the
+policy to presence channels.
+
+## "Allow Public Access" Setting
+Private channels with `config: { private: true }` enforce RLS policies
+regardless of the "Allow public access" Realtime dashboard setting. That
+setting only controls whether public channels (without `private: true`)
+are allowed. The app's 12 other Realtime subscriptions are public Postgres
+Changes channels that rely on table-level RLS, so do NOT disable "Allow
+public access" without first converting those channels to private.
 
 ## Security
-- RLS is already enabled on `realtime.messages`.
-- These policies are scoped to `extension = 'presence'` only, so they do not
-  affect broadcast or other realtime message types.
-- Policies use `auth.uid()` for identity, never `current_user`.
+- RLS is already enabled on `realtime.messages` (Supabase default).
+- SELECT policy: only active couple members can read presence messages on
+  their own couple's channel.
+- INSERT policy: only active couple members can track presence on their
+  own couple's channel.
+- Uses `auth.uid()` for identity, never `current_user`.
 - Disconnected partners (couple `active = false`) are denied access.
+
+## Verification
+WebSocket tests with real authenticated sessions confirmed:
+- Member subscribing to own couple's private channel: SUBSCRIBED (PASS)
+- Outsider subscribing to foreign couple's private channel: CHANNEL_ERROR (PASS)
+- Track on existing connection after couple deactivated: TRACKED (cached auth)
+- Fresh client (new WebSocket) after deactivation: CHANNEL_ERROR (PASS)
 */
 
 -- Drop existing policies if any (idempotent)
@@ -50,18 +67,12 @@ ON realtime.messages
 FOR SELECT
 TO authenticated
 USING (
-  extension = 'presence'
-  AND EXISTS (
+  EXISTS (
     SELECT 1
     FROM public.couples c
-    WHERE c.id = (
-      SELECT regexp_replace(
-        regexp_replace(realtime.topic(), '^presence:couple_', ''),
-        '[^a-f0-9-]', '', 'g'
-      )::uuid
-    )
-    AND c.active = true
+    WHERE c.active = true
     AND (c.user_a_id = auth.uid() OR c.user_b_id = auth.uid())
+    AND realtime.topic() LIKE '%' || 'presence:couple_' || c.id::text
   )
 );
 
@@ -71,17 +82,11 @@ ON realtime.messages
 FOR INSERT
 TO authenticated
 WITH CHECK (
-  extension = 'presence'
-  AND EXISTS (
+  EXISTS (
     SELECT 1
     FROM public.couples c
-    WHERE c.id = (
-      SELECT regexp_replace(
-        regexp_replace(realtime.topic(), '^presence:couple_', ''),
-        '[^a-f0-9-]', '', 'g'
-      )::uuid
-    )
-    AND c.active = true
+    WHERE c.active = true
     AND (c.user_a_id = auth.uid() OR c.user_b_id = auth.uid())
+    AND realtime.topic() LIKE '%' || 'presence:couple_' || c.id::text
   )
 );
