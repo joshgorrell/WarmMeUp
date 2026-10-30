@@ -10,6 +10,7 @@ import AppTextInput from '@/components/AppTextInput';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { signInWithProvider, isOAuthSupported, assertNoEmailCollision, EmailCollisionError } from '@/lib/oauth';
 import { savePendingCode, loadPendingCode, clearPendingCode } from '@/lib/inviteCode';
 import { friendlyAuthError } from '@/lib/authError';
@@ -31,6 +32,7 @@ const PLACEHOLDER_COLOR = 'rgba(255,255,255,0.38)';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { isAuthenticatingRef } = useAuth();
   const { pendingCode, prefilledCode } = useLocalSearchParams<{ pendingCode?: string; prefilledCode?: string }>();
   const codeToPreserve = (pendingCode || prefilledCode || '').toUpperCase().trim();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
@@ -86,6 +88,7 @@ export default function LoginScreen() {
   const handleOAuth = async (provider: 'apple' | 'google') => {
     setError('');
     setOauthLoading(provider);
+    isAuthenticatingRef.current = true;
     try {
       if (codeToPreserve) await savePendingCode(codeToPreserve);
       const session = await signInWithProvider(provider);
@@ -143,6 +146,7 @@ export default function LoginScreen() {
     } catch (e: unknown) {
       setError(friendlyAuthError(e));
     } finally {
+      isAuthenticatingRef.current = false;
       setOauthLoading(null);
     }
   };
