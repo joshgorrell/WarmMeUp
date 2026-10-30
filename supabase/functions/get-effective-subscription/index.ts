@@ -54,8 +54,8 @@ function isTrialPlan(plan: string): boolean {
   return plan === "trial";
 }
 
-function isProductionEnv(env: PurchaseEnvironment | null): boolean {
-  return env === "production";
+function isVerifiedPurchaseEnvironment(env: PurchaseEnvironment | null): env is PurchaseEnvironment {
+  return env === "production" || env === "sandbox";
 }
 
 interface RCEntitlementResult {
@@ -144,14 +144,11 @@ async function userHasPremiumAccess(
     .maybeSingle();
 
   if (isSubActive(sub) && isPaidPlan(sub!.plan)) {
-    // Only grant production premium if the subscription row came from a
-    // production App Store purchase. Sandbox rows (from TestFlight) must
-    // not masquerade as real paid subscriptions.
-    if (isProductionEnv(sub!.purchase_environment)) {
+    // Sandbox rows include historical backfills. Re-verify these with RevenueCat
+    // below rather than treating a database label as proof of a test purchase.
+    if (sub!.purchase_environment === "production") {
       return { hasPremium: true, isOnTrial: false, source: "self", plan: sub!.plan, expiresAt: sub!.expires_at, canInvite: true, trialGraceEndsAt: null, purchaseEnvironment: "production" };
     }
-    // Sandbox subscription row — do not grant production premium from DB.
-    // The RC fallback below will check if there's a real production entitlement.
   }
 
   if (isSubActive(sub) && isTrialPlan(sub!.plan)) {
@@ -259,13 +256,13 @@ Deno.serve(async (req: Request) => {
         // Partner has no DB subscription — check RevenueCat directly. If the
         // partner purchased but confirm-subscription never completed, we still
         // grant access and backfill their subscription row for future checks.
-        // BUT only if the RC entitlement is from a PRODUCTION environment.
+        // Preserve the verified purchase environment when backfilling access.
         const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
         if (rcSecretKey) {
           try {
             const partnerRc = await checkRevenueCatEntitlement(partnerId, rcSecretKey);
-            if (partnerRc.active && partnerRc.environment === "production") {
-              console.log(`[get-effective-subscription] RC partner fallback hit for partner=${partnerId} plan=${partnerRc.plan} env=production`);
+            if (partnerRc.active && isVerifiedPurchaseEnvironment(partnerRc.environment)) {
+              console.log(`[get-effective-subscription] RC partner fallback hit for partner=${partnerId} plan=${partnerRc.plan} env=${partnerRc.environment}`);
               await adminClient
                 .from("subscriptions")
                 .upsert(
@@ -276,7 +273,7 @@ Deno.serve(async (req: Request) => {
                     started_at: new Date().toISOString(),
                     expires_at: partnerRc.expiresAt,
                     trial_started_at: null,
-                    purchase_environment: "production",
+                    purchase_environment: partnerRc.environment,
                   },
                   { onConflict: "user_id" }
                 );
@@ -291,15 +288,12 @@ Deno.serve(async (req: Request) => {
                   trialExpired: false,
                   canInvite: false,
                   trialGraceEndsAt: null,
-                  purchaseEnvironment: "production",
+                  purchaseEnvironment: partnerRc.environment,
                   _v: "2026-09-03",
                   _ts: new Date().toISOString(),
                 }),
                 { headers: { ...corsHeaders, "Content-Type": "application/json" } }
               );
-            }
-            if (partnerRc.active && partnerRc.environment === "sandbox") {
-              console.log(`[get-effective-subscription] RC partner sandbox entitlement detected for partner=${partnerId} — NOT granting production premium`);
             }
           } catch (err) {
             console.error(`[get-effective-subscription] RC partner fallback error for partner=${partnerId}:`, String(err));
@@ -311,14 +305,13 @@ Deno.serve(async (req: Request) => {
     // 5. RevenueCat API fallback — if the DB has no active subscription but
     //    RevenueCat shows an active entitlement (e.g. purchase completed but
     //    confirm-subscription never ran), sync the DB and return premium.
-    //    BUT only if the entitlement is from a PRODUCTION environment.
-    //    Sandbox entitlements are NOT granted production premium by the server.
+    //    Both production and sandbox are verified server-side and labeled accurately.
     const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
     if (rcSecretKey) {
       try {
         const rc = await checkRevenueCatEntitlement(user.id, rcSecretKey);
-        if (rc.active && rc.environment === "production") {
-          console.log(`[get-effective-subscription] RC fallback hit for user=${user.id} plan=${rc.plan} env=production`);
+        if (rc.active && isVerifiedPurchaseEnvironment(rc.environment)) {
+          console.log(`[get-effective-subscription] RC fallback hit for user=${user.id} plan=${rc.plan} env=${rc.environment}`);
           await adminClient
             .from("subscriptions")
             .upsert(
@@ -329,7 +322,7 @@ Deno.serve(async (req: Request) => {
                 started_at: new Date().toISOString(),
                 expires_at: rc.expiresAt,
                 trial_started_at: null,
-                purchase_environment: "production",
+                purchase_environment: rc.environment,
               },
               { onConflict: "user_id" }
             );
@@ -344,15 +337,12 @@ Deno.serve(async (req: Request) => {
               trialExpired: false,
               canInvite: true,
               trialGraceEndsAt: null,
-              purchaseEnvironment: "production",
+              purchaseEnvironment: rc.environment,
               _v: "2026-09-03",
               _ts: new Date().toISOString(),
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
-        }
-        if (rc.active && rc.environment === "sandbox") {
-          console.log(`[get-effective-subscription] RC sandbox entitlement detected for user=${user.id} — NOT granting production premium from server`);
         }
       } catch (err) {
         console.error(`[get-effective-subscription] RC fallback error for user=${user.id}:`, String(err));

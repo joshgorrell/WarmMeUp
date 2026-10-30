@@ -5,6 +5,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { logDebugEvent } from './debugLog';
 
 try { WebBrowser.maybeCompleteAuthSession(); } catch {};
 
@@ -97,6 +98,7 @@ async function signInWithAppleNative() {
 
   let credential: AppleAuthentication.AppleAuthenticationCredential;
   try {
+    logDebugEvent('APPLE_AUTH_STAGE', { stage: 'native_prompt' });
     logger.log('[oauth/apple] presenting native sign-in sheet');
     credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
@@ -110,11 +112,12 @@ async function signInWithAppleNative() {
       logger.log('[oauth/apple] user cancelled the sign-in sheet');
       return null;
     }
+    logDebugEvent('APPLE_AUTH_STAGE', { stage: 'native_error', code: e?.code ?? 'unknown' });
     logger.warn('[oauth/apple] signInAsync threw:', e?.code, e?.message);
     throw e;
   }
 
-  logger.log('[oauth/apple] credential received — identityToken present:', !!credential.identityToken, 'email:', credential.email ?? 'none', 'givenName:', credential.fullName?.givenName ?? 'none');
+  logger.log('[oauth/apple] credential received — identityToken present:', !!credential.identityToken);
 
   if (!credential.identityToken) {
     throw new Error('Apple did not return an identity token.');
@@ -138,6 +141,7 @@ async function signInWithAppleNative() {
   });
 
   if (error) {
+    logDebugEvent('APPLE_AUTH_STAGE', { stage: 'token_exchange_error', code: error.code ?? 'unknown', status: error.status });
     logger.warn('[oauth/apple] signInWithIdToken error:', error.message);
     const message = error.message ?? '';
     if (/audience|client.?id|apple.*provider|provider.*apple|invalid.*token/i.test(message)) {
@@ -146,11 +150,23 @@ async function signInWithAppleNative() {
     throw error;
   }
 
-  logger.log('[oauth/apple] signInWithIdToken success — userId:', data.user?.id ?? 'none');
+  if (!data.session || !data.user) {
+    throw new Error('Apple sign-in did not create a session. Please try again.');
+  }
+  logDebugEvent('APPLE_AUTH_STAGE', { stage: 'session_established' });
+  logger.log('[oauth/apple] session established');
 
   // Persist Apple-provided name to user metadata so the register flow can pick it up.
   if (data.user && Object.keys(userData).length > 0) {
-    await supabase.auth.updateUser({ data: userData }).catch(() => {});
+    try {
+      const { error: metadataError } = await supabase.auth.updateUser({ data: userData });
+      if (metadataError) logger.warn('[oauth/apple] name persistence failed:', metadataError.code);
+    } catch {
+      logger.warn('[oauth/apple] name persistence unavailable; continuing registration');
+    }
+    // The sign-in response predates updateUser. Preserve first-authorization
+    // names in the returned data so registration does not lose Apple's only copy.
+    data.user.user_metadata = { ...data.user.user_metadata, ...userData };
   }
 
   // Exchange the Apple authorization code for a refresh token server-side.
@@ -200,8 +216,11 @@ export async function assertNoEmailCollision(): Promise<void> {
   const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
   if (!baseUrl.startsWith('https://')) return;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     const res = await fetch(`${baseUrl}/functions/v1/check-email-collision`, {
+      signal: controller.signal,
       method: 'GET',
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -217,12 +236,17 @@ export async function assertNoEmailCollision(): Promise<void> {
     if (data?.collision) {
       logger.log('[oauth] email collision detected — signing out duplicate session');
       collisionSignOutInProgress = true;
-      await supabase.auth.signOut();
-      collisionSignOutInProgress = false;
+      try {
+        await supabase.auth.signOut();
+      } finally {
+        collisionSignOutInProgress = false;
+      }
       throw new EmailCollisionError();
     }
   } catch (err) {
     if (err instanceof EmailCollisionError) throw err;
     logger.warn('[oauth] check-email-collision fetch failed (fail-open):', err);
+  } finally {
+    clearTimeout(timeout);
   }
 }

@@ -82,7 +82,7 @@ export default function RegisterScreen() {
   const { pendingCode, oauthComplete } = useLocalSearchParams<{ pendingCode?: string; oauthComplete?: string }>();
   const { width, height, isTablet, contentMaxWidth } = useLayout();
   const insets = useSafeAreaInsets();
-  const { refreshSubscription, refreshProfile } = useAuth();
+  const { refreshSubscription, refreshProfile, isAuthenticatingRef } = useAuth();
 
   const vXs = Math.round(height * 0.008);
   const vSm = Math.round(height * 0.014);
@@ -328,8 +328,9 @@ export default function RegisterScreen() {
   const runOAuth = async (provider: 'apple' | 'google') => {
     setApiError('');
     setOauthLoading(provider);
-    if (pendingCode) await savePendingCode(pendingCode);
+    isAuthenticatingRef.current = true;
     try {
+      if (pendingCode) await savePendingCode(pendingCode);
       const session = await signInWithProvider(provider);
       if (!session) return;
 
@@ -450,6 +451,7 @@ export default function RegisterScreen() {
         setApiError(friendlyAuthError(e));
       }
     } finally {
+      isAuthenticatingRef.current = false;
       setOauthLoading(null);
     }
   };

@@ -123,8 +123,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Fail safe: if we cannot determine the purchase environment, do NOT
-    // grant production access. A sandbox entitlement must not masquerade
-    // as a real production subscription.
+    // grant access. Every accepted purchase needs a verified environment.
     if (environment === null) {
       console.warn(`[confirm-subscription] Cannot determine purchase environment for user=${user.id} — refusing to grant production access`);
       return new Response(
@@ -133,18 +132,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (environment === "sandbox") {
-      console.warn(`[confirm-subscription] Sandbox entitlement detected for user=${user.id} — NOT recording as production subscription`);
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          environment: "sandbox",
-          error: "Sandbox purchase detected. This purchase is valid for TestFlight testing but is not a production subscription.",
-        }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
+    // App Review and TestFlight use real, server-verified sandbox transactions.
+    // Honor access while preserving the environment for reporting and expiry.
     console.log(`[confirm-subscription] RC premium ACTIVE user=${user.id} plan=${plan} environment=${environment} expiresAt=${expiresAt}`);
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
