@@ -59,7 +59,7 @@
     },
     "burn-content": {
       "hasChanged": false,
-      "hash": "49040cf7333f652cc5a32805054f2931370190b5407036e69a88150a9b9a8953e466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+      "hash": "49040cf7333f652cc5a32805054f2931370190b5407036e69a88150a9b9a89535a565f0799fe069a43625937f4c81c65faf3c0a8b29c4a3010452c56847e670f"
     },
     "check-email-collision": {
       "hasChanged": false,
@@ -75,15 +75,15 @@
     },
     "delete-account": {
       "hasChanged": false,
-      "hash": "e7a9bed2476917e994ecf4dc73469bf513a99f7b211fea5ae77adf142708086ae466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+      "hash": "e7a9bed2476917e994ecf4dc73469bf513a99f7b211fea5ae77adf142708086a5a565f0799fe069a43625937f4c81c65faf3c0a8b29c4a3010452c56847e670f"
     },
     "disconnect-couple": {
       "hasChanged": false,
-      "hash": "7b0e8235a63ee44df2a194b6248b4e2fa40bc215dc0b6ce1a3239fd10ef5e0f9e466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+      "hash": "7b0e8235a63ee44df2a194b6248b4e2fa40bc215dc0b6ce1a3239fd10ef5e0f95a565f0799fe069a43625937f4c81c65faf3c0a8b29c4a3010452c56847e670f"
     },
     "get-effective-subscription": {
       "hasChanged": false,
-      "hash": "053fd05edd68ec8e7c45380aefe2f8918dc406fd860f533434f90e754752deeee466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+      "hash": "053fd05edd68ec8e7c45380aefe2f8918dc406fd860f533434f90e754752deee5a565f0799fe069a43625937f4c81c65faf3c0a8b29c4a3010452c56847e670f"
     },
     "notify-partner": {
       "hasChanged": false,
@@ -95,11 +95,11 @@
     },
     "process-content-burns": {
       "hasChanged": false,
-      "hash": "bb09fc3afb612e4a55a5e3d3f840f151e59c70f8e6ec41723a870d40024e5ab9e466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+      "hash": "bb09fc3afb612e4a55a5e3d3f840f151e59c70f8e6ec41723a870d40024e5ab95a565f0799fe069a43625937f4c81c65faf3c0a8b29c4a3010452c56847e670f"
     },
     "process-trial-expiry": {
       "hasChanged": false,
-      "hash": "04baf0fc4f55de300f8f08733a5ba167131b5525bfad5cf0aa1334394e232b2ee466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+      "hash": "72581b31d3704c0e7e4a6e0b3286e86941655edef1c81b3c3d6649ae3623077b5a565f0799fe069a43625937f4c81c65faf3c0a8b29c4a3010452c56847e670f"
     },
     "send-test-push": {
       "hasChanged": false,

@@ -21,7 +21,7 @@ export interface TrialExpiryAlert {
  *   - user_b_id is null (solo, invite pending)
  *   - pending_partner_status is not null (someone requested to join)
  *   - server-resolved access shows no premium (includes review, admin, and trial grace)
- *   - trial_expired_notified_at is null (not yet detected)
+ *   - no expiry notice has been recorded for this trial expiration yet
  */
 export function useTrialExpiryCheck(): TrialExpiryAlert {
   const { user, couple, partnerProfile, subscriptionInfo } = useAuth();

@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { hasEffectiveSelfAccess } from "../_shared/effectiveAccess.ts";
+import { isNoticeEligible, type NoticeRecord, type NoticeStatus, TRIAL_GRACE_MS } from "../_shared/trialNotice.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,7 +11,6 @@ const corsHeaders = {
 
 // Trial expirations whose grace period ended before this instant are historical and never notify.
 const TRIAL_NOTIFICATION_CUTOFF = "2026-11-03T20:00:00Z";
-const TRIAL_GRACE_MS = 24 * 60 * 60 * 1000;
 
 /** Length-independent, constant-time string comparison. */
 function safeEqual(a: string, b: string): boolean {
@@ -78,8 +78,8 @@ Deno.serve(async (req: Request) => {
 
     // ── Trial expirations ────────────────────────────────────────────────
     // A trial qualifies once its 24h grace has ended, and only if that happened on or
-    // after the cutoff. Each expiration notifies at most once per couple: the couple's
-    // trial_expired_notified_at stores the expiration it covered and must be earlier than the next one.
+    // after the cutoff. Each user is tracked per expiration on their own profile, so
+    // one partner's notice never blocks the other's.
     const cutoffMs = Date.parse(TRIAL_NOTIFICATION_CUTOFF);
     const nowMs = Date.now();
 
@@ -105,7 +105,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: couples, error: coupleError } = await adminClient
         .from("couples")
-        .select("id, user_a_id, user_b_id, pending_partner_status, trial_expired_notified_at")
+        .select("id, user_a_id, user_b_id, pending_partner_status")
         .eq("active", true)
         .or(`user_a_id.eq.${trial.user_id},user_b_id.eq.${trial.user_id}`);
 
@@ -133,7 +133,20 @@ Deno.serve(async (req: Request) => {
           );
           const expirationIso = new Date(expirationMs).toISOString();
 
-          if (couple.trial_expired_notified_at && Date.parse(couple.trial_expired_notified_at) >= expirationMs) continue;
+          const { data: memberProfiles, error: profileError } = await adminClient
+            .from("profiles")
+            .select("id, trial_expiry_notice_for, trial_expiry_notice_status")
+            .in("id", recipients);
+          if (profileError) throw new Error(profileError.message);
+
+          const noticeByUser = new Map<string, NoticeRecord>(
+            (memberProfiles ?? []).map((p) => [
+              p.id,
+              { for: p.trial_expiry_notice_for, status: p.trial_expiry_notice_status as NoticeStatus | null },
+            ]),
+          );
+          const eligibleIds = recipients.filter((id) => isNoticeEligible(noticeByUser.get(id) ?? null, expirationMs));
+          if (eligibleIds.length === 0) continue;
 
           let covered = false;
           for (const userId of recipients) {
@@ -144,37 +157,48 @@ Deno.serve(async (req: Request) => {
           }
           if (covered) continue;
 
-          // Claim the expiration before sending so a concurrent run or a repeated call cannot notify twice.
-          const { data: claimed, error: claimError } = await adminClient
-            .from("couples")
-            .update({ trial_expired_notified_at: expirationIso })
-            .eq("id", couple.id)
-            .or(`trial_expired_notified_at.is.null,trial_expired_notified_at.lt.${expirationIso}`)
-            .select("id");
-
-          if (claimError) {
-            console.error(`[process-trial-expiry] claim failed for couple=${couple.id}:`, claimError.message);
-            continue;
-          }
-          if (!claimed || claimed.length === 0) continue;
-
           const eventType = couple.user_b_id
             ? "paired_trial_expired"
             : couple.pending_partner_status
               ? "invite_trial_expired"
               : "solo_trial_expired";
 
-          for (const userId of recipients) {
-            await sendPushToUser(adminClient, userId, eventType, couple.id);
+          for (const userId of eligibleIds) {
+            // Claim before sending so a concurrent run cannot send the same notice twice.
+            const { data: claimed, error: claimError } = await adminClient
+              .from("profiles")
+              .update({ trial_expiry_notice_for: expirationIso, trial_expiry_notice_status: "pending" })
+              .eq("id", userId)
+              .or(
+                `trial_expiry_notice_for.is.null,trial_expiry_notice_for.neq.${expirationIso},trial_expiry_notice_status.eq.failed`,
+              )
+              .select("id");
+
+            if (claimError) {
+              console.error(`[process-trial-expiry] claim failed for user=${userId}:`, claimError.message);
+              continue;
+            }
+            if (!claimed || claimed.length === 0) continue;
+
+            const outcome = await sendPushToUser(adminClient, userId, eventType, couple.id);
+
+            const { error: recordError } = await adminClient
+              .from("profiles")
+              .update({ trial_expiry_notice_status: outcome })
+              .eq("id", userId)
+              .eq("trial_expiry_notice_for", expirationIso);
+            if (recordError) {
+              console.error(`[process-trial-expiry] could not record outcome for user=${userId}:`, recordError.message);
+            }
+            if (outcome === "sent") notified++;
           }
-          notified++;
         } catch (err: any) {
           console.error(`[process-trial-expiry] error for couple=${couple.id}:`, err?.message ?? String(err));
         }
       }
     }
 
-    console.log(`[process-trial-expiry] checked ${lapsedTrials?.length ?? 0} lapsed trials, notified ${notified} couples`);
+    console.log(`[process-trial-expiry] checked ${lapsedTrials?.length ?? 0} lapsed trials, sent ${notified} notices`);
 
     return new Response(
       JSON.stringify({ ok: true, checkedTrials: lapsedTrials?.length ?? 0, notified }),
@@ -189,61 +213,81 @@ Deno.serve(async (req: Request) => {
   }
 });
 
+// "failed" means Expo definitely did not accept the message, so a retry is safe.
+// "uncertain" means the request may have been delivered but the outcome is unknown,
+// so the notice is not resent for this expiration.
 async function sendPushToUser(
   adminClient: ReturnType<typeof createClient>,
   userId: string,
   eventType: string,
   coupleId: string
-): Promise<void> {
+): Promise<NoticeStatus> {
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("push_token")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileError) {
+    console.error(`[process-trial-expiry] token read failed for user=${userId}:`, profileError.message);
+    return "failed";
+  }
+
+  if (!profile?.push_token) {
+    console.log(`[process-trial-expiry] no push_token for user=${userId}, marking unreachable`);
+    return "unreachable";
+  }
+
+  const labels: Record<string, string> = {
+    invite_trial_expired: "Your trial has ended! Subscribe now to confirm your partner's connection request.",
+    solo_trial_expired: "Your free trial has ended. Subscribe to keep your access to all features.",
+    paired_trial_expired: "Your free trial has ended. Subscribe to keep your access to all features.",
+  };
+
+  const expoPayload = {
+    to: profile.push_token,
+    title: "Warm Me Up",
+    body: labels[eventType] ?? "Your free trial has ended.",
+    data: { event_type: eventType, couple_id: coupleId, target_route: "/(auth)/subscription" },
+    sound: "default",
+  };
+
+  let pushRes: Response;
   try {
-    const { data: profile } = await adminClient
-      .from("profiles")
-      .select("push_token")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (!profile?.push_token) {
-      console.log(`[process-trial-expiry] no push_token for user=${userId}, skipping`);
-      return;
-    }
-
-    const labels: Record<string, string> = {
-      invite_trial_expired: "Your trial has ended! Subscribe now to confirm your partner's connection request.",
-      solo_trial_expired: "Your free trial has ended. Subscribe to keep your access to all features.",
-      paired_trial_expired: "Your free trial has ended. Subscribe to keep your access to all features.",
-    };
-
-    const bodyText = labels[eventType] ?? "Your free trial has ended.";
-
-    const expoPayload = {
-      to: profile.push_token,
-      title: "Warm Me Up",
-      body: bodyText,
-      data: { event_type: eventType, couple_id: coupleId, target_route: "/(auth)/subscription" },
-      sound: "default",
-    };
-
-    const pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
+    pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(expoPayload),
     });
-
-    if (!pushRes.ok) {
-      console.error(`[process-trial-expiry] Expo push HTTP ${pushRes.status} for user=${userId}`);
-    } else {
-      const ticket = await pushRes.json().catch(() => null);
-      if (ticket?.data?.status === "error") {
-        const expoError = ticket?.data?.details?.error ?? "unknown";
-        if (expoError === "DeviceNotRegistered") {
-          await adminClient.from("profiles").update({ push_token: null }).eq("id", userId);
-          console.warn(`[process-trial-expiry] DeviceNotRegistered — cleared token for user=${userId}`);
-        } else {
-          console.error(`[process-trial-expiry] Expo push error: ${expoError}`);
-        }
-      }
-    }
   } catch (err: any) {
-    console.error(`[process-trial-expiry] sendPushToUser error for user=${userId}:`, err?.message ?? String(err));
+    console.error(`[process-trial-expiry] Expo request error for user=${userId}:`, err?.message ?? String(err));
+    return "uncertain";
   }
+
+  if (!pushRes.ok) {
+    console.error(`[process-trial-expiry] Expo push HTTP ${pushRes.status} for user=${userId}`);
+    return "failed";
+  }
+
+  let ticket: any = null;
+  try {
+    ticket = await pushRes.json();
+  } catch {
+    return "uncertain";
+  }
+
+  const ticketStatus = ticket?.data?.status;
+  if (ticketStatus === "ok") return "sent";
+
+  if (ticketStatus === "error") {
+    const expoError = ticket?.data?.details?.error ?? "unknown";
+    if (expoError === "DeviceNotRegistered") {
+      await adminClient.from("profiles").update({ push_token: null }).eq("id", userId);
+      console.warn(`[process-trial-expiry] DeviceNotRegistered, cleared token for user=${userId}`);
+      return "unreachable";
+    }
+    console.error(`[process-trial-expiry] Expo push error: ${expoError}`);
+    return "failed";
+  }
+
+  return "uncertain";
 }
