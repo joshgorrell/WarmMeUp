@@ -14,6 +14,23 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const ACCESS_GRACE_MS = 24 * 60 * 60 * 1000;
+
+// A paid subscription keeps couple access until 24 hours after its last valid moment: the end
+// date once it has passed, or the last RevenueCat confirmation when access was revoked early.
+function coupleGraceEndsMs(
+  member: { plan: string; expires_at: string | null; rc_verified_at: string | null },
+  nowMs: number,
+): number | null {
+  if (!isPaidPlan(member.plan)) return null;
+  const endedMs = member.expires_at && Date.parse(member.expires_at) <= nowMs
+    ? Date.parse(member.expires_at)
+    : member.rc_verified_at ? Date.parse(member.rc_verified_at) : null;
+  if (endedMs === null || endedMs > nowMs) return null;
+  const graceEndsMs = endedMs + ACCESS_GRACE_MS;
+  return graceEndsMs > nowMs ? graceEndsMs : null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -179,6 +196,47 @@ Deno.serve(async (req: Request) => {
         }
       } catch (err) {
         console.error(`[get-effective-subscription] RC fallback error for user=${user.id}:`, String(err));
+      }
+    }
+
+    // A paired couple keeps access for 24 hours after its last valid paid moment.
+    // Grace never grants invite permission, which the database invite gate checks separately.
+    if (couple?.user_b_id) {
+      const { data: memberSubs, error: memberSubsError } = await adminClient
+        .from("subscriptions")
+        .select("plan, expires_at, rc_verified_at")
+        .in("user_id", [couple.user_a_id, couple.user_b_id]);
+      if (memberSubsError) {
+        console.error(`[get-effective-subscription] grace lookup failed for user=${user.id}:`, memberSubsError.message);
+      }
+
+      const nowMs = Date.now();
+      let graceRow: { plan: string; expires_at: string | null; graceEndsMs: number } | null = null;
+      for (const member of memberSubs ?? []) {
+        const graceEndsMs = coupleGraceEndsMs(member, nowMs);
+        if (graceEndsMs !== null && (graceRow === null || graceEndsMs > graceRow.graceEndsMs)) {
+          graceRow = { plan: member.plan, expires_at: member.expires_at, graceEndsMs };
+        }
+      }
+
+      if (graceRow) {
+        return new Response(
+          JSON.stringify({
+            isPremium: true,
+            source: "grace",
+            plan: graceRow.plan,
+            expiresAt: graceRow.expires_at,
+            isOnTrial: false,
+            trialExpiresAt: null,
+            trialExpired: false,
+            canInvite: false,
+            trialGraceEndsAt: null,
+            purchaseEnvironment: "none",
+            _v: "2026-09-03",
+            _ts: new Date().toISOString(),
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
     }
 
