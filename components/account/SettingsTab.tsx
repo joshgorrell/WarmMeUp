@@ -148,9 +148,11 @@ export function SettingsTab({
 
       <Section title="MEMBERSHIP">
         {subscriptionInfo.loading ? <SettingsRow label="Status" sub="Loading…" last /> : subscriptionInfo.source === 'review_access' ? <SettingsRow label="Access" sub="App Review Demo Access" last /> : (subscriptionInfo.source === 'admin' || subscriptionInfo.source === 'super_admin') ? <SettingsRow label="Access" sub="Admin Access" last /> : subscriptionInfo.source === 'partner' ? <><SettingsRow label="Plan" sub="Covered by your Partner's Subscription" /><SettingsRow label="Manage" sub="View or cancel in the App Store" onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')} accent last /></> : subscriptionInfo.source === 'self' && subscriptionInfo.isOnTrial ? <><SettingsRow label="Plan" sub={`Free Trial${subscriptionInfo.trialExpiresAt ? ` · ends ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`} /><SettingsRow label="Subscribe" sub="Unlock full access · your partner joins free" onPress={() => router.push('/(auth)/subscription')} accent /><SettingsRow label="Restore Purchase" sub="Recover a previous subscription" onPress={onRestorePurchase} last /></> : subscriptionInfo.source === 'self' && subscriptionInfo.plan === 'complimentary' ? <><SettingsRow label="Plan" sub={`Complimentary Subscription · Active${subscriptionInfo.expiresAt ? ` — active through ${new Date(subscriptionInfo.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`} last /></> : subscriptionInfo.source === 'self' && subscriptionInfo.isPremium ? <><SettingsRow label="Plan" sub={`${subscriptionInfo.plan === 'yearly' ? 'Yearly' : 'Monthly'} · Active${subscriptionInfo.expiresAt ? ` — active through ${new Date(subscriptionInfo.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`} /><SettingsRow label="Manage Subscription" sub="View or cancel in the App Store" onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')} accent /><SettingsRow label="Restore Purchase" sub="Recover a previous subscription" onPress={onRestorePurchase} last /></> : <><SettingsRow label="Plan" sub="No active subscription" /><SettingsRow label="Subscribe" sub="One subscription covers both of you · partner joins free" onPress={() => router.push('/(auth)/subscription')} accent /><SettingsRow label="Restore Purchase" sub="Recover a previous subscription" onPress={onRestorePurchase} last /></>}
+        <View style={styles.membershipNote}><AppText style={[stylesShared.rowSub, { color: colors.textMuted }]}>One subscription provides full access for both you and your Partner. Either person may purchase and maintain their own subscription.</AppText></View>
       </Section>
 
       <Section title="SECURITY">
+
         <SettingsRow label="Terms of Service" sub="The rules for using Warm Me Up" onPress={onShowTerms} />
         <SettingsRow label="Privacy Policy" sub="How we handle your data" onPress={onShowPrivacyPolicy} />
         <SettingsRow label="Delete My Account" danger onPress={onDeleteAccount} last />
@@ -167,6 +169,7 @@ const styles = StyleSheet.create({
   footerLogoWrap: { alignItems: 'center', paddingTop: Spacing.xxl, paddingBottom: Spacing.xl, opacity: 0.7 },
   footerLogo: { width: 320, height: 160 },
   shareAppLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingBottom: Spacing.xl },
+  membershipNote: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
   shareAppLinkText: { fontSize: FontSize.xs, fontFamily: 'Inter-Regular', textDecorationLine: 'underline', textDecorationColor: 'rgba(150,150,160,0.35)' },
 });
 
