@@ -22,7 +22,7 @@ type TabKey = 'users' | 'couples' | 'subscribers' | 'trials';
 
 type ProfileRow = { id: string; display_name: string | null; is_admin: boolean | null; is_super_admin: boolean | null; created_at: string | null };
 type CoupleRow = { id: string; user_a_id: string; user_b_id: string | null; invite_code: string | null; active: boolean | null; created_at: string | null };
-type SubscriptionRow = { user_id: string; plan: string | null; status: string | null; started_at: string | null; expires_at: string | null; trial_started_at: string | null };
+type SubscriptionRow = { user_id: string; plan: string | null; status: string | null; started_at: string | null; expires_at: string | null; trial_started_at: string | null; purchase_environment: string | null };
 type EffectiveEntitlement = { label: string; source: 'super_admin' | 'admin' | 'self' | 'trial' | 'partner' | 'none'; isActive: boolean };
 type SelectedUser = { profile: ProfileRow; couple: CoupleRow | null; partnerName: string | null; subscription: SubscriptionRow | null; entitlement: EffectiveEntitlement };
 
@@ -67,7 +67,7 @@ export default function UsersDashboard() {
       const [profilesResult, couplesResult, subscriptionsResult] = await Promise.all([
         supabase.from('profiles').select('id, display_name, is_admin, is_super_admin, created_at').order('created_at', { ascending: true }),
         supabase.from('couples').select('id, user_a_id, user_b_id, invite_code, active, created_at').order('created_at', { ascending: false }),
-        supabase.from('subscriptions').select('user_id, plan, status, started_at, expires_at, trial_started_at').order('started_at', { ascending: false }),
+        supabase.from('subscriptions').select('user_id, plan, status, started_at, expires_at, trial_started_at, purchase_environment').order('started_at', { ascending: false }),
       ]);
       if (profilesResult.error) throw profilesResult.error;
       if (couplesResult.error) throw couplesResult.error;
@@ -103,6 +103,7 @@ export default function UsersDashboard() {
     if (profile.is_super_admin) return { label: 'Super Admin', source: 'super_admin', isActive: true };
     if (profile.is_admin) return { label: 'Admin', source: 'admin', isActive: true };
     const sub = subscriptionByUser[profile.id];
+    if (isSubActive(sub) && sub.plan === 'monthly' && sub.purchase_environment === null) return { label: 'Complimentary Subscription', source: 'self', isActive: true };
     if (isSubActive(sub) && (sub.plan === 'monthly' || sub.plan === 'yearly')) return { label: `${sub.plan} subscription`, source: 'self', isActive: true };
     if (isSubActive(sub) && sub.plan === 'trial') return { label: 'Trial (active)', source: 'trial', isActive: true };
     const couple = coupleByUser[profile.id];

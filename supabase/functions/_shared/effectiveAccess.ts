@@ -5,7 +5,7 @@ type AdminClient = ReturnType<typeof createClient>;
 
 export interface RCEntitlementResult {
   active: boolean;
-  plan: "monthly" | "yearly";
+  plan: "monthly" | "yearly" | "complimentary" | null;
   expiresAt: string | null;
   environment: PurchaseEnvironment | null;
 }
@@ -15,9 +15,28 @@ function isVerifiedPurchaseEnvironment(env: PurchaseEnvironment | null): env is 
 }
 
 // A null environment means RevenueCat holds no store record for the entitlement. That is how
-// complimentary and promotional grants appear, so they grant access like any verified purchase.
+// complimentary grants appear, so they grant access like any verified purchase.
 export function hasRevenueCatAccess(rc: RCEntitlementResult): boolean {
   return rc.active && (rc.environment === null || isVerifiedPurchaseEnvironment(rc.environment));
+}
+
+// The subscriptions table cannot store a complimentary plan, so those rows are stored
+// with a paid plan and no purchase environment. Paid-expiry notices skip such rows.
+export function recordRevenueCatEntitlement(adminClient: AdminClient, userId: string, rc: RCEntitlementResult) {
+  return adminClient
+    .from("subscriptions")
+    .upsert(
+      {
+        user_id: userId,
+        plan: rc.plan === "complimentary" ? "monthly" : rc.plan,
+        status: "active",
+        started_at: new Date().toISOString(),
+        expires_at: rc.expiresAt,
+        trial_started_at: null,
+        purchase_environment: rc.environment,
+      },
+      { onConflict: "user_id" }
+    );
 }
 
 export async function fetchOwnAccessFacts(adminClient: AdminClient, userId: string): Promise<OwnAccessFacts> {
@@ -53,7 +72,7 @@ export async function checkRevenueCatEntitlement(
   rcUserId: string,
   secretKey: string
 ): Promise<RCEntitlementResult> {
-  const inactive: RCEntitlementResult = { active: false, plan: "monthly", expiresAt: null, environment: null };
+  const inactive: RCEntitlementResult = { active: false, plan: null, expiresAt: null, environment: null };
   const url = `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(rcUserId)}`;
   const res = await fetch(url, {
     headers: {
@@ -75,11 +94,6 @@ export async function checkRevenueCatEntitlement(
   const isActive = expiresAt === null || new Date(expiresAt) > new Date();
   const productId: string = entitlement.product_identifier ?? "";
 
-  const plan: "monthly" | "yearly" =
-    productId.includes("annual") || productId.includes("yearly") || productId.includes("year")
-      ? "yearly"
-      : "monthly";
-
   const subscriptions = data?.subscriber?.subscriptions ?? {};
   const subEntry = subscriptions[productId];
 
@@ -87,6 +101,13 @@ export async function checkRevenueCatEntitlement(
   if (subEntry && typeof subEntry.is_sandbox === "boolean") {
     environment = subEntry.is_sandbox ? "sandbox" : "production";
   }
+
+  const plan: "monthly" | "yearly" | "complimentary" =
+    environment === null
+      ? "complimentary"
+      : productId.includes("annual") || productId.includes("yearly") || productId.includes("year")
+        ? "yearly"
+        : "monthly";
 
   return { active: isActive, plan, expiresAt, environment };
 }

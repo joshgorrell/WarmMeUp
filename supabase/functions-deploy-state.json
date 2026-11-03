@@ -59,7 +59,7 @@
     },
     "burn-content": {
       "hasChanged": false,
-      "hash": "49040cf7333f652cc5a32805054f2931370190b5407036e69a88150a9b9a8953ce61c48f7e7b12b21133ac40b73eb9a7d6ba8cf3dae171c3cb6648df8504e1ea"
+      "hash": "49040cf7333f652cc5a32805054f2931370190b5407036e69a88150a9b9a8953416dcf8ff83ed757e552517ffcd098a8562be331bdddc452d18ab19cf1726e6d"
     },
     "check-email-collision": {
       "hasChanged": false,
@@ -67,7 +67,7 @@
     },
     "confirm-subscription": {
       "hasChanged": false,
-      "hash": "de34423a8fcbd02ba02329aa1aab66421f12c8b818cffb2276c64555c152f9cfce61c48f7e7b12b21133ac40b73eb9a7d6ba8cf3dae171c3cb6648df8504e1ea"
+      "hash": "f509ca31d9a2f968befce0e3c35289cb505cdfcf48297033a63609aa818dd5a2416dcf8ff83ed757e552517ffcd098a8562be331bdddc452d18ab19cf1726e6d"
     },
     "copy-to-vault": {
       "hasChanged": false,
@@ -75,15 +75,15 @@
     },
     "delete-account": {
       "hasChanged": false,
-      "hash": "e7a9bed2476917e994ecf4dc73469bf513a99f7b211fea5ae77adf142708086ace61c48f7e7b12b21133ac40b73eb9a7d6ba8cf3dae171c3cb6648df8504e1ea"
+      "hash": "e7a9bed2476917e994ecf4dc73469bf513a99f7b211fea5ae77adf142708086a416dcf8ff83ed757e552517ffcd098a8562be331bdddc452d18ab19cf1726e6d"
     },
     "disconnect-couple": {
       "hasChanged": false,
-      "hash": "7b0e8235a63ee44df2a194b6248b4e2fa40bc215dc0b6ce1a3239fd10ef5e0f9ce61c48f7e7b12b21133ac40b73eb9a7d6ba8cf3dae171c3cb6648df8504e1ea"
+      "hash": "7b0e8235a63ee44df2a194b6248b4e2fa40bc215dc0b6ce1a3239fd10ef5e0f9416dcf8ff83ed757e552517ffcd098a8562be331bdddc452d18ab19cf1726e6d"
     },
     "get-effective-subscription": {
       "hasChanged": false,
-      "hash": "b48d9d66e9cc954a7d076526912a2f2685e17f3ee8d5a144a6a5bdde7998545dce61c48f7e7b12b21133ac40b73eb9a7d6ba8cf3dae171c3cb6648df8504e1ea"
+      "hash": "da801d21e0fd62a41cea6b37116399bc38cdca6518c8e6396d1d97c52b0fe9a0416dcf8ff83ed757e552517ffcd098a8562be331bdddc452d18ab19cf1726e6d"
     },
     "notify-partner": {
       "hasChanged": false,
@@ -95,11 +95,11 @@
     },
     "process-content-burns": {
       "hasChanged": false,
-      "hash": "bb09fc3afb612e4a55a5e3d3f840f151e59c70f8e6ec41723a870d40024e5ab9ce61c48f7e7b12b21133ac40b73eb9a7d6ba8cf3dae171c3cb6648df8504e1ea"
+      "hash": "bb09fc3afb612e4a55a5e3d3f840f151e59c70f8e6ec41723a870d40024e5ab9416dcf8ff83ed757e552517ffcd098a8562be331bdddc452d18ab19cf1726e6d"
     },
     "process-trial-expiry": {
       "hasChanged": false,
-      "hash": "4571be02ea8b09032efcc145efa42db5d8808f905b6be8d6784edbb3a42e33e2ce61c48f7e7b12b21133ac40b73eb9a7d6ba8cf3dae171c3cb6648df8504e1ea"
+      "hash": "84d0aae1f961aabffd1b80b7a374149a28f7949b1f515a77de68c57e9eeaa9f3416dcf8ff83ed757e552517ffcd098a8562be331bdddc452d18ab19cf1726e6d"
     },
     "send-test-push": {
       "hasChanged": false,

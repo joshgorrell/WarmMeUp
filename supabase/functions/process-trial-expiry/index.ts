@@ -96,6 +96,7 @@ Deno.serve(async (req: Request) => {
         .from("subscriptions")
         .select("user_id, plan, expires_at")
         .in("plan", ["monthly", "yearly"])
+        .not("purchase_environment", "is", null)
         .gte("expires_at", iso(cutoffMs))
         .lte("expires_at", iso(nowMs)),
     ]);

@@ -1,9 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { isSubActive, isTrialPlan, TRIAL_GRACE_MS } from "../_shared/accessRules.ts";
+import { isPaidPlan, isSubActive, isTrialPlan, TRIAL_GRACE_MS } from "../_shared/accessRules.ts";
 import {
   checkRevenueCatEntitlement,
   hasRevenueCatAccess,
+  recordRevenueCatEntitlement,
   resolveOwnAccess,
 } from "../_shared/effectiveAccess.ts";
 
@@ -115,20 +116,7 @@ Deno.serve(async (req: Request) => {
             const partnerRc = await checkRevenueCatEntitlement(partnerId, rcSecretKey);
             if (hasRevenueCatAccess(partnerRc)) {
               console.log(`[get-effective-subscription] RC partner fallback hit for partner=${partnerId} plan=${partnerRc.plan} env=${partnerRc.environment}`);
-              await adminClient
-                .from("subscriptions")
-                .upsert(
-                  {
-                    user_id: partnerId,
-                    plan: partnerRc.plan,
-                    status: "active",
-                    started_at: new Date().toISOString(),
-                    expires_at: partnerRc.expiresAt,
-                    trial_started_at: null,
-                    purchase_environment: partnerRc.environment,
-                  },
-                  { onConflict: "user_id" }
-                );
+              await recordRevenueCatEntitlement(adminClient, partnerId, partnerRc);
               return new Response(
                 JSON.stringify({
                   isPremium: true,
@@ -164,20 +152,7 @@ Deno.serve(async (req: Request) => {
         const rc = await checkRevenueCatEntitlement(user.id, rcSecretKey);
         if (hasRevenueCatAccess(rc)) {
           console.log(`[get-effective-subscription] RC fallback hit for user=${user.id} plan=${rc.plan} env=${rc.environment}`);
-          await adminClient
-            .from("subscriptions")
-            .upsert(
-              {
-                user_id: user.id,
-                plan: rc.plan,
-                status: "active",
-                started_at: new Date().toISOString(),
-                expires_at: rc.expiresAt,
-                trial_started_at: null,
-                purchase_environment: rc.environment,
-              },
-              { onConflict: "user_id" }
-            );
+          await recordRevenueCatEntitlement(adminClient, user.id, rc);
           return new Response(
             JSON.stringify({
               isPremium: true,
@@ -195,6 +170,12 @@ Deno.serve(async (req: Request) => {
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
+        }
+        if (ownSub && isPaidPlan(ownSub.plan) && ownSub.purchase_environment === null) {
+          await adminClient
+            .from("subscriptions")
+            .update({ status: "expired" })
+            .eq("user_id", user.id);
         }
       } catch (err) {
         console.error(`[get-effective-subscription] RC fallback error for user=${user.id}:`, String(err));

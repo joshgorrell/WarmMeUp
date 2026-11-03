@@ -5,7 +5,7 @@ import { ensureConfigured, ensureRevenueCatUser } from '@/lib/purchases';
 import { planFromProductId } from '@/lib/productIds';
 import { logger } from '../lib/logger';
 
-export type SubscriptionPlan = 'Free' | 'Monthly' | 'Annual';
+export type SubscriptionPlan = 'Free' | 'Monthly' | 'Annual' | 'Complimentary';
 export type SubscriptionStatus = 'Active' | 'Inactive' | 'Trial';
 export type SubscriptionSource = 'self' | 'partner' | 'none' | 'admin' | 'super_admin' | 'review_access';
 
@@ -36,6 +36,7 @@ function formatDate(dateString: string | null): string | null {
 }
 
 function serverPlanToDisplayPlan(serverPlan: string | null): SubscriptionPlan {
+  if (serverPlan === 'complimentary') return 'Complimentary';
   if (serverPlan === 'yearly' || serverPlan === 'annual') return 'Annual';
   if (serverPlan === 'monthly') return 'Monthly';
   return 'Free';

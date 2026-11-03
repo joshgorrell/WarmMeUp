@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { checkRevenueCatEntitlement, hasRevenueCatAccess } from "../_shared/effectiveAccess.ts";
+import { checkRevenueCatEntitlement, hasRevenueCatAccess, recordRevenueCatEntitlement } from "../_shared/effectiveAccess.ts";
 import { type CoupleOwnerRow, reconcileSubscriptionOwner } from "../_shared/subscriptionOwner.ts";
 
 const corsHeaders = {
@@ -62,20 +62,7 @@ Deno.serve(async (req: Request) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const { error: upsertError } = await adminClient
-      .from("subscriptions")
-      .upsert(
-        {
-          user_id: user.id,
-          plan: rc.plan,
-          status: "active",
-          started_at: new Date().toISOString(),
-          expires_at: rc.expiresAt,
-          trial_started_at: null,
-          purchase_environment: rc.environment,
-        },
-        { onConflict: "user_id" }
-      );
+    const { error: upsertError } = await recordRevenueCatEntitlement(adminClient, user.id, rc);
 
     if (upsertError) {
       console.error("[confirm-subscription] DB upsert error:", upsertError.message);
