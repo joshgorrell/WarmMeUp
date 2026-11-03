@@ -424,7 +424,7 @@ export default function PairScreen() {
           setMyCode(couple.invite_code);
           return;
         }
-        setInviteError('Your free trial is being set up. Please reopen the app in a moment and try again.');
+        setInviteError('Your Free Trial is being set up. Please reopen the app in a moment and try again.');
         return;
       }
       const inviteCode = (result as any)?.invite_code ?? null;
@@ -968,7 +968,7 @@ export default function PairScreen() {
                   <View style={styles.trialBanner}>
                     <Sparkles color="#FFB84D" size={14} strokeWidth={2} />
                     <AppText style={styles.trialBannerText}>
-                      Free trial active · expires {new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      Free Trial active · expires {new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                     </AppText>
                   </View>
                 )}

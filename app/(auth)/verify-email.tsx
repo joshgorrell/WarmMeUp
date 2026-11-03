@@ -99,8 +99,8 @@ export default function VerifyEmailScreen() {
           result.reason === 'not_found' ? "Invite code not found. You can pair from the app later." :
           result.reason === 'rate_limited' ? 'Too many attempts. You can pair from the app later.' :
           result.reason === 'already_taken' ? "Someone just joined with that code. You can pair from the app later." :
-          result.reason === 'no_subscription' ? "Your partner's free trial has ended. They can subscribe and try again." :
-          result.reason === 'trial_expired' ? "Your partner's free trial has ended. They can subscribe and try again." :
+          result.reason === 'no_subscription' ? "Your Partner's Free Trial has ended. They can subscribe and try again." :
+          result.reason === 'trial_expired' ? "Your Partner's Free Trial has ended. They can subscribe and try again." :
           'Something went wrong connecting you. You can pair from the app later.';
         setError(msg);
         router.replace({ pathname: '/(auth)/pair', params: { prefilledCode: code } });

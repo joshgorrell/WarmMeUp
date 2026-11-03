@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { isSubActive, isTrialPlan, TRIAL_GRACE_MS } from "../_shared/accessRules.ts";
 import {
   checkRevenueCatEntitlement,
-  isVerifiedPurchaseEnvironment,
+  hasRevenueCatAccess,
   resolveOwnAccess,
 } from "../_shared/effectiveAccess.ts";
 
@@ -113,7 +113,7 @@ Deno.serve(async (req: Request) => {
         if (rcSecretKey) {
           try {
             const partnerRc = await checkRevenueCatEntitlement(partnerId, rcSecretKey);
-            if (partnerRc.active && isVerifiedPurchaseEnvironment(partnerRc.environment)) {
+            if (hasRevenueCatAccess(partnerRc)) {
               console.log(`[get-effective-subscription] RC partner fallback hit for partner=${partnerId} plan=${partnerRc.plan} env=${partnerRc.environment}`);
               await adminClient
                 .from("subscriptions")
@@ -162,7 +162,7 @@ Deno.serve(async (req: Request) => {
     if (rcSecretKey) {
       try {
         const rc = await checkRevenueCatEntitlement(user.id, rcSecretKey);
-        if (rc.active && isVerifiedPurchaseEnvironment(rc.environment)) {
+        if (hasRevenueCatAccess(rc)) {
           console.log(`[get-effective-subscription] RC fallback hit for user=${user.id} plan=${rc.plan} env=${rc.environment}`);
           await adminClient
             .from("subscriptions")

@@ -924,12 +924,12 @@ export default function HomeScreen() {
               <Heart color="#FF2E8A" size={32} strokeWidth={2} />
             </View>
             <AppText style={[trialExpiryStyles.title, { color: colors.text }]}>
-              Your free trial has ended
+              Your Free Trial has ended
             </AppText>
             <AppText style={[trialExpiryStyles.body, { color: colors.textSecondary }]}>
               {trialExpiry.partnerName ?? 'Your partner'} is waiting for you to confirm their connection. Subscribe now to accept their request and unlock everything.
               {subscriptionInfo.trialExpiresAt && (
-                <>\n\nYour free trial ended on {new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}.</>
+                <>\n\nYour Free Trial ended on {new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}.</>
               )}
               {subscriptionInfo.trialGraceEndsAt && new Date(subscriptionInfo.trialGraceEndsAt) > new Date() && (
                 <> You have until {new Date(subscriptionInfo.trialGraceEndsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} to subscribe before losing access.</>

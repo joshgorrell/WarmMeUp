@@ -1,5 +1,11 @@
 export const TRIAL_GRACE_MS = 24 * 60 * 60 * 1000;
 
+/** When a subscription's access ends: trials keep access through their grace period. */
+export function lapseEndMs(plan: string, expiresAt: string): number {
+  const end = Date.parse(expiresAt);
+  return plan === "trial" ? end + TRIAL_GRACE_MS : end;
+}
+
 export type NoticeStatus = "pending" | "sent" | "uncertain" | "failed" | "unreachable";
 
 export interface NoticeRecord {

@@ -90,7 +90,7 @@ export default function WelcomeScreen() {
 
           <View style={[styles.trialRow, { marginTop: trialGap }]}>
             <AppText style={styles.trialPrefix}>Start your </AppText>
-            <AppText style={styles.trialHighlight}>7-day free trial</AppText>
+            <AppText style={styles.trialHighlight}>7-day Free Trial</AppText>
           </View>
 
           <TouchableOpacity

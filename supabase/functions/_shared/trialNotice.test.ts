@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { isNoticeEligible, TRIAL_GRACE_MS } from "./trialNotice.ts";
+import { isNoticeEligible, lapseEndMs, TRIAL_GRACE_MS } from "./trialNotice.ts";
 
 const EXP_1 = Date.parse("2026-11-05T12:00:00Z");
 const EXP_2 = Date.parse("2026-11-09T12:00:00Z");
@@ -41,5 +41,14 @@ describe("trial notice eligibility", () => {
 
   it("grace period is 24 hours", () => {
     assert.equal(TRIAL_GRACE_MS, 86_400_000);
+  });
+
+  it("a trial lapses only after its grace period", () => {
+    assert.equal(lapseEndMs("trial", "2026-11-05T12:00:00Z"), EXP_1 + TRIAL_GRACE_MS);
+  });
+
+  it("a paid subscription lapses at its end date with no grace", () => {
+    assert.equal(lapseEndMs("monthly", "2026-11-05T12:00:00Z"), EXP_1);
+    assert.equal(lapseEndMs("yearly", "2026-11-05T12:00:00Z"), EXP_1);
   });
 });

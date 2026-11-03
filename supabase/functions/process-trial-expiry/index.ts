@@ -1,7 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { hasEffectiveSelfAccess } from "../_shared/effectiveAccess.ts";
-import { isNoticeEligible, type NoticeRecord, type NoticeStatus, TRIAL_GRACE_MS } from "../_shared/trialNotice.ts";
+import { reconcileSubscriptionOwner } from "../_shared/subscriptionOwner.ts";
+import { isNoticeEligible, lapseEndMs, type NoticeRecord, type NoticeStatus, TRIAL_GRACE_MS } from "../_shared/trialNotice.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,8 +10,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-// Trial expirations whose grace period ended before this instant are historical and never notify.
-const TRIAL_NOTIFICATION_CUTOFF = "2026-11-03T20:00:00Z";
+// Subscription lapses that ended before this instant are historical and never notify.
+const NOTIFICATION_CUTOFF = "2026-11-03T20:00:00Z";
 
 /** Length-independent, constant-time string comparison. */
 function safeEqual(a: string, b: string): boolean {
@@ -76,41 +77,52 @@ Deno.serve(async (req: Request) => {
     const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
     const hasAccess = (userId: string) => hasEffectiveSelfAccess(adminClient, userId, rcSecretKey);
 
-    // ── Trial expirations ────────────────────────────────────────────────
-    // A trial qualifies once its 24h grace has ended, and only if that happened on or
-    // after the cutoff. Each user is tracked per expiration on their own profile, so
-    // one partner's notice never blocks the other's.
-    const cutoffMs = Date.parse(TRIAL_NOTIFICATION_CUTOFF);
+    // ── Subscription lapses ──────────────────────────────────────────────
+    // A Free Trial lapses once its 24h grace has ended; a paid subscription lapses at its
+    // end date. Only lapses on or after the cutoff qualify. Each user is tracked per
+    // expiration on their own profile, so one partner's notice never blocks the other's.
+    const cutoffMs = Date.parse(NOTIFICATION_CUTOFF);
     const nowMs = Date.now();
+    const iso = (ms: number) => new Date(ms).toISOString();
 
-    const { data: lapsedTrials, error: lapsedError } = await adminClient
-      .from("subscriptions")
-      .select("user_id, expires_at")
-      .eq("plan", "trial")
-      .gte("expires_at", new Date(cutoffMs - TRIAL_GRACE_MS).toISOString())
-      .lte("expires_at", new Date(nowMs - TRIAL_GRACE_MS).toISOString());
+    const [trialResult, paidResult] = await Promise.all([
+      adminClient
+        .from("subscriptions")
+        .select("user_id, plan, expires_at")
+        .eq("plan", "trial")
+        .gte("expires_at", iso(cutoffMs - TRIAL_GRACE_MS))
+        .lte("expires_at", iso(nowMs - TRIAL_GRACE_MS)),
+      adminClient
+        .from("subscriptions")
+        .select("user_id, plan, expires_at")
+        .in("plan", ["monthly", "yearly"])
+        .gte("expires_at", iso(cutoffMs))
+        .lte("expires_at", iso(nowMs)),
+    ]);
 
-    if (lapsedError) {
-      console.error("[process-trial-expiry] trial query error:", lapsedError.message);
+    const queryError = trialResult.error ?? paidResult.error;
+    if (queryError) {
+      console.error("[process-trial-expiry] lapse query error:", queryError.message);
       return new Response(JSON.stringify({ error: "Internal server error" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    const lapses = [...(trialResult.data ?? []), ...(paidResult.data ?? [])];
     let notified = 0;
 
-    for (const trial of lapsedTrials ?? []) {
-      const lapseEndMs = Date.parse(trial.expires_at) + TRIAL_GRACE_MS;
+    for (const lapse of lapses) {
+      const lapseEnd = lapseEndMs(lapse.plan, lapse.expires_at);
 
       const { data: couples, error: coupleError } = await adminClient
         .from("couples")
-        .select("id, user_a_id, user_b_id, pending_partner_status")
+        .select("id, user_a_id, user_b_id, pending_partner_status, subscription_owner_id")
         .eq("active", true)
-        .or(`user_a_id.eq.${trial.user_id},user_b_id.eq.${trial.user_id}`);
+        .or(`user_a_id.eq.${lapse.user_id},user_b_id.eq.${lapse.user_id}`);
 
       if (coupleError) {
-        console.error(`[process-trial-expiry] couple query error for user=${trial.user_id}:`, coupleError.message);
+        console.error(`[process-trial-expiry] couple query error for user=${lapse.user_id}:`, coupleError.message);
         continue;
       }
 
@@ -118,20 +130,23 @@ Deno.serve(async (req: Request) => {
         const recipients = couple.user_b_id ? [couple.user_a_id, couple.user_b_id] : [couple.user_a_id];
 
         try {
-          // A couple's expiration is the latest trial end across its members, so a
-          // partner who lapses later still counts as one expiration for both.
-          const { data: memberTrials, error: memberError } = await adminClient
+          if (couple.user_b_id && couple.subscription_owner_id === lapse.user_id) {
+            await reconcileSubscriptionOwner(adminClient, couple, rcSecretKey);
+          }
+
+          // A couple's expiration is the latest lapse across its members, so a partner
+          // who lapses later still counts as one expiration for both.
+          const { data: memberSubs, error: memberError } = await adminClient
             .from("subscriptions")
-            .select("expires_at")
-            .eq("plan", "trial")
+            .select("plan, expires_at")
             .in("user_id", recipients);
           if (memberError) throw new Error(memberError.message);
 
           const expirationMs = Math.max(
-            lapseEndMs,
-            ...(memberTrials ?? []).map((t) => Date.parse(t.expires_at) + TRIAL_GRACE_MS),
+            lapseEnd,
+            ...(memberSubs ?? []).map((s) => lapseEndMs(s.plan, s.expires_at)),
           );
-          const expirationIso = new Date(expirationMs).toISOString();
+          const expirationIso = iso(expirationMs);
 
           const { data: memberProfiles, error: profileError } = await adminClient
             .from("profiles")
@@ -157,11 +172,13 @@ Deno.serve(async (req: Request) => {
           }
           if (covered) continue;
 
-          const eventType = couple.user_b_id
-            ? "paired_trial_expired"
-            : couple.pending_partner_status
-              ? "invite_trial_expired"
-              : "solo_trial_expired";
+          const eventType = lapse.plan !== "trial"
+            ? (couple.user_b_id ? "paired_subscription_expired" : "subscription_expired")
+            : couple.user_b_id
+              ? "paired_trial_expired"
+              : couple.pending_partner_status
+                ? "invite_trial_expired"
+                : "solo_trial_expired";
 
           for (const userId of eligibleIds) {
             // Claim before sending so a concurrent run cannot send the same notice twice.
@@ -198,10 +215,10 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    console.log(`[process-trial-expiry] checked ${lapsedTrials?.length ?? 0} lapsed trials, sent ${notified} notices`);
+    console.log(`[process-trial-expiry] checked ${lapses.length} lapses, sent ${notified} notices`);
 
     return new Response(
-      JSON.stringify({ ok: true, checkedTrials: lapsedTrials?.length ?? 0, notified }),
+      JSON.stringify({ ok: true, checkedLapses: lapses.length, notified }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
@@ -238,15 +255,17 @@ async function sendPushToUser(
   }
 
   const labels: Record<string, string> = {
-    invite_trial_expired: "Your trial has ended! Subscribe now to confirm your partner's connection request.",
-    solo_trial_expired: "Your free trial has ended. Subscribe to keep your access to all features.",
-    paired_trial_expired: "Your free trial has ended. Subscribe to keep your access to all features.",
+    invite_trial_expired: "Your Free Trial has ended! Subscribe now to confirm your partner's connection request.",
+    solo_trial_expired: "Your Free Trial has ended. Subscribe to keep your access to all features.",
+    paired_trial_expired: "Your Free Trial has ended. Subscribe to keep your access to all features.",
+    subscription_expired: "Your subscription has ended. Renew to keep your access to all features.",
+    paired_subscription_expired: "Your subscription has ended. Renew, or ask your partner to subscribe, to keep your access.",
   };
 
   const expoPayload = {
     to: profile.push_token,
     title: "Warm Me Up",
-    body: labels[eventType] ?? "Your free trial has ended.",
+    body: labels[eventType] ?? "Your subscription has ended.",
     data: { event_type: eventType, couple_id: coupleId, target_route: "/(auth)/subscription" },
     sound: "default",
   };

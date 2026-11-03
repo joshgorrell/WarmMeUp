@@ -10,8 +10,14 @@ export interface RCEntitlementResult {
   environment: PurchaseEnvironment | null;
 }
 
-export function isVerifiedPurchaseEnvironment(env: PurchaseEnvironment | null): env is PurchaseEnvironment {
+function isVerifiedPurchaseEnvironment(env: PurchaseEnvironment | null): env is PurchaseEnvironment {
   return env === "production" || env === "sandbox";
+}
+
+// A null environment means RevenueCat holds no store record for the entitlement. That is how
+// complimentary and promotional grants appear, so they grant access like any verified purchase.
+export function hasRevenueCatAccess(rc: RCEntitlementResult): boolean {
+  return rc.active && (rc.environment === null || isVerifiedPurchaseEnvironment(rc.environment));
 }
 
 export async function fetchOwnAccessFacts(adminClient: AdminClient, userId: string): Promise<OwnAccessFacts> {
@@ -62,10 +68,11 @@ export async function checkRevenueCatEntitlement(
   const data = await res.json();
   const entitlement = data?.subscriber?.entitlements?.premium;
 
-  if (!entitlement?.expires_date) return inactive;
+  if (!entitlement) return inactive;
 
-  const expiresAt = entitlement.expires_date;
-  const isActive = new Date(expiresAt) > new Date();
+  // RevenueCat omits expires_date for lifetime entitlements, which never lapse.
+  const expiresAt: string | null = entitlement.expires_date ?? null;
+  const isActive = expiresAt === null || new Date(expiresAt) > new Date();
   const productId: string = entitlement.product_identifier ?? "";
 
   const plan: "monthly" | "yearly" =
@@ -94,6 +101,5 @@ export async function hasEffectiveSelfAccess(
   const own = await resolveOwnAccess(adminClient, userId);
   if (own.hasPremium) return true;
   if (!rcSecretKey) return false;
-  const rc = await checkRevenueCatEntitlement(userId, rcSecretKey);
-  return rc.active && isVerifiedPurchaseEnvironment(rc.environment);
+  return hasRevenueCatAccess(await checkRevenueCatEntitlement(userId, rcSecretKey));
 }

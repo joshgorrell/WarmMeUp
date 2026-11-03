@@ -324,11 +324,11 @@ export default function SubscriptionScreen() {
             const dateStr = new Date(trialEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
             if (inGrace) {
               const graceDateStr = new Date(graceEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-              return `Your 7-day free trial ended on ${dateStr}. You have until ${graceDateStr} to subscribe before losing access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
+              return `Your 7-day Free Trial ended on ${dateStr}. You have until ${graceDateStr} to subscribe before losing access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
             }
-            return `Your 7-day free trial ended on ${dateStr}. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
+            return `Your 7-day Free Trial ended on ${dateStr}. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
           }
-          return 'Your 7-day free trial has ended. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.';
+          return 'Your 7-day Free Trial has ended. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.';
         })() }
       : null;
 
@@ -492,7 +492,7 @@ export default function SubscriptionScreen() {
             >
               <AppText style={styles.continueTrialText}>
                 {subscriptionInfo.isOnTrial && subscriptionInfo.trialExpiresAt
-                  ? `Continue with free trial · expires ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+                  ? `Continue with Free Trial · expires ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
                   : subscriptionInfo.trialGraceEndsAt && new Date(subscriptionInfo.trialGraceEndsAt) > new Date()
                   ? `Continue · subscribe by ${new Date(subscriptionInfo.trialGraceEndsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} to keep access`
                   : 'Continue — subscribe later'}
