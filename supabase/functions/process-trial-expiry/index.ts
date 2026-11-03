@@ -8,6 +8,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+// Trial expirations whose grace period ended before this instant are historical and never notify.
+const TRIAL_NOTIFICATION_CUTOFF = "2026-11-03T20:00:00Z";
+const TRIAL_GRACE_MS = 24 * 60 * 60 * 1000;
+
 /** Length-independent, constant-time string comparison. */
 function safeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder();
@@ -70,146 +74,96 @@ Deno.serve(async (req: Request) => {
     }
 
     const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
-
-    // Failures for one couple are logged and skipped so the next run retries them
-    // (a RevenueCat outage must not stamp a couple as expired).
     const hasAccess = (userId: string) => hasEffectiveSelfAccess(adminClient, userId, rcSecretKey);
 
-    let processedFirst = 0;
-    let processedReminders = 0;
+    // ── Trial expirations ────────────────────────────────────────────────
+    // A trial qualifies once its 24h grace has ended, and only if that happened on or
+    // after the cutoff. Each expiration notifies at most once per couple: the couple's
+    // trial_expired_notified_at must be earlier than the end of that grace period.
+    const cutoffMs = Date.parse(TRIAL_NOTIFICATION_CUTOFF);
+    const nowMs = Date.now();
 
-    // ── 1. First-time trial expiry detection ──────────────────────────────
-    // Find couples where:
-    //   - user_b_id IS NULL (solo, invite pending)
-    //   - pending_partner_status IS NOT NULL (someone requested to join)
-    //   - trial_expired_notified_at IS NULL (not yet detected)
-    //   - the inviter (user_a_id) has NO active premium and NO active trial
-    const { data: expiredCouples, error: expiredError } = await adminClient
-      .from("couples")
-      .select("id, user_a_id, pending_partner_id, pending_partner_status")
-      .is("user_b_id", null)
-      .not("pending_partner_status", "is", null)
-      .is("trial_expired_notified_at", null);
+    const { data: lapsedTrials, error: lapsedError } = await adminClient
+      .from("subscriptions")
+      .select("user_id, expires_at")
+      .eq("plan", "trial")
+      .gte("expires_at", new Date(cutoffMs - TRIAL_GRACE_MS).toISOString())
+      .lte("expires_at", new Date(nowMs - TRIAL_GRACE_MS).toISOString());
 
-    if (expiredError) {
-      console.error("[process-trial-expiry] query error:", expiredError.message);
+    if (lapsedError) {
+      console.error("[process-trial-expiry] trial query error:", lapsedError.message);
+      return new Response(JSON.stringify({ error: "Internal server error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    if (expiredCouples && expiredCouples.length > 0) {
-      for (const couple of expiredCouples) {
-        try {
-          if (await hasAccess(couple.user_a_id)) continue;
+    let notified = 0;
 
-          const { error: stampError } = await adminClient
+    for (const trial of lapsedTrials ?? []) {
+      const lapseEndMs = Date.parse(trial.expires_at) + TRIAL_GRACE_MS;
+      const lapseEndIso = new Date(lapseEndMs).toISOString();
+
+      const { data: couples, error: coupleError } = await adminClient
+        .from("couples")
+        .select("id, user_a_id, user_b_id, pending_partner_status, trial_expired_notified_at")
+        .eq("active", true)
+        .or(`user_a_id.eq.${trial.user_id},user_b_id.eq.${trial.user_id}`);
+
+      if (coupleError) {
+        console.error(`[process-trial-expiry] couple query error for user=${trial.user_id}:`, coupleError.message);
+        continue;
+      }
+
+      for (const couple of couples ?? []) {
+        if (couple.trial_expired_notified_at && Date.parse(couple.trial_expired_notified_at) >= lapseEndMs) continue;
+
+        const recipients = couple.user_b_id ? [couple.user_a_id, couple.user_b_id] : [couple.user_a_id];
+
+        try {
+          let covered = false;
+          for (const userId of recipients) {
+            if (await hasAccess(userId)) {
+              covered = true;
+              break;
+            }
+          }
+          if (covered) continue;
+
+          // Claim the expiration before sending so a concurrent run or a repeated call cannot notify twice.
+          const { data: claimed, error: claimError } = await adminClient
             .from("couples")
-            .update({ trial_expired_notified_at: new Date().toISOString() })
-            .eq("id", couple.id);
-          if (stampError) {
-            console.error(`[process-trial-expiry] stamp failed for couple=${couple.id}:`, stampError.message);
+            .update({ trial_expired_notified_at: new Date(nowMs).toISOString() })
+            .eq("id", couple.id)
+            .or(`trial_expired_notified_at.is.null,trial_expired_notified_at.lt.${lapseEndIso}`)
+            .select("id");
+
+          if (claimError) {
+            console.error(`[process-trial-expiry] claim failed for couple=${couple.id}:`, claimError.message);
             continue;
           }
+          if (!claimed || claimed.length === 0) continue;
 
-          await sendPushToUser(adminClient, couple.user_a_id, "invite_trial_expired", couple.id);
-          processedFirst++;
+          const eventType = couple.user_b_id
+            ? "paired_trial_expired"
+            : couple.pending_partner_status
+              ? "invite_trial_expired"
+              : "solo_trial_expired";
+
+          for (const userId of recipients) {
+            await sendPushToUser(adminClient, userId, eventType, couple.id);
+          }
+          notified++;
         } catch (err: any) {
-          console.error(`[process-trial-expiry] first-notice error for couple=${couple.id}:`, err?.message ?? String(err));
+          console.error(`[process-trial-expiry] error for couple=${couple.id}:`, err?.message ?? String(err));
         }
       }
     }
 
-    // ── 2. 48-hour reminder detection ────────────────────────────────────
-    // Find couples where:
-    //   - trial_expired_notified_at IS NOT NULL (already detected)
-    //   - trial_expired_reminder_sent IS NULL or false (reminder not yet sent)
-    //   - trial_expired_notified_at is 48+ hours ago
-    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-
-    const { data: reminderCouples, error: reminderError } = await adminClient
-      .from("couples")
-      .select("id, user_a_id, pending_partner_id, pending_partner_status, trial_expired_notified_at")
-      .is("user_b_id", null)
-      .not("pending_partner_status", "is", null)
-      .not("trial_expired_notified_at", "is", null)
-      .lt("trial_expired_notified_at", fortyEightHoursAgo)
-      .or("trial_expired_reminder_sent.is.null,trial_expired_reminder_sent.eq.false");
-
-    if (reminderError) {
-      console.error("[process-trial-expiry] reminder query error:", reminderError.message);
-    }
-
-    if (reminderCouples && reminderCouples.length > 0) {
-      for (const couple of reminderCouples) {
-        // Only send reminder if the request is still pending (not accepted/declined)
-        if (couple.pending_partner_status !== "pending" && couple.pending_partner_status !== "b_accepted") {
-          continue;
-        }
-
-        try {
-          if (await hasAccess(couple.user_a_id)) continue;
-
-          const { error: reminderStampError } = await adminClient
-            .from("couples")
-            .update({ trial_expired_reminder_sent: true })
-            .eq("id", couple.id);
-          if (reminderStampError) {
-            console.error(`[process-trial-expiry] reminder stamp failed for couple=${couple.id}:`, reminderStampError.message);
-            continue;
-          }
-
-          await sendPushToUser(adminClient, couple.user_a_id, "invite_trial_reminder", couple.id);
-          processedReminders++;
-        } catch (err: any) {
-          console.error(`[process-trial-expiry] reminder error for couple=${couple.id}:`, err?.message ?? String(err));
-        }
-      }
-    }
-
-    // ── 3. Paired-couple trial expiry detection ──────────────────────────
-    // Notify only when neither partner has access. Partner access follows whichever
-    // partner currently holds valid premium, so a partner's purchase covers the couple.
-    let processedPaired = 0;
-
-    const { data: pairedCouples, error: pairedError } = await adminClient
-      .from("couples")
-      .select("id, user_a_id, user_b_id")
-      .not("user_b_id", "is", null)
-      .eq("active", true)
-      .is("trial_expired_notified_at", null);
-
-    if (pairedError) {
-      console.error("[process-trial-expiry] paired query error:", pairedError.message);
-    }
-
-    if (pairedCouples && pairedCouples.length > 0) {
-      for (const couple of pairedCouples) {
-        if (!couple.user_a_id || !couple.user_b_id) continue;
-
-        try {
-          if (await hasAccess(couple.user_a_id)) continue;
-          if (await hasAccess(couple.user_b_id)) continue;
-
-          const { error: pairedStampError } = await adminClient
-            .from("couples")
-            .update({ trial_expired_notified_at: new Date().toISOString() })
-            .eq("id", couple.id);
-          if (pairedStampError) {
-            console.error(`[process-trial-expiry] paired stamp failed for couple=${couple.id}:`, pairedStampError.message);
-            continue;
-          }
-
-          await sendPushToUser(adminClient, couple.user_a_id, "paired_trial_expired", couple.id);
-          await sendPushToUser(adminClient, couple.user_b_id, "paired_trial_expired", couple.id);
-          processedPaired++;
-        } catch (err: any) {
-          console.error(`[process-trial-expiry] paired error for couple=${couple.id}:`, err?.message ?? String(err));
-        }
-      }
-    }
-
-    console.log(`[process-trial-expiry] processed ${processedFirst} first-notifications, ${processedReminders} reminders, ${processedPaired} paired-expirations`);
+    console.log(`[process-trial-expiry] checked ${lapsedTrials?.length ?? 0} lapsed trials, notified ${notified} couples`);
 
     return new Response(
-      JSON.stringify({ ok: true, processedFirst, processedReminders, processedPaired }),
+      JSON.stringify({ ok: true, checkedTrials: lapsedTrials?.length ?? 0, notified }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
@@ -241,11 +195,11 @@ async function sendPushToUser(
 
     const labels: Record<string, string> = {
       invite_trial_expired: "Your trial has ended! Subscribe now to confirm your partner's connection request.",
-      invite_trial_reminder: "Your partner is still waiting! Subscribe now to confirm your connection.",
+      solo_trial_expired: "Your free trial has ended. Subscribe to keep your access to all features.",
       paired_trial_expired: "Your free trial has ended. Subscribe to keep your access to all features.",
     };
 
-    const bodyText = labels[eventType] ?? "You have a pending connection request.";
+    const bodyText = labels[eventType] ?? "Your free trial has ended.";
 
     const expoPayload = {
       to: profile.push_token,
