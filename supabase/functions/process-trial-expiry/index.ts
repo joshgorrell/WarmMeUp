@@ -79,7 +79,7 @@ Deno.serve(async (req: Request) => {
     // ── Trial expirations ────────────────────────────────────────────────
     // A trial qualifies once its 24h grace has ended, and only if that happened on or
     // after the cutoff. Each expiration notifies at most once per couple: the couple's
-    // trial_expired_notified_at must be earlier than the end of that grace period.
+    // trial_expired_notified_at stores the expiration it covered and must be earlier than the next one.
     const cutoffMs = Date.parse(TRIAL_NOTIFICATION_CUTOFF);
     const nowMs = Date.now();
 
@@ -102,7 +102,6 @@ Deno.serve(async (req: Request) => {
 
     for (const trial of lapsedTrials ?? []) {
       const lapseEndMs = Date.parse(trial.expires_at) + TRIAL_GRACE_MS;
-      const lapseEndIso = new Date(lapseEndMs).toISOString();
 
       const { data: couples, error: coupleError } = await adminClient
         .from("couples")
@@ -116,11 +115,26 @@ Deno.serve(async (req: Request) => {
       }
 
       for (const couple of couples ?? []) {
-        if (couple.trial_expired_notified_at && Date.parse(couple.trial_expired_notified_at) >= lapseEndMs) continue;
-
         const recipients = couple.user_b_id ? [couple.user_a_id, couple.user_b_id] : [couple.user_a_id];
 
         try {
+          // A couple's expiration is the latest trial end across its members, so a
+          // partner who lapses later still counts as one expiration for both.
+          const { data: memberTrials, error: memberError } = await adminClient
+            .from("subscriptions")
+            .select("expires_at")
+            .eq("plan", "trial")
+            .in("user_id", recipients);
+          if (memberError) throw new Error(memberError.message);
+
+          const expirationMs = Math.max(
+            lapseEndMs,
+            ...(memberTrials ?? []).map((t) => Date.parse(t.expires_at) + TRIAL_GRACE_MS),
+          );
+          const expirationIso = new Date(expirationMs).toISOString();
+
+          if (couple.trial_expired_notified_at && Date.parse(couple.trial_expired_notified_at) >= expirationMs) continue;
+
           let covered = false;
           for (const userId of recipients) {
             if (await hasAccess(userId)) {
@@ -133,9 +147,9 @@ Deno.serve(async (req: Request) => {
           // Claim the expiration before sending so a concurrent run or a repeated call cannot notify twice.
           const { data: claimed, error: claimError } = await adminClient
             .from("couples")
-            .update({ trial_expired_notified_at: new Date(nowMs).toISOString() })
+            .update({ trial_expired_notified_at: expirationIso })
             .eq("id", couple.id)
-            .or(`trial_expired_notified_at.is.null,trial_expired_notified_at.lt.${lapseEndIso}`)
+            .or(`trial_expired_notified_at.is.null,trial_expired_notified_at.lt.${expirationIso}`)
             .select("id");
 
           if (claimError) {
