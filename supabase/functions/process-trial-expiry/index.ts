@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { hasEffectiveSelfAccess } from "../_shared/effectiveAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,6 +64,11 @@ Deno.serve(async (req: Request) => {
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
+
+    // Failures for one couple are logged and skipped so the next run retries them
+    // (a RevenueCat outage must not stamp a couple as expired).
+    const hasAccess = (userId: string) => hasEffectiveSelfAccess(adminClient, userId, rcSecretKey);
 
     let processedFirst = 0;
     let processedReminders = 0;
@@ -86,42 +92,22 @@ Deno.serve(async (req: Request) => {
 
     if (expiredCouples && expiredCouples.length > 0) {
       for (const couple of expiredCouples) {
-        // Check if the inviter still has premium access
-        const { data: inviterSub } = await adminClient
-          .from("subscriptions")
-          .select("status, plan, expires_at")
-          .eq("user_id", couple.user_a_id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        try {
+          if (await hasAccess(couple.user_a_id)) continue;
 
-        const hasActivePremium =
-          inviterSub?.status === "active" &&
-          inviterSub?.plan !== "trial" &&
-          inviterSub?.expires_at &&
-          new Date(inviterSub.expires_at) > new Date();
-
-        const hasActiveTrial =
-          inviterSub?.status === "active" &&
-          inviterSub?.plan === "trial" &&
-          inviterSub?.expires_at &&
-          new Date(inviterSub.expires_at) > new Date();
-
-        if (!hasActivePremium && !hasActiveTrial) {
-          // Stamp the first detection timestamp
-          await adminClient
+          const { error: stampError } = await adminClient
             .from("couples")
             .update({ trial_expired_notified_at: new Date().toISOString() })
             .eq("id", couple.id);
+          if (stampError) {
+            console.error(`[process-trial-expiry] stamp failed for couple=${couple.id}:`, stampError.message);
+            continue;
+          }
 
-          // Send the first push notification to User A
-          await sendPushToUser(
-            adminClient,
-            couple.user_a_id,
-            "invite_trial_expired",
-            couple.id
-          );
+          await sendPushToUser(adminClient, couple.user_a_id, "invite_trial_expired", couple.id);
           processedFirst++;
+        } catch (err: any) {
+          console.error(`[process-trial-expiry] first-notice error for couple=${couple.id}:`, err?.message ?? String(err));
         }
       }
     }
@@ -153,47 +139,34 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Double-check the inviter still doesn't have premium
-        const { data: inviterSub } = await adminClient
-          .from("subscriptions")
-          .select("status, plan, expires_at")
-          .eq("user_id", couple.user_a_id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        try {
+          if (await hasAccess(couple.user_a_id)) continue;
 
-        const hasActivePremium =
-          inviterSub?.status === "active" &&
-          inviterSub?.plan !== "trial" &&
-          inviterSub?.expires_at &&
-          new Date(inviterSub.expires_at) > new Date();
-
-        if (!hasActivePremium) {
-          await adminClient
+          const { error: reminderStampError } = await adminClient
             .from("couples")
             .update({ trial_expired_reminder_sent: true })
             .eq("id", couple.id);
+          if (reminderStampError) {
+            console.error(`[process-trial-expiry] reminder stamp failed for couple=${couple.id}:`, reminderStampError.message);
+            continue;
+          }
 
-          await sendPushToUser(
-            adminClient,
-            couple.user_a_id,
-            "invite_trial_reminder",
-            couple.id
-          );
+          await sendPushToUser(adminClient, couple.user_a_id, "invite_trial_reminder", couple.id);
           processedReminders++;
+        } catch (err: any) {
+          console.error(`[process-trial-expiry] reminder error for couple=${couple.id}:`, err?.message ?? String(err));
         }
       }
     }
 
     // ── 3. Paired-couple trial expiry detection ──────────────────────────
-    // Find couples where both partners are connected (user_b_id IS NOT NULL)
-    // and the subscription owner's trial has expired, but neither partner has
-    // been notified yet (trial_expired_notified_at IS NULL on a paired couple).
+    // Notify only when neither partner has access. Partner access follows whichever
+    // partner currently holds valid premium, so a partner's purchase covers the couple.
     let processedPaired = 0;
 
     const { data: pairedCouples, error: pairedError } = await adminClient
       .from("couples")
-      .select("id, user_a_id, user_b_id, subscription_owner_id")
+      .select("id, user_a_id, user_b_id")
       .not("user_b_id", "is", null)
       .eq("active", true)
       .is("trial_expired_notified_at", null);
@@ -204,40 +177,26 @@ Deno.serve(async (req: Request) => {
 
     if (pairedCouples && pairedCouples.length > 0) {
       for (const couple of pairedCouples) {
-        const ownerId = couple.subscription_owner_id ?? couple.user_a_id;
-        if (!ownerId) continue;
+        if (!couple.user_a_id || !couple.user_b_id) continue;
 
-        const { data: ownerSub } = await adminClient
-          .from("subscriptions")
-          .select("status, plan, expires_at")
-          .eq("user_id", ownerId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        try {
+          if (await hasAccess(couple.user_a_id)) continue;
+          if (await hasAccess(couple.user_b_id)) continue;
 
-        const hasActivePremium =
-          ownerSub?.status === "active" &&
-          ownerSub?.plan !== "trial" &&
-          ownerSub?.expires_at &&
-          new Date(ownerSub.expires_at) > new Date();
-
-        const hasActiveTrial =
-          ownerSub?.status === "active" &&
-          ownerSub?.plan === "trial" &&
-          ownerSub?.expires_at &&
-          new Date(ownerSub.expires_at) > new Date();
-
-        if (!hasActivePremium && !hasActiveTrial) {
-          await adminClient
+          const { error: pairedStampError } = await adminClient
             .from("couples")
             .update({ trial_expired_notified_at: new Date().toISOString() })
             .eq("id", couple.id);
+          if (pairedStampError) {
+            console.error(`[process-trial-expiry] paired stamp failed for couple=${couple.id}:`, pairedStampError.message);
+            continue;
+          }
 
           await sendPushToUser(adminClient, couple.user_a_id, "paired_trial_expired", couple.id);
-          if (couple.user_b_id) {
-            await sendPushToUser(adminClient, couple.user_b_id, "paired_trial_expired", couple.id);
-          }
+          await sendPushToUser(adminClient, couple.user_b_id, "paired_trial_expired", couple.id);
           processedPaired++;
+        } catch (err: any) {
+          console.error(`[process-trial-expiry] paired error for couple=${couple.id}:`, err?.message ?? String(err));
         }
       }
     }

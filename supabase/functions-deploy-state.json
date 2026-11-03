@@ -1,0 +1,117 @@
+{
+  "projectId": "69376270",
+  "functions": {
+    "ai-ops-bug-analyzer": {
+      "hasChanged": false,
+      "hash": "a9a4c25fb253e2d58bc64ee139b599a077c82f4373adbf64ecf607cc5558f005"
+    },
+    "ai-ops-daily-brief": {
+      "hasChanged": false,
+      "hash": "740529a25260064473d21d7db13efe7ea614ff9e3eeee40f9617e96bb75e51e7"
+    },
+    "ai-ops-security-monitor": {
+      "hasChanged": false,
+      "hash": "e236c731394788a5751715b1c2961a0a910eae0f575f0f605de69545195bca33"
+    },
+    "ai-ops-signup-monitor": {
+      "hasChanged": false,
+      "hash": "ebdbc0ab4155dc253b8e6c423fdfd2887433b14463b576d233ac78aac85acd5d"
+    },
+    "analytics-business-health": {
+      "hasChanged": false,
+      "hash": "a646f5b0a3401422f07360d54b3f9dfa8a476e4819af6e5427e4fde923c0abbb"
+    },
+    "analytics-cancellations": {
+      "hasChanged": false,
+      "hash": "f9d5f031593c70570a63548319c04bcb3095742bfb4ca73381e36be813ed5528"
+    },
+    "analytics-chat": {
+      "hasChanged": false,
+      "hash": "3c08be30b207bf0debc47a1f7a2036c22185555ceeb81ae6789007e5eeea3f35"
+    },
+    "analytics-churn": {
+      "hasChanged": false,
+      "hash": "92a4136785adb8ab811799a0b85f0ff1659901006668cc80c6a7bbdad6fac3be"
+    },
+    "analytics-cohorts": {
+      "hasChanged": false,
+      "hash": "02b1cba1dc97be027c63da17a9f1cdb11ce4bfccef9d012b4db6822e48bb90e8"
+    },
+    "analytics-couple-health": {
+      "hasChanged": false,
+      "hash": "ce336c228a6e3df2246e5d6711635a807631532422edd3b62f3a26b7b6576c49"
+    },
+    "analytics-engagement": {
+      "hasChanged": false,
+      "hash": "7ce5d27dc03b5a6ad1783fbff52657561852bcf72ff67d8c50b6c46f336a5c4c"
+    },
+    "analytics-overview": {
+      "hasChanged": false,
+      "hash": "17310494706ebe7a3e127f3f86eb0da58ed6a19e5edde765023c2424f4bfde2c"
+    },
+    "analytics-trials": {
+      "hasChanged": false,
+      "hash": "e0d06ebf4ff04bef1c0d20bef0b610187f31c4954323de964c76ad35a71a9935"
+    },
+    "apple-token-exchange": {
+      "hasChanged": false,
+      "hash": "b84660726a772465154fb9da1df6ff83cf5a176792f37da7dbf5780f6bebe90d"
+    },
+    "burn-content": {
+      "hasChanged": false,
+      "hash": "49040cf7333f652cc5a32805054f2931370190b5407036e69a88150a9b9a8953e466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+    },
+    "check-email-collision": {
+      "hasChanged": false,
+      "hash": "05b3406b2b9b8550c4ac07d93f19f715e0aa322d7582a415afd1eb7c621f7026"
+    },
+    "confirm-subscription": {
+      "hasChanged": false,
+      "hash": "b871c8643ba3c18de5d2989bc3070676b269c503210135139d2888c61b98e2c9"
+    },
+    "copy-to-vault": {
+      "hasChanged": false,
+      "hash": "0b671090476e0241cf9791f94155432528c5a754c382f2b42ae309c858a833e9"
+    },
+    "delete-account": {
+      "hasChanged": false,
+      "hash": "e7a9bed2476917e994ecf4dc73469bf513a99f7b211fea5ae77adf142708086ae466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+    },
+    "disconnect-couple": {
+      "hasChanged": false,
+      "hash": "7b0e8235a63ee44df2a194b6248b4e2fa40bc215dc0b6ce1a3239fd10ef5e0f9e466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+    },
+    "get-effective-subscription": {
+      "hasChanged": false,
+      "hash": "053fd05edd68ec8e7c45380aefe2f8918dc406fd860f533434f90e754752deeee466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+    },
+    "notify-partner": {
+      "hasChanged": false,
+      "hash": "3a6406db7fd564367528d79e959e916752861f4ce6a007b792ebf6114f160a21"
+    },
+    "notify-screenshot": {
+      "hasChanged": false,
+      "hash": "463f0da0164a145d66b5d9234b8a1a36315c161ce6af3fc2313d22ff45e53a36"
+    },
+    "process-content-burns": {
+      "hasChanged": false,
+      "hash": "bb09fc3afb612e4a55a5e3d3f840f151e59c70f8e6ec41723a870d40024e5ab9e466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+    },
+    "process-trial-expiry": {
+      "hasChanged": false,
+      "hash": "7b3665203457a4837ae754886321258a2284dda6c968a8e836da65760dbfe703e466f40d6e78dc5cf98eaa0590b70cc8b84b73b745dc09e7b795946ad14cbb8c"
+    },
+    "send-test-push": {
+      "hasChanged": false,
+      "hash": "c88b4f4df913f0368dcedc119af4f90efe906f7e66b2df3dcfb7d8ccc910ae91"
+    },
+    "submit-feedback": {
+      "hasChanged": false,
+      "hash": "84ec4ccd3afd4f839d54255bf863bc924d0e99488e39fb858f1a434b0457dec7"
+    },
+    "weather": {
+      "hasChanged": false,
+      "hash": "aca7f6319fc250e46345350aa6c8adbeca10568b56173200949e8ae5c87a956e"
+    }
+  }
+}

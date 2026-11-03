@@ -1,165 +1,17 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { isSubActive, isTrialPlan, TRIAL_GRACE_MS } from "../_shared/accessRules.ts";
+import {
+  checkRevenueCatEntitlement,
+  isVerifiedPurchaseEnvironment,
+  resolveOwnAccess,
+} from "../_shared/effectiveAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
-
-type PurchaseEnvironment = "sandbox" | "production";
-
-interface SubscriptionRow {
-  user_id: string;
-  plan: string;
-  status: string;
-  expires_at: string | null;
-  trial_started_at: string | null;
-  purchase_environment: PurchaseEnvironment | null;
-}
-
-interface AccessResult {
-  hasPremium: boolean;
-  isOnTrial: boolean;
-  source: string;
-  plan: string | null;
-  expiresAt: string | null;
-  canInvite: boolean;
-  trialGraceEndsAt: string | null;
-  purchaseEnvironment: PurchaseEnvironment | "none";
-}
-
-const REVIEW_ACCESS_SOURCE = "review_access";
-
-const TRIAL_GRACE_MS = 24 * 60 * 60 * 1000;
-
-function isSubActive(row: SubscriptionRow | null): boolean {
-  if (!row) return false;
-  if (row.status !== "active") return false;
-  if (row.expires_at && new Date(row.expires_at) < new Date()) {
-    if (isTrialPlan(row.plan)) {
-      const expiredMs = Date.now() - new Date(row.expires_at).getTime();
-      if (expiredMs < TRIAL_GRACE_MS) return true;
-    }
-    return false;
-  }
-  return true;
-}
-
-function isPaidPlan(plan: string): boolean {
-  return plan === "monthly" || plan === "yearly";
-}
-
-function isTrialPlan(plan: string): boolean {
-  return plan === "trial";
-}
-
-function isVerifiedPurchaseEnvironment(env: PurchaseEnvironment | null): env is PurchaseEnvironment {
-  return env === "production" || env === "sandbox";
-}
-
-interface RCEntitlementResult {
-  active: boolean;
-  plan: "monthly" | "yearly";
-  expiresAt: string | null;
-  environment: PurchaseEnvironment | null;
-}
-
-async function checkRevenueCatEntitlement(
-  rcUserId: string,
-  secretKey: string
-): Promise<RCEntitlementResult> {
-  const url = `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(rcUserId)}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${secretKey}`,
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!res.ok) return { active: false, plan: "monthly", expiresAt: null, environment: null };
-
-  const data = await res.json();
-  const entitlement = data?.subscriber?.entitlements?.premium;
-
-  if (!entitlement?.expires_date) {
-    return { active: false, plan: "monthly", expiresAt: null, environment: null };
-  }
-
-  const expiresAt = entitlement.expires_date;
-  const isActive = new Date(expiresAt) > new Date();
-  const productId: string = entitlement.product_identifier ?? "";
-
-  const plan: "monthly" | "yearly" =
-    productId.includes("annual") || productId.includes("yearly") || productId.includes("year")
-      ? "yearly"
-      : "monthly";
-
-  // Determine sandbox vs production from the underlying subscription object.
-  const subscriptions = data?.subscriber?.subscriptions ?? {};
-  const subEntry = subscriptions[productId];
-
-  let environment: PurchaseEnvironment | null = null;
-  if (subEntry && typeof subEntry.is_sandbox === "boolean") {
-    environment = subEntry.is_sandbox ? "sandbox" : "production";
-  }
-
-  return { active: isActive, plan, expiresAt, environment };
-}
-
-async function userHasPremiumAccess(
-  adminClient: ReturnType<typeof createClient>,
-  userId: string
-): Promise<AccessResult> {
-  // 1. Explicit permanent review access
-  const { data: reviewAccess } = await adminClient
-    .from("permanent_review_access")
-    .select("user_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (reviewAccess) {
-    return { hasPremium: true, isOnTrial: false, source: REVIEW_ACCESS_SOURCE, plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null, purchaseEnvironment: "none" };
-  }
-
-  // 2. admin / super_admin profile flags
-  const { data: profile } = await adminClient
-    .from("profiles")
-    .select("is_admin, is_super_admin")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (profile?.is_super_admin === true) {
-    return { hasPremium: true, isOnTrial: false, source: "super_admin", plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null, purchaseEnvironment: "none" };
-  }
-  if (profile?.is_admin === true) {
-    return { hasPremium: true, isOnTrial: false, source: "admin", plan: null, expiresAt: null, canInvite: true, trialGraceEndsAt: null, purchaseEnvironment: "none" };
-  }
-
-  // 3. Own subscription row — paid plan or active 7-day trial
-  const { data: sub } = await adminClient
-    .from("subscriptions")
-    .select("user_id, plan, status, expires_at, trial_started_at, purchase_environment")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (isSubActive(sub) && isPaidPlan(sub!.plan)) {
-    // Sandbox rows include historical backfills. Re-verify these with RevenueCat
-    // below rather than treating a database label as proof of a test purchase.
-    if (sub!.purchase_environment === "production") {
-      return { hasPremium: true, isOnTrial: false, source: "self", plan: sub!.plan, expiresAt: sub!.expires_at, canInvite: true, trialGraceEndsAt: null, purchaseEnvironment: "production" };
-    }
-  }
-
-  if (isSubActive(sub) && isTrialPlan(sub!.plan)) {
-    const graceEndsAt = sub!.expires_at
-      ? new Date(new Date(sub!.expires_at).getTime() + TRIAL_GRACE_MS).toISOString()
-      : null;
-    return { hasPremium: true, isOnTrial: true, source: "trial", plan: "trial", expiresAt: sub!.expires_at, canInvite: true, trialGraceEndsAt: graceEndsAt, purchaseEnvironment: "none" };
-  }
-
-  return { hasPremium: false, isOnTrial: false, source: "none", plan: null, expiresAt: null, canInvite: false, trialGraceEndsAt: null, purchaseEnvironment: "none" };
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -192,7 +44,7 @@ Deno.serve(async (req: Request) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const ownAccess = await userHasPremiumAccess(adminClient, user.id);
+    const ownAccess = await resolveOwnAccess(adminClient, user.id);
 
     if (ownAccess.hasPremium) {
       return new Response(
@@ -232,7 +84,7 @@ Deno.serve(async (req: Request) => {
     if (couple) {
       const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
       if (partnerId) {
-        const partnerAccess = await userHasPremiumAccess(adminClient, partnerId);
+        const partnerAccess = await resolveOwnAccess(adminClient, partnerId);
         if (partnerAccess.hasPremium) {
           return new Response(
             JSON.stringify({
@@ -350,7 +202,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // No active premium from any source. Only flag trialExpired for trial plan rows.
-    const trialExpired = ownSub !== null && isTrialPlan(ownSub.plan) && !isSubActive(ownSub);
+    const trialExpired = ownSub !== null && isTrialPlan(ownSub.plan) && !isSubActive(ownSub, Date.now());
 
     // Compute trial grace end time for expired trials so the client can show
     // grace-period messaging in the paywall.
@@ -362,7 +214,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Determine purchase_environment for the response (for diagnostics).
-    let responseEnv: PurchaseEnvironment | "none" = "none";
+    let responseEnv: "sandbox" | "production" | "none" = "none";
     if (ownSub?.purchase_environment) {
       responseEnv = ownSub.purchase_environment;
     }

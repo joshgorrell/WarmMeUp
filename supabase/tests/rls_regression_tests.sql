@@ -10,7 +10,7 @@
 -- INSERT violations DO throw (42501), so those use throws_ok with NULL
 -- error matching (any exception satisfies the test).
 
-SELECT plan(64);
+SELECT plan(67);
 
 -- ═══════════════════════════════════════════════════════════════
 -- Test Setup: Create two couples with test users
@@ -113,6 +113,9 @@ SELECT throws_ok($q$INSERT INTO chat_messages (couple_id, sender_id, content_tex
 SELECT throws_ok($q$INSERT INTO vault_items (couple_id, uploaded_by_user_id, file_path, storage_path, media_type) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '33333333-3333-3333-3333-333333333333', 'fake.jpg', 'fake.jpg', 'photo')$q$, NULL, 'C cannot INSERT A vault_items');
 SELECT throws_ok($q$INSERT INTO wishes (couple_id, created_by_user_id, title) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '33333333-3333-3333-3333-333333333333', 'injected')$q$, NULL, 'C cannot INSERT A wishes');
 SELECT throws_ok($q$INSERT INTO interactions (couple_id, sender_id, receiver_id, type, content_text) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '33333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 'dice', 'injected')$q$, NULL, 'C cannot INSERT A interactions');
+SELECT ok(NOT has_table_privilege('authenticated', 'public.subscriptions', 'INSERT'), 'authenticated has no INSERT on subscriptions');
+SELECT ok(NOT has_table_privilege('authenticated', 'public.subscription_events', 'INSERT'), 'authenticated has no INSERT on subscription_events');
+SELECT ok(NOT has_table_privilege('authenticated', 'public.subscriptions', 'TRUNCATE'), 'authenticated has no TRUNCATE on subscriptions');
 
 -- DELETE: User C cannot delete couple A rows — silently affects 0 rows (5 tests)
 SELECT lives_ok($q$DELETE FROM chat_messages WHERE id = 'a0000000-0000-0000-0000-000000000001'$q$, 'C DELETE A chat_messages (no throw)');

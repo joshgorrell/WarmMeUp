@@ -20,7 +20,7 @@ export interface TrialExpiryAlert {
  *   - user is user_a_id (inviter) on their couple
  *   - user_b_id is null (solo, invite pending)
  *   - pending_partner_status is not null (someone requested to join)
- *   - user has no active premium and no active trial
+ *   - server-resolved access shows no premium (includes review, admin, and trial grace)
  *   - trial_expired_notified_at is null (not yet detected) OR is set but
  *     trial_expired_reminder_sent is false and 48h have passed (reminder due)
  */
@@ -40,53 +40,19 @@ export function useTrialExpiryCheck(): TrialExpiryAlert {
   useEffect(() => {
     if (checkRef.current) return;
     if (!user || !couple) return;
+    if (subscriptionInfo.loading) return;
     // Only the inviter (user_a_id) needs this check
     if (couple.user_a_id !== user.id) return;
     // Only when solo (no partner joined yet)
     if (couple.user_b_id) return;
     // Only when there's a pending request
     if (!couple.pending_partner_status) return;
+    if (subscriptionInfo.isPremium) return;
 
     checkRef.current = true;
 
     (async () => {
       try {
-        // Check if user already has active premium
-        if (subscriptionInfo.isPremium) {
-          return;
-        }
-
-        // Double-check subscription status from server
-        const { data: sub } = await supabase
-          .from('subscriptions')
-          .select('status, plan, expires_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        const now = new Date();
-        const hasActivePremium =
-          sub?.status === 'active' &&
-          sub?.plan !== 'trial' &&
-          sub?.expires_at &&
-          new Date(sub.expires_at) > now;
-
-        // Trial is still active OR within the 24h grace period — don't alert.
-        const TRIAL_GRACE_MS = 24 * 60 * 60 * 1000;
-        const hasActiveTrial =
-          sub?.status === 'active' &&
-          sub?.plan === 'trial' &&
-          sub?.expires_at &&
-          (new Date(sub.expires_at) > now ||
-            (now.getTime() - new Date(sub.expires_at).getTime()) < TRIAL_GRACE_MS);
-
-        if (hasActivePremium || hasActiveTrial) {
-          return; // Still has access (including grace period), no need to alert
-        }
-
-        // Trial has expired and partner request is pending — show alert.
-        // Fetch the pending partner's name for a personalized message.
         let pName = 'Your partner';
         if (couple.pending_partner_id) {
           const { data: partner } = await supabase
@@ -103,12 +69,13 @@ export function useTrialExpiryCheck(): TrialExpiryAlert {
           pName = partnerProfile.display_name;
         }
 
-        // Stamp trial_expired_notified_at if not already set (server-side detection)
-        if (!couple.trial_expired_notified_at) {
-          await supabase
-            .from('couples')
-            .update({ trial_expired_notified_at: new Date().toISOString() })
-            .eq('id', couple.id);
+        const { data: stamp, error: stampError } = await supabase.rpc('record_trial_expired_notification', {
+          p_couple_id: couple.id,
+        });
+        if (stampError) {
+          logger.warn('[useTrialExpiryCheck] stamp failed:', stampError.message);
+        } else if (stamp?.ok === false) {
+          logger.warn('[useTrialExpiryCheck] stamp rejected:', stamp?.reason ?? 'unknown');
         }
 
         setPartnerName(pName);
@@ -117,7 +84,7 @@ export function useTrialExpiryCheck(): TrialExpiryAlert {
         logger.warn('[useTrialExpiryCheck] error:', err?.message ?? String(err));
       }
     })();
-  }, [user, couple, partnerProfile, subscriptionInfo.isPremium]);
+  }, [user, couple, partnerProfile, subscriptionInfo.isPremium, subscriptionInfo.loading]);
 
   return { visible, partnerName, dismiss, goToSubscribe };
 }
