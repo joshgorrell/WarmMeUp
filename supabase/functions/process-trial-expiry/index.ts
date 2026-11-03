@@ -30,15 +30,21 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     // ── Authorization ────────────────────────────────────────────────────
     // This job sends push notifications and stamps notification bookkeeping
-    // columns, so it must only run for the scheduler (service-role key) or
-    // for an admin triggering it manually. Never for an anonymous caller.
+    // columns, so it must only run for the scheduler (Vault token or service-role
+    // key) or for an admin triggering it manually. Never for an anonymous caller.
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const isCron = token.length > 0 && safeEqual(token, serviceRoleKey);
+    let isScheduled = token.length > 0 && safeEqual(token, serviceRoleKey);
+    const schedulerToken = req.headers.get("x-trial-expiry-token") ?? "";
+    if (!isScheduled && schedulerToken.length > 0) {
+      const { data: valid, error: tokenError } = await adminClient.rpc("validate_trial_expiry_token", { p_token: schedulerToken });
+      isScheduled = !tokenError && valid === true;
+    }
 
-    if (!isCron) {
+    if (!isScheduled) {
       const userClient = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: `Bearer ${token}` } },
       });
@@ -63,7 +69,6 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
 
     // Failures for one couple are logged and skipped so the next run retries them
