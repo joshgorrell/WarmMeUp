@@ -19,19 +19,15 @@ entitlement configuration in the deployed backend. Client changes require a new
 production iOS build; verify its actual EAS build number is newer than 111
 (remote versioning is enabled, so app.json is not the authoritative build number).
 
-## Review accounts: not yet verified
-The owner supplied test3@ksav.com and test4@ksav.com as an existing paired couple.
-This workspace has no authorized connection to the Bolt-managed live database.
-Run scripts/verify-app-review-accounts.sql in its SQL editor (read-only).
-Do not reset passwords, unpair users or change access just to inspect them.
-A stored password only establishes that email/password auth is configured; actual
-credential validity must be tested separately without placing passwords in logs.
-
-For purchase review, both users must lack active own/partner premium, admin or
-permanent review grants. An expired app trial is not proof of an expired StoreKit
-subscription. Verify RevenueCat purchase history as well, and account for the
-24-hour app-trial grace period. Preserve the pairing and content. If a full-access
-review account is supplied too, label its purpose separately in App Review notes.
+## Review accounts
+- Couple 1 (testa@ksav.com, testb@ksav.com): permanent review access grant; full access.
+- Couple 2 (testc@ksav.com, testd@ksav.com): paired, trial expired; used for purchase review.
+- Run scripts/verify-app-review-accounts.sql in the SQL editor to inspect them (read-only).
+- Do not reset passwords, unpair users or change access just to inspect them.
+- For purchase review, Couple 2 must lack active own/partner premium, admin or
+  permanent review grants. An expired app trial is not proof of an expired StoreKit
+  subscription. Verify RevenueCat purchase history as well, and account for the
+  24-hour app-trial grace period. Preserve the pairing and content.
 
 ## Required release-device checks
 On physical iPad and iPhone using the release build:

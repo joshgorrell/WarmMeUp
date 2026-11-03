@@ -4,7 +4,7 @@ WITH target AS (
   SELECT id, email, email_confirmed_at IS NOT NULL AS email_verified,
          coalesce(encrypted_password, '') <> '' AS has_password
   FROM auth.users
-  WHERE lower(email) IN ('test3@ksav.com', 'test4@ksav.com')
+  WHERE lower(email) IN ('testa@ksav.com', 'testb@ksav.com', 'testc@ksav.com', 'testd@ksav.com')
 )
 SELECT t.*, p.is_admin, p.is_super_admin,
        p.onboarding_completed_at IS NOT NULL AS onboarding_complete,
