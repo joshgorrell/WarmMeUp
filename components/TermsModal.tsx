@@ -162,7 +162,7 @@ We reserve the right, but not the obligation, to investigate, remove, suspend, o
   },
   {
     title: '10. Subscription Services',
-    body: `Warm Me Up offers free features and premium subscriptions, including monthly and annual plans. A seven-day free trial may be available for eligible users.
+    body: `Warm Me Up offers a free trial and paid subscriptions, including monthly and annual plans. A seven-day free trial may be available for eligible users.
 
 One subscription covers both you and your connected partner — your partner joins free.
 

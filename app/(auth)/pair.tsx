@@ -295,7 +295,7 @@ export default function PairScreen() {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       const entitlement = customerInfo.entitlements.active['premium'];
       if (!entitlement) {
-        setSubscribeError('Purchase completed but premium was not activated. Please try again.');
+        setSubscribeError('Purchase completed but the subscription was not activated. Please try again.');
         return;
       }
 

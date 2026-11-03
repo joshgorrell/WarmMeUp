@@ -190,7 +190,7 @@ function Step1({
       <View style={styles.bulletList}>
         <BulletItem colors={colors} text={`Your connection with ${partnerName} will be removed.`} />
         <BulletItem colors={colors} text="ALL shared content — chat messages, photos, videos, dares, dice rolls, wishes, vault items, points, and activity history — will be permanently deleted for both of you." />
-        <BulletItem colors={colors} text="If your partner holds the subscription, you will lose premium access immediately." />
+        <BulletItem colors={colors} text="If your access comes from your partner's subscription, you will lose access immediately." />
         <BulletItem colors={colors} text="Reconnecting later requires a new invite code and starts a fresh relationship with no previous data." />
       </View>
 

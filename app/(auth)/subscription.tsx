@@ -194,7 +194,7 @@ export default function SubscriptionScreen() {
       const entitlement = customerInfo.entitlements.active['premium'];
       logger.log('[Subscription] purchase result — premium entitlement active:', !!entitlement);
       if (!entitlement) {
-        Alert.alert('Purchase Not Confirmed', 'Your purchase completed but the premium entitlement was not found. Please tap Restore Purchase.');
+        Alert.alert('Purchase Not Confirmed', 'Your purchase completed but the subscription could not be found yet. Please tap Restore Purchase.');
         return;
       }
       const confirmed = await confirmWithServer();
@@ -205,7 +205,7 @@ export default function SubscriptionScreen() {
         if (!retried) {
           Alert.alert(
             'Purchase Confirmed',
-            'Your purchase succeeded but is still syncing. Your premium access will activate automatically shortly. If it does not, tap "Restore Purchase".'
+            'Your purchase succeeded but is still syncing. Your subscription access will activate automatically shortly. If it does not, tap "Restore Purchase".'
           );
         }
       }
