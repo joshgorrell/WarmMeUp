@@ -18,6 +18,8 @@ import {
 } from 'lucide-react-native';
 import WarmupBrand from '@/components/WarmupBrand';
 import CancellationSurveySheet from '@/components/CancellationSurveySheet';
+import TermsModal from '@/components/TermsModal';
+import PrivacyPolicyModal from '@/components/PrivacyPolicyModal';
 import { FontSize, Spacing, Radius } from '@/constants/theme';
 import { useLayout } from '@/hooks/useLayout';
 import { useAuth } from '@/context/AuthContext';
@@ -76,6 +78,8 @@ export default function SubscriptionScreen() {
   const [packages, setPackages] = useState<Record<string, any>>({});
   const [offeringsLoaded, setOfferingsLoaded] = useState(false);
   const [showSurvey, setShowSurvey] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const surveyShownRef = React.useRef(false);
 
   // Show cancellation survey only after the user has had a chance to read
@@ -483,6 +487,16 @@ export default function SubscriptionScreen() {
             </TouchableOpacity>
           )}
 
+          <View style={styles.legalLinkRow}>
+            <TouchableOpacity onPress={() => setShowTerms(true)} activeOpacity={0.7} style={styles.legalLinkBtn}>
+              <AppText style={styles.legalLinkText}>Terms of Use</AppText>
+            </TouchableOpacity>
+            <AppText style={styles.legalLinkDivider}>·</AppText>
+            <TouchableOpacity onPress={() => setShowPrivacy(true)} activeOpacity={0.7} style={styles.legalLinkBtn}>
+              <AppText style={styles.legalLinkText}>Privacy Policy</AppText>
+            </TouchableOpacity>
+          </View>
+
           {canDismiss && (
             <TouchableOpacity
               style={styles.continueTrialBtn}
@@ -516,6 +530,8 @@ export default function SubscriptionScreen() {
         </View>
       </ScrollView>
 
+      <TermsModal visible={showTerms} onClose={() => setShowTerms(false)} />
+      <PrivacyPolicyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <CancellationSurveySheet
         visible={showSurvey}
         onClose={() => setShowSurvey(false)}
@@ -778,6 +794,26 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontFamily: 'Inter-Regular',
     textDecorationLine: 'underline',
+  },
+  legalLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  legalLinkBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  legalLinkText: {
+    color: 'rgba(255,255,255,0.70)',
+    fontSize: FontSize.sm,
+    fontFamily: 'Inter-Regular',
+    textDecorationLine: 'underline',
+  },
+  legalLinkDivider: {
+    color: 'rgba(255,255,255,0.40)',
+    fontSize: FontSize.sm,
   },
   continueTrialBtn: {
     marginTop: 16,

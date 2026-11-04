@@ -8,6 +8,7 @@
   was returned, and suppress background lock redirects during OAuth.
 - Record safe Apple auth stage/error codes; do not log Apple name, email or tokens.
 - Bound the optional collision request and reset its sign-out marker reliably.
+- Paywall shows functional Terms of Use and Privacy Policy links.
 
 The Apple login failure has not been reproduced on a physical device. These are
 hardening changes, not a verified root-cause diagnosis.
@@ -44,3 +45,24 @@ binary contains Sign in with Apple capability, and both subscriptions are includ
 in the submission. Enter working app credentials and exact paywall navigation in
 App Review Information. Reply to Apple only after these checks pass, listing the
 actual tested build and devices. Do not claim device tests were completed here.
+
+## Draft App Review notes
+Paste into App Review Information after the device checks pass. Replace the bracketed items.
+
+> Warm Me Up is a private app for couples. Sign in with Apple is offered on iPhone and iPad.
+>
+> Review accounts (one couple each, paired):
+> - Couple 1, full access: [testa@ksav.com] / [password]; [testb@ksav.com] / [password]
+> - Couple 2, purchase review: [testc@ksav.com] / [password]; [testd@ksav.com] / [password]
+>
+> Subscription testing (Couple 2): sign in with testc@ksav.com. The trial has ended, so the
+> Subscribe screen appears automatically. Choose Monthly or Yearly and complete the sandbox
+> purchase. Both partners gain access. To test restore, use Restore Purchase on that screen
+> or in the account settings. Terms of Use and Privacy Policy links are at the bottom of the
+> Subscribe screen.
+>
+> Sign in with Apple: available on the login screen on iPhone and iPad. Build [N] was
+> tested on [iPad model, iOS version] and [iPhone model, iOS version] for first-time and
+> returning sign-in, cancellation and retry.
+>
+> Sandbox purchases use the App Store sandbox account.
