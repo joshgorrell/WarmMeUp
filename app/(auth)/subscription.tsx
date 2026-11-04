@@ -82,20 +82,25 @@ export default function SubscriptionScreen() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const surveyShownRef = React.useRef(false);
 
-  // Show cancellation survey only after the user has had a chance to read
-  // the paywall — 6 seconds instead of 1.2, and only once per screen mount.
-  useEffect(() => {
+  // Exit feedback is voluntary: never interrupt the paywall on a timer.
+  // Expired users remain on the paywall until access is restored.
+  const handleDecline = () => {
+    if (loading) return;
     if (reason === 'expired_trial' && !surveyShownRef.current) {
       surveyShownRef.current = true;
-      const timer = setTimeout(() => setShowSurvey(true), 6000);
-      return () => clearTimeout(timer);
+      setShowSurvey(true);
+      return;
     }
-  }, [reason]);
+    // The protected app layout rejects expired access. Keep the paywall open.
+  };
+
+  const handleSurveyClose = () => {
+    setShowSurvey(false);
+  };
 
   const logoSize = Math.min(Math.round(width * 0.12), 48);
-  // Allow dismissing the paywall for expired trials so users aren't
-  // trapped — they can look around and come back to subscribe later.
-  const canDismiss = !reason || reason === 'expired_trial';
+  // Paired users without premium access must not dismiss into protected tabs.
+  const canDismiss = reason === 'expired_trial' || !reason;
 
   // Auto-dismiss paywall when premium access appears (e.g. partner subscribed
   // while this screen was open). Fires for all users so neither partner in a
@@ -328,11 +333,11 @@ export default function SubscriptionScreen() {
             const dateStr = new Date(trialEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
             if (inGrace) {
               const graceDateStr = new Date(graceEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-              return `Your 7-day Free Trial ended on ${dateStr}. You have until ${graceDateStr} to subscribe before losing access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
+              return `Your free trial ended ${dateStr}. Your access continues until ${graceDateStr}. Your content stays saved.`;
             }
-            return `Your 7-day Free Trial ended on ${dateStr}. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.`;
+            return `Your free trial ended ${dateStr}. Subscribe to unlock your saved messages, Vault, and more.`;
           }
-          return 'Your 7-day Free Trial has ended. Subscribe to keep access.\n\nAll your messages, vault items, streaks, and points are saved and will reappear the moment you subscribe.';
+          return 'Your free trial has ended. Subscribe to unlock your saved content.';
         })() }
       : null;
 
@@ -347,7 +352,7 @@ export default function SubscriptionScreen() {
       {canDismiss && (
         <TouchableOpacity
           style={[styles.dismissBtn, { top: insets.top + 12 }]}
-          onPress={() => router.replace('/(app)/(tabs)')}
+          onPress={handleDecline}
           activeOpacity={0.7}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
@@ -374,17 +379,9 @@ export default function SubscriptionScreen() {
             </View>
           )}
 
-          {reason === 'expired_trial' && couple?.user_b_id && (
-            <View style={styles.partnerHint}>
-              <AppText style={styles.partnerHintText}>
-                Only one of you needs to subscribe — it covers both of you.
-              </AppText>
-            </View>
-          )}
-
-          <AppText style={styles.heading}>Unlock everything</AppText>
+           <AppText style={styles.heading}>Unlock everything</AppText>
           <AppText style={styles.sub}>
-            One subscription covers both of you.{'\n'}Your partner joins at no extra cost.
+            One subscription covers both of you. Your partner joins free.
           </AppText>
 
           <View style={[styles.featureList, { marginBottom: height < 700 ? 20 : 28 }]}>
@@ -500,7 +497,7 @@ export default function SubscriptionScreen() {
           {canDismiss && (
             <TouchableOpacity
               style={styles.continueTrialBtn}
-              onPress={() => router.replace('/(app)/(tabs)')}
+              onPress={handleDecline}
               activeOpacity={0.7}
               disabled={loading}
             >
@@ -509,7 +506,7 @@ export default function SubscriptionScreen() {
                   ? `Continue with Free Trial · expires ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
                   : subscriptionInfo.trialGraceEndsAt && new Date(subscriptionInfo.trialGraceEndsAt) > new Date()
                   ? `Continue · subscribe by ${new Date(subscriptionInfo.trialGraceEndsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} to keep access`
-                  : 'Continue — subscribe later'}
+                  : reason === 'expired_trial' ? 'Not ready to subscribe? Share feedback' : 'Continue — subscribe later'}
               </AppText>
             </TouchableOpacity>
           )}
@@ -534,7 +531,7 @@ export default function SubscriptionScreen() {
       <PrivacyPolicyModal visible={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <CancellationSurveySheet
         visible={showSurvey}
-        onClose={() => setShowSurvey(false)}
+        onClose={handleSurveyClose}
         surveyType="trial_expired"
       />
     </View>
