@@ -7,7 +7,7 @@ import OfflineScreen from '@/components/OfflineScreen';
 import { clearGalleryItems, evictAllCachedUrls } from '@/lib/mediaGalleryStore';
 
 export default function AppLayout() {
-  const { session, loading, profile, couple, coupleLoading } = useAuth();
+  const { session, loading, profile, couple, coupleLoading, subscriptionInfo, isAdmin, isSuperAdmin } = useAuth();
   const router = useRouter();
   const { isOffline, checking, checkConnection } = useOnlineStatus();
   // Key changes on each offline→online transition to force a full remount of
@@ -24,6 +24,22 @@ export default function AppLayout() {
       else if (!profile.onboarding_completed_at && !coupleLoading && !(couple?.active && couple.user_b_id)) router.replace('/(auth)/onboarding');
     }
   }, [session, loading, profile, couple, coupleLoading, router]);
+
+  // Defense in depth: deep links and dismissed paywalls must not bypass
+  // the subscription check for a paired couple. Never treat an unresolved
+  // subscription request as an expired entitlement.
+  const paired = !!couple?.active && !!couple.user_b_id;
+  const needsSubscription = paired && !isAdmin && !isSuperAdmin
+    && !subscriptionInfo.loading && !subscriptionInfo.isPremium;
+
+  useEffect(() => {
+    if (!loading && !coupleLoading && session && needsSubscription) {
+      router.replace({
+        pathname: '/(auth)/subscription',
+        params: subscriptionInfo.trialExpired ? { reason: 'expired_trial' } : {},
+      });
+    }
+  }, [loading, coupleLoading, session, needsSubscription, subscriptionInfo.trialExpired, router]);
 
   // When entering the offline state, flush all in-memory gallery caches so
   // stale Vault items cannot repopulate after reconnect.
@@ -44,7 +60,7 @@ export default function AppLayout() {
   }
 
   const establishedPair = !!couple?.active && !!couple.user_b_id;
-  if (loading || coupleLoading || !session || !profile || !registrationComplete(profile) || (!profile.onboarding_completed_at && !establishedPair)) return null;
+  if (loading || coupleLoading || (establishedPair && subscriptionInfo.loading && !subscriptionInfo.isPremium) || needsSubscription || !session || !profile || !registrationComplete(profile) || (!profile.onboarding_completed_at && !establishedPair)) return null;
 
   return (
     <Stack key={stackKey} screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: '#05040A' } }}>
