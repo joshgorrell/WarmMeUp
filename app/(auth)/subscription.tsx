@@ -83,7 +83,7 @@ export default function SubscriptionScreen() {
   const surveyShownRef = React.useRef(false);
 
   // Exit feedback is voluntary: never interrupt the paywall on a timer.
-  // An expired user can dismiss to the existing restricted app experience.
+  // Expired users remain on the paywall until access is restored.
   const handleDecline = () => {
     if (loading) return;
     if (reason === 'expired_trial' && !surveyShownRef.current) {
@@ -91,18 +91,16 @@ export default function SubscriptionScreen() {
       setShowSurvey(true);
       return;
     }
-    router.replace('/(app)/(tabs)');
+    // The protected app layout rejects expired access. Keep the paywall open.
   };
 
   const handleSurveyClose = () => {
     setShowSurvey(false);
-    router.replace('/(app)/(tabs)');
   };
 
   const logoSize = Math.min(Math.round(width * 0.12), 48);
-  // Allow dismissing the paywall for expired trials so users aren't
-  // trapped — they can look around and come back to subscribe later.
-  const canDismiss = !reason || reason === 'expired_trial';
+  // Paired users without premium access must not dismiss into protected tabs.
+  const canDismiss = !reason;
 
   // Auto-dismiss paywall when premium access appears (e.g. partner subscribed
   // while this screen was open). Fires for all users so neither partner in a
