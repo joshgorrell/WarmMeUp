@@ -1,12 +1,16 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { isPaidPlan, isSubActive, isTrialPlan, TRIAL_GRACE_MS } from "../_shared/accessRules.ts";
+import { isSubActive, isTrialPlan, TRIAL_GRACE_MS } from "../_shared/accessRules.ts";
 import {
   checkRevenueCatEntitlement,
   hasRevenueCatAccess,
   recordRevenueCatEntitlement,
-  resolveOwnAccess,
 } from "../_shared/effectiveAccess.ts";
+import {
+  graceEndsMs,
+  reverifyPaidSubscriptions,
+  resolveVerifiedAccess,
+} from "./verification.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,29 +18,32 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const ACCESS_GRACE_MS = 24 * 60 * 60 * 1000;
-
-// A paid subscription keeps couple access until 24 hours after its last valid moment: the end
-// date once it has passed, or the last RevenueCat confirmation when access was revoked early.
-function coupleGraceEndsMs(
-  member: { plan: string; expires_at: string | null; rc_verified_at: string | null },
-  nowMs: number,
-): number | null {
-  if (!isPaidPlan(member.plan)) return null;
-  const endedMs = member.expires_at && Date.parse(member.expires_at) <= nowMs
-    ? Date.parse(member.expires_at)
-    : member.rc_verified_at ? Date.parse(member.rc_verified_at) : null;
-  if (endedMs === null || endedMs > nowMs) return null;
-  const graceEndsMs = endedMs + ACCESS_GRACE_MS;
-  return graceEndsMs > nowMs ? graceEndsMs : null;
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
+
+    const reverifyToken = req.headers.get("x-subscription-reverify-token") ?? "";
+    if (reverifyToken) {
+      const { data: isScheduler, error: tokenError } = await adminClient.rpc(
+        "validate_subscription_reverify_token",
+        { p_token: reverifyToken },
+      );
+      if (!tokenError && isScheduler === true) {
+        if (!rcSecretKey) throw new Error("REVENUECAT_SECRET_KEY is not configured");
+        const summary = await reverifyPaidSubscriptions(adminClient, rcSecretKey);
+        return new Response(JSON.stringify(summary), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -44,9 +51,6 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
@@ -60,9 +64,8 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
-
-    const ownAccess = await resolveOwnAccess(adminClient, user.id);
+    const own = await resolveVerifiedAccess(adminClient, user.id, rcSecretKey);
+    const ownAccess = own.access;
 
     if (ownAccess.hasPremium) {
       return new Response(
@@ -102,7 +105,8 @@ Deno.serve(async (req: Request) => {
     if (couple) {
       const partnerId = couple.user_a_id === user.id ? couple.user_b_id : couple.user_a_id;
       if (partnerId) {
-        const partnerAccess = await resolveOwnAccess(adminClient, partnerId);
+        const partner = await resolveVerifiedAccess(adminClient, partnerId, rcSecretKey);
+        const partnerAccess = partner.access;
         if (partnerAccess.hasPremium) {
           return new Response(
             JSON.stringify({
@@ -123,12 +127,8 @@ Deno.serve(async (req: Request) => {
           );
         }
 
-        // Partner has no DB subscription — check RevenueCat directly. If the
-        // partner purchased but confirm-subscription never completed, we still
-        // grant access and backfill their subscription row for future checks.
-        // Preserve the verified purchase environment when backfilling access.
-        const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
-        if (rcSecretKey) {
+        // Partner has no paid row to re-verify, so check RevenueCat directly for a new purchase.
+        if (rcSecretKey && !partner.revenueCatChecked) {
           try {
             const partnerRc = await checkRevenueCatEntitlement(partnerId, rcSecretKey);
             if (hasRevenueCatAccess(partnerRc)) {
@@ -159,12 +159,8 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 5. RevenueCat API fallback — if the DB has no active subscription but
-    //    RevenueCat shows an active entitlement (e.g. purchase completed but
-    //    confirm-subscription never ran), sync the DB and return premium.
-    //    Both production and sandbox are verified server-side and labeled accurately.
-    const rcSecretKey = Deno.env.get("REVENUECAT_SECRET_KEY");
-    if (rcSecretKey) {
+    // RevenueCat fallback for a new purchase that confirm-subscription never recorded.
+    if (rcSecretKey && !own.revenueCatChecked) {
       try {
         const rc = await checkRevenueCatEntitlement(user.id, rcSecretKey);
         if (hasRevenueCatAccess(rc)) {
@@ -188,12 +184,6 @@ Deno.serve(async (req: Request) => {
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        if (ownSub && isPaidPlan(ownSub.plan) && ownSub.purchase_environment === null) {
-          await adminClient
-            .from("subscriptions")
-            .update({ status: "expired" })
-            .eq("user_id", user.id);
-        }
       } catch (err) {
         console.error(`[get-effective-subscription] RC fallback error for user=${user.id}:`, String(err));
       }
@@ -204,7 +194,7 @@ Deno.serve(async (req: Request) => {
     if (couple?.user_b_id) {
       const { data: memberSubs, error: memberSubsError } = await adminClient
         .from("subscriptions")
-        .select("plan, expires_at, rc_verified_at")
+        .select("plan, expires_at")
         .in("user_id", [couple.user_a_id, couple.user_b_id]);
       if (memberSubsError) {
         console.error(`[get-effective-subscription] grace lookup failed for user=${user.id}:`, memberSubsError.message);
@@ -213,9 +203,9 @@ Deno.serve(async (req: Request) => {
       const nowMs = Date.now();
       let graceRow: { plan: string; expires_at: string | null; graceEndsMs: number } | null = null;
       for (const member of memberSubs ?? []) {
-        const graceEndsMs = coupleGraceEndsMs(member, nowMs);
-        if (graceEndsMs !== null && (graceRow === null || graceEndsMs > graceRow.graceEndsMs)) {
-          graceRow = { plan: member.plan, expires_at: member.expires_at, graceEndsMs };
+        const memberGraceEndsMs = graceEndsMs(member, nowMs);
+        if (memberGraceEndsMs !== null && (graceRow === null || memberGraceEndsMs > graceRow.graceEndsMs)) {
+          graceRow = { plan: member.plan, expires_at: member.expires_at, graceEndsMs: memberGraceEndsMs };
         }
       }
 
