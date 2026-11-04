@@ -100,7 +100,7 @@ export default function SubscriptionScreen() {
 
   const logoSize = Math.min(Math.round(width * 0.12), 48);
   // Paired users without premium access must not dismiss into protected tabs.
-  const canDismiss = !reason;
+  const canDismiss = reason === 'expired_trial' || !reason;
 
   // Auto-dismiss paywall when premium access appears (e.g. partner subscribed
   // while this screen was open). Fires for all users so neither partner in a
@@ -506,7 +506,7 @@ export default function SubscriptionScreen() {
                   ? `Continue with Free Trial · expires ${new Date(subscriptionInfo.trialExpiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
                   : subscriptionInfo.trialGraceEndsAt && new Date(subscriptionInfo.trialGraceEndsAt) > new Date()
                   ? `Continue · subscribe by ${new Date(subscriptionInfo.trialGraceEndsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} to keep access`
-                  : 'Continue — subscribe later'}
+                  : reason === 'expired_trial' ? 'Not ready to subscribe? Share feedback' : 'Continue — subscribe later'}
               </AppText>
             </TouchableOpacity>
           )}
