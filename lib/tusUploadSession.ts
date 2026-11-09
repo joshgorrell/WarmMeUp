@@ -44,7 +44,9 @@ export async function uploadTusChunks(
   if (existingUrl) {
     url = resolveTusLocation(endpoint, existingUrl);
   } else {
-    const created = await transport.request('POST', endpoint, {
+    // Retry only explicit transient HTTP responses. A thrown POST may have
+    // created a session whose response was lost; don't blindly create another.
+    const createHeaders = {
       ...common,
       'Upload-Length': String(fileSize),
       'Upload-Metadata': encodeTusMetadata({
@@ -52,9 +54,22 @@ export async function uploadTusChunks(
         contentType: params.mimeType, cacheControl: '3600',
       }),
       'x-upsert': 'true',
-    });
-    if (created.status !== 201) throw new Error(`Could not start resumable upload (HTTP ${created.status}).`);
-    url = resolveTusLocation(endpoint, created.headers.location ?? null);
+    };
+    let createdUrl: string | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const created = await transport.request('POST', endpoint, createHeaders);
+      if (created.status === 201) {
+        createdUrl = resolveTusLocation(endpoint, created.headers.location ?? null);
+        break;
+      }
+      if (!isRetryableTusStatus(created.status)) {
+        throw new Error(`Could not start resumable upload (HTTP ${created.status}).`);
+      }
+      if (attempt === 2) throw new Error(`Could not start resumable upload (HTTP ${created.status}).`);
+      await new Promise<void>(resolve => setTimeout(resolve, 400 * (attempt + 1)));
+    }
+    if (!createdUrl) throw new Error('Could not start resumable upload.');
+    url = createdUrl;
   }
 
   // HEAD is our source of truth after ambiguous PATCH responses. Transient
