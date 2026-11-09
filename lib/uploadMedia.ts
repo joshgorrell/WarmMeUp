@@ -10,6 +10,29 @@ function isLocalUri(uri: string): boolean {
   return uri.startsWith('file://') || uri.startsWith('ph://') || uri.startsWith('content://');
 }
 
+// Some Android pickers provide content:// URIs rather than sandbox file paths.
+// Copy into app cache so native upload can stream the file without allocating
+// a second, video-sized JavaScript ArrayBuffer. Cleanup is handled by the caller.
+async function stageNativeVideoForUpload(uri: string, extension: string): Promise<string | null> {
+  if (Platform.OS === 'web' || uri.startsWith('file://')) return null;
+  if (!uri.startsWith('content://') && !uri.startsWith('ph://')) return null;
+  try {
+    const FileSystem = await import('expo-file-system/legacy');
+    if (!FileSystem.cacheDirectory) return null;
+    const { randomUUID } = await import('expo-crypto');
+    const destination = `${FileSystem.cacheDirectory}media-upload-${randomUUID()}.${extension}`;
+    try {
+      await FileSystem.copyAsync({ from: uri, to: destination });
+      return destination;
+    } catch {
+      await FileSystem.deleteAsync(destination, { idempotent: true }).catch(() => {});
+      return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
 async function buildUploadBody(uri: string, _mimeType: string): Promise<Blob | ArrayBuffer> {
   const response = await fetch(uri);
   if (!response.ok) {
@@ -317,6 +340,16 @@ export async function uploadMediaFile(
         : `${uploadStoragePath}.${expectedExt}`;
 
 
+    }
+
+    // Stage picker-owned video handles into our sandbox for native streaming.
+    // If the OS refuses copying, preserve the existing in-memory fallback.
+    if (isVideo && Platform.OS !== 'web' && !uploadUri.startsWith('file://')) {
+      const stagedUri = await stageNativeVideoForUpload(uploadUri, mimeToExtension(uploadMime));
+      if (stagedUri) {
+        uploadUri = stagedUri;
+        tempFiles.add(stagedUri);
+      }
     }
 
     const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL!}/storage/v1/object/${bucket}/${uploadStoragePath}`;

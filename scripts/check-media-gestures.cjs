@@ -20,6 +20,8 @@ console.log('Media gesture source guards passed (manual device tests still requi
 const upload = fs.readFileSync('lib/uploadMedia.ts', 'utf8');
 for (const [name, pattern] of [
   ['native file streaming', /FileSystem\.createUploadTask\(/],
+  ['picker URI cache staging', /stageNativeVideoForUpload\(uploadUri/],
+  ['staged file cleanup', /tempFiles\.add\(stagedUri\)/],
   ['native upload timeout', /300_000/],
   ['native upload cancellation', /await task\.cancelAsync\(\)/],
   ['native byte progress', /totalBytesSent\s*\/\s*event\.totalBytesExpectedToSend/],
