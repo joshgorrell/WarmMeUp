@@ -3,6 +3,7 @@ import { logDebugEvent } from './debugLog';
 import { Image as ReactNativeImage, Platform } from 'react-native';
 import { cleanupTempFile } from './mediaCache';
 import { RETRYABLE_UPLOAD_STATUSES, shouldRetryUploadError } from './mediaRetryPolicy';
+import { videoUploadTimeoutMs } from './videoUploadPolicy';
 export { MAX_SHARED_VIDEO_DURATION_MS, isLibraryVideoTooLong } from './videoDurationPolicy';
 import { startScopedUpload, updateScopedUpload, endScopedUpload } from './uploadProgress';
 
@@ -348,6 +349,7 @@ export async function uploadMediaFile(
     let uploadStoragePath = storagePath;
     let thumbnailPath: string | undefined;
     let thumbnailLocalUri: string | null = null;
+    let videoSizeBytes: number | null = null;
 
 
     if (isPhoto) {
@@ -390,6 +392,7 @@ export async function uploadMediaFile(
       if (!fileInfo.exists || fileInfo.isDirectory || !fileInfo.size || fileInfo.size <= 0) {
         throw new Error('This video could not be read. Please choose another copy and try again.');
       }
+      videoSizeBytes = fileInfo.size;
     }
 
     const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL!}/storage/v1/object/${bucket}/${uploadStoragePath}`;
@@ -473,6 +476,9 @@ export async function uploadMediaFile(
 
     reportProgress(8);
 
+    // Large two-minute recordings need longer on cellular networks. Keep
+    // timeout proportional to bytes rather than rejecting quality or size.
+    const mediaUploadTimeoutMs = isVideo ? videoUploadTimeoutMs(videoSizeBytes) : 90_000;
     let uploadStatus: number;
     let uploadErrorBody = '';
     const headers = {
@@ -486,7 +492,7 @@ export async function uploadMediaFile(
         const result = await uploadNativeFileWithProgressRetry(
           uploadUrl, uploadUri, headers,
           fraction => reportProgress(8 + Math.floor(fraction * 84)),
-          isVideo ? 300_000 : 90_000,
+          mediaUploadTimeoutMs,
         );
         uploadStatus = result.status;
         uploadErrorBody = result.body;
@@ -495,7 +501,7 @@ export async function uploadMediaFile(
         const response = await uploadWithProgressRetry(
           uploadUrl, body, headers,
           fraction => reportProgress(8 + Math.floor(fraction * 84)),
-          isVideo ? 300_000 : 90_000,
+          mediaUploadTimeoutMs,
         );
         uploadStatus = response.status;
         if (!response.ok) uploadErrorBody = await response.text();
