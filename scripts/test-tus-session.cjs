@@ -75,5 +75,45 @@ const { uploadTusChunks } = load('lib/tusUploadSession.ts', { './tusUploadPolicy
     transport: alwaysLost,
   });
   assert.equal(finalOffset, smallSize);
+  // Initial HEAD can briefly fail while the network reconnects.
+  let headChecks = 0;
+  let retryOffset = 0;
+  await uploadTusChunks({
+    endpoint: 'https://example.supabase.co/storage/v1/upload/resumable',
+    bucket: 'vault', objectPath: 'videos/reconnect.mp4', mimeType: 'video/mp4',
+    fileSize: 5, authorization: 'Bearer test', apiKey: 'test',
+    transport: {
+      async readChunk(start, length) { return new Uint8Array(length); },
+      async request(method, url, headers, body) {
+        if (method === 'POST') return { status: 201, headers: { location: '/storage/v1/upload/resumable/reconnect' } };
+        if (method === 'HEAD') {
+          headChecks++;
+          if (headChecks === 1) throw new Error('Temporary network outage');
+          if (headChecks === 2) return { status: 503, headers: {} };
+          return { status: 200, headers: { 'upload-offset': String(retryOffset) } };
+        }
+        retryOffset += body.byteLength;
+        return { status: 204, headers: { 'upload-offset': String(retryOffset) } };
+      },
+    },
+  });
+  assert.equal(retryOffset, 5);
+  assert.equal(headChecks, 3);
+  // Authentication failures on HEAD must stop without retrying or sending data.
+  let deniedHeads = 0;
+  await assert.rejects(uploadTusChunks({
+    endpoint: 'https://example.supabase.co/storage/v1/upload/resumable',
+    bucket: 'vault', objectPath: 'videos/denied.mp4', mimeType: 'video/mp4',
+    fileSize: 5, authorization: 'Bearer test', apiKey: 'test',
+    transport: {
+      async readChunk() { throw new Error('Should not read'); },
+      async request(method) {
+        if (method === 'POST') return { status: 201, headers: { location: '/storage/v1/upload/resumable/denied' } };
+        deniedHeads++;
+        return { status: 403, headers: {} };
+      },
+    },
+  }), /403/);
+  assert.equal(deniedHeads, 1);
   console.log('TUS resumable session tests passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
