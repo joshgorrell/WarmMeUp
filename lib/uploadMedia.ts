@@ -165,12 +165,13 @@ async function uploadNativeFileWithProgressRetry(
   const FileSystem = await import('expo-file-system/legacy');
   for (let attempt = 0; attempt < 3; attempt++) {
     onProgress(0);
+    let acceptProgress = true;
     try {
       const task = FileSystem.createUploadTask(
         url, uri,
         { httpMethod: 'PUT', uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT, headers },
         event => {
-          if (event.totalBytesExpectedToSend > 0) {
+          if (acceptProgress && event.totalBytesExpectedToSend > 0) {
             onProgress(Math.min(1, event.totalBytesSent / event.totalBytesExpectedToSend));
           }
         },
@@ -204,15 +205,23 @@ async function uploadNativeFileWithProgressRetry(
           return { status: result.status, body: result.body ?? '' };
         }
       } finally {
+        acceptProgress = false;
         if (timeout) clearTimeout(timeout);
         if (timedOut) {
-          try { await task.cancelAsync(); } catch {}
+          // A cancellation failure means the previous transfer may still be
+          // writing to this object. Never start a competing retry.
+          try {
+            await task.cancelAsync();
+          } catch {
+            throw new Error('Video upload stopped responding. Please retry after checking your connection.');
+          }
           onProgress(0);
         }
       }
 
     } catch (error) {
-      if (attempt === 2) throw error;
+      // Do not retry when we cannot prove the previous native task stopped.
+      if (attempt === 2 || (error instanceof Error && error.message.startsWith('Video upload stopped responding.'))) throw error;
     }
     await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
   }
