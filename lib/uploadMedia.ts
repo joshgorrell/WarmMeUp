@@ -183,13 +183,14 @@ async function uploadWithMeasuredProgress(
   });
 }
 
-// Native video uploads stream from the sandboxed file rather than first copying
-// the entire video into a JavaScript ArrayBuffer. The SDK reports real bytes sent.
+// Stream native photo and video files from the sandbox rather than copying
+// entire files into a JavaScript ArrayBuffer. The SDK reports real bytes sent.
 async function uploadNativeFileWithProgressRetry(
   url: string,
   uri: string,
   headers: Record<string, string>,
   onProgress: (fraction: number) => void,
+  timeoutMs = 300_000,
 ): Promise<{ status: number; body: string }> {
   const FileSystem = await import('expo-file-system/legacy');
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -225,8 +226,8 @@ async function uploadNativeFileWithProgressRetry(
             timeout = setTimeout(() => {
               if (transferSettled) return;
               timedOut = true;
-              reject(new Error('Video upload timed out — please try again.'));
-            }, 300_000);
+              reject(new Error('Media upload timed out — please try again.'));
+            }, timeoutMs);
           }),
         ]);
         if (!result) throw new Error('Upload was interrupted.');
@@ -382,10 +383,10 @@ export async function uploadMediaFile(
       coupleId: coupleId ?? null,
     });
 
-    // Read the main photo into memory BEFORE generating the thumbnail.
-    // This avoids two concurrent reads of the same compressed file which can deadlock on native.
+    // Native sandbox files stream without a video- or photo-sized JS buffer.
+    // For non-file URIs and web, load the body before thumbnail generation.
     let body: Blob | ArrayBuffer | null = null;
-    if (!(isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://'))) {
+    if (!(Platform.OS !== 'web' && uploadUri.startsWith('file://'))) {
       try {
         body = await buildUploadBody(uploadUri, uploadMime);
       } catch {
@@ -462,10 +463,11 @@ export async function uploadMediaFile(
       'x-upsert': 'true',
     };
     try {
-      if (isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://')) {
+      if (Platform.OS !== 'web' && uploadUri.startsWith('file://')) {
         const result = await uploadNativeFileWithProgressRetry(
           uploadUrl, uploadUri, headers,
           fraction => reportProgress(8 + Math.floor(fraction * 84)),
+          isVideo ? 300_000 : 90_000,
         );
         uploadStatus = result.status;
         uploadErrorBody = result.body;
