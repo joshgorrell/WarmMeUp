@@ -22,6 +22,8 @@ for (const [name, pattern] of [
   ['native file streaming', /FileSystem\.createUploadTask\(/],
   ['picker URI cache staging', /stageNativeVideoForUpload\(uploadUri/],
   ['staged file cleanup', /tempFiles\.add\(stagedUri\)/],
+  ['fail closed if video staging fails', /Could not prepare this video for upload/],
+  ['native video file readability preflight', /fileInfo\.exists \|\| fileInfo\.isDirectory/],
   ['native upload timeout', /300_000/],
   ['native upload cancellation', /task\.cancelAsync\(\)/],
   ['bounded native cancellation', /cancelTimer\s*=\s*setTimeout\(/],
