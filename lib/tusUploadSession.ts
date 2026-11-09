@@ -22,6 +22,9 @@ export type TusUploadParams = {
   apiKey: string;
   transport: TusTransport;
   onProgress?: (fraction: number) => void;
+  // Called as soon as a server-issued session URL is available, before any
+  // HEAD/PATCH request. Consumers can store a scoped resume token privately.
+  onSessionReady?: (url: string) => void | Promise<void>;
 };
 
 /**
@@ -71,6 +74,11 @@ export async function uploadTusChunks(
     if (!createdUrl) throw new Error('Could not start resumable upload.');
     url = createdUrl;
   }
+
+  // Surface the server-issued URL before sending video bytes, so a future
+  // durable-resume coordinator can record it. Callback failures must not
+  // leave a partially-uploaded object with a falsely reported success.
+  await params.onSessionReady?.(url);
 
   // HEAD is our source of truth after ambiguous PATCH responses. Transient
   // HEAD failures must not cause the whole video to fail or resend a chunk
