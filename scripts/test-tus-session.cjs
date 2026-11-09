@@ -55,5 +55,25 @@ const { uploadTusChunks } = load('lib/tusUploadSession.ts', { './tusUploadPolicy
   assert.equal(sent[0], policy.TUS_CHUNK_BYTES);
   assert.equal(sent[1], 3);
   assert.equal(progress.at(-1), 1);
+  // Even when every PATCH response is lost, a HEAD-confirmed server commit
+  // must count as success rather than a false failed upload.
+  let finalOffset = 0;
+  const smallSize = 9;
+  const alwaysLost = {
+    async readChunk(start, length) { return new Uint8Array(length); },
+    async request(method) {
+      if (method === 'POST') return { status: 201, headers: { location: '/storage/v1/upload/resumable/final' } };
+      if (method === 'HEAD') return { status: 200, headers: { 'upload-offset': String(finalOffset) } };
+      finalOffset = smallSize;
+      throw new Error('PATCH response lost');
+    },
+  };
+  await uploadTusChunks({
+    endpoint: 'https://example.supabase.co/storage/v1/upload/resumable',
+    bucket: 'vault', objectPath: 'videos/final.mp4', mimeType: 'video/mp4',
+    fileSize: smallSize, authorization: 'Bearer test', apiKey: 'test',
+    transport: alwaysLost,
+  });
+  assert.equal(finalOffset, smallSize);
   console.log('TUS resumable session tests passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
