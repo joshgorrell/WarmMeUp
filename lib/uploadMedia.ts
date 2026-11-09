@@ -38,6 +38,25 @@ async function getImageDimensions(uri: string): Promise<{ width: number; height:
   });
 }
 
+// Retry only transient upload failures. Each retry uses the same object path (upsert),
+// so a successful but interrupted response cannot create duplicate media objects.
+async function uploadWithRetry(
+  url: string,
+  body: Blob | ArrayBuffer,
+  headers: Record<string, string>,
+): Promise<Response> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await uploadToStorage(url, body, headers);
+      if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === 2) return response;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
+  }
+  throw new Error('Upload could not be completed.');
+}
+
 async function compressImage(uri: string, mimeType: string): Promise<{ uri: string; mimeType: string }> {
   if (Platform.OS === 'web') return { uri, mimeType };
   // Do not flatten animations or silently convert transparent PNGs to opaque JPEGs.
@@ -188,7 +207,7 @@ export async function uploadMediaFile(
         const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
         try {
           const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
-          const thumbResponse = await uploadToStorage(
+          const thumbResponse = await uploadWithRetry(
             `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
             thumbBody,
             {
@@ -253,7 +272,7 @@ export async function uploadMediaFile(
 
     let response: Response;
     try {
-      response = await uploadToStorage(uploadUrl, body, {
+      response = await uploadWithRetry(uploadUrl, body, {
         Authorization: `Bearer ${session.access_token}`,
         apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
         'Content-Type': uploadMime,
