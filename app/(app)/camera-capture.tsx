@@ -12,6 +12,10 @@ import { clearCameraCaptureResult, setCameraCaptureResult } from '@/lib/cameraCa
 import { cleanupTempFile } from '@/lib/mediaCache';
 
 type Mode = 'photo' | 'video';
+// Encode 1080p recordings efficiently at capture time, before any upload.
+// 5 Mbps video targets ~75 MB for two minutes (plus audio), without an
+// extra transcode or a copy in the user's Photos/Camera Roll.
+const CAMERA_VIDEO_BITRATE_BPS = 5_000_000;
 type PendingCapture = { uri: string; mediaType: Mode; mimeType: string };
 
 function videoMimeFromUri(uri: string): string {
@@ -165,7 +169,7 @@ export default function CameraCaptureScreen() {
   );
 
   return <View style={styles.root}>
-    <CameraView key={`${mode}-${facing}-${cameraGeneration}`} ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} mode={mode === 'video' ? 'video' : 'picture'} videoQuality="1080p" flash={mode === 'photo' && flashEnabled ? 'on' : 'off'} enableTorch={mode === 'video' && flashEnabled} onMountError={(error) => Alert.alert('Camera Error', error?.message ?? 'The camera could not start.')} />
+    <CameraView key={`${mode}-${facing}-${cameraGeneration}`} ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} mode={mode === 'video' ? 'video' : 'picture'} videoQuality="1080p" videoBitrate={CAMERA_VIDEO_BITRATE_BPS} flash={mode === 'photo' && flashEnabled ? 'on' : 'off'} enableTorch={mode === 'video' && flashEnabled} onMountError={(error) => Alert.alert('Camera Error', error?.message ?? 'The camera could not start.')} />
     <View style={styles.topBar}><TouchableOpacity style={styles.iconButton} onPress={close}><X color="#fff" size={26} /></TouchableOpacity><TouchableOpacity style={[styles.iconButton, flashEnabled && styles.activeButton]} onPress={() => setFlashEnabled(v => !v)} disabled={recording}><Flashlight color="#fff" size={24} /></TouchableOpacity><TouchableOpacity style={styles.iconButton} onPress={switchFacing} disabled={recording || busy}><RefreshCcw color="#fff" size={23} /></TouchableOpacity></View>
     <View style={styles.bottomBar}>
       <View style={styles.modeSwitcher}><TouchableOpacity onPress={() => switchMode('photo')} disabled={recording || busy}><AppText style={[styles.modeOption, mode === 'photo' && styles.modeOptionActive]}>PHOTO</AppText></TouchableOpacity><TouchableOpacity onPress={() => switchMode('video')} disabled={recording || busy}><AppText style={[styles.modeOption, mode === 'video' && styles.modeOptionActive]}>VIDEO</AppText></TouchableOpacity></View>
