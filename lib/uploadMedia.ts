@@ -24,7 +24,7 @@ async function uploadToStorage(
   headers: Record<string, string>,
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
+  const timeout = setTimeout(() => controller.abort(), 90_000);
   try {
     return await fetch(url, { method: 'PUT', headers, body, signal: controller.signal });
   } finally {
@@ -40,7 +40,7 @@ async function compressImage(uri: string, mimeType: string): Promise<{ uri: stri
   if (!needsConversion && !mimeType.startsWith('image/')) return { uri, mimeType };
   try {
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
-    const result = await manipulateAsync(uri, [{ resize: { width: 3000 } }], { compress: 0.93, format: SaveFormat.JPEG });
+    const result = await manipulateAsync(uri, [{ resize: { width: 2048 } }], { compress: 0.86, format: SaveFormat.JPEG });
     return { uri: result.uri, mimeType: 'image/jpeg' };
   } catch {
     return { uri, mimeType };
@@ -81,7 +81,7 @@ async function extractVideoThumbnail(uri: string): Promise<string | null> {
 function mapStorageError(status: number, body: { error?: string; message?: string; statusCode?: string } | null): string {
   if (status === 401) return 'Session expired — please log out and back in.';
   if (status === 403 || body?.error === 'Unauthorized') return 'Upload permission denied. Check that your account is active and paired.';
-  if (status === 413 || body?.error === 'EntityTooLarge') return 'File too large (max 100 MB).';
+  if (status === 413 || body?.error === 'EntityTooLarge') return 'Video or photo exceeds the storage upload limit. Please choose a smaller file.';
   if (status === 415 || body?.error === 'invalid_mime_type') return 'Unsupported file format.';
   if (status >= 500) return 'Storage temporarily unavailable — please try again.';
   if (body?.message) return `Upload failed: ${body.message}`;
@@ -321,7 +321,7 @@ export function mimeToExtension(mimeType: string): string {
 export const PICKER_OPTIONS = {
   mediaTypes: ['images', 'videos'] as any,
   quality: 1,
-  videoMaxDuration: 120,
+  videoMaxDuration: 60,
   allowsEditing: false,
   exportsVideoAsCopy: true,
   flashMode: 'off' as const,
