@@ -45,5 +45,8 @@ const durationPolicy = fs.readFileSync('lib/videoDurationPolicy.ts', 'utf8');
 assert.match(durationPolicy, /MAX_SHARED_VIDEO_DURATION_MS = 120_000/, 'Video duration must be capped at two minutes');
 const camera = fs.readFileSync('app/(app)/camera-capture.tsx', 'utf8');
 assert.match(camera, /recordAsync\(\{ maxDuration: 120 \}\)/, 'Camera must record up to two minutes');
+assert.match(camera, /videoBitrate=\{CAMERA_VIDEO_BITRATE_BPS\}/, 'Camera must use efficient video encoding');
+assert.match(camera, /CAMERA_VIDEO_BITRATE_BPS = 5_000_000/, 'Camera encoding bitrate must remain quality-conscious');
+assert.doesNotMatch(camera, /saveToLibraryAsync|createAssetAsync|CameraRoll\.save/, 'Camera capture must not save to Photos by default');
 assert.match(camera, /recordingSeconds \/ 120/, 'Camera progress must match two-minute duration');
 console.log('Library and camera video duration guards passed.');
