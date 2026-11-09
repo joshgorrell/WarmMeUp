@@ -171,8 +171,10 @@ export default function ChatTab() {
         const elapsed = lastInactiveAtRef.current ? Date.now() - lastInactiveAtRef.current : 999;
         if (elapsed < 400 && couple?.id && user?.id) {
           const visibleMsg = lastVisibleMediaMsgRef.current;
-          const screenshotBlocked = visibleMsg ? !(visibleMsg as ChatMessage).allow_screenshot : false;
-          if (!screenshotBlocked) {
+          // Only report an event for visible media whose sender disabled
+          // screenshots. Never notify for ordinary chat or permitted media.
+          const screenshotBlocked = !!visibleMsg && visibleMsg.allow_screenshot === false;
+          if (screenshotBlocked) {
             supabase.auth.getSession().then(({ data }) => {
               const token = data?.session?.access_token;
               if (!token) return;
