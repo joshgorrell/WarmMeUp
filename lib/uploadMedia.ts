@@ -145,6 +145,7 @@ async function uploadWithMeasuredProgress(
     xhr.ontimeout = () => reject(new Error('Upload timed out — please try again.'));
     xhr.onabort = () => reject(new Error('Upload was interrupted.'));
     xhr.onload = () => {
+      if (xhr.status === 0) { reject(new Error('Network connection lost during upload.')); return; }
       const responseBody = xhr.responseText ?? '';
       resolve(new Response(responseBody, { status: xhr.status, statusText: xhr.statusText }));
     };
