@@ -382,6 +382,16 @@ export async function uploadMediaFile(
       }
     }
 
+    // Verify the native video is readable before launching a long transfer.
+    // This is a readability check, not an arbitrary file-size restriction.
+    if (isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://')) {
+      const FileSystem = await import('expo-file-system/legacy');
+      const fileInfo = await FileSystem.getInfoAsync(uploadUri);
+      if (!fileInfo.exists || fileInfo.isDirectory || !fileInfo.size || fileInfo.size <= 0) {
+        throw new Error('This video could not be read. Please choose another copy and try again.');
+      }
+    }
+
     const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL!}/storage/v1/object/${bucket}/${uploadStoragePath}`;
 
     logDebugEvent('VAULT UPLOAD START', {
