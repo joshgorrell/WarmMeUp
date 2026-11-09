@@ -47,7 +47,6 @@ assert.equal(progress.getUploadProgressState().pct, 67);
 progress.endScopedUpload(first, true);
 assert.equal(progress.getUploadProgressState().pct, 100);
 const third = progress.startScopedUpload('New upload');
-callbacks.shift()(); // old legacy completion callback, already invalidated by legacy generation
 callbacks.shift()(); // previous scoped completion callback
 assert.equal(progress.getUploadProgressState().label, 'New upload');
 progress.endScopedUpload(third, false);
