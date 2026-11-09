@@ -16,3 +16,15 @@ for (const [name, pattern] of [
 assert.match(gallery, /<ZoomablePhoto/, 'Gallery must use zoomable photo viewer');
 assert.match(gallery, /horizontal\s*\n\s*pagingEnabled/, 'Gallery must retain horizontal paging');
 console.log('Media gesture source guards passed (manual device tests still required).');
+
+const upload = fs.readFileSync('lib/uploadMedia.ts', 'utf8');
+for (const [name, pattern] of [
+  ['native file streaming', /FileSystem\.createUploadTask\(/],
+  ['native byte progress', /totalBytesSent\s*\/\s*event\.totalBytesExpectedToSend/],
+  ['web byte progress', /xhr\.upload\.onprogress/],
+  ['transient retry', /\[408, 429, 500, 502, 503, 504\]/],
+  ['original media upload', /uploadNativeFileWithProgressRetry\(/],
+  ['60-second picker limit', /videoMaxDuration:\s*60/],
+  ['thumbnail processing', /pendingThumbPromise/],
+]) assert.match(upload, pattern, `Missing media transfer safeguard: ${name}`);
+console.log('Media transfer source guards passed.');
