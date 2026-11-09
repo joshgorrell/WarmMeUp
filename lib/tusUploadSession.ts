@@ -90,7 +90,9 @@ export async function uploadTusChunks(
           throw Object.assign(new Error(`Video upload failed (HTTP ${response.status}).`), { fatalTus: true });
         }
       } catch (error) {
-        if ((error as Error & { fatalTus?: boolean }).fatalTus || attempt === 2) throw error;
+        if ((error as Error & { fatalTus?: boolean }).fatalTus) throw error;
+        // A lost PATCH response on the final attempt may still mean the
+        // server committed the bytes. Always reconcile via HEAD first.
       }
       if (!completed) {
         // The server may have accepted the chunk before the response was lost.
