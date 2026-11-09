@@ -61,3 +61,14 @@ assert.match(chat, /if \(screenshotBlocked\) \{\s*supabase\.auth\.getSession/,
 assert.doesNotMatch(chat, /if \(!screenshotBlocked\)/,
   'Chat screenshot notification permission check must not be inverted');
 console.log('Screenshot notification permission guards passed.');
+
+const viewerSource = fs.readFileSync('app/(app)/vault-viewer.tsx', 'utf8');
+for (const [screen, source] of [['Chat', chat], ['Vault viewer', viewerSource]]) {
+  assert.match(source, /ScreenCapture\.addScreenshotListener\(/,
+    screen + ' must listen for native screenshot events');
+  assert.doesNotMatch(source, /elapsed\s*<\s*400|lastInactiveAt/,
+    screen + ' must not infer screenshots from AppState timing');
+}
+assert.match(viewerSource, /!isActive \|\| canScreenshot/,
+  'Vault screenshot listener must be limited to active protected media');
+console.log('Native screenshot event guards passed.');
