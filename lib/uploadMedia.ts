@@ -125,16 +125,52 @@ function mapStorageError(status: number, body: { error?: string; message?: strin
   return `Upload failed (HTTP ${status}).`;
 }
 
-function startProgressPulse(report: (pct: number) => void): () => void {
-  let pct = 8;
-  report(pct);
-  const timer = setInterval(() => {
-    if (pct >= 90) return;
-    const step = pct < 45 ? 5 : pct < 70 ? 3 : 1;
-    pct = Math.min(90, pct + step);
-    report(pct);
-  }, 450);
-  return () => clearInterval(timer);
+// XHR exposes real bytes sent. Unlike a timer, the percentage does not advance
+// while the network is stalled. Use only for the primary media transfer.
+async function uploadWithMeasuredProgress(
+  url: string,
+  body: Blob | ArrayBuffer,
+  headers: Record<string, string>,
+  onBytes: (loaded: number, total: number) => void,
+): Promise<Response> {
+  return new Promise<Response>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url, true);
+    xhr.timeout = 90_000;
+    Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
+    xhr.upload.onprogress = event => {
+      if (event.lengthComputable && event.total > 0) onBytes(event.loaded, event.total);
+    };
+    xhr.onerror = () => reject(new Error('Network connection lost during upload.'));
+    xhr.ontimeout = () => reject(new Error('Upload timed out — please try again.'));
+    xhr.onabort = () => reject(new Error('Upload was interrupted.'));
+    xhr.onload = () => {
+      const responseBody = xhr.responseText ?? '';
+      resolve(new Response(responseBody, { status: xhr.status, statusText: xhr.statusText }));
+    };
+    try { xhr.send(body as any); } catch (error) { reject(error); }
+  });
+}
+
+async function uploadWithProgressRetry(
+  url: string,
+  body: Blob | ArrayBuffer,
+  headers: Record<string, string>,
+  onProgress: (fraction: number) => void,
+): Promise<Response> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    onProgress(0);
+    try {
+      const response = await uploadWithMeasuredProgress(url, body, headers, (loaded, total) => {
+        onProgress(Math.min(1, loaded / total));
+      });
+      if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === 2) return response;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
+  }
+  throw new Error('Upload could not be completed.');
 }
 
 export function videoThumbnailPath(storagePath: string): string {
@@ -161,7 +197,6 @@ export async function uploadMediaFile(
 
   const tempFiles = new Set<string>([localUri]);
   let pendingThumbPromise: Promise<string | null> | null = null;
-  let stopPulse: (() => void) | null = null;
 
   try {
     const { data: { session: initialSession } } = await supabase.auth.getSession();
@@ -281,21 +316,18 @@ export async function uploadMediaFile(
       })();
     }
 
-    stopPulse = startProgressPulse(reportProgress);
+    reportProgress(8);
 
     let response: Response;
     try {
-      response = await uploadWithRetry(uploadUrl, body, {
+      response = await uploadWithProgressRetry(uploadUrl, body, {
         Authorization: `Bearer ${session.access_token}`,
         apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
         'Content-Type': uploadMime,
         'x-upsert': 'true',
-      });
+      }, fraction => reportProgress(8 + Math.floor(fraction * 84)));
     } catch (networkErr: any) {
       throw new Error(networkErr?.message ? `Network error — ${networkErr.message}` : 'Network error — check your connection and try again.');
-    } finally {
-      stopPulse?.();
-      stopPulse = null;
     }
 
     if (!response.ok) {
@@ -330,7 +362,6 @@ export async function uploadMediaFile(
     if (showGlobalProgress) finishUploadProgress();
     return { storagePath: uploadStoragePath, thumbnailPath };
   } catch (error) {
-    stopPulse?.();
     if (showGlobalProgress) cancelUploadProgress();
     throw error;
   } finally {
