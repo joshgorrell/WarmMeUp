@@ -4,7 +4,7 @@ import { Image as ReactNativeImage, Platform } from 'react-native';
 import { cleanupTempFile } from './mediaCache';
 import { RETRYABLE_UPLOAD_STATUSES, shouldRetryUploadError } from './mediaRetryPolicy';
 export { MAX_SHARED_VIDEO_DURATION_MS, isLibraryVideoTooLong } from './videoDurationPolicy';
-import { beginUploadProgress, cancelUploadProgress, finishUploadProgress, setUploadProgressPct } from './uploadProgress';
+import { startScopedUpload, updateScopedUpload, endScopedUpload } from './uploadProgress';
 
 export type UploadResult = { storagePath: string; thumbnailPath?: string };
 
@@ -312,10 +312,12 @@ export async function uploadMediaFile(
   coupleId?: string,
 ): Promise<UploadResult> {
   const showGlobalProgress = !!onProgress;
-  if (showGlobalProgress) beginUploadProgress(bucket === 'vault' ? 'Uploading to Vault…' : 'Sending media…');
+  const progressId = showGlobalProgress
+    ? startScopedUpload(bucket === 'vault' ? 'Uploading to Vault…' : 'Sending media…')
+    : null;
   const reportProgress = (pct: number) => {
     onProgress?.(pct);
-    if (showGlobalProgress) setUploadProgressPct(pct);
+    if (progressId !== null) updateScopedUpload(progressId, pct);
   };
 
   const tempFiles = new Set<string>([localUri]);
@@ -514,10 +516,10 @@ export async function uploadMediaFile(
     if (thumbnailLocalUri) tempFiles.add(thumbnailLocalUri);
 
     reportProgress(100);
-    if (showGlobalProgress) finishUploadProgress();
+    if (progressId !== null) endScopedUpload(progressId, true);
     return { storagePath: uploadStoragePath, thumbnailPath };
   } catch (error) {
-    if (showGlobalProgress) cancelUploadProgress();
+    if (progressId !== null) endScopedUpload(progressId, false);
     throw error;
   } finally {
     await pendingThumbPromise?.catch(() => null);
