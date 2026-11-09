@@ -14,6 +14,7 @@ on:
       - 'lib/nativeResumableVideo.ts'
       - 'scripts/test-tus-policy.cjs'
       - 'scripts/test-tus-session.cjs'
+      - 'scripts/test-tus-rollout.cjs'
       - 'scripts/test-upload-progress.cjs'
       - 'lib/mediaRetryPolicy.ts'
       - 'scripts/test-media-retry.cjs'
@@ -40,6 +41,7 @@ on:
       - 'lib/nativeResumableVideo.ts'
       - 'scripts/test-tus-policy.cjs'
       - 'scripts/test-tus-session.cjs'
+      - 'scripts/test-tus-rollout.cjs'
       - 'scripts/test-upload-progress.cjs'
       - 'lib/mediaRetryPolicy.ts'
       - 'scripts/test-media-retry.cjs'
@@ -76,5 +78,7 @@ jobs:
         run: node scripts/test-tus-policy.cjs
       - name: TUS resume session tests
         run: node scripts/test-tus-session.cjs
+      - name: TUS rollout and Camera Roll privacy guard
+        run: node scripts/test-tus-rollout.cjs
       - name: Upload progress lifecycle tests
         run: node scripts/test-upload-progress.cjs
