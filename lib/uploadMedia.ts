@@ -200,26 +200,7 @@ export async function uploadMediaFile(
         ? uploadStoragePath.replace(/\.\w+$/, `.${expectedExt}`)
         : `${uploadStoragePath}.${expectedExt}`;
 
-      reportProgress(5);
-      const thumbUri = await extractVideoThumbnail(localUri);
-      if (thumbUri) {
-        thumbnailLocalUri = thumbUri; tempFiles.add(thumbUri);
-        const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
-        try {
-          const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
-          const thumbResponse = await uploadWithRetry(
-            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
-            thumbBody,
-            {
-              Authorization: `Bearer ${session.access_token}`,
-              apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-              'Content-Type': 'image/jpeg',
-              'x-upsert': 'true',
-            },
-          );
-          if (thumbResponse.ok) thumbnailPath = thumbStoragePath;
-        } catch {}
-      }
+
     }
 
     const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL!}/storage/v1/object/${bucket}/${uploadStoragePath}`;
@@ -241,6 +222,34 @@ export async function uploadMediaFile(
       throw new Error('Could not read media file — please try again.');
     }
 
+    // Prepare video posters after reading the main file so native file reads do not contend.
+    // Upload the poster alongside the video rather than delaying the video transfer.
+    if (isVideo) {
+      const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
+      pendingThumbPromise = (async () => {
+        const thumbUri = await extractVideoThumbnail(localUri);
+        if (!thumbUri) return null;
+        thumbnailLocalUri = thumbUri;
+        tempFiles.add(thumbUri);
+        try {
+          const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
+          const thumbResponse = await uploadWithRetry(
+            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
+            thumbBody,
+            {
+              Authorization: `Bearer ${session.access_token}`,
+              apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+              'Content-Type': 'image/jpeg',
+              'x-upsert': 'true',
+            },
+          );
+          return thumbResponse.ok ? thumbStoragePath : null;
+        } catch {
+          return null;
+        }
+      })();
+    }
+
     // Now that the main body is fully loaded, generate + upload the thumbnail in parallel
     // with the main network upload. Animated images must use the original file in Chat,
     // otherwise a JPEG thumbnail would replace the animation.
@@ -252,7 +261,7 @@ export async function uploadMediaFile(
         thumbnailLocalUri = thumbUri; tempFiles.add(thumbUri);
         try {
           const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
-          const thumbResponse = await uploadToStorage(
+          const thumbResponse = await uploadWithRetry(
             `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
             thumbBody,
             {
@@ -293,7 +302,7 @@ export async function uploadMediaFile(
       throw new Error(mapStorageError(response.status, errBody));
     }
 
-    // Await the thumbnail upload that was running in parallel with the main photo
+    // Await the thumbnail upload that was running alongside the main media
     if (pendingThumbPromise) {
       try {
         const thumbResult = await pendingThumbPromise;
