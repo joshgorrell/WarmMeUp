@@ -239,10 +239,24 @@ async function uploadNativeFileWithProgressRetry(
         if (timedOut) {
           // A cancellation failure means the previous transfer may still be
           // writing to this object. Never start a competing retry.
+          // Native cancellation can itself hang if the OS networking layer is
+          // wedged. Give it a short deadline and fail closed: do not launch
+          // another transfer unless cancellation was acknowledged.
+          let cancelTimer: ReturnType<typeof setTimeout> | undefined;
           try {
-            await task.cancelAsync();
+            await Promise.race([
+              task.cancelAsync(),
+              new Promise<never>((_, reject) => {
+                cancelTimer = setTimeout(
+                  () => reject(new Error('Native upload cancellation did not finish.')),
+                  10_000,
+                );
+              }),
+            ]);
           } catch {
             throw new Error('Video upload stopped responding. Please retry after checking your connection.');
+          } finally {
+            if (cancelTimer) clearTimeout(cancelTimer);
           }
           onProgress(0);
         }
