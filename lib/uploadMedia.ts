@@ -548,6 +548,16 @@ export function mimeToExtension(mimeType: string): string {
   }
 }
 
+/** Expo ImagePickerAsset.duration is milliseconds; picker videoMaxDuration
+ * controls recording, not videos selected from the existing photo library. */
+export const MAX_SHARED_VIDEO_DURATION_MS = 60_000;
+
+export function isLibraryVideoTooLong(asset: { type?: string | null; mimeType?: string | null; duration?: number | null }): boolean {
+  const isVideo = asset.type === 'video' || asset.mimeType?.toLowerCase().startsWith('video/') === true;
+  return isVideo && typeof asset.duration === 'number' &&
+    Number.isFinite(asset.duration) && asset.duration > MAX_SHARED_VIDEO_DURATION_MS;
+}
+
 export const PICKER_OPTIONS = {
   mediaTypes: ['images', 'videos'] as any,
   quality: 1,
