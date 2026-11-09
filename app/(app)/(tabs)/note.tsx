@@ -231,7 +231,7 @@ export default function ChatTab() {
     const seeded: Record<string, string> = {};
     const needsFetch: ChatMessage[] = [];
     for (const m of mediaMessages) {
-      const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+      const thumbPath = (m.media_type === 'video' ? m.media_storage_path! : (m.thumbnail_path ?? m.media_storage_path!));
       const cached = getCachedUrl(thumbPath);
       if (cached) {
         seeded[m.id] = cached;
@@ -255,12 +255,12 @@ export default function ChatTab() {
     await Promise.all(
       Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
         try {
-          const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
+          const paths = bucketMsgs.map(m => (m.media_type === 'video' ? m.media_storage_path! : (m.thumbnail_path ?? m.media_storage_path!)));
           const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, 5 * 60);
           if (error) logDebugEvent('chat_signed_url_batch_error', { bucket, error: error.message });
           const pathToUrl = new Map(data?.map(d => [d.path, d.signedUrl]) ?? []);
           for (const m of bucketMsgs) {
-            const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+            const thumbPath = (m.media_type === 'video' ? m.media_storage_path! : (m.thumbnail_path ?? m.media_storage_path!));
             const signed = pathToUrl.get(thumbPath) ?? null;
             results[m.id] = signed;
             if (signed) setCachedUrl(thumbPath, signed);
@@ -320,7 +320,7 @@ export default function ChatTab() {
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of visible) {
           if (m.media_storage_path) {
-            const thumbPath = m.thumbnail_path ?? m.media_storage_path;
+            const thumbPath = (m.media_type === 'video' ? m.media_storage_path : (m.thumbnail_path ?? m.media_storage_path));
             const cached = getCachedUrl(thumbPath);
             if (cached) {
               urlMap[m.id] = cached;
@@ -339,12 +339,12 @@ export default function ChatTab() {
           await Promise.all(
             Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
               try {
-                const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
+                const paths = bucketMsgs.map(m => (m.media_type === 'video' ? m.media_storage_path! : (m.thumbnail_path ?? m.media_storage_path!)));
                 const { data: urlData, error: urlErr } = await supabase.storage.from(bucket).createSignedUrls(paths, 5 * 60);
                 if (urlErr) logDebugEvent('chat_load_signed_url_error', { bucket, error: urlErr.message });
                 const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
                 for (const m of bucketMsgs) {
-                  const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+                  const thumbPath = (m.media_type === 'video' ? m.media_storage_path! : (m.thumbnail_path ?? m.media_storage_path!));
                   const signed = pathToUrl.get(thumbPath) ?? null;
                   if (signed) {
                     urlMap[m.id] = signed;
@@ -394,7 +394,7 @@ export default function ChatTab() {
         const needsNetworkFetch: ChatMessage[] = [];
         for (const m of sorted) {
           if (m.media_storage_path) {
-            const thumbPath = m.thumbnail_path ?? m.media_storage_path;
+            const thumbPath = (m.media_type === 'video' ? m.media_storage_path : (m.thumbnail_path ?? m.media_storage_path));
             const cached = getCachedUrl(thumbPath);
             if (cached) {
               urlMap[m.id] = cached;
@@ -413,12 +413,12 @@ export default function ChatTab() {
           await Promise.all(
             Object.entries(byBucket).map(async ([bucket, bucketMsgs]) => {
               try {
-                const paths = bucketMsgs.map(m => m.thumbnail_path ?? m.media_storage_path!);
+                const paths = bucketMsgs.map(m => (m.media_type === 'video' ? m.media_storage_path! : (m.thumbnail_path ?? m.media_storage_path!)));
                 const { data: urlData, error: urlErr } = await supabase.storage.from(bucket).createSignedUrls(paths, 5 * 60);
                 if (urlErr) logDebugEvent('chat_load_older_signed_url_error', { bucket, error: urlErr.message });
                 const pathToUrl = new Map(urlData?.map(d => [d.path, d.signedUrl]) ?? []);
                 for (const m of bucketMsgs) {
-                  const thumbPath = m.thumbnail_path ?? m.media_storage_path!;
+                  const thumbPath = (m.media_type === 'video' ? m.media_storage_path! : (m.thumbnail_path ?? m.media_storage_path!));
                   const signed = pathToUrl.get(thumbPath) ?? null;
                   if (signed) {
                     urlMap[m.id] = signed;

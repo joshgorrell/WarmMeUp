@@ -170,9 +170,12 @@ export function ZoomablePhoto({
     .activeOffsetY([-24, 24])
     .failOffsetX([-70, 70])
     .onEnd((e) => {
+      // Dismiss in either vertical direction, but never while zoomed or
+      // during a predominantly horizontal gallery swipe.
       const isDeliberateDismiss =
-        e.translationY > DISMISS_DISTANCE &&
-        e.velocityY > DISMISS_VELOCITY &&
+        Math.abs(e.translationY) > DISMISS_DISTANCE &&
+        Math.abs(e.velocityY) > DISMISS_VELOCITY &&
+        Math.sign(e.translationY) === Math.sign(e.velocityY) &&
         Math.abs(e.translationY) > Math.abs(e.translationX) * 1.35;
       if (isDeliberateDismiss) {
         runOnJS(dismissViewer)();

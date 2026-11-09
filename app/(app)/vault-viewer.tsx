@@ -70,7 +70,9 @@ function MediaPage({
   const mountedRef = useRef(true);
   const appStateRef = useRef(AppState.currentState);
   const lastInactiveAt = useRef<number | null>(null);
-  const player = useVideoPlayer(isVideo && mediaUri ? { uri: mediaUri, useCaching: false } : null, (p) => {
+  // Only the visible gallery page should own a video source. Keep ZoomablePhoto's
+  // pinch, pan and vertical-dismiss gestures untouched.
+  const player = useVideoPlayer(isVideo && isActive && mediaUri ? { uri: mediaUri, useCaching: false } : null, (p) => {
     p.loop = false;
   });
 
@@ -120,9 +122,9 @@ function MediaPage({
   }, [item.storagePath, item.storageBucket, isActive]);
 
   useEffect(() => {
-    if (!isVideo || !mediaUri || Platform.OS === 'web') return;
+    if (!isVideo || !isActive || !mediaUri || Platform.OS === 'web') return;
     player.replaceAsync({ uri: mediaUri, useCaching: false });
-  }, [isVideo, mediaUri, player]);
+  }, [isVideo, isActive, mediaUri, player]);
 
   useEffect(() => {
     if (!isVideo || Platform.OS === 'web') return;

@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { logDebugEvent } from './debugLog';
-import { Platform } from 'react-native';
+import { Image as ReactNativeImage, Platform } from 'react-native';
 import { cleanupTempFile } from './mediaCache';
 import { beginUploadProgress, cancelUploadProgress, finishUploadProgress, setUploadProgressPct } from './uploadProgress';
 
@@ -24,7 +24,7 @@ async function uploadToStorage(
   headers: Record<string, string>,
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
+  const timeout = setTimeout(() => controller.abort(), 90_000);
   try {
     return await fetch(url, { method: 'PUT', headers, body, signal: controller.signal });
   } finally {
@@ -32,15 +32,47 @@ async function uploadToStorage(
   }
 }
 
+async function getImageDimensions(uri: string): Promise<{ width: number; height: number } | null> {
+  return new Promise(resolve => {
+    ReactNativeImage.getSize(uri, (width, height) => resolve({ width, height }), () => resolve(null));
+  });
+}
+
+// Retry only transient upload failures. Each retry uses the same object path (upsert),
+// so a successful but interrupted response cannot create duplicate media objects.
+async function uploadWithRetry(
+  url: string,
+  body: Blob | ArrayBuffer,
+  headers: Record<string, string>,
+): Promise<Response> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await uploadToStorage(url, body, headers);
+      if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === 2) return response;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
+  }
+  throw new Error('Upload could not be completed.');
+}
+
 async function compressImage(uri: string, mimeType: string): Promise<{ uri: string; mimeType: string }> {
   if (Platform.OS === 'web') return { uri, mimeType };
-  // Preserve animated formats exactly as provided. Converting them to JPEG would flatten the animation.
-  if (mimeType === 'image/gif' || mimeType === 'image/webp') return { uri, mimeType };
-  const needsConversion = mimeType === 'image/heic' || mimeType === 'image/heif' || mimeType === 'image/heif-sequence';
-  if (!needsConversion && !mimeType.startsWith('image/')) return { uri, mimeType };
+  // Do not flatten animations or silently convert transparent PNGs to opaque JPEGs.
+  if (mimeType === 'image/gif' || mimeType === 'image/webp' || mimeType === 'image/png') return { uri, mimeType };
+  if (!mimeType.startsWith('image/')) return { uri, mimeType };
+  const needsConversion = ['image/heic', 'image/heif', 'image/heif-sequence'].includes(mimeType);
+  const dimensions = await getImageDimensions(uri);
+  // Unknown dimensions: preserve a supported JPEG instead of risking unnecessary resampling.
+  if (!dimensions && !needsConversion) return { uri, mimeType };
+  const resize = dimensions && Math.max(dimensions.width, dimensions.height) > 2048
+    ? [{ resize: dimensions.width >= dimensions.height ? { width: 2048 } : { height: 2048 } }]
+    : [];
+  if (resize.length === 0 && !needsConversion) return { uri, mimeType };
   try {
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
-    const result = await manipulateAsync(uri, [{ resize: { width: 1600 } }], { compress: 0.8, format: SaveFormat.JPEG });
+    const result = await manipulateAsync(uri, resize, { compress: 0.9, format: SaveFormat.JPEG });
     return { uri: result.uri, mimeType: 'image/jpeg' };
   } catch {
     return { uri, mimeType };
@@ -51,9 +83,13 @@ async function generatePhotoThumbnail(uri: string): Promise<string | null> {
   if (Platform.OS === 'web') return null;
   try {
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
+    const dimensions = await getImageDimensions(uri);
+    const actions = dimensions && Math.max(dimensions.width, dimensions.height) <= 360
+      ? []
+      : [{ resize: dimensions && dimensions.height > dimensions.width ? { height: 360 } : { width: 360 } }];
     const result = await manipulateAsync(
       uri,
-      [{ resize: { width: 200 } }],
+      actions,
       { compress: 0.7, format: SaveFormat.JPEG },
     );
     return result.uri;
@@ -81,7 +117,7 @@ async function extractVideoThumbnail(uri: string): Promise<string | null> {
 function mapStorageError(status: number, body: { error?: string; message?: string; statusCode?: string } | null): string {
   if (status === 401) return 'Session expired — please log out and back in.';
   if (status === 403 || body?.error === 'Unauthorized') return 'Upload permission denied. Check that your account is active and paired.';
-  if (status === 413 || body?.error === 'EntityTooLarge') return 'File too large (max 100 MB).';
+  if (status === 413 || body?.error === 'EntityTooLarge') return 'Video or photo exceeds the storage upload limit. Please choose a smaller file.';
   if (status === 415 || body?.error === 'invalid_mime_type') return 'Unsupported file format.';
   if (status >= 500) return 'Storage temporarily unavailable — please try again.';
   if (body?.message) return `Upload failed: ${body.message}`;
@@ -89,16 +125,89 @@ function mapStorageError(status: number, body: { error?: string; message?: strin
   return `Upload failed (HTTP ${status}).`;
 }
 
-function startProgressPulse(report: (pct: number) => void): () => void {
-  let pct = 8;
-  report(pct);
-  const timer = setInterval(() => {
-    if (pct >= 90) return;
-    const step = pct < 45 ? 5 : pct < 70 ? 3 : 1;
-    pct = Math.min(90, pct + step);
-    report(pct);
-  }, 450);
-  return () => clearInterval(timer);
+// XHR exposes real bytes sent. Unlike a timer, the percentage does not advance
+// while the network is stalled. Use only for the primary media transfer.
+async function uploadWithMeasuredProgress(
+  url: string,
+  body: Blob | ArrayBuffer,
+  headers: Record<string, string>,
+  onBytes: (loaded: number, total: number) => void,
+  timeoutMs = 90_000,
+): Promise<Response> {
+  return new Promise<Response>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url, true);
+    xhr.timeout = timeoutMs;
+    Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
+    xhr.upload.onprogress = event => {
+      if (event.lengthComputable && event.total > 0) onBytes(event.loaded, event.total);
+    };
+    xhr.onerror = () => reject(new Error('Network connection lost during upload.'));
+    xhr.ontimeout = () => reject(new Error('Upload timed out — please try again.'));
+    xhr.onabort = () => reject(new Error('Upload was interrupted.'));
+    xhr.onload = () => {
+      if (xhr.status === 0) { reject(new Error('Network connection lost during upload.')); return; }
+      const responseBody = xhr.responseText ?? '';
+      resolve(new Response(responseBody, { status: xhr.status, statusText: xhr.statusText }));
+    };
+    try { xhr.send(body as any); } catch (error) { reject(error); }
+  });
+}
+
+// Native video uploads stream from the sandboxed file rather than first copying
+// the entire video into a JavaScript ArrayBuffer. The SDK reports real bytes sent.
+async function uploadNativeFileWithProgressRetry(
+  url: string,
+  uri: string,
+  headers: Record<string, string>,
+  onProgress: (fraction: number) => void,
+): Promise<{ status: number; body: string }> {
+  const FileSystem = await import('expo-file-system/legacy');
+  for (let attempt = 0; attempt < 3; attempt++) {
+    onProgress(0);
+    try {
+      const task = FileSystem.createUploadTask(
+        url, uri,
+        { httpMethod: 'PUT', uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT, headers },
+        event => {
+          if (event.totalBytesExpectedToSend > 0) {
+            onProgress(Math.min(1, event.totalBytesSent / event.totalBytesExpectedToSend));
+          }
+        },
+      );
+      const result = await task.uploadAsync();
+      if (!result) throw new Error('Upload was interrupted.');
+      if (![408, 429, 500, 502, 503, 504].includes(result.status) || attempt === 2) {
+        return { status: result.status, body: result.body ?? '' };
+      }
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
+  }
+  throw new Error('Upload could not be completed.');
+}
+
+async function uploadWithProgressRetry(
+  url: string,
+  body: Blob | ArrayBuffer,
+  headers: Record<string, string>,
+  onProgress: (fraction: number) => void,
+  timeoutMs = 90_000,
+): Promise<Response> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    onProgress(0);
+    try {
+      const response = await uploadWithMeasuredProgress(url, body, headers, (loaded, total) => {
+        onProgress(Math.min(1, loaded / total));
+      }, timeoutMs);
+      if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === 2) return response;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
+  }
+  throw new Error('Upload could not be completed.');
 }
 
 export function videoThumbnailPath(storagePath: string): string {
@@ -125,7 +234,6 @@ export async function uploadMediaFile(
 
   const tempFiles = new Set<string>([localUri]);
   let pendingThumbPromise: Promise<string | null> | null = null;
-  let stopPulse: (() => void) | null = null;
 
   try {
     const { data: { session: initialSession } } = await supabase.auth.getSession();
@@ -168,26 +276,7 @@ export async function uploadMediaFile(
         ? uploadStoragePath.replace(/\.\w+$/, `.${expectedExt}`)
         : `${uploadStoragePath}.${expectedExt}`;
 
-      reportProgress(5);
-      const thumbUri = await extractVideoThumbnail(localUri);
-      if (thumbUri) {
-        thumbnailLocalUri = thumbUri; tempFiles.add(thumbUri);
-        const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
-        try {
-          const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
-          const thumbResponse = await uploadToStorage(
-            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
-            thumbBody,
-            {
-              Authorization: `Bearer ${session.access_token}`,
-              apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-              'Content-Type': 'image/jpeg',
-              'x-upsert': 'true',
-            },
-          );
-          if (thumbResponse.ok) thumbnailPath = thumbStoragePath;
-        } catch {}
-      }
+
     }
 
     const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL!}/storage/v1/object/${bucket}/${uploadStoragePath}`;
@@ -202,11 +291,41 @@ export async function uploadMediaFile(
 
     // Read the main photo into memory BEFORE generating the thumbnail.
     // This avoids two concurrent reads of the same compressed file which can deadlock on native.
-    let body: Blob | ArrayBuffer;
-    try {
-      body = await buildUploadBody(uploadUri, uploadMime);
-    } catch {
-      throw new Error('Could not read media file — please try again.');
+    let body: Blob | ArrayBuffer | null = null;
+    if (!(isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://'))) {
+      try {
+        body = await buildUploadBody(uploadUri, uploadMime);
+      } catch {
+        throw new Error('Could not read media file — please try again.');
+      }
+    }
+
+    // Prepare video posters after reading the main file so native file reads do not contend.
+    // Upload the poster alongside the video rather than delaying the video transfer.
+    if (isVideo) {
+      const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
+      pendingThumbPromise = (async () => {
+        const thumbUri = await extractVideoThumbnail(localUri);
+        if (!thumbUri) return null;
+        thumbnailLocalUri = thumbUri;
+        tempFiles.add(thumbUri);
+        try {
+          const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
+          const thumbResponse = await uploadWithRetry(
+            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
+            thumbBody,
+            {
+              Authorization: `Bearer ${session.access_token}`,
+              apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+              'Content-Type': 'image/jpeg',
+              'x-upsert': 'true',
+            },
+          );
+          return thumbResponse.ok ? thumbStoragePath : null;
+        } catch {
+          return null;
+        }
+      })();
     }
 
     // Now that the main body is fully loaded, generate + upload the thumbnail in parallel
@@ -220,7 +339,7 @@ export async function uploadMediaFile(
         thumbnailLocalUri = thumbUri; tempFiles.add(thumbUri);
         try {
           const thumbBody = await buildUploadBody(thumbUri, 'image/jpeg');
-          const thumbResponse = await uploadToStorage(
+          const thumbResponse = await uploadWithRetry(
             `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${thumbStoragePath}`,
             thumbBody,
             {
@@ -236,32 +355,45 @@ export async function uploadMediaFile(
       })();
     }
 
-    stopPulse = startProgressPulse(reportProgress);
+    reportProgress(8);
 
-    let response: Response;
+    let uploadStatus: number;
+    let uploadErrorBody = '';
+    const headers = {
+      Authorization: `Bearer ${session.access_token}`,
+      apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+      'Content-Type': uploadMime,
+      'x-upsert': 'true',
+    };
     try {
-      response = await uploadToStorage(uploadUrl, body, {
-        Authorization: `Bearer ${session.access_token}`,
-        apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-        'Content-Type': uploadMime,
-        'x-upsert': 'true',
-      });
+      if (isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://')) {
+        const result = await uploadNativeFileWithProgressRetry(
+          uploadUrl, uploadUri, headers,
+          fraction => reportProgress(8 + Math.floor(fraction * 84)),
+        );
+        uploadStatus = result.status;
+        uploadErrorBody = result.body;
+      } else {
+        if (!body) throw new Error('Media file could not be loaded.');
+        const response = await uploadWithProgressRetry(
+          uploadUrl, body, headers,
+          fraction => reportProgress(8 + Math.floor(fraction * 84)),
+          isVideo ? 300_000 : 90_000,
+        );
+        uploadStatus = response.status;
+        if (!response.ok) uploadErrorBody = await response.text();
+      }
     } catch (networkErr: any) {
       throw new Error(networkErr?.message ? `Network error — ${networkErr.message}` : 'Network error — check your connection and try again.');
-    } finally {
-      stopPulse?.();
-      stopPulse = null;
     }
 
-    if (!response.ok) {
+    if (uploadStatus < 200 || uploadStatus >= 300) {
       let errBody: { error?: string; message?: string; statusCode?: string } | null = null;
-      try {
-        errBody = await response.json();
-      } catch {}
-      throw new Error(mapStorageError(response.status, errBody));
+      try { errBody = JSON.parse(uploadErrorBody); } catch {}
+      throw new Error(mapStorageError(uploadStatus, errBody));
     }
 
-    // Await the thumbnail upload that was running in parallel with the main photo
+    // Await the thumbnail upload that was running alongside the main media
     if (pendingThumbPromise) {
       try {
         const thumbResult = await pendingThumbPromise;
@@ -285,7 +417,6 @@ export async function uploadMediaFile(
     if (showGlobalProgress) finishUploadProgress();
     return { storagePath: uploadStoragePath, thumbnailPath };
   } catch (error) {
-    stopPulse?.();
     if (showGlobalProgress) cancelUploadProgress();
     throw error;
   } finally {
