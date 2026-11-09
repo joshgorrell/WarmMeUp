@@ -185,7 +185,6 @@ async function uploadNativeFileWithProgressRetry(
           new Promise<never>((_, reject) => {
             timeout = setTimeout(() => {
               timedOut = true;
-              void task.cancelAsync().catch(() => {});
               reject(new Error('Video upload timed out — please try again.'));
             }, 300_000);
           }),
@@ -196,7 +195,10 @@ async function uploadNativeFileWithProgressRetry(
         }
       } finally {
         if (timeout) clearTimeout(timeout);
-        if (timedOut) onProgress(0);
+        if (timedOut) {
+          try { await task.cancelAsync(); } catch {}
+          onProgress(0);
+        }
       }
 
     } catch (error) {
