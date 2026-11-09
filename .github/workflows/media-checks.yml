@@ -1,0 +1,42 @@
+name: Media regression checks
+
+on:
+  pull_request:
+    paths:
+      - 'lib/uploadMedia.ts'
+      - 'lib/uploadProgress.ts'
+      - 'components/note/**'
+      - 'app/(app)/vault-viewer.tsx'
+      - 'app/(app)/camera-capture.tsx'
+      - 'app/(app)/(tabs)/note.tsx'
+      - 'app/(app)/(tabs)/vault.tsx'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/media-checks.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'lib/uploadMedia.ts'
+      - 'components/note/**'
+      - 'app/(app)/vault-viewer.tsx'
+      - '.github/workflows/media-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: TypeScript validation
+        run: npm run typecheck
+      - name: Media gesture regression guard
+        run: node scripts/check-media-gestures.cjs
