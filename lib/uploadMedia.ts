@@ -175,11 +175,30 @@ async function uploadNativeFileWithProgressRetry(
           }
         },
       );
-      const result = await task.uploadAsync();
-      if (!result) throw new Error('Upload was interrupted.');
-      if (![408, 429, 500, 502, 503, 504].includes(result.status) || attempt === 2) {
-        return { status: result.status, body: result.body ?? '' };
+      // Native upload tasks do not honor the XHR timeout. Bound each attempt
+      // separately, and cancel the native transfer before retrying.
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let timedOut = false;
+      try {
+        const result = await Promise.race([
+          task.uploadAsync(),
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(() => {
+              timedOut = true;
+              void task.cancelAsync().catch(() => {});
+              reject(new Error('Video upload timed out — please try again.'));
+            }, 300_000);
+          }),
+        ]);
+        if (!result) throw new Error('Upload was interrupted.');
+        if (![408, 429, 500, 502, 503, 504].includes(result.status) || attempt === 2) {
+          return { status: result.status, body: result.body ?? '' };
+        }
+      } finally {
+        if (timeout) clearTimeout(timeout);
+        if (timedOut) onProgress(0);
       }
+
     } catch (error) {
       if (attempt === 2) throw error;
     }
