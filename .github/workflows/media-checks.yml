@@ -6,6 +6,8 @@ on:
       - 'lib/uploadMedia.ts'
       - 'lib/videoDurationPolicy.ts'
       - 'scripts/test-video-duration.cjs'
+      - 'scripts/test-video-upload-policy.cjs'
+      - 'lib/videoUploadPolicy.ts'
       - 'scripts/test-upload-progress.cjs'
       - 'lib/mediaRetryPolicy.ts'
       - 'scripts/test-media-retry.cjs'
@@ -24,6 +26,8 @@ on:
       - 'lib/uploadMedia.ts'
       - 'lib/videoDurationPolicy.ts'
       - 'scripts/test-video-duration.cjs'
+      - 'scripts/test-video-upload-policy.cjs'
+      - 'lib/videoUploadPolicy.ts'
       - 'scripts/test-upload-progress.cjs'
       - 'lib/mediaRetryPolicy.ts'
       - 'scripts/test-media-retry.cjs'
@@ -54,5 +58,7 @@ jobs:
         run: node scripts/test-media-retry.cjs
       - name: Video duration boundary tests
         run: node scripts/test-video-duration.cjs
+      - name: Adaptive video upload timeout tests
+        run: node scripts/test-video-upload-policy.cjs
       - name: Upload progress lifecycle tests
         run: node scripts/test-upload-progress.cjs
