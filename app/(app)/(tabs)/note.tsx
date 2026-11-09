@@ -191,7 +191,6 @@ export default function ChatTab() {
           }).catch(() => {});
         });
       }
-      }
     });
     return () => sub.remove();
   }, [couple?.id, user?.id]);
