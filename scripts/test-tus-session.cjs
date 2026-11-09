@@ -115,5 +115,45 @@ const { uploadTusChunks } = load('lib/tusUploadSession.ts', { './tusUploadPolicy
     },
   }), /403/);
   assert.equal(deniedHeads, 1);
+  // Explicit 503 and 429 responses should retry creation with backoff.
+  let createAttempts = 0;
+  let createOffset = 0;
+  await uploadTusChunks({
+    endpoint: 'https://example.supabase.co/storage/v1/upload/resumable',
+    bucket: 'vault', objectPath: 'videos/create-retry.mp4', mimeType: 'video/mp4',
+    fileSize: 4, authorization: 'Bearer test', apiKey: 'test',
+    transport: {
+      async readChunk(start, length) { return new Uint8Array(length); },
+      async request(method, url, headers, body) {
+        if (method === 'POST') {
+          createAttempts++;
+          if (createAttempts === 1) return { status: 503, headers: {} };
+          if (createAttempts === 2) return { status: 429, headers: {} };
+          return { status: 201, headers: { location: '/storage/v1/upload/resumable/create-retry' } };
+        }
+        if (method === 'HEAD') return { status: 200, headers: { 'upload-offset': String(createOffset) } };
+        createOffset += body.byteLength;
+        return { status: 204, headers: { 'upload-offset': String(createOffset) } };
+      },
+    },
+  });
+  assert.equal(createAttempts, 3);
+  assert.equal(createOffset, 4);
+  // Ambiguous POST network failures must not trigger a second creation.
+  let ambiguousPosts = 0;
+  await assert.rejects(uploadTusChunks({
+    endpoint: 'https://example.supabase.co/storage/v1/upload/resumable',
+    bucket: 'vault', objectPath: 'videos/ambiguous.mp4', mimeType: 'video/mp4',
+    fileSize: 4, authorization: 'Bearer test', apiKey: 'test',
+    transport: {
+      async readChunk() { throw new Error('Should not read'); },
+      async request(method) {
+        if (method !== 'POST') throw new Error('Unexpected request');
+        ambiguousPosts++;
+        throw new Error('Connection lost after POST');
+      },
+    },
+  }), /Connection lost/);
+  assert.equal(ambiguousPosts, 1);
   console.log('TUS resumable session tests passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
