@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'lib/uploadMedia.ts'
+      - 'lib/videoDurationPolicy.ts'
+      - 'scripts/test-video-duration.cjs'
       - 'lib/mediaRetryPolicy.ts'
       - 'scripts/test-media-retry.cjs'
       - 'lib/uploadProgress.ts'
@@ -19,6 +21,8 @@ on:
     branches: [main]
     paths:
       - 'lib/uploadMedia.ts'
+      - 'lib/videoDurationPolicy.ts'
+      - 'scripts/test-video-duration.cjs'
       - 'lib/mediaRetryPolicy.ts'
       - 'scripts/test-media-retry.cjs'
       - 'components/note/**'
@@ -46,3 +50,5 @@ jobs:
         run: node scripts/check-media-gestures.cjs
       - name: Media retry behavioral tests
         run: node scripts/test-media-retry.cjs
+      - name: Video duration boundary tests
+        run: node scripts/test-video-duration.cjs

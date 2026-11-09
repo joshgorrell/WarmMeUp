@@ -39,5 +39,6 @@ for (const path of ['app/(app)/(tabs)/note.tsx', 'app/(app)/(tabs)/vault.tsx']) 
   const pickerScreen = fs.readFileSync(path, 'utf8');
   assert.match(pickerScreen, /isLibraryVideoTooLong\(asset\)/, `Missing library video duration validation in ${path}`);
 }
-assert.match(upload, /MAX_SHARED_VIDEO_DURATION_MS = 60_000/, 'Video duration must be capped at 60 seconds');
+const durationPolicy = fs.readFileSync('lib/videoDurationPolicy.ts', 'utf8');
+assert.match(durationPolicy, /MAX_SHARED_VIDEO_DURATION_MS = 60_000/, 'Video duration must be capped at 60 seconds');
 console.log('Library video duration guards passed.');
