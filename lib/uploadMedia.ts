@@ -4,6 +4,7 @@ import { Image as ReactNativeImage, Platform } from 'react-native';
 import { cleanupTempFile } from './mediaCache';
 import { RETRYABLE_UPLOAD_STATUSES, shouldRetryUploadError } from './mediaRetryPolicy';
 import { videoUploadTimeoutMs } from './videoUploadPolicy';
+import { uploadNativeVideoResumable } from './nativeResumableVideo';
 export { MAX_SHARED_VIDEO_DURATION_MS, isLibraryVideoTooLong } from './videoDurationPolicy';
 import { startScopedUpload, updateScopedUpload, endScopedUpload } from './uploadProgress';
 
@@ -488,7 +489,27 @@ export async function uploadMediaFile(
       'x-upsert': 'true',
     };
     try {
-      if (Platform.OS !== 'web' && uploadUri.startsWith('file://')) {
+      // Guarded rollout: TUS is opt-in until real iOS/Android device tests
+      // confirm native file slicing, storage headers, and interruption recovery.
+      // No media is saved to the Camera Roll; the existing private cache cleanup
+      // in finally applies equally to both upload transports.
+      if (
+        isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://') &&
+        videoSizeBytes !== null && process.env.EXPO_PUBLIC_ENABLE_VIDEO_TUS === 'true'
+      ) {
+        await uploadNativeVideoResumable({
+          uri: uploadUri,
+          bucket,
+          storagePath: uploadStoragePath,
+          mimeType: uploadMime,
+          fileSize: videoSizeBytes,
+          accessToken: session.access_token,
+          apiKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+          supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL!,
+          onProgress: fraction => reportProgress(8 + Math.floor(fraction * 84)),
+        });
+        uploadStatus = 200;
+      } else if (Platform.OS !== 'web' && uploadUri.startsWith('file://')) {
         const result = await uploadNativeFileWithProgressRetry(
           uploadUrl, uploadUri, headers,
           fraction => reportProgress(8 + Math.floor(fraction * 84)),
