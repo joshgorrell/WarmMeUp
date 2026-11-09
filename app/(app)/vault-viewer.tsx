@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import * as ScreenCapture from 'expo-screen-capture';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TriangleAlert as AlertTriangle, Archive, Camera, Check, ChevronLeft, Download, Pause, Play, Share2, Trash2, Volume2, VolumeX } from 'lucide-react-native';
@@ -68,8 +69,6 @@ function MediaPage({
   const [savingToVault, setSavingToVault] = useState(false);
   const webVideoRef = useRef<HTMLVideoElement | null>(null);
   const mountedRef = useRef(true);
-  const appStateRef = useRef(AppState.currentState);
-  const lastInactiveAt = useRef<number | null>(null);
   // Only the visible gallery page should own a video source. Keep ZoomablePhoto's
   // pinch, pan and vertical-dismiss gestures untouched.
   const player = useVideoPlayer(isVideo && isActive && mediaUri ? { uri: mediaUri, useCaching: false } : null, (p) => {
@@ -176,22 +175,16 @@ function MediaPage({
     } catch {}
   }, [item, user?.id, canScreenshot]);
 
+  // Only an OS-reported screenshot event should trigger a partner alert.
+  // AppState transitions (notifications, app switching, system dialogs) are
+  // not reliable evidence of a screenshot.
   useEffect(() => {
-    if (Platform.OS === 'web' || !isActive) return;
-    const sub = AppState.addEventListener('change', nextState => {
-      const prev = appStateRef.current;
-      if (prev === 'active' && nextState === 'inactive') {
-        lastInactiveAt.current = Date.now();
-      }
-      if (prev === 'inactive' && nextState === 'active') {
-        const elapsed = lastInactiveAt.current ? Date.now() - lastInactiveAt.current : 999;
-        if (elapsed < 400) handleScreenshotDetected();
-        lastInactiveAt.current = null;
-      }
-      appStateRef.current = nextState;
+    if (Platform.OS === 'web' || !isActive || canScreenshot) return;
+    const sub = ScreenCapture.addScreenshotListener(() => {
+      void handleScreenshotDetected();
     });
     return () => sub.remove();
-  }, [isActive, handleScreenshotDetected]);
+  }, [isActive, canScreenshot, handleScreenshotDetected]);
 
   const handleShare = useCallback(async () => {
     if (!canShare || !mediaUri) return;

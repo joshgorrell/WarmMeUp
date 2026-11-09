@@ -8,6 +8,7 @@ import {
   AppState, AppStateStatus, Keyboard, InteractionManager, BackHandler, Linking,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import * as ScreenCapture from 'expo-screen-capture';
 import AppText from '@/components/AppText';
 import AppTextInput from '@/components/AppTextInput';
 import { TextInputWrapper } from 'expo-paste-input';
@@ -97,7 +98,6 @@ export default function ChatTab() {
   const bubbleRefs = useRef<Record<string, View | null>>({});
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const prevMsgCountRef = useRef(0);
-  const lastInactiveAtRef = useRef<number | null>(null);
   const cameraActiveRef = useRef(false);
   const lastVisibleMediaMsgRef = useRef<ChatMessage | null>(null);
   const userIdRef = useRef<string | undefined>(undefined);
@@ -159,38 +159,41 @@ export default function ChatTab() {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       const prev = appStateRef.current;
       appStateRef.current = next;
-      if (prev === 'active' && next === 'inactive') {
-        lastInactiveAtRef.current = Date.now();
-      }
       if ((prev === 'background' || prev === 'inactive') && next === 'active') {
         if (blurEnabled) setRevealedMedia(new Set());
         // Re-sync messages on resume — the realtime channel may have dropped
         // while backgrounded, so any messages that arrived during that window
         // would otherwise be missing until a manual reload.
         if (couple?.id) loadMessages();
-        const elapsed = lastInactiveAtRef.current ? Date.now() - lastInactiveAtRef.current : 999;
-        if (elapsed < 400 && couple?.id && user?.id) {
-          const visibleMsg = lastVisibleMediaMsgRef.current;
-          // Only report an event for visible media whose sender disabled
-          // screenshots. Never notify for ordinary chat or permitted media.
-          const screenshotBlocked = !!visibleMsg && visibleMsg.allow_screenshot === false;
-          if (screenshotBlocked) {
-            supabase.auth.getSession().then(({ data }) => {
-              const token = data?.session?.access_token;
-              if (!token) return;
-              fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ couple_id: couple.id, detected_by_user_id: user.id, source_screen: 'chat', chat_message_id: visibleMsg?.id ?? null }),
-              }).catch(() => {});
-            });
-          }
-        }
-        lastInactiveAtRef.current = null;
       }
     });
     return () => sub.remove();
   }, [blurEnabled, couple?.id, user?.id]);
+
+  // Screenshot notifications require a real OS screenshot event, not an
+  // AppState transition caused by a system dialog or switching applications.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = ScreenCapture.addScreenshotListener(() => {
+      if (!couple?.id || !user?.id) return;
+      const visibleMsg = lastVisibleMediaMsgRef.current;
+      // Only report an event for visible media whose sender disabled
+      // screenshots. Never notify for ordinary chat or permitted media.
+      const screenshotBlocked = !!visibleMsg && visibleMsg.allow_screenshot === false;
+      if (screenshotBlocked) {
+        supabase.auth.getSession().then(({ data }) => {
+          const token = data?.session?.access_token;
+          if (!token) return;
+          fetch(`${SUPABASE_URL}/functions/v1/notify-screenshot`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ couple_id: couple.id, detected_by_user_id: user.id, source_screen: 'chat', chat_message_id: visibleMsg?.id ?? null }),
+          }).catch(() => {});
+        });
+      }
+    });
+    return () => sub.remove();
+  }, [couple?.id, user?.id]);
 
   // Re-blur when leaving the Chat tab
   useFocusEffect(
