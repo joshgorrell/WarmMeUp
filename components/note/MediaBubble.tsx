@@ -211,7 +211,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
       return;
     }
     const bucket = msg.media_storage_bucket ?? 'chat_media';
-    const thumbPath = videoThumbnailPath(msg.media_storage_path);
+    const thumbPath = msg.thumbnail_path ?? videoThumbnailPath(msg.media_storage_path);
     supabase.storage.from(bucket).createSignedUrl(thumbPath, 5 * 60)
       .then(({ data, error }) => {
         if (cancelled) return;
@@ -220,7 +220,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
       })
       .catch(() => { if (!cancelled) setPosterChecked(true); });
     return () => { cancelled = true; };
-  }, [isVideo, msg.media_storage_path, msg.media_storage_bucket]);
+  }, [isVideo, msg.media_storage_path, msg.media_storage_bucket, msg.thumbnail_path]);
 
   useEffect(() => {
     if (!revealed && blurEnabled) {
@@ -250,7 +250,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   };
   const handleVideoOuterPress = () => {
     if (isBlurred) { revealMedia(); return; }
-    if (blurEnabled) { setVideoPlaying(false); setLocallyRevealed(false); }
+    if (blurEnabled) { setVideoPlaying(false); setVideoPlayerActivated(false); setLocallyRevealed(false); }
   };
   const toggleVideoPlayback = async (event?: any) => {
     event?.stopPropagation?.();
@@ -262,6 +262,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
     event?.stopPropagation?.();
     if (isBlurred) return;
     setVideoPlaying(false);
+    setVideoPlayerActivated(false);
     onOpen(msg);
   };
   const cappedHeight = Math.min(bubbleHeight, Math.round(bubbleWidth * 1.35));
