@@ -190,6 +190,7 @@ async function uploadNativeFileWithProgressRetry(
   uri: string,
   headers: Record<string, string>,
   onProgress: (fraction: number) => void,
+  timeoutMs = 300_000,
 ): Promise<{ status: number; body: string }> {
   const FileSystem = await import('expo-file-system/legacy');
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -225,8 +226,8 @@ async function uploadNativeFileWithProgressRetry(
             timeout = setTimeout(() => {
               if (transferSettled) return;
               timedOut = true;
-              reject(new Error('Video upload timed out — please try again.'));
-            }, 300_000);
+              reject(new Error('Media upload timed out — please try again.'));
+            }, timeoutMs);
           }),
         ]);
         if (!result) throw new Error('Upload was interrupted.');
@@ -466,6 +467,7 @@ export async function uploadMediaFile(
         const result = await uploadNativeFileWithProgressRetry(
           uploadUrl, uploadUri, headers,
           fraction => reportProgress(8 + Math.floor(fraction * 84)),
+          isVideo ? 300_000 : 90_000,
         );
         uploadStatus = result.status;
         uploadErrorBody = result.body;
