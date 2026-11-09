@@ -183,8 +183,8 @@ async function uploadWithMeasuredProgress(
   });
 }
 
-// Native video uploads stream from the sandboxed file rather than first copying
-// the entire video into a JavaScript ArrayBuffer. The SDK reports real bytes sent.
+// Stream native photo and video files from the sandbox rather than copying
+// entire files into a JavaScript ArrayBuffer. The SDK reports real bytes sent.
 async function uploadNativeFileWithProgressRetry(
   url: string,
   uri: string,
@@ -382,10 +382,10 @@ export async function uploadMediaFile(
       coupleId: coupleId ?? null,
     });
 
-    // Read the main photo into memory BEFORE generating the thumbnail.
-    // This avoids two concurrent reads of the same compressed file which can deadlock on native.
+    // Native sandbox files stream without a video- or photo-sized JS buffer.
+    // For non-file URIs and web, load the body before thumbnail generation.
     let body: Blob | ArrayBuffer | null = null;
-    if (!(isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://'))) {
+    if (!(Platform.OS !== 'web' && uploadUri.startsWith('file://'))) {
       try {
         body = await buildUploadBody(uploadUri, uploadMime);
       } catch {
@@ -462,7 +462,7 @@ export async function uploadMediaFile(
       'x-upsert': 'true',
     };
     try {
-      if (isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://')) {
+      if (Platform.OS !== 'web' && uploadUri.startsWith('file://')) {
         const result = await uploadNativeFileWithProgressRetry(
           uploadUrl, uploadUri, headers,
           fraction => reportProgress(8 + Math.floor(fraction * 84)),
