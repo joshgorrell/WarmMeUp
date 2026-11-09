@@ -154,6 +154,40 @@ async function uploadWithMeasuredProgress(
   });
 }
 
+// Native video uploads stream from the sandboxed file rather than first copying
+// the entire video into a JavaScript ArrayBuffer. The SDK reports real bytes sent.
+async function uploadNativeFileWithProgressRetry(
+  url: string,
+  uri: string,
+  headers: Record<string, string>,
+  onProgress: (fraction: number) => void,
+): Promise<{ status: number; body: string }> {
+  const FileSystem = await import('expo-file-system/legacy');
+  for (let attempt = 0; attempt < 3; attempt++) {
+    onProgress(0);
+    try {
+      const task = FileSystem.createUploadTask(
+        url, uri,
+        { httpMethod: 'PUT', uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT, headers },
+        event => {
+          if (event.totalBytesExpectedToSend > 0) {
+            onProgress(Math.min(1, event.totalBytesSent / event.totalBytesExpectedToSend));
+          }
+        },
+      );
+      const result = await task.uploadAsync();
+      if (!result) throw new Error('Upload was interrupted.');
+      if (![408, 429, 500, 502, 503, 504].includes(result.status) || attempt === 2) {
+        return { status: result.status, body: result.body ?? '' };
+      }
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
+  }
+  throw new Error('Upload could not be completed.');
+}
+
 async function uploadWithProgressRetry(
   url: string,
   body: Blob | ArrayBuffer,
@@ -257,11 +291,13 @@ export async function uploadMediaFile(
 
     // Read the main photo into memory BEFORE generating the thumbnail.
     // This avoids two concurrent reads of the same compressed file which can deadlock on native.
-    let body: Blob | ArrayBuffer;
-    try {
-      body = await buildUploadBody(uploadUri, uploadMime);
-    } catch {
-      throw new Error('Could not read media file — please try again.');
+    let body: Blob | ArrayBuffer | null = null;
+    if (!(isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://'))) {
+      try {
+        body = await buildUploadBody(uploadUri, uploadMime);
+      } catch {
+        throw new Error('Could not read media file — please try again.');
+      }
     }
 
     // Prepare video posters after reading the main file so native file reads do not contend.
@@ -321,24 +357,40 @@ export async function uploadMediaFile(
 
     reportProgress(8);
 
-    let response: Response;
+    let uploadStatus: number;
+    let uploadErrorBody = '';
+    const headers = {
+      Authorization: `Bearer ${session.access_token}`,
+      apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+      'Content-Type': uploadMime,
+      'x-upsert': 'true',
+    };
     try {
-      response = await uploadWithProgressRetry(uploadUrl, body, {
-        Authorization: `Bearer ${session.access_token}`,
-        apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
-        'Content-Type': uploadMime,
-        'x-upsert': 'true',
-      }, fraction => reportProgress(8 + Math.floor(fraction * 84)), isVideo ? 300_000 : 90_000);
+      if (isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://')) {
+        const result = await uploadNativeFileWithProgressRetry(
+          uploadUrl, uploadUri, headers,
+          fraction => reportProgress(8 + Math.floor(fraction * 84)),
+        );
+        uploadStatus = result.status;
+        uploadErrorBody = result.body;
+      } else {
+        if (!body) throw new Error('Media file could not be loaded.');
+        const response = await uploadWithProgressRetry(
+          uploadUrl, body, headers,
+          fraction => reportProgress(8 + Math.floor(fraction * 84)),
+          isVideo ? 300_000 : 90_000,
+        );
+        uploadStatus = response.status;
+        if (!response.ok) uploadErrorBody = await response.text();
+      }
     } catch (networkErr: any) {
       throw new Error(networkErr?.message ? `Network error — ${networkErr.message}` : 'Network error — check your connection and try again.');
     }
 
-    if (!response.ok) {
+    if (uploadStatus < 200 || uploadStatus >= 300) {
       let errBody: { error?: string; message?: string; statusCode?: string } | null = null;
-      try {
-        errBody = await response.json();
-      } catch {}
-      throw new Error(mapStorageError(response.status, errBody));
+      try { errBody = JSON.parse(uploadErrorBody); } catch {}
+      throw new Error(mapStorageError(uploadStatus, errBody));
     }
 
     // Await the thumbnail upload that was running alongside the main media
