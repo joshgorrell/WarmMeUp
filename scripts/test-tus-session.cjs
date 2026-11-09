@@ -155,5 +155,33 @@ const { uploadTusChunks } = load('lib/tusUploadSession.ts', { './tusUploadPolicy
     },
   }), /Connection lost/);
   assert.equal(ambiguousPosts, 1);
+  // The session URL must be observable before the first HEAD or PATCH,
+  // and the same callback must work when resuming an existing session.
+  for (const existingUrl of [undefined, '/storage/v1/upload/resumable/reused']) {
+    const events = [];
+    const readyUrl = 'https://example.supabase.co/storage/v1/upload/resumable/reused';
+    let storedOffset = 0;
+    const returned = await uploadTusChunks({
+      endpoint: 'https://example.supabase.co/storage/v1/upload/resumable',
+      bucket: 'vault', objectPath: 'videos/reused.mp4', mimeType: 'video/mp4',
+      fileSize: 3, authorization: 'Bearer test', apiKey: 'test',
+      onSessionReady: async url => { events.push('ready'); assert.equal(url, readyUrl); },
+      transport: {
+        async readChunk(start, length) { events.push('read'); return new Uint8Array(length); },
+        async request(method, url, headers, body) {
+          events.push(method);
+          if (method === 'POST') return { status: 201, headers: { location: '/storage/v1/upload/resumable/reused' } };
+          if (method === 'HEAD') return { status: 200, headers: { 'upload-offset': String(storedOffset) } };
+          storedOffset += body.byteLength;
+          return { status: 204, headers: { 'upload-offset': String(storedOffset) } };
+        },
+      },
+    }, existingUrl);
+    assert.equal(returned, readyUrl);
+    assert.ok(events.indexOf('ready') < events.indexOf('HEAD'));
+    assert.ok(events.indexOf('ready') < events.indexOf('PATCH'));
+    assert.equal(events.includes('POST'), !existingUrl);
+    assert.equal(storedOffset, 3);
+  }
   console.log('TUS resumable session tests passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
