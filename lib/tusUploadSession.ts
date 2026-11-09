@@ -88,7 +88,13 @@ export async function uploadTusChunks(
       try {
         const response = await transport.request('HEAD', url, common);
         if (response.status === 200 || response.status === 204) {
-          return parseTusOffset(response.headers['upload-offset'] ?? null, fileSize);
+          // A malformed successful HEAD is a protocol violation, not a
+          // transient network failure. Never retry or send bytes after it.
+          try {
+            return parseTusOffset(response.headers['upload-offset'] ?? null, fileSize);
+          } catch (error) {
+            throw Object.assign(error as Error, { fatalTus: true });
+          }
         }
         if (!isRetryableTusStatus(response.status)) {
           throw Object.assign(
@@ -123,7 +129,9 @@ export async function uploadTusChunks(
         }, bytes);
         if (response.status === 204) {
           const confirmed = parseTusOffset(response.headers['upload-offset'] ?? null, fileSize);
-          if (confirmed !== offset + length) throw new Error('Unexpected resumable upload offset.');
+          if (confirmed !== offset + length) {
+            throw Object.assign(new Error('Unexpected resumable upload offset.'), { fatalTus: true });
+          }
           offset = confirmed;
           completed = true;
         } else if (!isRetryableTusStatus(response.status) && response.status !== 409) {
