@@ -114,7 +114,7 @@ export default function CameraCaptureScreen() {
           if (!result.granted) { Alert.alert('Microphone Access Required', 'Allow microphone access to record videos with sound.'); return; }
         }
         setBusy(true); setRecordingSeconds(0); setRecording(true);
-        const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
+        const result = await cameraRef.current.recordAsync({ maxDuration: 120 });
         setRecording(false);
         if (result?.uri) {
           setPendingCapture({ uri: result.uri, mediaType: 'video', mimeType: videoMimeFromUri(result.uri) });
@@ -173,7 +173,7 @@ export default function CameraCaptureScreen() {
       <AppText style={styles.flashText}>{`${mode === 'video' ? 'Light' : 'Flash'} ${flashEnabled ? 'On' : 'Off'}`}</AppText>
       {recording && <View style={styles.recordingStatus}><View style={styles.recordingDot} /><AppText style={styles.recordingTimer}>{formatRecordingTime(recordingSeconds)}</AppText><AppText style={styles.recordingText}>Tap stop</AppText></View>}
     </View>
-    {recording && <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${(recordingSeconds / 60) * 100}%` }]} /></View>}
+    {recording && <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${(recordingSeconds / 120) * 100}%` }]} /></View>}
   </View>;
 }
 
