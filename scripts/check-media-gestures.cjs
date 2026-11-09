@@ -29,7 +29,7 @@ for (const [name, pattern] of [
   ['classify retryable transport errors', /shouldRetryUploadError\(error\)/],
   ['native byte progress', /totalBytesSent\s*\/\s*event\.totalBytesExpectedToSend/],
   ['web byte progress', /xhr\.upload\.onprogress/],
-  ['transient retry', /RETRYABLE_UPLOAD_STATUSES = new Set\(\[408, 429, 500, 502, 503, 504\]\)/],
+  ['shared retry policy', /RETRYABLE_UPLOAD_STATUSES\.has\(/],
   ['original media upload', /uploadNativeFileWithProgressRetry\(/],
   ['60-second picker limit', /videoMaxDuration:\s*60/],
   ['thumbnail processing', /pendingThumbPromise/],
