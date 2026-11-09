@@ -25,7 +25,7 @@ for (const [name, pattern] of [
   ['native upload timeout', /300_000/],
   ['native upload cancellation', /task\.cancelAsync\(\)/],
   ['bounded native cancellation', /cancelTimer\s*=\s*setTimeout\(/],
-  ['no retry on unconfirmed cancellation', /stopped responding\|permission\|unauthorized/],
+  ['no retry on unconfirmed cancellation', /shouldRetryUploadError\(error\)/],
   ['classify retryable transport errors', /shouldRetryUploadError\(error\)/],
   ['native byte progress', /totalBytesSent\s*\/\s*event\.totalBytesExpectedToSend/],
   ['web byte progress', /xhr\.upload\.onprogress/],
