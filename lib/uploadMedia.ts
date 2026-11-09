@@ -179,11 +179,21 @@ async function uploadNativeFileWithProgressRetry(
       // separately, and cancel the native transfer before retrying.
       let timeout: ReturnType<typeof setTimeout> | undefined;
       let timedOut = false;
+      let transferSettled = false;
       try {
+        const transfer = task.uploadAsync();
+        // Ignore progress from a timed-out attempt while cancellation settles.
         const result = await Promise.race([
-          task.uploadAsync(),
+          transfer.then(value => {
+            transferSettled = true;
+            return value;
+          }, error => {
+            transferSettled = true;
+            throw error;
+          }),
           new Promise<never>((_, reject) => {
             timeout = setTimeout(() => {
+              if (transferSettled) return;
               timedOut = true;
               reject(new Error('Video upload timed out — please try again.'));
             }, 300_000);
