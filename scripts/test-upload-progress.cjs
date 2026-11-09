@@ -33,4 +33,23 @@ progress.cancelUploadProgress();
 progress.beginUploadProgress('Video D');
 callbacks.shift()();
 assert.equal(progress.getUploadProgressState().label, 'Video D', 'cancelled completion must not hide later upload');
+
+const first = progress.startScopedUpload('Chat video');
+progress.updateScopedUpload(first, 42);
+const second = progress.startScopedUpload('Vault video');
+progress.updateScopedUpload(second, 12);
+progress.updateScopedUpload(first, 67);
+assert.equal(progress.getUploadProgressState().label, 'Vault video');
+assert.equal(progress.getUploadProgressState().pct, 12);
+progress.endScopedUpload(second, true);
+assert.equal(progress.getUploadProgressState().label, 'Chat video');
+assert.equal(progress.getUploadProgressState().pct, 67);
+progress.endScopedUpload(first, true);
+assert.equal(progress.getUploadProgressState().pct, 100);
+const third = progress.startScopedUpload('New upload');
+callbacks.shift()(); // previous scoped completion callback
+assert.equal(progress.getUploadProgressState().label, 'New upload');
+progress.endScopedUpload(third, false);
+assert.equal(progress.getUploadProgressState().visible, false);
+
 console.log('Upload progress lifecycle tests passed.');
