@@ -183,5 +183,53 @@ const { uploadTusChunks } = load('lib/tusUploadSession.ts', { './tusUploadPolicy
     assert.equal(events.includes('POST'), !existingUrl);
     assert.equal(storedOffset, 3);
   }
+  // Malformed successful HEAD responses must fail closed immediately, not
+  // trigger more HEAD requests or send any video bytes.
+  for (const invalidOffset of [null, 'not-a-number', '99']) {
+    let headCount = 0;
+    let patchCount = 0;
+    await assert.rejects(uploadTusChunks({
+      endpoint: 'https://example.supabase.co/storage/v1/upload/resumable',
+      bucket: 'vault', objectPath: 'videos/invalid-head.mp4', mimeType: 'video/mp4',
+      fileSize: 4, authorization: 'Bearer test', apiKey: 'test',
+      transport: {
+        async readChunk() { throw new Error('Must not read'); },
+        async request(method) {
+          if (method === 'POST') return { status: 201, headers: { location: '/storage/v1/upload/resumable/invalid-head' } };
+          if (method === 'HEAD') {
+            headCount++;
+            return { status: 200, headers: { 'upload-offset': invalidOffset } };
+          }
+          patchCount++;
+          throw new Error('Must not patch');
+        },
+      },
+    }), /offset/i);
+    assert.equal(headCount, 1);
+    assert.equal(patchCount, 0);
+  }
+  // An acknowledged PATCH that reports an unexpected offset must not be
+  // mistaken for a lost response and retried.
+  let invalidPatchCount = 0;
+  let invalidPatchHeads = 0;
+  await assert.rejects(uploadTusChunks({
+    endpoint: 'https://example.supabase.co/storage/v1/upload/resumable',
+    bucket: 'vault', objectPath: 'videos/invalid-patch.mp4', mimeType: 'video/mp4',
+    fileSize: 4, authorization: 'Bearer test', apiKey: 'test',
+    transport: {
+      async readChunk(start, length) { return new Uint8Array(length); },
+      async request(method) {
+        if (method === 'POST') return { status: 201, headers: { location: '/storage/v1/upload/resumable/invalid-patch' } };
+        if (method === 'HEAD') {
+          invalidPatchHeads++;
+          return { status: 200, headers: { 'upload-offset': '0' } };
+        }
+        invalidPatchCount++;
+        return { status: 204, headers: { 'upload-offset': '2' } };
+      },
+    },
+  }), /Unexpected resumable upload offset/);
+  assert.equal(invalidPatchCount, 1);
+  assert.equal(invalidPatchHeads, 1);
   console.log('TUS resumable session tests passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
