@@ -132,11 +132,12 @@ async function uploadWithMeasuredProgress(
   body: Blob | ArrayBuffer,
   headers: Record<string, string>,
   onBytes: (loaded: number, total: number) => void,
+  timeoutMs = 90_000,
 ): Promise<Response> {
   return new Promise<Response>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url, true);
-    xhr.timeout = 90_000;
+    xhr.timeout = timeoutMs;
     Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
     xhr.upload.onprogress = event => {
       if (event.lengthComputable && event.total > 0) onBytes(event.loaded, event.total);
@@ -158,13 +159,14 @@ async function uploadWithProgressRetry(
   body: Blob | ArrayBuffer,
   headers: Record<string, string>,
   onProgress: (fraction: number) => void,
+  timeoutMs = 90_000,
 ): Promise<Response> {
   for (let attempt = 0; attempt < 3; attempt++) {
     onProgress(0);
     try {
       const response = await uploadWithMeasuredProgress(url, body, headers, (loaded, total) => {
         onProgress(Math.min(1, loaded / total));
-      });
+      }, timeoutMs);
       if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === 2) return response;
     } catch (error) {
       if (attempt === 2) throw error;
@@ -326,7 +328,7 @@ export async function uploadMediaFile(
         apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
         'Content-Type': uploadMime,
         'x-upsert': 'true',
-      }, fraction => reportProgress(8 + Math.floor(fraction * 84)));
+      }, fraction => reportProgress(8 + Math.floor(fraction * 84)), isVideo ? 300_000 : 90_000);
     } catch (networkErr: any) {
       throw new Error(networkErr?.message ? `Network error — ${networkErr.message}` : 'Network error — check your connection and try again.');
     }
