@@ -552,7 +552,7 @@ export function mimeToExtension(mimeType: string): string {
 export const PICKER_OPTIONS = {
   mediaTypes: ['images', 'videos'] as any,
   quality: 1,
-  videoMaxDuration: 60,
+  videoMaxDuration: 120,
   allowsEditing: false,
   exportsVideoAsCopy: true,
   flashMode: 'off' as const,
