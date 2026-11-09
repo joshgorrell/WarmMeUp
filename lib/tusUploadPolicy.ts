@@ -71,8 +71,19 @@ export function resolveTusLocation(endpoint: string, location: string | null): s
   if (!location) throw new Error('Storage did not return a resumable upload URL.');
   const base = new URL(endpoint);
   const resolved = new URL(location, base);
+  const prefix = '/storage/v1/upload/resumable/';
+  // An upload session is an opaque server-issued token, not an arbitrary
+  // relative path. Reject user-info, query strings, fragments, encoded path
+  // separators and nested paths before using a URL as an authenticated target.
+  const token = resolved.pathname.startsWith(prefix)
+    ? resolved.pathname.slice(prefix.length) : '';
   if (resolved.origin !== base.origin ||
-      !resolved.pathname.startsWith('/storage/v1/upload/resumable/')) {
+      resolved.protocol !== 'https:' && base.protocol === 'https:' ||
+      resolved.username || resolved.password ||
+      resolved.search || resolved.hash ||
+      !token || token.includes('/') ||
+      /%(?:2f|5c|2e|25)/i.test(token) ||
+      !/^[A-Za-z0-9._~-]+$/.test(token)) {
     throw new Error('Storage returned an unsafe resumable upload URL.');
   }
   return resolved.toString();
