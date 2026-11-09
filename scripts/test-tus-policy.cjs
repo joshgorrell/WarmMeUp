@@ -6,7 +6,7 @@ const js = ts.transpileModule(fs.readFileSync('lib/tusUploadPolicy.ts', 'utf8'),
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText;
 const mod = { exports: {} };
-vm.runInNewContext(js, { module: mod, exports: mod.exports, Number, Math, URL, TextEncoder });
+vm.runInNewContext(js, { module: mod, exports: mod.exports, Number, Math, URL });
 const p = mod.exports;
 const chunk = 6 * 1024 * 1024;
 assert.equal(p.tusChunkLength(0, chunk * 2 + 17), chunk);
@@ -22,6 +22,11 @@ for (const value of [null, '-1', '1.5', '01', 'NaN', String(chunk + 1)]) {
 assert.equal(p.encodeTusMetadata({ bucketName: 'vault', contentType: 'video/mp4' }),
   'bucketName dmF1bHQ=,contentType dmlkZW8vbXA0');
 assert.equal(p.encodeTusMetadata({ objectName: 'été.mp4' }), 'objectName w6l0w6kubXA0');
+// Run inside a VM with no TextEncoder to simulate Hermes globals.
+for (const input of ['plain', 'été.mp4', '日本語.mov', '🎥.mp4', '\\ud800bad']) {
+  assert.deepEqual(Array.from(p.tusUtf8Bytes(input)), Array.from(new TextEncoder().encode(input)));
+}
+assert.equal(p.encodeTusMetadata({ objectName: '🎥.mp4' }), 'objectName 8J+OpS5tcDQ=');
 const endpoint = 'https://example.supabase.co/storage/v1/upload/resumable';
 assert.equal(p.resolveTusLocation(endpoint, '/storage/v1/upload/resumable/abc'),
   'https://example.supabase.co/storage/v1/upload/resumable/abc');
