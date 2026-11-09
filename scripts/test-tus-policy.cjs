@@ -31,7 +31,14 @@ const endpoint = 'https://example.supabase.co/storage/v1/upload/resumable';
 assert.equal(p.resolveTusLocation(endpoint, '/storage/v1/upload/resumable/abc'),
   'https://example.supabase.co/storage/v1/upload/resumable/abc');
 for (const url of ['https://evil.example/storage/v1/upload/resumable/abc',
-  '/storage/v1/object/private', '//evil.example/storage/v1/upload/resumable/abc']) {
+  '/storage/v1/object/private', '//evil.example/storage/v1/upload/resumable/abc',
+  '/storage/v1/upload/resumable/abc/other',
+  '/storage/v1/upload/resumable/abc?redirect=https://evil.example',
+  '/storage/v1/upload/resumable/abc#secret',
+  '/storage/v1/upload/resumable/abc%2Fother',
+  '/storage/v1/upload/resumable/abc%5Cother',
+  '/storage/v1/upload/resumable/abc%252Fother',
+  'https://user:password@example.supabase.co/storage/v1/upload/resumable/abc']) {
   assert.throws(() => p.resolveTusLocation(endpoint, url));
 }
 assert.ok(p.isRetryableTusStatus(503));
