@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'lib/uploadMedia.ts'
+      - 'lib/mediaRetryPolicy.ts'
+      - 'scripts/test-media-retry.cjs'
       - 'lib/uploadProgress.ts'
       - 'components/note/**'
       - 'app/(app)/vault-viewer.tsx'
@@ -17,6 +19,8 @@ on:
     branches: [main]
     paths:
       - 'lib/uploadMedia.ts'
+      - 'lib/mediaRetryPolicy.ts'
+      - 'scripts/test-media-retry.cjs'
       - 'components/note/**'
       - 'app/(app)/vault-viewer.tsx'
       - '.github/workflows/media-checks.yml'
@@ -40,3 +44,5 @@ jobs:
         run: npm run typecheck
       - name: Media gesture regression guard
         run: node scripts/check-media-gestures.cjs
+      - name: Media retry behavioral tests
+        run: node scripts/test-media-retry.cjs

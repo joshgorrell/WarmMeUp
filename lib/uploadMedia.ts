@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { logDebugEvent } from './debugLog';
 import { Image as ReactNativeImage, Platform } from 'react-native';
 import { cleanupTempFile } from './mediaCache';
+import { RETRYABLE_UPLOAD_STATUSES, shouldRetryUploadError } from './mediaRetryPolicy';
 import { beginUploadProgress, cancelUploadProgress, finishUploadProgress, setUploadProgressPct } from './uploadProgress';
 
 export type UploadResult = { storagePath: string; thumbnailPath?: string };
@@ -65,19 +66,6 @@ async function getImageDimensions(uri: string): Promise<{ width: number; height:
   return new Promise(resolve => {
     ReactNativeImage.getSize(uri, (width, height) => resolve({ width, height }), () => resolve(null));
   });
-}
-
-const RETRYABLE_UPLOAD_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
-
-// A missing source file or an explicitly canceled transfer cannot recover by
-// replaying the same request. Preserve the actual error for the composer.
-function shouldRetryUploadError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
-  if (/stopped responding|permission|unauthorized|forbidden|not found|no such file|could not read|interrupted|cancelled|canceled/.test(message)) {
-    return false;
-  }
-  return /network|timeout|timed out|connection|offline|failed to fetch|request failed|socket|transport/.test(message);
 }
 
 // Retry only transient upload failures. Each retry uses the same object path (upsert),
