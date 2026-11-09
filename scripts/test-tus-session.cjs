@@ -9,7 +9,7 @@ function load(path, imports = {}) {
   const module = { exports: {} };
   vm.runInNewContext(js, {
     module, exports: module.exports, require: name => imports[name],
-    Number, Math, URL, TextEncoder, Uint8Array, Error, Object, String,
+    Number, Math, URL, TextEncoder, Uint8Array, Error, Object, String, setTimeout,
   });
   return module.exports;
 }
