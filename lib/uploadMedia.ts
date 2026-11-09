@@ -220,7 +220,8 @@ async function uploadNativeFileWithProgressRetry(
       }
 
     } catch (error) {
-      if (attempt === 2) throw error;
+      // Do not retry when we cannot prove the previous native task stopped.
+      if (attempt === 2 || (error instanceof Error && error.message.startsWith('Video upload stopped responding.'))) throw error;
     }
     await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
   }
