@@ -11,6 +11,7 @@ on:
       - 'lib/tusUploadPolicy.ts'
       - 'lib/tusUploadSession.ts'
       - 'scripts/test-tus-policy.cjs'
+      - 'scripts/test-tus-session.cjs'
       - 'scripts/test-upload-progress.cjs'
       - 'lib/mediaRetryPolicy.ts'
       - 'scripts/test-media-retry.cjs'
@@ -34,6 +35,7 @@ on:
       - 'lib/tusUploadPolicy.ts'
       - 'lib/tusUploadSession.ts'
       - 'scripts/test-tus-policy.cjs'
+      - 'scripts/test-tus-session.cjs'
       - 'scripts/test-upload-progress.cjs'
       - 'lib/mediaRetryPolicy.ts'
       - 'scripts/test-media-retry.cjs'
@@ -68,5 +70,7 @@ jobs:
         run: node scripts/test-video-upload-policy.cjs
       - name: TUS protocol boundary tests
         run: node scripts/test-tus-policy.cjs
+      - name: TUS resume session tests
+        run: node scripts/test-tus-session.cjs
       - name: Upload progress lifecycle tests
         run: node scripts/test-upload-progress.cjs
