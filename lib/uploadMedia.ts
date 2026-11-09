@@ -67,6 +67,19 @@ async function getImageDimensions(uri: string): Promise<{ width: number; height:
   });
 }
 
+const RETRYABLE_UPLOAD_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+// A missing source file or an explicitly canceled transfer cannot recover by
+// replaying the same request. Preserve the actual error for the composer.
+function shouldRetryUploadError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  if (/stopped responding|permission|unauthorized|forbidden|not found|no such file|could not read|interrupted|cancelled|canceled/.test(message)) {
+    return false;
+  }
+  return /network|timeout|timed out|connection|offline|failed to fetch|request failed|socket|transport/.test(message);
+}
+
 // Retry only transient upload failures. Each retry uses the same object path (upsert),
 // so a successful but interrupted response cannot create duplicate media objects.
 async function uploadWithRetry(
@@ -77,9 +90,9 @@ async function uploadWithRetry(
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const response = await uploadToStorage(url, body, headers);
-      if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === 2) return response;
+      if (!RETRYABLE_UPLOAD_STATUSES.has(response.status) || attempt === 2) return response;
     } catch (error) {
-      if (attempt === 2) throw error;
+      if (attempt === 2 || !shouldRetryUploadError(error)) throw error;
     }
     await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
   }
@@ -231,7 +244,7 @@ async function uploadNativeFileWithProgressRetry(
           }),
         ]);
         if (!result) throw new Error('Upload was interrupted.');
-        if (![408, 429, 500, 502, 503, 504].includes(result.status) || attempt === 2) {
+        if (!RETRYABLE_UPLOAD_STATUSES.has(result.status) || attempt === 2) {
           return { status: result.status, body: result.body ?? '' };
         }
       } finally {
@@ -265,7 +278,7 @@ async function uploadNativeFileWithProgressRetry(
 
     } catch (error) {
       // Do not retry when we cannot prove the previous native task stopped.
-      if (attempt === 2 || (error instanceof Error && error.message.startsWith('Video upload stopped responding.'))) throw error;
+      if (attempt === 2 || !shouldRetryUploadError(error)) throw error;
     }
     await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
   }
@@ -285,9 +298,9 @@ async function uploadWithProgressRetry(
       const response = await uploadWithMeasuredProgress(url, body, headers, (loaded, total) => {
         onProgress(Math.min(1, loaded / total));
       }, timeoutMs);
-      if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === 2) return response;
+      if (!RETRYABLE_UPLOAD_STATUSES.has(response.status) || attempt === 2) return response;
     } catch (error) {
-      if (attempt === 2) throw error;
+      if (attempt === 2 || !shouldRetryUploadError(error)) throw error;
     }
     await new Promise<void>(resolve => setTimeout(resolve, 700 * (attempt + 1)));
   }
