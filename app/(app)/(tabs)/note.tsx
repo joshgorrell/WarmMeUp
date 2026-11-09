@@ -597,7 +597,7 @@ export default function ChatTab() {
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       if (isLibraryVideoTooLong(asset)) {
-        Alert.alert('Video Too Long', 'Choose a video that is 60 seconds or shorter.');
+        Alert.alert('Video Too Long', 'Choose a video that is 2 minutes or shorter.');
         return;
       }
       const isVideo = asset.type === 'video';
