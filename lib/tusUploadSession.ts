@@ -57,12 +57,30 @@ export async function uploadTusChunks(
     url = resolveTusLocation(endpoint, created.headers.location ?? null);
   }
 
+  // HEAD is our source of truth after ambiguous PATCH responses. Transient
+  // HEAD failures must not cause the whole video to fail or resend a chunk
+  // whose response was lost. Never retry authentication/validation failures.
   const getOffset = async () => {
-    const response = await transport.request('HEAD', url, common);
-    if (response.status !== 200 && response.status !== 204) {
-      throw new Error(`Could not resume video upload (HTTP ${response.status}).`);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const response = await transport.request('HEAD', url, common);
+        if (response.status === 200 || response.status === 204) {
+          return parseTusOffset(response.headers['upload-offset'] ?? null, fileSize);
+        }
+        if (!isRetryableTusStatus(response.status)) {
+          throw Object.assign(
+            new Error(`Could not resume video upload (HTTP ${response.status}).`),
+            { fatalTus: true },
+          );
+        }
+      } catch (error) {
+        if ((error as Error & { fatalTus?: boolean }).fatalTus) throw error;
+        if (attempt === 3) throw error;
+      }
+      if (attempt === 3) break;
+      await new Promise<void>(resolve => setTimeout(resolve, 400 * (attempt + 1)));
     }
-    return parseTusOffset(response.headers['upload-offset'] ?? null, fileSize);
+    throw new Error('Could not confirm how much of the video reached storage.');
   };
 
   let offset = await getOffset();
@@ -105,6 +123,7 @@ export async function uploadTusChunks(
           throw new Error('Storage returned an unexpected partial chunk offset.');
         }
         if (!completed && attempt === 2) throw new Error('Video upload interrupted after retries.');
+        if (!completed) await new Promise<void>(resolve => setTimeout(resolve, 400 * (attempt + 1)));
       }
     }
     params.onProgress?.(offset / fileSize);
