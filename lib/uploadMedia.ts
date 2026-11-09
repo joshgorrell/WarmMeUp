@@ -368,12 +368,27 @@ export async function uploadMediaFile(
     }
 
     // Stage picker-owned video handles into our sandbox for native streaming.
-    // If the OS refuses copying, preserve the existing in-memory fallback.
+    // If the OS refuses copying, fail safely instead of loading a large video into JS memory.
     if (isVideo && Platform.OS !== 'web' && !uploadUri.startsWith('file://')) {
       const stagedUri = await stageNativeVideoForUpload(uploadUri, mimeToExtension(uploadMime));
       if (stagedUri) {
         uploadUri = stagedUri;
         tempFiles.add(stagedUri);
+      } else {
+        // Never fall back to fetching a potentially huge video into a JS
+        // ArrayBuffer. That can freeze or terminate the app on mobile.
+        // Ask the user to retry with a readable local copy instead.
+        throw new Error('Could not prepare this video for upload. Save the video to your device and try again.');
+      }
+    }
+
+    // Verify the native video is readable before launching a long transfer.
+    // This is a readability check, not an arbitrary file-size restriction.
+    if (isVideo && Platform.OS !== 'web' && uploadUri.startsWith('file://')) {
+      const FileSystem = await import('expo-file-system/legacy');
+      const fileInfo = await FileSystem.getInfoAsync(uploadUri);
+      if (!fileInfo.exists || fileInfo.isDirectory || !fileInfo.size || fileInfo.size <= 0) {
+        throw new Error('This video could not be read. Please choose another copy and try again.');
       }
     }
 
