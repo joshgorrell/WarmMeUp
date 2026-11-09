@@ -31,7 +31,7 @@ for (const [name, pattern] of [
   ['web byte progress', /xhr\.upload\.onprogress/],
   ['shared retry policy', /RETRYABLE_UPLOAD_STATUSES\.has\(/],
   ['original media upload', /uploadNativeFileWithProgressRetry\(/],
-  ['60-second picker limit', /videoMaxDuration:\s*60/],
+  ['two-minute picker limit', /videoMaxDuration:\s*120/],
   ['thumbnail processing', /pendingThumbPromise/],
 ]) assert.match(upload, pattern, `Missing media transfer safeguard: ${name}`);
 console.log('Media transfer source guards passed.');
@@ -40,5 +40,8 @@ for (const path of ['app/(app)/(tabs)/note.tsx', 'app/(app)/(tabs)/vault.tsx']) 
   assert.match(pickerScreen, /isLibraryVideoTooLong\(asset\)/, `Missing library video duration validation in ${path}`);
 }
 const durationPolicy = fs.readFileSync('lib/videoDurationPolicy.ts', 'utf8');
-assert.match(durationPolicy, /MAX_SHARED_VIDEO_DURATION_MS = 60_000/, 'Video duration must be capped at 60 seconds');
-console.log('Library video duration guards passed.');
+assert.match(durationPolicy, /MAX_SHARED_VIDEO_DURATION_MS = 120_000/, 'Video duration must be capped at two minutes');
+const camera = fs.readFileSync('app/(app)/camera-capture.tsx', 'utf8');
+assert.match(camera, /recordAsync\(\{ maxDuration: 120 \}\)/, 'Camera must record up to two minutes');
+assert.match(camera, /recordingSeconds \/ 120/, 'Camera progress must match two-minute duration');
+console.log('Library and camera video duration guards passed.');
