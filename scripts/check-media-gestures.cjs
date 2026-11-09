@@ -50,3 +50,14 @@ assert.match(camera, /CAMERA_VIDEO_BITRATE_BPS = 5_000_000/, 'Camera encoding bi
 assert.doesNotMatch(camera, /saveToLibraryAsync|createAssetAsync|CameraRoll\.save/, 'Camera capture must not save to Photos by default');
 assert.match(camera, /recordingSeconds \/ 120/, 'Camera progress must match two-minute duration');
 console.log('Library and camera video duration guards passed.');
+
+// Screenshot notifications are permission-sensitive. Chat must never notify
+// about ordinary text or media whose sender explicitly allows screenshots.
+const chat = fs.readFileSync('app/(app)/(tabs)/note.tsx', 'utf8');
+assert.match(chat, /const screenshotBlocked = !!visibleMsg && visibleMsg\.allow_screenshot === false;/,
+  'Chat screenshot notifications must require visible media with screenshots disabled');
+assert.match(chat, /if \(screenshotBlocked\) \{\s*supabase\.auth\.getSession/,
+  'Chat must only send screenshot notifications for protected media');
+assert.doesNotMatch(chat, /if \(!screenshotBlocked\)/,
+  'Chat screenshot notification permission check must not be inverted');
+console.log('Screenshot notification permission guards passed.');
