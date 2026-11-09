@@ -26,12 +26,35 @@ export function parseTusOffset(raw: string | null, totalBytes: number): number {
   return offset;
 }
 
+/**
+ * Encode UTF-8 without TextEncoder, which is not consistently available in
+ * React Native Hermes. Handles surrogate pairs and malformed UTF-16 safely.
+ */
+export function tusUtf8Bytes(value: string): number[] {
+  const bytes: number[] = [];
+  for (let i = 0; i < value.length; i++) {
+    let cp = value.charCodeAt(i);
+    if (cp >= 0xd800 && cp <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        cp = 0x10000 + ((cp - 0xd800) << 10) + next - 0xdc00;
+        i++;
+      } else cp = 0xfffd;
+    } else if (cp >= 0xdc00 && cp <= 0xdfff) cp = 0xfffd;
+    if (cp <= 0x7f) bytes.push(cp);
+    else if (cp <= 0x7ff) bytes.push(0xc0 | (cp >> 6), 0x80 | (cp & 63));
+    else if (cp <= 0xffff) bytes.push(0xe0 | (cp >> 12), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));
+    else bytes.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));
+  }
+  return bytes;
+}
+
 export function encodeTusMetadata(metadata: Record<string, string>): string {
   // TUS metadata is a comma-separated list of key + base64-encoded UTF-8.
-  // Use TextEncoder for non-ASCII filenames and MIME metadata.
+  // Use a Hermes-compatible UTF-8 encoder for filenames and MIME metadata.
   return Object.entries(metadata).map(([key, value]) => {
     if (!/^[A-Za-z0-9_-]+$/.test(key)) throw new Error('Invalid TUS metadata key.');
-    const bytes = new TextEncoder().encode(value);
+    const bytes = tusUtf8Bytes(value);
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     let result = '';
     for (let i = 0; i < bytes.length; i += 3) {
