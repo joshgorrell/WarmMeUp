@@ -86,10 +86,11 @@ export async function uploadTusChunks(
           offset = confirmed;
           completed = true;
         } else if (!isRetryableTusStatus(response.status) && response.status !== 409) {
-          throw new Error(`Video upload failed (HTTP ${response.status}).`);
+          // Permission/validation errors cannot be repaired by retrying.
+          throw Object.assign(new Error(`Video upload failed (HTTP ${response.status}).`), { fatalTus: true });
         }
       } catch (error) {
-        if (attempt === 2) throw error;
+        if ((error as Error & { fatalTus?: boolean }).fatalTus || attempt === 2) throw error;
       }
       if (!completed) {
         // The server may have accepted the chunk before the response was lost.
