@@ -66,7 +66,9 @@ async function compressImage(uri: string, mimeType: string): Promise<{ uri: stri
   const dimensions = await getImageDimensions(uri);
   // Unknown dimensions: preserve a supported JPEG instead of risking unnecessary resampling.
   if (!dimensions && !needsConversion) return { uri, mimeType };
-  const resize = dimensions && dimensions.width > 2048 ? [{ resize: { width: 2048 } }] : [];
+  const resize = dimensions && Math.max(dimensions.width, dimensions.height) > 2048
+    ? [{ resize: dimensions.width >= dimensions.height ? { width: 2048 } : { height: 2048 } }]
+    : [];
   if (resize.length === 0 && !needsConversion) return { uri, mimeType };
   try {
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
@@ -82,7 +84,9 @@ async function generatePhotoThumbnail(uri: string): Promise<string | null> {
   try {
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
     const dimensions = await getImageDimensions(uri);
-    const actions = dimensions && dimensions.width <= 360 ? [] : [{ resize: { width: 360 } }];
+    const actions = dimensions && Math.max(dimensions.width, dimensions.height) <= 360
+      ? []
+      : [{ resize: dimensions && dimensions.height > dimensions.width ? { height: 360 } : { width: 360 } }];
     const result = await manipulateAsync(
       uri,
       actions,
