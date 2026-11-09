@@ -40,7 +40,7 @@ async function compressImage(uri: string, mimeType: string): Promise<{ uri: stri
   if (!needsConversion && !mimeType.startsWith('image/')) return { uri, mimeType };
   try {
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
-    const result = await manipulateAsync(uri, [{ resize: { width: 1600 } }], { compress: 0.8, format: SaveFormat.JPEG });
+    const result = await manipulateAsync(uri, [{ resize: { width: 3000 } }], { compress: 0.93, format: SaveFormat.JPEG });
     return { uri: result.uri, mimeType: 'image/jpeg' };
   } catch {
     return { uri, mimeType };
@@ -53,7 +53,7 @@ async function generatePhotoThumbnail(uri: string): Promise<string | null> {
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
     const result = await manipulateAsync(
       uri,
-      [{ resize: { width: 200 } }],
+      [{ resize: { width: 360 } }],
       { compress: 0.7, format: SaveFormat.JPEG },
     );
     return result.uri;
@@ -321,7 +321,7 @@ export function mimeToExtension(mimeType: string): string {
 export const PICKER_OPTIONS = {
   mediaTypes: ['images', 'videos'] as any,
   quality: 1,
-  videoMaxDuration: 60,
+  videoMaxDuration: 120,
   allowsEditing: false,
   exportsVideoAsCopy: true,
   flashMode: 'off' as const,
