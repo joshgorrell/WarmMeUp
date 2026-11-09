@@ -164,6 +164,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   const overlayOpacity = useRef(new Animated.Value(isBlurred ? 1 : 0)).current;
   const prevEffectiveRevealedRef = useRef(effectiveRevealed);
   const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoPlayerActivated, setVideoPlayerActivated] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [posterChecked, setPosterChecked] = useState(false);
@@ -179,7 +180,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
     const timer = setTimeout(async () => {
       if (!msg.media_storage_path) return;
       const bucket = msg.media_storage_bucket ?? 'chat_media';
-      const thumbPath = msg.thumbnail_path ?? msg.media_storage_path;
+      const thumbPath = isVideo ? msg.media_storage_path : (msg.thumbnail_path ?? msg.media_storage_path);
       const tryPaths = thumbPath !== msg.media_storage_path
         ? [thumbPath, msg.media_storage_path]
         : [thumbPath];
@@ -197,7 +198,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
       if (!cancelled) setSelfFetchFailed(true);
     }, 4000);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [loaded, msg.media_storage_path, msg.media_storage_bucket, msg.thumbnail_path]);
+  }, [loaded, isVideo, msg.media_storage_path, msg.media_storage_bucket, msg.thumbnail_path]);
 
   const effectiveLoaded = loaded || selfFetchedUrl !== null || selfFetchFailed;
 
@@ -224,7 +225,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   useEffect(() => {
     if (!revealed && blurEnabled) {
       setLocallyRevealed(false);
-      if (isVideo) setVideoPlaying(false);
+      if (isVideo) { setVideoPlaying(false); setVideoPlayerActivated(false); }
     }
   }, [revealed, blurEnabled, isVideo]);
 
@@ -238,7 +239,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   useEffect(() => {
     if (isBlurred) {
       overlayOpacity.setValue(1);
-      if (isVideo) setVideoPlaying(false);
+      if (isVideo) { setVideoPlaying(false); setVideoPlayerActivated(false); }
     }
   }, [isBlurred, overlayOpacity, isVideo]);
 
@@ -254,6 +255,7 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
   const toggleVideoPlayback = async (event?: any) => {
     event?.stopPropagation?.();
     if (isBlurred) { revealMedia(); return; }
+    if (!videoPlaying) setVideoPlayerActivated(true);
     setVideoPlaying(!videoPlaying);
   };
   const handleExpandPress = (event: any) => {
@@ -271,9 +273,9 @@ export function MediaBubble({ msg, blurEnabled, revealed, onReveal, signedUrl, o
         {isVideo ? <>
           {posterUrl && !videoPlaying && <ExpoImage source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="none" />}
           {!posterUrl && !posterChecked && <View style={styles.mediaPlaceholder}><ShimmerPlaceholder /></View>}
-          {Platform.OS === 'web'
+          {videoPlayerActivated && (Platform.OS === 'web'
             ? <WebVideoPlayer mediaUrl={mediaUrl!} posterUrl={posterUrl} videoPlaying={videoPlaying} setVideoPlaying={setVideoPlaying} setVideoError={setVideoError} messageId={msg.id} />
-            : <NativeVideoPlayer mediaUrl={mediaUrl!} videoPlaying={videoPlaying} setVideoPlaying={setVideoPlaying} setVideoError={setVideoError} messageId={msg.id} />}
+            : <NativeVideoPlayer mediaUrl={mediaUrl!} videoPlaying={videoPlaying} setVideoPlaying={setVideoPlaying} setVideoError={setVideoError} messageId={msg.id} />)}
         </> : <ExpoImage key={mediaUrl} source={{ uri: mediaUrl }} style={[StyleSheet.absoluteFill, isBlurred && Platform.OS === 'web' ? { filter: 'blur(40px)', transform: 'scale(1.1)' } as any : undefined]}
           contentFit="cover" cachePolicy="none" onError={() => {
             if (retryAttempted.current) { logDebugEvent('chat_message_image_load_error_hard', { messageId: msg.id }); setImgError(true); return; }
