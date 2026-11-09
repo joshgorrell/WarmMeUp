@@ -18,7 +18,7 @@ import { supabase } from '@/lib/supabase';
 import { VaultItem } from '@/lib/types';
 import { awardPoints } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
-import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension } from '@/lib/uploadMedia';
+import { uploadMediaFile, PICKER_OPTIONS, isLibraryVideoTooLong, resolveAssetMimeType, mimeToExtension } from '@/lib/uploadMedia';
 import { logDebugEvent } from '@/lib/debugLog';
 import { setGalleryItems, getCachedUrl, setCachedUrl, evictCachedUrl } from '@/lib/mediaGalleryStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -382,7 +382,12 @@ export default function VaultScreen() {
       const ImagePicker = await import('expo-image-picker'); const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) { Alert.alert('Photo Library Access Required', 'Allow access to your photo library in Settings to add media to the Vault.', [{ text: 'Open Settings', onPress: () => Linking.openSettings() }, { text: 'Cancel', style: 'cancel' }]); return; }
       const result = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS); if (result.canceled || !result.assets?.length) return;
-      const asset = result.assets[0]; const isVideo = asset.type === 'video'; const mimeType = resolveAssetMimeType(asset);
+      const asset = result.assets[0];
+      if (isLibraryVideoTooLong(asset)) {
+        Alert.alert('Video Too Long', 'Choose a video that is 60 seconds or shorter.');
+        return;
+      }
+      const isVideo = asset.type === 'video'; const mimeType = resolveAssetMimeType(asset);
       await uploadToVault(asset.uri, isVideo ? 'video' : 'photo', mimeType);
     } catch (e: any) { setUploading(false); Alert.alert('Upload Failed', e?.message ?? 'Something went wrong. Please try again.'); }
   };

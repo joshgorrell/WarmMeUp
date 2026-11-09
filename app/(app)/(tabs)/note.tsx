@@ -18,7 +18,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { awardPoints, getPointValue, incrementMonthlyCounter, isPointsEnabled } from '@/lib/points';
 import { notifyPartner } from '@/lib/notifications';
-import { uploadMediaFile, PICKER_OPTIONS, resolveAssetMimeType, mimeToExtension, extensionToMime } from '@/lib/uploadMedia';
+import { uploadMediaFile, PICKER_OPTIONS, isLibraryVideoTooLong, resolveAssetMimeType, mimeToExtension, extensionToMime } from '@/lib/uploadMedia';
 import { ChatMessage } from '@/lib/types';
 import AppShell from '@/components/AppShell';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -596,6 +596,10 @@ export default function ChatTab() {
       const result = await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
+      if (isLibraryVideoTooLong(asset)) {
+        Alert.alert('Video Too Long', 'Choose a video that is 60 seconds or shorter.');
+        return;
+      }
       const isVideo = asset.type === 'video';
       const resolvedMime = resolveAssetMimeType(asset);
       const media: AttachedMedia = {
