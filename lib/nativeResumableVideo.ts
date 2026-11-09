@@ -16,6 +16,7 @@ export async function uploadNativeVideoResumable(params: {
   supabaseUrl: string;
   onProgress?: (fraction: number) => void;
   resumeUrl?: string;
+  onSessionReady?: (url: string) => void | Promise<void>;
 }): Promise<string> {
   const endpoint = params.supabaseUrl.replace(/\/$/, '') + '/storage/v1/upload/resumable';
   return uploadTusChunks({
@@ -28,5 +29,6 @@ export async function uploadNativeVideoResumable(params: {
     apiKey: params.apiKey,
     transport: createNativeTusTransport(params.uri),
     onProgress: params.onProgress,
+    onSessionReady: params.onSessionReady,
   }, params.resumeUrl);
 }
