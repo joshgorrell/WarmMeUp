@@ -71,7 +71,8 @@ let nextTransferId = 0;
 let scopedGeneration = 0;
 
 function showActiveTransfer() {
-  const latest = [...activeTransfers.values()].at(-1);
+  const transfers = [...activeTransfers.values()];
+  const latest = transfers[transfers.length - 1];
   if (latest) {
     state = { visible: true, label: latest.label, pct: latest.pct };
     emit();
@@ -90,12 +91,12 @@ export function updateScopedUpload(id: number, pct: number) {
   const transfer = activeTransfers.get(id);
   if (!transfer) return;
   transfer.pct = Math.max(0, Math.min(100, Math.round(pct)));
-  if ([...activeTransfers.keys()].at(-1) === id) showActiveTransfer();
+  if ([...activeTransfers.keys()].slice(-1)[0] === id) showActiveTransfer();
 }
 
 export function endScopedUpload(id: number, completed: boolean) {
   if (!activeTransfers.has(id)) return;
-  const wasLatest = [...activeTransfers.keys()].at(-1) === id;
+  const wasLatest = [...activeTransfers.keys()].slice(-1)[0] === id;
   activeTransfers.delete(id);
   const generation = ++scopedGeneration;
   if (activeTransfers.size) {
