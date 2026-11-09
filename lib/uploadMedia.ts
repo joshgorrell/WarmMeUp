@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { logDebugEvent } from './debugLog';
-import { Platform } from 'react-native';
+import { Image as ReactNativeImage, Platform } from 'react-native';
 import { cleanupTempFile } from './mediaCache';
 import { beginUploadProgress, cancelUploadProgress, finishUploadProgress, setUploadProgressPct } from './uploadProgress';
 
@@ -32,15 +32,26 @@ async function uploadToStorage(
   }
 }
 
+async function getImageDimensions(uri: string): Promise<{ width: number; height: number } | null> {
+  return new Promise(resolve => {
+    ReactNativeImage.getSize(uri, (width, height) => resolve({ width, height }), () => resolve(null));
+  });
+}
+
 async function compressImage(uri: string, mimeType: string): Promise<{ uri: string; mimeType: string }> {
   if (Platform.OS === 'web') return { uri, mimeType };
-  // Preserve animated formats exactly as provided. Converting them to JPEG would flatten the animation.
-  if (mimeType === 'image/gif' || mimeType === 'image/webp') return { uri, mimeType };
-  const needsConversion = mimeType === 'image/heic' || mimeType === 'image/heif' || mimeType === 'image/heif-sequence';
-  if (!needsConversion && !mimeType.startsWith('image/')) return { uri, mimeType };
+  // Do not flatten animations or silently convert transparent PNGs to opaque JPEGs.
+  if (mimeType === 'image/gif' || mimeType === 'image/webp' || mimeType === 'image/png') return { uri, mimeType };
+  if (!mimeType.startsWith('image/')) return { uri, mimeType };
+  const needsConversion = ['image/heic', 'image/heif', 'image/heif-sequence'].includes(mimeType);
+  const dimensions = await getImageDimensions(uri);
+  // Unknown dimensions: preserve a supported JPEG instead of risking unnecessary resampling.
+  if (!dimensions && !needsConversion) return { uri, mimeType };
+  const resize = dimensions && dimensions.width > 2048 ? [{ resize: { width: 2048 } }] : [];
+  if (resize.length === 0 && !needsConversion) return { uri, mimeType };
   try {
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
-    const result = await manipulateAsync(uri, [{ resize: { width: 2048 } }], { compress: 0.86, format: SaveFormat.JPEG });
+    const result = await manipulateAsync(uri, resize, { compress: 0.9, format: SaveFormat.JPEG });
     return { uri: result.uri, mimeType: 'image/jpeg' };
   } catch {
     return { uri, mimeType };
@@ -51,9 +62,11 @@ async function generatePhotoThumbnail(uri: string): Promise<string | null> {
   if (Platform.OS === 'web') return null;
   try {
     const { manipulateAsync, SaveFormat } = await import('expo-image-manipulator');
+    const dimensions = await getImageDimensions(uri);
+    const actions = dimensions && dimensions.width <= 360 ? [] : [{ resize: { width: 360 } }];
     const result = await manipulateAsync(
       uri,
-      [{ resize: { width: 360 } }],
+      actions,
       { compress: 0.7, format: SaveFormat.JPEG },
     );
     return result.uri;
