@@ -23,6 +23,12 @@ async function stageNativeVideoForUpload(uri: string, extension: string): Promis
     const destination = `${FileSystem.cacheDirectory}media-upload-${randomUUID()}.${extension}`;
     try {
       await FileSystem.copyAsync({ from: uri, to: destination });
+      const staged = await FileSystem.getInfoAsync(destination);
+      // A provider may report success after yielding an empty/incomplete file.
+      // Never upload that copy as if it were the original recording.
+      if (!staged.exists || staged.isDirectory || !staged.size || staged.size <= 0) {
+        throw new Error('Video picker did not provide a readable file.');
+      }
       return destination;
     } catch {
       await FileSystem.deleteAsync(destination, { idempotent: true }).catch(() => {});
@@ -378,7 +384,10 @@ export async function uploadMediaFile(
     if (isVideo) {
       const thumbStoragePath = videoThumbnailPath(uploadStoragePath);
       pendingThumbPromise = (async () => {
-        const thumbUri = await extractVideoThumbnail(localUri);
+        // Prefer the sandboxed copy: picker-owned content:// handles are not
+        // always readable by the native thumbnail generator.
+        const thumbUri = await extractVideoThumbnail(uploadUri)
+          ?? (uploadUri !== localUri ? await extractVideoThumbnail(localUri) : null);
         if (!thumbUri) return null;
         thumbnailLocalUri = thumbUri;
         tempFiles.add(thumbUri);
